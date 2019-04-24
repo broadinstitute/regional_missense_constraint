@@ -22,6 +22,22 @@ def get_codon_table_path() -> str:
     return f'{RESOURCE_PREFIX}/codons_lookup.tsv'
 
 
+def get_codon_lookup() -> dict:
+    """
+    Reads in codon lookup table and returns as dictionary (key: codon, value: amino acid)
+
+    :return: Dictionary of codon translation
+    :rtype: dict
+    """
+    with hl.hadoop_open(get_codon_table_path()) as c:
+        codon_lookup = {}
+        c.readline()
+        for line in c:
+            line = line.strip().split(' ')
+            codon_lookup[line[0]] = line[1]
+    return codon_lookup
+
+
 def get_acid_names_path() -> str:
     """
     Returns path to amino acid table (full name, 3 letter name, 1 letter name)
@@ -30,6 +46,22 @@ def get_acid_names_path() -> str:
     :rtype: str
     """
     return f'{RESOURCE_PREFIX}/acid_names.tsv'
+
+
+def get_acid_names() -> dict:
+    """
+    Reads in amino acid table and stores as dict (key: 3 letter name, value: (long name, one letter name)
+
+    :return: Dictionary of amino acid names
+    :rtype: dict
+    """
+    with hl.hadoop_open(get_acid_names_path()) as a:
+        acid_map = {}
+        a.readline()
+        for line in a:
+            line = line.strip().split('\t')
+            acid_map[line[1]] = (line[0], line[2])
+    return acid_map
 
 
 def get_reference_path(build) -> str:
