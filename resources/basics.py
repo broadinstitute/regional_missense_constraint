@@ -1,26 +1,35 @@
 import argparse
+import hail as hl
 import logging
 from gnomad_hail.resources import *
-from gnomad_hail.utils.generic import file_exists,get_reference_genome
+from gnomad_hail.utils.generic import get_reference_genome
 from constraint_utils.constraint_basics import *
 #from gnomad_lof.constraint_utils.generic import * 
 
 
+logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
+logger = logging.getLogger("regional_missense_constraint_basics")
+logger.setLevel(logging.INFO)
+
+
 RESOURCE_PREFIX = 'gs://regional_missense_constraint/resources'
-MODEL_PREFIX = f'{RESOURCE_PREFIX}/model/'
-FLAGSHIP_LOF = 'gs://gnomad-public/papers/2019-flagship-lof/v1.0/'
 BUILDS = [37, 38]
 
 
-def get_codon_table_path() -> str:
-    """
-    Returns path to codon lookup table (codon > amino acid)
+# original regional missense constraint resource files
+codon_table_path = f'{RESOURCE_PREFIX}/codons_lookup.tsv'
+acid_names_path = f'{RESOURCE_PREFIX}/acid_names.tsv'
+mutation_rate_table_path = f'{RESOURCE_PREFIX}/mutation_rate_table.tsv'
+divergence_scores_path = f'{RESOURCE_PREFIX}/divsites_gencodev19_all_transcripts.tsv'
 
-    :return: Path to codon table
-    :rtype: str
-    """
-    return f'{RESOURCE_PREFIX}/codons_lookup.tsv'
+# constraint resource files
+FLAGSHIP_LOF = 'gs://gnomad-public/papers/2019-flagship-lof/v1.0/'
+MODEL_PREFIX = f'{FLAGSHIP_LOF}/model/'
+processed_exomes_ht_path = f'{MODEL_PREFIX}/exomes_processed.ht'
+processed_genomes_ht_path = f'{MODEL_PREFIX}/genomes_processed.ht'
 
+# processed constraint resource files
+mutation_rate_ht = f'{RESOURCE_PREFIX}/ht/mutation_rate.ht'
 
 def get_codon_lookup() -> dict:
     """
@@ -29,23 +38,13 @@ def get_codon_lookup() -> dict:
     :return: Dictionary of codon translation
     :rtype: dict
     """
-    with hl.hadoop_open(get_codon_table_path()) as c:
-        codon_lookup = {}
+    codon_lookup = {}
+    with hl.hadoop_open(codon_table_path) as c:
         c.readline()
         for line in c:
             line = line.strip().split(' ')
             codon_lookup[line[0]] = line[1]
     return codon_lookup
-
-
-def get_acid_names_path() -> str:
-    """
-    Returns path to amino acid table (full name, 3 letter name, 1 letter name)
-
-    :return: Path to amino acid names table
-    :rtype: str
-    """
-    return f'{RESOURCE_PREFIX}/acid_names.tsv'
 
 
 def get_acid_names() -> dict:
@@ -55,8 +54,8 @@ def get_acid_names() -> dict:
     :return: Dictionary of amino acid names
     :rtype: dict
     """
-    with hl.hadoop_open(get_acid_names_path()) as a:
-        acid_map = {}
+    acid_map = {}
+    with hl.hadoop_open(acid_names_path) as a:
         a.readline()
         for line in a:
             line = line.strip().split('\t')
@@ -64,11 +63,58 @@ def get_acid_names() -> dict:
     return acid_map
 
 
+def get_mutation_rate() -> dict:
+    """
+    Reads in mutation rate table and stores as ht
+
+    :return: Dictionary of mutation rate information (key: context, value: (alt, mu_snp))
+    :rtype: dict
+    """
+    mu = {}
+    # from    n_kmer  p_any_snp_given_kmer    mu_kmer to      count_snp       p_snp_given_kmer        mu_snp
+    with hl.hadoop_open(mutation_rate_table_path) as m:
+        for line in m:
+            context, n_kmer, p_any_snp_given_kmer, mu_kmer, new_kmer, count_snp, p_snp_given_kmer, mu_snp = line.strip().split('\t')
+            mu[context] = (new_kmer[1], mu_snp)
+    return mu
+
+
+def get_mutation_rate_ht() -> hl.Table:
+    """
+    Reads in mutation rate table and stores as ht
+
+    :return: Mutation rate information in ht
+    :rtype: Table 
+    """
+    ht = hl.import_table(f'{mutation_rate_table_path}', impute=True)
+    ht = ht.transmute(context=ht['from'], ref=ht['from'][1],
+                                 alt=ht.to[1])
+    ht = ht.key_by('context', 'ref', 'alt')
+    ht = ht.select(ht.mu_snp)
+    ht = ht.checkpoint(mutation_rate_ht, overwrite=True)
+    return ht
+ 
+
+def get_divergence_scores() -> dict:
+    """
+    Reads in divergence score file and stores as dict (key: transcript, value: score)
+
+    :return: Divergence score dict
+    :rtype: dict
+    """
+    div_scores = {}
+    with hl.hadoop_open(divergence_scores_path) as d:
+        for line in d:
+            transcript, score = line.strip().split('\t')
+            div_scores[transcript] = score
+    return div_scores
+
+
 def get_reference_path(build) -> str:
     """
     Returns path to reference fasta files 
 
-    :param str build: Reference genome build; one of BUILDS
+    :param int build: Reference genome build; one of BUILDS
     :return: Path to reference fasta + fasta index
     :rtype: str
     """
@@ -81,73 +127,157 @@ def get_reference_path(build) -> str:
         return 'gs://hail-common/references/Homo_sapiens_assembly38.fasta' 
 
 
-def get_raw_context_ht_path() -> str:
+def get_full_context_ht_path(build) -> str:
     """
-    Returns path to raw context Table (reference fasta in Table form)
+    Returns path to reference fasta in ht form, filtered to SNPs, and annotated with VEP
 
-    :return: Path to raw context Table
+    :param int build: Reference genome build; one of BUILDS
+    :return: Path to full SNP reference fasta
     :rtype: str
     """
-    return f'{RESOURCE_PREFIX}/raw_fasta.snps_only.unsplit.ht'
+    # TODO: Add support for b38 
+    if build not in BUILDS:
+        raise DataException(f'Build must be one of {BUILDS}.')
+        
+    if build == 37:
+        return f'{FLAGSHIP_LOF}/context/Homo_sapiens_assembly19.fasta.snps_only.vep_20181129.ht'
+    else:
+        raise DataException('Sorry, no reference ht for b38 yet')
 
 
-def get_vep_context_ht_path() -> str:
+def get_processed_context_ht_path(build) -> str:
     """
-    Returns path to VEP'd raw context Table
+    Returns path to reference fasta in ht form, filtered to SNPs, and annotated with VEP
 
-    :return: Path to raw context Table with VEP annotations
+    :param int build: Reference genome build; one of BUILDS
+    :return: Path to full SNP reference fasta
     :rtype: str
     """
-    return f'{RESOURCE_PREFIX}/raw_fasta.snps_only.unsplit.vep.ht'
+    # TODO: Add support for b38 
+    if build not in BUILDS:
+        raise DataException(f'Build must be one of {BUILDS}.')
+        
+    if build == 37:
+        return f'{RESOURCE_PREFIX}/ht/context/context_fasta_snps_only_vep_20190430.ht'
+    else:
+        raise DataException('Sorry, no reference ht for b38 yet')
 
 
-def get_context_ht_path() -> str:
+def get_gencode_gtf_path(build) -> str:
     """
-    Returns path to VEP'd raw context Table with multiallelics split
+    Gets path to gencode gtf
 
-    :return: Path to raw context Table with VEP annotations with multiallelics split
+    :param int build: Reference genome build; one of BUILDS
+    :return: Full path to gencode gtf
     :rtype: str
     """
-    return f'{RESOURCE_PREFIX}/raw_fasta.snps_only.vep.ht'
+    if build not in BUILDS:
+        raise DataException(f'Build must be one of {BUILDS}.')
+
+    if build == 37:
+        return f'{RESOURCE_PREFIX}/gencode.v30lift37.basic.annotation.gtf'
+    else:
+        return f'{RESOURCE_PREFIX}/gencode.v30.basic.annotation.gtf'
 
 
-def get_processed_exomes_ht_path() -> str:
+def get_gencode_ht_path(build) -> str:
     """
-    Returns path to gnomAD exomes Table annotated with context information
+    Gets path to gencode ht
 
-    :return: Path to processed gnoMAD exomes Table
+    :param int build: Reference genome build; one of BUILDS
+    :return: Full path to gencode ht
     :rtype: str
     """
-    return f'{MODEL_PREFIX}/exomes_processed.ht'
+    if build not in BUILDS:
+        raise DataException(f'Build must be one of {BUILDS}.')
+
+    if build == 37:
+        return f'{RESOURCE_PREFIX}/ht/context/gencode.v30lift37.basic.annotation.ht'
+    else:
+        return f'{RESOURCE_PREFIX}/ht/context/gencode.v30.basic.annotation.ht'
 
 
-def get_processed_genomes_ht_path() -> str:
+def get_processed_gencode_ht_path(build) -> str:
     """
-    Returns path to VEP'd raw context Table with multiallelics split
+    Gets path to gencode ht
 
-    :return: Path to raw context Table with VEP annotations with multiallelics split
+    :param int build: Reference genome build; one of BUILDS
+    :return: Full path to gencode ht
     :rtype: str
     """
-    return f'{MODEL_PREFIX}/genomes_processed.ht'
+    if build not in BUILDS:
+        raise DataException(f'Build must be one of {BUILDS}.')
+
+    if build == 37:
+        return f'{RESOURCE_PREFIX}/ht/context/gencode.v30lift37.exons.ht'
+    else:
+        return f'{RESOURCE_PREFIX}/ht/context/gencode.v30.basic.exons.ht'
 
 
-def pre_process_data(build, overwrite) -> None:
+def process_gencode_ht(build) -> None:
     """
-    Preprocesses data for constraint; code stolen from Konrad
+    Imports gencode gtf as ht,filters to protein coding transcripts, and writes out as ht
 
-    :param str build: Reference genome build; one of BUILDS
-    :param bool overwrite: Whether to overwrite files
-    :return: None; updates resource paths with processed data
+    :param int build: Reference genome build; one of BUILDS
+    :return: None
     :rtype: None
     """
-    raw_context_txt_path = f'{get_reference_path(build)}.gz'
+    if build not in BUILDS:
+        raise DataException(f'Build must be one of {BUILDS}.')
 
-    import_fasta(raw_context_txt_path, get_raw_context_ht_path, overwrite)
-    vep_context_ht(raw_context_ht_path, get_vep_context_ht_path, overwrite)
-    split_context_mt(get_vep_context_ht_path, {'exomes': coverage_ht_path('exomes'), 'genomes': coverage_ht_path('genomes')},
-                    methylation_sites_mt_path(), get_context_ht_path, overwrite)
-    pre_process_data(get_gnomad_public_data('genomes'), get_context_ht_path, get_processed_genomes_ht_path, overwrite)
-    pre_process_data(get_gnomad_public_data('exomes'), get_context_ht_path, get_processed_exomes_ht_path, overwrite)
+    logger.info('Reading in gencode gtf')
+    ht = hl.experimental.import_gtf(get_gencode_gtf_path(build), reference_genome=f'GRCh{build}',
+                                    skip_invalid_contigs=True)
+
+    logger.info('Filtering gencode gtf to exons in protein coding genes with support levels 1 and 2')
+    ht = ht.filter((ht.feature == 'exon') & (ht.gene_type == 'protein_coding') & (ht.level != '3'))
+    ht = ht.checkpoint(get_gencode_ht_path(build), overwrite=True)
+
+    logger.info('Grouping gencode ht by transcript ID')
+    ht = ht.key_by(ht.transcript_id)
+    ht = ht.select(ht.frame, ht.exon_number, ht.gene_name, ht.interval)
+    ht = ht.collect_by_key()
+    ht.write(get_processed_gencode_ht_path(build), overwrite=True)
+
+
+def process_context_ht(build, trimers) -> None:
+    """
+    Imports reference fasta (SNPs only, VEP'd) as ht
+    Filters to canonical protein coding transcripts
+
+    :param int build: Reference genome build; one of BUILDS
+    :param bool trimers: Whether to filter to trimers or heptamers
+    :return: None
+    :rtype: None
+    """
+
+    if build not in BUILDS:
+        raise DataException(f'Build must be one of {BUILDS}.')
+
+    
+    logger.info('Reading in SNPs-only, VEP-annotated context ht')
+    full_context_ht = prepare_ht(hl.read_table(get_full_context_ht_path(build)), trimers)
+
+    logger.info(
+                'Importing codon translation table, amino acid names,'
+                'mutation rate, divergence scores and annotating as globals')
+    full_context_ht = full_context_ht.annotate_globals(
+                                                    codon_translation=get_codon_lookup(), acid_names=get_acid_names(),
+                                                    mutation_rate=get_mutation_rate(), div_scores=get_divergence_scores())
+
+
+    logger.info('Filtering to canonical protein coding transcripts')
+    full_context_ht = full_context_ht.explode(full_context_ht.vep.transcript_consequences)
+    context_ht = full_context_ht.filter(
+                                        (full_context_ht.vep.transcript_consequences.biotype == 'protein_coding')
+                                        & (full_context_ht.vep.transcript_consequences.canonical == 1))
+
+    #logger.info('Importing mutation rate table and annotating as global')
+    #mu_ht = get_mutation_rate_ht()
+
+    logger.info('Writing out context ht')
+    context_ht.write(get_processed_context_ht_path(build), overwrite=True)
+    context_ht.describe()
 
 
 class DataException(Exception):
