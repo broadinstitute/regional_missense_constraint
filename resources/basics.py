@@ -104,9 +104,13 @@ def get_divergence_scores() -> dict:
     """
     div_scores = {}
     with hl.hadoop_open(divergence_scores_path) as d:
+        d.readline()
         for line in d:
             transcript, score = line.strip().split('\t')
-            div_scores[transcript] = score
+            try:
+                div_scores[transcript.split('.')[0]] = float(score)
+            except:
+                continue
     return div_scores
 
 
@@ -274,6 +278,11 @@ def process_context_ht(build, trimers) -> None:
 
     #logger.info('Importing mutation rate table and annotating as global')
     #mu_ht = get_mutation_rate_ht()
+
+    context_ht.vep.transcript_consequences.transcript_id.show()
+
+    logger.info('Re-keying context ht')
+    context_ht = context_ht.key_by(context_ht.locus, context_ht.context, context_ht.ref, context_ht.alt)
 
     logger.info('Writing out context ht')
     context_ht.write(get_processed_context_ht_path(build), overwrite=True)
