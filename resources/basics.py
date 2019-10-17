@@ -5,7 +5,6 @@ from gnomad_hail.resources import *
 from gnomad_hail.utils import *
 from gnomad_hail.utils.generic import *
 from constraint_utils.constraint_basics import *
-#from gnomad_lof.constraint_utils.generic import * 
 
 
 logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -35,7 +34,10 @@ mutation_rate_ht = f'{RESOURCE_PREFIX}/ht/mutation_rate.ht'
 # ExAC files (for direct comparison with Kaitlin's code)
 exac_vcf = f'{RESOURCE_PREFIX}/ExAC/ExAC.r0.3.sites.vep.vcf.gz'
 exac_ht = f'{RESOURCE_PREFIX}/ExAC/ExAC.r0.3.sites.vep.ht'
-filtered_exac_ht = f'{RESOURCE_PREFIX/ExAC/ExAC.r0.3.missense_only.ht'
+filtered_exac_ht = f'{RESOURCE_PREFIX}/ExAC/ExAC.r0.3.missense_only.ht'
+
+# missense variant VEP annotations
+MISSENSE = ['stop_lost', 'initiator_codon_variant', 'start_lost', 'protein_altering_variant', 'missense_variant']
 
 
 def get_codon_lookup() -> dict:
@@ -309,9 +311,8 @@ def filter_to_missense(ht: hl.Table) -> hl.Table:
 
     # vep consequences from https://github.com/macarthur-lab/gnomad_hail/blob/master/utils/constants.py
     # missense definition from seqr searches
-    missense = ['stop_lost', 'initiator_codon_variant', 'start_lost', 'protein_altering_variant', 'missense_variant']
     logger.info('Filtering to missense variants')
-    ht = ht.filter(hl.literal(missense).contains(ht.vep.most_severe_consequence))
+    ht = ht.filter(hl.literal(MISSENSE).contains(ht.vep.most_severe_consequence))
     logger.info(f'ht count after filtration: {ht.count()}') # this printed 6818793
 
     ht = ht.naive_coalesce(5000)
