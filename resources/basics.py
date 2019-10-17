@@ -313,5 +313,22 @@ def filter_to_missense(ht: hl.Table) -> hl.Table:
     return ht
 
 
+def filter_to_autosome_and_par(ht: hl.Table) -> hl.Table:
+    """
+    Filters input table to autosomes and PAR regions. Also annotates each locus with whether it's in a PAR
+
+    :param Table ht: Input ht to be filtered/annotated
+    :return: Table filtered to autosomes/PAR and annotated with PAR status
+    :rtype: hl.Table
+    """
+    logger.info(f'ht count before filtration: {ht.count()}') 
+    logger.info('Filtering to autosomes and PAR')
+
+    ht = ht.filter(ht.locus.in_autosome_or_par())
+    ht = ht.annotate(in_par=(ht.locus_in_x_par() | ht.locus_in_y_par()))
+    logger.info(f'ht count after filtration: {ht.count()}')
+    return ht
+
+    
 class DataException(Exception):
     pass
