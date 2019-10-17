@@ -31,8 +31,11 @@ def main(args):
         # total rows in context_ht after filtering to missenses in protein coding, canonical transcripts: 92683899 # this is processed context ht
         # total rows scored with average divergence score (=not in div_scores): 49443864
     
-    logger.info('Reading in exome ht')     
-    exome_ht = prepare_ht(hl.read_table(filtered_exomes_ht_path), args.trimers)  
+    logger.info('Reading in exome ht') 
+    if args.exac:
+        exome_ht = prepare_ht(hl.read_table(filtered_exac_ht), args.trimers)
+    else:   
+        exome_ht = prepare_ht(hl.read_table(filtered_exomes_ht_path), args.trimers)  
     
     logger.info('Inferring build of exome ht')
     rg = get_reference_genome(exome_ht.locus).name 
@@ -65,6 +68,7 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('This script searches for regional missense constraint in gnomAD')
 
+    parser.add_argument('--exac', help='Use ExAC ht (not gnomAD ht)', action='store_true')
     parser.add_argument('--overwrite', help='Overwrite existing data', action='store_true')
     parser.add_argument('--pre_process_data', help='Pre-process data', action='store_true')
     parser.add_argument('--test', help='Filter to chr22 (for code testing purposes)', action='store_true')

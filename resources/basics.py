@@ -32,6 +32,11 @@ processed_genomes_ht_path = f'{MODEL_PREFIX}/genomes_processed.ht'
 # processed constraint resource files
 mutation_rate_ht = f'{RESOURCE_PREFIX}/ht/mutation_rate.ht'
 
+# ExAC files (for direct comparison with Kaitlin's code)
+exac_vcf = f'{RESOURCE_PREFIX}/ExAC/ExAC.r0.3.sites.vep.vcf.gz'
+exac_ht = f'{RESOURCE_PREFIX}/ExAC/ExAC.r0.3.sites.vep.ht'
+filtered_exac_ht = f'{RESOURCE_PREFIX/ExAC/ExAC.r0.3.missense_only.ht'
+
 
 def get_codon_lookup() -> dict:
     """
