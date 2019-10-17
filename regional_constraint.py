@@ -10,6 +10,8 @@ logger.setLevel(logging.INFO)
 
 def main(args):
 
+    hl.init(log='/RMC.log')
+
     if args.pre_process_data:
         logger.info('Preprocessing reference fasta and gencode files')
         process_context_ht(args.build, args.trimers)
@@ -18,13 +20,16 @@ def main(args):
         gencode_ht = process_gencode_ht(args.build)
 
         logger.info('Filtering gnomAD exomes ht to missense variants only')
+        exome_ht = hl.read_table(processed_exomes_ht_path)
         exome_ht = filter_to_missense(exome_ht)
+        exome_ht.write(filtered_exomes_ht_path, overwrite=args.overwrite)
 
         logger.info('Done preprocessing files')
 
+
     logger.info('Reading in input files')         
     context_ht = hl.read_table(get_processed_context_ht_path(args.build))
-    exome_ht = prepare_ht(hl.read_table(processed_exomes_ht_path), args.trimers)
+    exome_ht = prepare_ht(hl.read_table(filtered_exomes_ht_path), args.trimers)
     gencode_ht = get_processed_gencode_ht(args.build)
 
     logger.info('Inferring build of exome ht')

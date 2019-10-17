@@ -26,6 +26,7 @@ divergence_scores_path = f'{RESOURCE_PREFIX}/divsites_gencodev19_all_transcripts
 FLAGSHIP_LOF = 'gs://gnomad-public/papers/2019-flagship-lof/v1.0/'
 MODEL_PREFIX = f'{FLAGSHIP_LOF}/model/'
 processed_exomes_ht_path = f'{MODEL_PREFIX}/exomes_processed.ht'
+filtered_exomes_ht_path = f'{RESOURCE_PREFIX}/ht/exomes_missense_only.ht'
 processed_genomes_ht_path = f'{MODEL_PREFIX}/genomes_processed.ht'
 
 # processed constraint resource files
@@ -297,7 +298,7 @@ def filter_to_missense(ht: hl.Table) -> hl.Table:
     :return: Table filtered to only missense variants
     :rtype: hl.Table
     """
-    logger.info(f'ht count before filtration: {ht.count()}')
+    logger.info(f'ht count before filtration: {ht.count()}') # this printed 17209972
     logger.info('Annotating ht with most severe consequence')
     ht = add_most_severe_csq_to_tc_within_ht(ht) # from constraint_basics
 
@@ -306,8 +307,9 @@ def filter_to_missense(ht: hl.Table) -> hl.Table:
     missense = ['stop_lost', 'initiator_codon_variant', 'start_lost', 'protein_altering_variant', 'missense_variant']
     logger.info('Filtering to missense variants')
     ht = ht.filter(hl.literal(missense).contains(ht.vep.most_severe_consequence))
-    logger.info(f'ht count after filtration: {ht.count()}')
+    logger.info(f'ht count after filtration: {ht.count()}') # this printed 6818793
 
+    ht = ht.naive_coalesce(5000)
     return ht
 
 
