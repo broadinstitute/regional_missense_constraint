@@ -17,6 +17,9 @@ def main(args):
         logger.info('Preprocessing gencode gtf information')
         gencode_ht = process_gencode_ht(args.build)
 
+        logger.info('Filtering gnomAD exomes ht to missense variants only')
+        exome_ht = filter_to_missense(exome_ht)
+
         logger.info('Done preprocessing files')
 
     logger.info('Reading in input files')         

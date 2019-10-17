@@ -2,7 +2,8 @@ import argparse
 import hail as hl
 import logging
 from gnomad_hail.resources import *
-from gnomad_hail.utils.generic import get_reference_genome
+from gnomad_hail.utils import *
+from gnomad_hail.utils.generic import *
 from constraint_utils.constraint_basics import *
 #from gnomad_lof.constraint_utils.generic import * 
 
@@ -13,8 +14,7 @@ logger.setLevel(logging.INFO)
 
 
 RESOURCE_PREFIX = 'gs://regional_missense_constraint/resources'
-BUILDS = [37, 38]
-
+BUILDS = ['GRCh37', 'GRCh38']
 
 # original regional missense constraint resource files
 codon_table_path = f'{RESOURCE_PREFIX}/codons_lookup.tsv'
@@ -30,6 +30,7 @@ processed_genomes_ht_path = f'{MODEL_PREFIX}/genomes_processed.ht'
 
 # processed constraint resource files
 mutation_rate_ht = f'{RESOURCE_PREFIX}/ht/mutation_rate.ht'
+
 
 def get_codon_lookup() -> dict:
     """
@@ -114,28 +115,28 @@ def get_divergence_scores() -> dict:
     return div_scores
 
 
-def get_reference_path(build) -> str:
+def get_reference_path(build: str) -> str:
     """
     Returns path to reference fasta files 
 
-    :param int build: Reference genome build; one of BUILDS
+    :param str build: Reference genome build; one of BUILDS
     :return: Path to reference fasta + fasta index
     :rtype: str
     """
     if build not in BUILDS:
         raise DataException(f'Build must be one of {BUILDS}.')
         
-    if build == 37:
+    if build == 'GRCh37':
         return 'gs://hail-common/references/human_g1k_v37.fasta'
     else:
         return 'gs://hail-common/references/Homo_sapiens_assembly38.fasta' 
 
 
-def get_full_context_ht_path(build) -> str:
+def get_full_context_ht_path(build: str) -> str:
     """
     Returns path to reference fasta in ht form, filtered to SNPs, and annotated with VEP
 
-    :param int build: Reference genome build; one of BUILDS
+    :param str build: Reference genome build; one of BUILDS
     :return: Path to full SNP reference fasta
     :rtype: str
     """
@@ -143,17 +144,17 @@ def get_full_context_ht_path(build) -> str:
     if build not in BUILDS:
         raise DataException(f'Build must be one of {BUILDS}.')
         
-    if build == 37:
+    if build == 'GRCh37':
         return f'{FLAGSHIP_LOF}/context/Homo_sapiens_assembly19.fasta.snps_only.vep_20181129.ht'
     else:
         raise DataException('Sorry, no reference ht for b38 yet')
 
 
-def get_processed_context_ht_path(build) -> str:
+def get_processed_context_ht_path(build: str) -> str:
     """
     Returns path to reference fasta in ht form, filtered to SNPs, and annotated with VEP
 
-    :param int build: Reference genome build; one of BUILDS
+    :param str build: Reference genome build; one of BUILDS
     :return: Path to full SNP reference fasta
     :rtype: str
     """
@@ -161,68 +162,68 @@ def get_processed_context_ht_path(build) -> str:
     if build not in BUILDS:
         raise DataException(f'Build must be one of {BUILDS}.')
         
-    if build == 37:
+    if build == 'GRCh37':
         return f'{RESOURCE_PREFIX}/ht/context/context_fasta_snps_only_vep_20190430.ht'
     else:
         raise DataException('Sorry, no reference ht for b38 yet')
 
 
-def get_gencode_gtf_path(build) -> str:
+def get_gencode_gtf_path(build: str) -> str:
     """
     Gets path to gencode gtf
 
-    :param int build: Reference genome build; one of BUILDS
+    :param str build: Reference genome build; one of BUILDS
     :return: Full path to gencode gtf
     :rtype: str
     """
     if build not in BUILDS:
         raise DataException(f'Build must be one of {BUILDS}.')
 
-    if build == 37:
+    if build == 'GRCh37':
         return f'{RESOURCE_PREFIX}/gencode.v30lift37.basic.annotation.gtf'
     else:
         return f'{RESOURCE_PREFIX}/gencode.v30.basic.annotation.gtf'
 
 
-def get_gencode_ht_path(build) -> str:
+def get_gencode_ht_path(build: str) -> str:
     """
     Gets path to gencode ht
 
-    :param int build: Reference genome build; one of BUILDS
+    :param str build: Reference genome build; one of BUILDS
     :return: Full path to gencode ht
     :rtype: str
     """
     if build not in BUILDS:
         raise DataException(f'Build must be one of {BUILDS}.')
 
-    if build == 37:
+    if build == 'GRCh37':
         return f'{RESOURCE_PREFIX}/ht/context/gencode.v30lift37.basic.annotation.ht'
     else:
         return f'{RESOURCE_PREFIX}/ht/context/gencode.v30.basic.annotation.ht'
 
 
-def get_processed_gencode_ht_path(build) -> str:
+def get_processed_gencode_ht_path(build: str) -> str:
     """
     Gets path to gencode ht
 
-    :param int build: Reference genome build; one of BUILDS
+    :param str build: Reference genome build; one of BUILDS
     :return: Full path to gencode ht
     :rtype: str
     """
     if build not in BUILDS:
         raise DataException(f'Build must be one of {BUILDS}.')
 
-    if build == 37:
+    if build == 'GRCh37':
         return f'{RESOURCE_PREFIX}/ht/context/gencode.v30lift37.exons.ht'
     else:
         return f'{RESOURCE_PREFIX}/ht/context/gencode.v30.basic.exons.ht'
 
 
-def process_gencode_ht(build) -> None:
+def process_gencode_ht(build: str) -> None:
     """
     Imports gencode gtf as ht,filters to protein coding transcripts, and writes out as ht
 
-    :param int build: Reference genome build; one of BUILDS
+    :param str build: Reference genome build; one of BUILDS
     :return: None
     :rtype: None
     """
@@ -244,12 +245,12 @@ def process_gencode_ht(build) -> None:
     ht.write(get_processed_gencode_ht_path(build), overwrite=True)
 
 
-def process_context_ht(build, trimers) -> None:
+def process_context_ht(build: str, trimers: bool) -> None:
     """
     Imports reference fasta (SNPs only, VEP'd) as ht
     Filters to canonical protein coding transcripts
 
-    :param int build: Reference genome build; one of BUILDS
+    :param str build: Reference genome build; one of BUILDS
     :param bool trimers: Whether to filter to trimers or heptamers
     :return: None
     :rtype: None
@@ -260,7 +261,7 @@ def process_context_ht(build, trimers) -> None:
 
     
     logger.info('Reading in SNPs-only, VEP-annotated context ht')
-    full_context_ht = prepare_ht(hl.read_table(get_full_context_ht_path(build)), trimers)
+    full_context_ht = prepare_ht(hl.read_table(get_full_context_ht_path(build)), trimers) # from constraint_basics
 
     logger.info(
                 'Importing codon translation table, amino acid names,'
@@ -268,7 +269,6 @@ def process_context_ht(build, trimers) -> None:
     full_context_ht = full_context_ht.annotate_globals(
                                                     codon_translation=get_codon_lookup(), acid_names=get_acid_names(),
                                                     mutation_rate=get_mutation_rate(), div_scores=get_divergence_scores())
-
 
     logger.info('Filtering to canonical protein coding transcripts')
     full_context_ht = full_context_ht.explode(full_context_ht.vep.transcript_consequences)
@@ -287,6 +287,28 @@ def process_context_ht(build, trimers) -> None:
     logger.info('Writing out context ht')
     context_ht.write(get_processed_context_ht_path(build), overwrite=True)
     context_ht.describe()
+
+
+def filter_to_missense(ht: hl.Table) -> hl.Table:
+    """
+    Filters input table to missense variants only
+
+    :param Table ht: Input ht to be filtered
+    :return: Table filtered to only missense variants
+    :rtype: hl.Table
+    """
+    logger.info(f'ht count before filtration: {ht.count()}')
+    logger.info('Annotating ht with most severe consequence')
+    ht = add_most_severe_csq_to_tc_within_ht(ht) # from constraint_basics
+
+    # vep consequences from https://github.com/macarthur-lab/gnomad_hail/blob/master/utils/constants.py
+    # missense definition from seqr searches
+    missense = ['stop_lost', 'initiator_codon_variant', 'start_lost', 'protein_altering_variant', 'missense_variant']
+    logger.info('Filtering to missense variants')
+    ht = ht.filter(hl.literal(missense).contains(ht.vep.most_severe_consequence))
+    logger.info(f'ht count after filtration: {ht.count()}')
+
+    return ht
 
 
 class DataException(Exception):
