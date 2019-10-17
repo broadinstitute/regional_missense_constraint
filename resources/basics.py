@@ -313,19 +313,23 @@ def filter_to_missense(ht: hl.Table) -> hl.Table:
     return ht
 
 
-def filter_to_autosome_and_par(ht: hl.Table) -> hl.Table:
+def filter_to_autosome_and_par(ht: hl.Table, rg: hl.ReferenceGenome) -> hl.Table:
     """
-    Filters input table to autosomes and PAR regions. Also annotates each locus with whether it's in a PAR
+    Filters input table to autosomes, X/X PAR, and Y (not mito or alt/decoy contigs). Also annotates each locus with region type.
 
     :param Table ht: Input ht to be filtered/annotated
+    :param ReferenceGenome rg: Reference genome of Table
     :return: Table filtered to autosomes/PAR and annotated with PAR status
     :rtype: hl.Table
     """
     logger.info(f'ht count before filtration: {ht.count()}') 
-    logger.info('Filtering to autosomes and PAR')
-
-    ht = ht.filter(ht.locus.in_autosome_or_par())
-    ht = ht.annotate(in_par=(ht.locus_in_x_par() | ht.locus_in_y_par()))
+    ht = ht.annotate(region_type=hl.case()
+                                        .when((ht.locus.in_autosome() | ht.locus.in_x_par()), 'autosome_xpar')
+                                        .when(ht.locus.in_x_nonpar(), 'x_nonpar')
+                                        .when(ht.locus.in_y_nonpar(), 'y')
+                                        .default('remove'))
+    logger.info('Filtering to autosomes + X/Y')
+    ht = ht.filter(ht.region_type == 'remove', keep=False)
     logger.info(f'ht count after filtration: {ht.count()}')
     return ht
 
