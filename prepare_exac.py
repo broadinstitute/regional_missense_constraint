@@ -25,7 +25,7 @@ def filter_to_missense(ht: hl.Table) -> hl.Table:
 
     logger.info('Filtering to missense variants')
     missense = ['stop_lost', 'initiator_codon_variant', 'start_lost', 'protein_altering_variant', 'missense_variant']
-    ht = ht.filter(hl.literal(MISSENSE).contains(ht.vep.most_severe_consequence))
+    ht = ht.filter(hl.literal(MISSENSE).contains(ht.most_severe_consequence))
     logger.info(f'ht count after filtration: {ht.count()}')
     return ht
 
