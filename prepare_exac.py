@@ -27,6 +27,9 @@ def filter_to_missense(ht: hl.Table) -> hl.Table:
     missense = ['stop_lost', 'initiator_codon_variant', 'start_lost', 'protein_altering_variant', 'missense_variant']
     ht = ht.filter(hl.literal(MISSENSE).contains(ht.most_severe_consequence))
     logger.info(f'ht count after filtration: {ht.count()}')
+    logger.info('Deduplicating keys')
+    ht = ht.distinct()
+    logger.info(f'ht count after dedup: {ht.count()}')
     return ht
 
  
@@ -44,7 +47,7 @@ def main(args):
         logger.info('Filtering ExAC ht to only missense variants')
         ht = hl.read_table(exac_ht)
         ht = filter_to_missense(ht)
-        ht.naive_coalesce(500).write(filtered_exac_ht)
+        ht.naive_coalesce(500).write(filtered_exac_ht, overwrite=args.overwrite)
 
 
 if __name__ == '__main__':
