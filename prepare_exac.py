@@ -49,12 +49,22 @@ def main(args):
         ht = filter_to_missense(ht)
         ht.naive_coalesce(500).write(filtered_exac_ht, overwrite=args.overwrite)
 
+    if args.import_cov:
+        for i in range(1, 23):
+            tsv = f'{exac_tsv_path}/Panel.chr{i}.coverage.txt.gz'
+            out = f'{exac_cov_path}/{i}_coverage.ht'
+            ht = hl.import_table(tsv, min_partitions=100, impute=True, force_bgz=True)
+            ht = ht.transmute(locus=hl.parse_locus(hl.format('%s:%s', ht['#chrom'], ht.pos)))
+            ht = ht.key_by('locus')
+            ht.write(out, overwrite=args.overwrite)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('This script prepares the ExAC sites vcf for RMC testing')
 
     parser.add_argument('--import_vcf', help='Import ExAC VCF and write to ht', action='store_true')
     parser.add_argument('--filter_ht', help='Filter ExAC ht to missense variants', action='store_true')
+    parser.add_argument('--import_cov', help='Import coverage files', action='store_true')
     parser.add_argument('--overwrite', help='Overwrite existing data', action='store_true')
     parser.add_argument('--slack_channel', help='Send message to Slack channel/user', default='@kc')
     args = parser.parse_args()

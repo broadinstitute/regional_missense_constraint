@@ -36,9 +36,10 @@ processed_genomes_ht_path = f'{MODEL_PREFIX}/genomes_processed.ht'
 mutation_rate_ht = f'{RESOURCE_PREFIX}/ht/mutation_rate.ht'
 
 # ExAC files (for direct comparison with Kaitlin's code)
-exac_vcf = f'{RESOURCE_PREFIX}/ExAC/ExAC.r0.3.sites.vep.vcf.gz'
-exac_ht = f'{RESOURCE_PREFIX}/ExAC/ExAC.r0.3.sites.vep.ht'
-filtered_exac_ht = f'{RESOURCE_PREFIX}/ExAC/ExAC.r0.3.missense_only.ht'
+EXAC_PREFIX = f'{RESOURCE_PREFIX}/ExAC'
+exac_vcf = f'{EXAC_PREFIX}/ExAC.r0.3.sites.vep.vcf.gz'
+exac_ht = f'{EXAC_PREFIX}/ExAC.r0.3.sites.vep.ht'
+filtered_exac_ht = f'{EXAC_PREFIX}/ExAC.r0.3.missense_only.ht'
 
 
 ## Resources from Kaitlin
@@ -307,8 +308,12 @@ MODEL_PREFIX = 'gs://regional_missense_constraint/model'
 EXP_PREFIX = f'{MODEL_PREFIX}/exp/'
 exp_var_pickle = f'{EXP_PREFIX}/expected_variants.pckl'
 exac_exp_var_pickle = f'{EXP_PREFIX}/exac_expected_variants.pckl' 
+cov_ht = coverage_ht_path('exomes') # https://github.com/macarthur-lab/gnomad_hail/blob/master/resources/basics.py#L366
+exac_tsv_path = 'gs://gnomad-public/legacy/exacv1_downloads/release0.1/coverage'
+exac_cov_path = f'{EXAC_PREFIX}/coverage' 
 
-def load_exp_var(ExAC: bool=False) -> dict[hl.Struct, int]:
+
+def load_exp_var(ExAC: bool=False) -> Dict[hl.Struct, int]:
     """
     Loads saved expected variant count from pickle
 
