@@ -11,6 +11,7 @@ logger.setLevel(logging.INFO)
 def main(args):
 
     hl.init(log='/RMC.log')
+    exac = args.exac
 
     if args.pre_process_data:
         logger.info('Preprocessing reference fasta and gencode files')
@@ -32,7 +33,7 @@ def main(args):
         # total rows scored with average divergence score (=not in div_scores): 49443864
     
     logger.info('Reading in exome ht') 
-    if args.exac:
+    if exac:
         exome_ht = prepare_ht(hl.read_table(filtered_exac_ht), args.trimers)
     else:   
         exome_ht = prepare_ht(hl.read_table(filtered_exomes_ht_path), args.trimers)  
@@ -61,13 +62,24 @@ def main(args):
                                                 context_ht.div_scores.contains(context_ht.vep.transcript_consequences.transcript_id),
                                                 context_ht.div_scores[context_ht.vep.transcript_consequences.transcript_id],
                                                 0.0564635)))
-    
-    #logger.info('Processing full context')
+
+    if args.calc_exp:
+        logger.info('Processing context ht to calculate number of expected variants')
+        # NOTE: count variants from Konrad's constraint code
+        # https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/generic.py
+        exp_counts = count_variants(context_ht).variant_count
+        outfile = exac_exp_var_pickle if exac else exp_var_pickle
+        with hl.hadoop_open(outfile, 'wb') as o:
+            pickle.dump(exp_counts, o)
+
+    logger.info('Loading exp counts')
+    exp_counts = load_exp_var(exac)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('This script searches for regional missense constraint in gnomAD')
 
+    parser.add_argument('--calc_exp', help='Calculate expected variant counts', action='store_true')
     parser.add_argument('--exac', help='Use ExAC ht (not gnomAD ht)', action='store_true')
     parser.add_argument('--overwrite', help='Overwrite existing data', action='store_true')
     parser.add_argument('--pre_process_data', help='Pre-process data', action='store_true')
