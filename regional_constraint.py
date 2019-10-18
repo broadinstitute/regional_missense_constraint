@@ -1,11 +1,55 @@
 from gnomad_hail.utils.generic import get_reference_genome
 from gnomad_hail.utils.slack import *
 from regional_missense_constraint.resources.basics import *
+from regional_missense_constraint.utils.generic import *
 
 
 logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
 logger = logging.getLogger("regional_missense_constraint")
 logger.setLevel(logging.INFO)
+
+
+def calculate_expected(context_ht: hl.Table, exac: bool) -> hl.Table:
+    """
+    Annotates context ht with expected variants count (adjusted by mutation rate, divergence score, and region type
+
+    :param Table context_ht: Context ht
+    :param bool exac: Whether the data is ExAC data
+    :return: Context ht with expected variant annotations
+    :rtype: Table
+    """
+    logger.info('Annotating context ht with mutation rate information')
+    context_ht = context_ht.annotate(mu_snp=context_ht.mutation_rate[context_ht.context][1])
+
+    # NOTE: average divergence score from Kaitlin
+    # https://github.com/ksamocha/regional_constraint/blob/master/per_base_regional.py#L1547
+    logger.info('Annotating transcripts in context ht with divergence scores')
+    context_ht = context_ht.annotate(div=(hl.cond(
+                                                context_ht.div_scores.contains(context_ht.vep.transcript_consequences.transcript_id),
+                                                context_ht.div_scores[context_ht.vep.transcript_consequences.transcript_id],
+                                                0.0564635)))
+    logger.info('Adjusting mutation rate with divergence scores')
+    # p_mut2 = p_mut1*(1 + (0.31898*div_score))
+    context_ht = context_ht.annotate(mu=context_ht.mu_snp *(1 + (0.31898*context_ht.div)))
+
+    logger.info('Processing context ht to calculate number of expected variants')
+    # NOTE: count variants from Konrad's constraint code
+    # https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/generic.py
+    '''exp_counts = count_variants(context_ht).variant_count # i think this pickle is actually used for mu calculations
+    outfile = exac_exp_var_pickle if exac else exp_var_pickle
+    with hl.hadoop_open(outfile, 'wb') as o:
+        pickle.dump(exp_counts, o)'''
+    logger.info('Counting variants in context ht')
+    exp_ht = count_variants(context_ht)
+    exp_ht = exp_ht.transmute(possible_variants=exp_ht.variant_count) # rename variant_counts (from count_variants function) to possible variants
+    if exac:
+        exp_ht = exp_ht.annotate(expected_variants=hl.case()
+                                                        .when(exp_ht.region_type == 'x_nonpar', (0.3715167 + 7796945 * exp_ht.mu))
+                                                        .when(exp_ht.region_type == 'y', (0.05330181 + 2457366 * exp_ht.mu))
+                                                        .default(0.4190964 + 11330208 * exp_ht.mu))
+
+    # TODO: get expected variant calculation for gnomAD
+    return exp_ht
 
 
 def main(args):
@@ -41,10 +85,10 @@ def main(args):
     logger.info('Inferring build of exome ht')
     rg = get_reference_genome(exome_ht.locus).name 
 
-    logger.info('Reading in context ht and gencode ht') 
+    logger.info('Reading in context ht, gencode ht, mutation rate ht') 
     context_ht = hl.read_table(get_processed_context_ht_path(args.build))
     gencode_ht = get_processed_gencode_ht(args.build)
- 
+
     if args.test:
         contigs = rg.contigs[21]
         logger.info('Filtering to chr22 for testing')
@@ -55,25 +99,9 @@ def main(args):
         context_ht = filter_to_autosome_and_par(context_ht)
         exome_ht = filter_to_autosome_and_par(exome_ht)
 
-    # NOTE: average divergence score from Kaitlin
-    # https://github.com/ksamocha/regional_constraint/blob/master/per_base_regional.py#L1547
-    logger.info('Annotating transcripts in context ht with divergence scores')
-    context_ht = context_ht.annotate(div=(hl.cond(
-                                                context_ht.div_scores.contains(context_ht.vep.transcript_consequences.transcript_id),
-                                                context_ht.div_scores[context_ht.vep.transcript_consequences.transcript_id],
-                                                0.0564635)))
-
     if args.calc_exp:
-        logger.info('Processing context ht to calculate number of expected variants')
-        # NOTE: count variants from Konrad's constraint code
-        # https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/generic.py
-        exp_counts = count_variants(context_ht).variant_count
-        outfile = exac_exp_var_pickle if exac else exp_var_pickle
-        with hl.hadoop_open(outfile, 'wb') as o:
-            pickle.dump(exp_counts, o)
+    
 
-    logger.info('Loading exp counts')
-    exp_counts = load_exp_var(exac)
 
 
 if __name__ == '__main__':
