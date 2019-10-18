@@ -42,6 +42,26 @@ def calculate_expected(context_ht: hl.Table, exac: bool) -> hl.Table:
     return exp_ht
 
 
+def calculate_observed(exome_ht: hl.Table, exac: bool) -> hl.Table:
+    """
+    Something about observed variants
+
+    :param Table exome_ht: Input exome ht with observed variants
+    :param bool exac: Whether the data is ExAC data
+    :return: Exome ht something with observed variants
+    :rtype: Table
+    """
+    if exac:
+        # keep criteria from Kaitlin (manuscript, also in her code): adjusted AC <= 123 and VQSLOD >= -2.632
+        obs_ht = exome_ht.filter((exome_ht.info.AC_Adj <= 123) & (exome_ht.info.VQSLOD >= -2.632))
+        obs_ht = count_variants(obs_ht)
+        obs_ht = obs_ht.transmute(observed_variants=obs_ht.variant_count)
+
+    return obs_ht
+
+    # TODO: get observed counts for gnomAD
+
+
 def main(args):
 
     hl.init(log='/RMC.log')
@@ -92,17 +112,21 @@ def main(args):
     if args.calc_exp:
         exp_ht = calculate_expected(context_ht, exac)
 
+    if args.calc_obs:
+        pass
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('This script searches for regional missense constraint in gnomAD')
 
-    parser.add_argument('--calc_exp', help='Calculate expected variant counts', action='store_true')
-    parser.add_argument('--exac', help='Use ExAC ht (not gnomAD ht)', action='store_true')
-    parser.add_argument('--overwrite', help='Overwrite existing data', action='store_true')
     parser.add_argument('--pre_process_data', help='Pre-process data', action='store_true')
+    parser.add_argument('--calc_exp', help='Calculate expected variant counts', action='store_true')  
+    parser.add_argument('--calc_obs', help='Calculated observed variant counts', action='store_true')
+ 
+    parser.add_argument('--trimers', help='Use trimers instead of heptamers', action='store_false')  
+    parser.add_argument('--exac', help='Use ExAC ht (not gnomAD ht)', action='store_true')
     parser.add_argument('--test', help='Filter to chr22 (for code testing purposes)', action='store_true')
-    parser.add_argument('--trimers', help='Use trimers instead of heptamers', action='store_false')
+    parser.add_argument('--pre_process_data', help='Pre-process data', action='store_true')
     parser.add_argument('--slack_channel', help='Send message to Slack channel/user', default='@kc')
     args = parser.parse_args()
 
