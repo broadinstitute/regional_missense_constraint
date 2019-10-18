@@ -1,4 +1,4 @@
-from constraint_utils.constraint_basics import *
+from regional_missense_constraint.resources.basics import *
 
 
 logging.basicConfig(format="%(asctime)s (%(name)s %(lineno)s): %(message)s", datefmt='%m/%d/%Y %I:%M:%S %p')
@@ -6,7 +6,7 @@ logger = logging.getLogger("regional_missense_constraint_generic")
 logger.setLevel(logging.INFO)
 
 
-## Functions to process resources from Kaitlin
+## Resources from Kaitlin
 def get_codon_lookup() -> dict:
     """
     Reads in codon lookup table and returns as dictionary (key: codon, value: amino acid)
@@ -55,22 +55,24 @@ def get_mutation_rate() -> dict:
     return mu
 
 
-def get_mutation_rate_ht() -> hl.Table:
+def get_mutation_rate_ht(overwrite: bool=True) -> hl.Table:
     """
     Reads in mutation rate table and stores as ht
 
+    :param bool overwrite: Whether to overwrite data
     :return: Mutation rate information in ht
-    :rtype: Table 
+    :rtype: Table
     """
-    ht = hl.import_table(f'{mutation_rate_table_path}', impute=True)
+    # from	n_kmer	p_any_snp_given_kmer	mu_kmer	to	count_snp	p_snp_given_kmer	mu_snp
+    ht = hl.import_table(mutation_rate_table_path, impute=True)
     ht = ht.transmute(context=ht['from'], ref=ht['from'][1],
                                  alt=ht.to[1])
     ht = ht.transmute(alleles=[ht.ref, ht.alt])
     ht = ht.key_by('context', 'alleles')
     ht = ht.select(ht.mu_snp)
-    ht = ht.checkpoint(mutation_rate_ht, overwrite=True)
+    ht = ht.checkpoint(mutation_rate_ht, overwrite=overwrite)
     return ht
- 
+
 
 def get_divergence_scores() -> dict:
     """
@@ -91,6 +93,21 @@ def get_divergence_scores() -> dict:
     return div_scores
 
 
+def get_divergence_score_ht(overwrite: bool=True) -> hl.Table:
+    """
+    Reads in divergence score file and writes out to ht
+
+    :param bool overwrite: Whether to overwrite
+    :return: Divergence score ht
+    :rtype: Table
+    """
+    ht = hl.import_table(divergence_scores_path, impute=True)
+    ht = ht.transmute(transcript=ht.transcript.split('.')[0])
+    ht = ht.key_by('transcript')
+    ht.write(divergence_ht, overwrite=overwrite)
+    return ht
+
+
 ## Functions to process reference genome related resources
 def process_context_ht(build: str, trimers: bool) -> None:
     """
@@ -102,37 +119,42 @@ def process_context_ht(build: str, trimers: bool) -> None:
     :return: None
     :rtype: None
     """
-
     if build not in BUILDS:
         raise DataException(f'Build must be one of {BUILDS}.')
 
-    
     logger.info('Reading in SNPs-only, VEP-annotated context ht')
     full_context_ht = prepare_ht(hl.read_table(get_full_context_ht_path(build)), trimers) # from constraint_basics
-
-    logger.info(
-                'Importing codon translation table, amino acid names,'
-                'mutation rate, divergence scores and annotating as globals')
-    full_context_ht = full_context_ht.annotate_globals(
-                                                    codon_translation=get_codon_lookup(), acid_names=get_acid_names(),
-                                                    mutation_rate=get_mutation_rate(), div_scores=get_divergence_scores())
+    logger.info(f'Full ht count: {full_context_ht.count()}')
 
     logger.info('Filtering to canonical protein coding transcripts')
     full_context_ht = full_context_ht.explode(full_context_ht.vep.transcript_consequences)
     context_ht = full_context_ht.filter(
                                         (full_context_ht.vep.transcript_consequences.biotype == 'protein_coding')
                                         & (full_context_ht.vep.transcript_consequences.canonical == 1))
+    logger.info(f'Count after filtration: {context_ht.count()}')
 
-    #logger.info('Importing mutation rate table and annotating as global')
-    #mu_ht = get_mutation_rate_ht()
+    logger.info(
+                'Importing codon translation table and amino acid names and annotating as globals')
+    full_context_ht = full_context_ht.annotate_globals(
+                                                    codon_translation=get_codon_lookup(), acid_names=get_acid_names())
 
-    context_ht.vep.transcript_consequences.transcript_id.show()
+    logger.info('Importing mutation rates and joining to context ht')
+    mu_ht = get_mutation_rate_ht()
+    context_ht = context_ht.key_by('context', 'alleles').join(mu_ht, how='left')
 
-    logger.info('Re-keying context ht')
+    logger.info('Importing divergence scores and annotating context ht')
+    div_ht = get_divergence_score_ht()
+    context_ht = context_ht.annotate(div=hl.cond(
+                                                hl.is_defined(div_ht[context_ht.vep.transcript_consequences.transcript_id]),
+                                                div_ht[context_ht.vep.transcript_consequences.transcript_id],
+                                                0.0564635))
+
+    logger.info('Re-keying context ht by locus and alleles')
     #context_ht = context_ht.key_by(context_ht.locus, context_ht.context, context_ht.ref, context_ht.alt)
     context_ht = context_ht.key_by('locus', 'alleles')
 
     logger.info('Writing out context ht')
+    context_ht = context_ht.naive_coalesce(10000)
     context_ht.write(get_processed_context_ht_path(build), overwrite=True)
     context_ht.describe()
 

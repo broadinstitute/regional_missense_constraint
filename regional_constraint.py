@@ -18,19 +18,9 @@ def calculate_expected(context_ht: hl.Table, exac: bool) -> hl.Table:
     :return: Context ht with expected variant annotations
     :rtype: Table
     """
-    logger.info('Annotating context ht with mutation rate information')
-    context_ht = context_ht.annotate(mu_snp=context_ht.mutation_rate[context_ht.context][1])
-
-    # NOTE: average divergence score from Kaitlin
-    # https://github.com/ksamocha/regional_constraint/blob/master/per_base_regional.py#L1547
-    logger.info('Annotating transcripts in context ht with divergence scores')
-    context_ht = context_ht.annotate(div=(hl.cond(
-                                                context_ht.div_scores.contains(context_ht.vep.transcript_consequences.transcript_id),
-                                                context_ht.div_scores[context_ht.vep.transcript_consequences.transcript_id],
-                                                0.0564635)))
     logger.info('Adjusting mutation rate with divergence scores')
     # p_mut2 = p_mut1*(1 + (0.31898*div_score))
-    context_ht = context_ht.annotate(mu=context_ht.mu_snp *(1 + (0.31898*context_ht.div)))
+    context_ht = context_ht.annotate(mu=(context_ht.mu_snp * (1 + (0.31898*context_ht.div))))
 
     logger.info('Processing context ht to calculate number of expected variants')
     # NOTE: count variants from Konrad's constraint code
@@ -59,10 +49,10 @@ def main(args):
 
     if args.pre_process_data:
         logger.info('Preprocessing reference fasta and gencode files')
-        process_context_ht(args.build, args.trimers)
+        process_context_ht('GRCh37', args.trimers)
 
         logger.info('Preprocessing gencode gtf information')
-        gencode_ht = process_gencode_ht(args.build)
+        gencode_ht = process_gencode_ht('GRCh37')
 
         logger.info('Filtering gnomAD exomes ht to missense variants only')
         exome_ht = hl.read_table(processed_exomes_ht_path)
@@ -78,16 +68,16 @@ def main(args):
     
     logger.info('Reading in exome ht') 
     if exac:
-        exome_ht = prepare_ht(hl.read_table(filtered_exac_ht), args.trimers)
+        exome_ht = hl.read_table(filt_exac_cov_ht)
     else:   
         exome_ht = prepare_ht(hl.read_table(filtered_exomes_ht_path), args.trimers)  
     
     logger.info('Inferring build of exome ht')
-    rg = get_reference_genome(exome_ht.locus).name 
+    rg = get_reference_genome(exome_ht.locus) 
 
     logger.info('Reading in context ht and gencode ht') 
-    context_ht = hl.read_table(get_processed_context_ht_path(args.build))
-    gencode_ht = get_processed_gencode_ht(args.build)
+    context_ht = hl.read_table(get_processed_context_ht_path(rg.name))
+    gencode_ht = get_processed_gencode_ht_path(rg.name)
 
     if args.test:
         contigs = rg.contigs[21]
@@ -100,7 +90,7 @@ def main(args):
         exome_ht = filter_to_autosome_and_par(exome_ht)
 
     if args.calc_exp:
-        exp_ht = calcuate_expected(context_ht, exac)
+        exp_ht = calculate_expected(context_ht, exac)
 
 
 

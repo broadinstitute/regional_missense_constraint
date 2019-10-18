@@ -24,6 +24,7 @@ codon_table_path = f'{RESOURCE_PREFIX}/codons_lookup.tsv'
 acid_names_path = f'{RESOURCE_PREFIX}/acid_names.tsv'
 mutation_rate_table_path = f'{RESOURCE_PREFIX}/mutation_rate_table.tsv'
 divergence_scores_path = f'{RESOURCE_PREFIX}/divsites_gencodev19_all_transcripts.tsv'
+divergence_ht = f'{RESOURCE_PREFIX}/div_scores.ht'
 
 # LoF constraint resource files
 FLAGSHIP_LOF = 'gs://gnomad-public/papers/2019-flagship-lof/v1.0/'
@@ -41,91 +42,6 @@ exac_vcf = f'{EXAC_PREFIX}/ExAC.r0.3.sites.vep.vcf.gz'
 exac_ht = f'{EXAC_PREFIX}/ExAC.r0.3.sites.vep.ht'
 filtered_exac_ht = f'{EXAC_PREFIX}/ExAC.r0.3.missense_only.ht'
 filt_exac_cov_ht = f'{EXAC_PREFIX}/ExAC.r0.3.missense_only_cov.ht' # NOTE: this is only annotated with coverage for chr22
-
-
-## Resources from Kaitlin
-def get_codon_lookup() -> dict:
-    """
-    Reads in codon lookup table and returns as dictionary (key: codon, value: amino acid)
-
-    :return: Dictionary of codon translation
-    :rtype: dict
-    """
-    codon_lookup = {}
-    with hl.hadoop_open(codon_table_path) as c:
-        c.readline()
-        for line in c:
-            line = line.strip().split(' ')
-            codon_lookup[line[0]] = line[1]
-    return codon_lookup
-
-
-def get_acid_names() -> dict:
-    """
-    Reads in amino acid table and stores as dict (key: 3 letter name, value: (long name, one letter name)
-
-    :return: Dictionary of amino acid names
-    :rtype: dict
-    """
-    acid_map = {}
-    with hl.hadoop_open(acid_names_path) as a:
-        a.readline()
-        for line in a:
-            line = line.strip().split('\t')
-            acid_map[line[1]] = (line[0], line[2])
-    return acid_map
-
-
-def get_mutation_rate() -> dict:
-    """
-    Reads in mutation rate table and stores as dict
-
-    :return: Dictionary of mutation rate information (key: context, value: (alt, mu_snp))
-    :rtype: dict
-    """
-    mu = {}
-    # from    n_kmer  p_any_snp_given_kmer    mu_kmer to      count_snp       p_snp_given_kmer        mu_snp
-    with hl.hadoop_open(mutation_rate_table_path) as m:
-        for line in m:
-            context, n_kmer, p_any_snp_given_kmer, mu_kmer, new_kmer, count_snp, p_snp_given_kmer, mu_snp = line.strip().split('\t')
-            mu[context] = (new_kmer[1], mu_snp)
-    return mu
-
-
-def get_mutation_rate_ht() -> hl.Table:
-    """
-    Reads in mutation rate table and stores as ht
-
-    :return: Mutation rate information in ht
-    :rtype: Table 
-    """
-    ht = hl.import_table(f'{mutation_rate_table_path}', impute=True)
-    ht = ht.transmute(context=ht['from'], ref=ht['from'][1],
-                                 alt=ht.to[1])
-    ht = ht.transmute(alleles=[ht.ref, ht.alt])
-    ht = ht.key_by('context', 'alleles')
-    ht = ht.select(ht.mu_snp)
-    ht = ht.checkpoint(mutation_rate_ht, overwrite=True)
-    return ht
- 
-
-def get_divergence_scores() -> dict:
-    """
-    Reads in divergence score file and stores as dict (key: transcript, value: score)
-
-    :return: Divergence score dict
-    :rtype: dict
-    """
-    div_scores = {}
-    with hl.hadoop_open(divergence_scores_path) as d:
-        d.readline()
-        for line in d:
-            transcript, score = line.strip().split('\t')
-            try:
-                div_scores[transcript.split('.')[0]] = float(score)
-            except:
-                continue
-    return div_scores
 
 
 ## Reference genome related resources
