@@ -72,8 +72,6 @@ def main(args):
             cov_path = f'{exac_cov_path}/{c}_coverage.ht'
             cov_ht = hl.read_table(cov_path)
             ht = ht.annotate(coverage=cov_ht[ht.locus])
-        ht.describe()
-        ht.show()
         ht.write(filt_exac_cov_ht, overwrite=args.overwrite)
 
 
