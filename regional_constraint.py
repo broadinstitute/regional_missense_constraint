@@ -85,7 +85,7 @@ def main(args):
     logger.info('Inferring build of exome ht')
     rg = get_reference_genome(exome_ht.locus).name 
 
-    logger.info('Reading in context ht, gencode ht, mutation rate ht') 
+    logger.info('Reading in context ht and gencode ht') 
     context_ht = hl.read_table(get_processed_context_ht_path(args.build))
     gencode_ht = get_processed_gencode_ht(args.build)
 
@@ -100,7 +100,7 @@ def main(args):
         exome_ht = filter_to_autosome_and_par(exome_ht)
 
     if args.calc_exp:
-    
+        exp_ht = calcuate_expected(context_ht, exac)
 
 
 
