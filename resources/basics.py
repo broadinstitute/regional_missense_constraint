@@ -181,51 +181,6 @@ def get_processed_context_ht_path(build: str) -> str:
         raise DataException('Sorry, no reference ht for b38 yet')
 
 
-def process_context_ht(build: str, trimers: bool) -> None:
-    """
-    Imports reference fasta (SNPs only, VEP'd) as ht
-    Filters to canonical protein coding transcripts
-
-    :param str build: Reference genome build; one of BUILDS
-    :param bool trimers: Whether to filter to trimers or heptamers
-    :return: None
-    :rtype: None
-    """
-
-    if build not in BUILDS:
-        raise DataException(f'Build must be one of {BUILDS}.')
-
-    
-    logger.info('Reading in SNPs-only, VEP-annotated context ht')
-    full_context_ht = prepare_ht(hl.read_table(get_full_context_ht_path(build)), trimers) # from constraint_basics
-
-    logger.info(
-                'Importing codon translation table, amino acid names,'
-                'mutation rate, divergence scores and annotating as globals')
-    full_context_ht = full_context_ht.annotate_globals(
-                                                    codon_translation=get_codon_lookup(), acid_names=get_acid_names(),
-                                                    mutation_rate=get_mutation_rate(), div_scores=get_divergence_scores())
-
-    logger.info('Filtering to canonical protein coding transcripts')
-    full_context_ht = full_context_ht.explode(full_context_ht.vep.transcript_consequences)
-    context_ht = full_context_ht.filter(
-                                        (full_context_ht.vep.transcript_consequences.biotype == 'protein_coding')
-                                        & (full_context_ht.vep.transcript_consequences.canonical == 1))
-
-    #logger.info('Importing mutation rate table and annotating as global')
-    #mu_ht = get_mutation_rate_ht()
-
-    context_ht.vep.transcript_consequences.transcript_id.show()
-
-    logger.info('Re-keying context ht')
-    #context_ht = context_ht.key_by(context_ht.locus, context_ht.context, context_ht.ref, context_ht.alt)
-    context_ht = context_ht.key_by('locus', 'alleles')
-
-    logger.info('Writing out context ht')
-    context_ht.write(get_processed_context_ht_path(build), overwrite=True)
-    context_ht.describe()
-
-
 ## Exon/transcript related resourcces
 def get_gencode_gtf_path(build: str) -> str:
     """
@@ -278,32 +233,6 @@ def get_processed_gencode_ht_path(build: str) -> str:
         return f'{RESOURCE_PREFIX}/ht/context/gencode.v30.basic.exons.ht'
 
 
-def process_gencode_ht(build: str) -> None:
-    """
-    Imports gencode gtf as ht,filters to protein coding transcripts, and writes out as ht
-
-    :param str build: Reference genome build; one of BUILDS
-    :return: None
-    :rtype: None
-    """
-    if build not in BUILDS:
-        raise DataException(f'Build must be one of {BUILDS}.')
-
-    logger.info('Reading in gencode gtf')
-    ht = hl.experimental.import_gtf(get_gencode_gtf_path(build), reference_genome=f'GRCh{build}',
-                                    skip_invalid_contigs=True)
-
-    logger.info('Filtering gencode gtf to exons in protein coding genes with support levels 1 and 2')
-    ht = ht.filter((ht.feature == 'exon') & (ht.gene_type == 'protein_coding') & (ht.level != '3'))
-    ht = ht.checkpoint(get_gencode_ht_path(build), overwrite=True)
-
-    logger.info('Grouping gencode ht by transcript ID')
-    ht = ht.key_by(ht.transcript_id)
-    ht = ht.select(ht.frame, ht.exon_number, ht.gene_name, ht.interval)
-    ht = ht.collect_by_key()
-    ht.write(get_processed_gencode_ht_path(build), overwrite=True)
-
-
 ## obs/exp related resources
 # expected variants resource files
 MODEL_PREFIX = 'gs://regional_missense_constraint/model'
@@ -337,50 +266,6 @@ def load_exp_var(ExAC: bool=False) -> Dict[hl.Struct, int]: # NOTE: I think this
     fname = exac_exp_var_pickle if filtered else exp_var_pickle
     with hl.hadoop_open(fname, 'rb') as f:
         return pickle.load(f)
-
-
-def filter_to_missense(ht: hl.Table) -> hl.Table:
-    """
-    Filters input table to missense variants only
-
-    :param Table ht: Input ht to be filtered
-    :return: Table filtered to only missense variants
-    :rtype: hl.Table
-    """
-    logger.info(f'ht count before filtration: {ht.count()}') # this printed 17209972
-    logger.info('Annotating ht with most severe consequence')
-    ht = add_most_severe_csq_to_tc_within_ht(ht) # from constraint_basics
-    logger.info(f'Consequence count: {ht.aggregate(hl.agg.counter(ht.vep.most_severe_consequence))}')
-
-    # vep consequences from https://github.com/macarthur-lab/gnomad_hail/blob/master/utils/constants.py
-    # missense definition from seqr searches
-    logger.info('Filtering to missense variants')
-    ht = ht.filter(hl.literal(MISSENSE).contains(ht.vep.most_severe_consequence))
-    logger.info(f'ht count after filtration: {ht.count()}') # this printed 6818793
-
-    ht = ht.naive_coalesce(5000)
-    return ht
-
-
-def filter_to_autosome_and_par(ht: hl.Table, rg: hl.ReferenceGenome) -> hl.Table:
-    """
-    Filters input table to autosomes, X/X PAR, and Y (not mito or alt/decoy contigs). Also annotates each locus with region type.
-
-    :param Table ht: Input ht to be filtered/annotated
-    :param ReferenceGenome rg: Reference genome of Table
-    :return: Table filtered to autosomes/PAR and annotated with PAR status
-    :rtype: hl.Table
-    """
-    logger.info(f'ht count before filtration: {ht.count()}') 
-    ht = ht.annotate(region_type=hl.case()
-                                        .when((ht.locus.in_autosome() | ht.locus.in_x_par()), 'autosome_xpar')
-                                        .when(ht.locus.in_x_nonpar(), 'x_nonpar')
-                                        .when(ht.locus.in_y_nonpar(), 'y')
-                                        .default('remove'))
-    logger.info('Filtering to autosomes + X/Y')
-    ht = ht.filter(ht.region_type == 'remove', keep=False)
-    logger.info(f'ht count after filtration: {ht.count()}')
-    return ht
 
     
 class DataException(Exception):
