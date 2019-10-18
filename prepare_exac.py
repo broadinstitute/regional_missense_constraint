@@ -50,9 +50,12 @@ def main(args):
         ht.naive_coalesce(500).write(filtered_exac_ht, overwrite=args.overwrite)
 
     if args.import_cov:
+        chroms = ['X', 'Y']
         for i in range(1, 23):
-            tsv = f'{exac_tsv_path}/Panel.chr{i}.coverage.txt.gz'
-            out = f'{exac_cov_path}/{i}_coverage.ht'
+                chroms.append[i]
+        for c in chroms:
+            tsv = f'{exac_tsv_path}/Panel.chr{c}.coverage.txt.gz'
+            out = f'{exac_cov_path}/{c}_coverage.ht'
             ht = hl.import_table(tsv, min_partitions=100, impute=True, force_bgz=True)
             ht = ht.transmute(locus=hl.parse_locus(hl.format('%s:%s', ht['#chrom'], ht.pos)))
             ht = ht.key_by('locus')
