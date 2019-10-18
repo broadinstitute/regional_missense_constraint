@@ -1,6 +1,7 @@
 import argparse
 import hail as hl
 import logging
+import pickle
 from gnomad_hail.resources import *
 from gnomad_hail.utils import *
 from gnomad_hail.utils.generic import *
@@ -15,13 +16,16 @@ logger.setLevel(logging.INFO)
 RESOURCE_PREFIX = 'gs://regional_missense_constraint/resources'
 BUILDS = ['GRCh37', 'GRCh38']
 
+# missense variant VEP annotations
+MISSENSE = ['stop_lost', 'initiator_codon_variant', 'start_lost', 'protein_altering_variant', 'missense_variant']
+
 # original regional missense constraint resource files
 codon_table_path = f'{RESOURCE_PREFIX}/codons_lookup.tsv'
 acid_names_path = f'{RESOURCE_PREFIX}/acid_names.tsv'
 mutation_rate_table_path = f'{RESOURCE_PREFIX}/mutation_rate_table.tsv'
 divergence_scores_path = f'{RESOURCE_PREFIX}/divsites_gencodev19_all_transcripts.tsv'
 
-# constraint resource files
+# LoF constraint resource files
 FLAGSHIP_LOF = 'gs://gnomad-public/papers/2019-flagship-lof/v1.0/'
 MODEL_PREFIX = f'{FLAGSHIP_LOF}/model/'
 processed_exomes_ht_path = f'{MODEL_PREFIX}/exomes_processed.ht'
@@ -36,10 +40,8 @@ exac_vcf = f'{RESOURCE_PREFIX}/ExAC/ExAC.r0.3.sites.vep.vcf.gz'
 exac_ht = f'{RESOURCE_PREFIX}/ExAC/ExAC.r0.3.sites.vep.ht'
 filtered_exac_ht = f'{RESOURCE_PREFIX}/ExAC/ExAC.r0.3.missense_only.ht'
 
-# missense variant VEP annotations
-MISSENSE = ['stop_lost', 'initiator_codon_variant', 'start_lost', 'protein_altering_variant', 'missense_variant']
 
-
+## Resources from Kaitlin
 def get_codon_lookup() -> dict:
     """
     Reads in codon lookup table and returns as dictionary (key: codon, value: amino acid)
@@ -123,6 +125,7 @@ def get_divergence_scores() -> dict:
     return div_scores
 
 
+## Reference genome related resources
 def get_reference_path(build: str) -> str:
     """
     Returns path to reference fasta files 
@@ -176,6 +179,51 @@ def get_processed_context_ht_path(build: str) -> str:
         raise DataException('Sorry, no reference ht for b38 yet')
 
 
+def process_context_ht(build: str, trimers: bool) -> None:
+    """
+    Imports reference fasta (SNPs only, VEP'd) as ht
+    Filters to canonical protein coding transcripts
+
+    :param str build: Reference genome build; one of BUILDS
+    :param bool trimers: Whether to filter to trimers or heptamers
+    :return: None
+    :rtype: None
+    """
+
+    if build not in BUILDS:
+        raise DataException(f'Build must be one of {BUILDS}.')
+
+    
+    logger.info('Reading in SNPs-only, VEP-annotated context ht')
+    full_context_ht = prepare_ht(hl.read_table(get_full_context_ht_path(build)), trimers) # from constraint_basics
+
+    logger.info(
+                'Importing codon translation table, amino acid names,'
+                'mutation rate, divergence scores and annotating as globals')
+    full_context_ht = full_context_ht.annotate_globals(
+                                                    codon_translation=get_codon_lookup(), acid_names=get_acid_names(),
+                                                    mutation_rate=get_mutation_rate(), div_scores=get_divergence_scores())
+
+    logger.info('Filtering to canonical protein coding transcripts')
+    full_context_ht = full_context_ht.explode(full_context_ht.vep.transcript_consequences)
+    context_ht = full_context_ht.filter(
+                                        (full_context_ht.vep.transcript_consequences.biotype == 'protein_coding')
+                                        & (full_context_ht.vep.transcript_consequences.canonical == 1))
+
+    #logger.info('Importing mutation rate table and annotating as global')
+    #mu_ht = get_mutation_rate_ht()
+
+    context_ht.vep.transcript_consequences.transcript_id.show()
+
+    logger.info('Re-keying context ht')
+    context_ht = context_ht.key_by(context_ht.locus, context_ht.context, context_ht.ref, context_ht.alt)
+
+    logger.info('Writing out context ht')
+    context_ht.write(get_processed_context_ht_path(build), overwrite=True)
+    context_ht.describe()
+
+
+## Exon/transcript related resourcces
 def get_gencode_gtf_path(build: str) -> str:
     """
     Gets path to gencode gtf
@@ -253,48 +301,24 @@ def process_gencode_ht(build: str) -> None:
     ht.write(get_processed_gencode_ht_path(build), overwrite=True)
 
 
-def process_context_ht(build: str, trimers: bool) -> None:
+## obs/exp related resources
+# expected variants resource files
+MODEL_PREFIX = 'gs://regional_missense_constraint/model'
+EXP_PREFIX = f'{MODEL_PREFIX}/exp/'
+exp_var_pickle = f'{EXP_PREFIX}/expected_variants.pckl'
+exac_exp_var_pickle = f'{EXP_PREFIX}/exac_expected_variants.pckl' 
+
+def load_exp_var(ExAC: bool=False) -> dict[hl.Struct, int]:
     """
-    Imports reference fasta (SNPs only, VEP'd) as ht
-    Filters to canonical protein coding transcripts
+    Loads saved expected variant count from pickle
 
-    :param str build: Reference genome build; one of BUILDS
-    :param bool trimers: Whether to filter to trimers or heptamers
-    :return: None
-    :rtype: None
+    :param bool ExAC: Whether to load expected variants from ExAC
+    :return: Dictionary of variant counts
+    :rtype: dict
     """
-
-    if build not in BUILDS:
-        raise DataException(f'Build must be one of {BUILDS}.')
-
-    
-    logger.info('Reading in SNPs-only, VEP-annotated context ht')
-    full_context_ht = prepare_ht(hl.read_table(get_full_context_ht_path(build)), trimers) # from constraint_basics
-
-    logger.info(
-                'Importing codon translation table, amino acid names,'
-                'mutation rate, divergence scores and annotating as globals')
-    full_context_ht = full_context_ht.annotate_globals(
-                                                    codon_translation=get_codon_lookup(), acid_names=get_acid_names(),
-                                                    mutation_rate=get_mutation_rate(), div_scores=get_divergence_scores())
-
-    logger.info('Filtering to canonical protein coding transcripts')
-    full_context_ht = full_context_ht.explode(full_context_ht.vep.transcript_consequences)
-    context_ht = full_context_ht.filter(
-                                        (full_context_ht.vep.transcript_consequences.biotype == 'protein_coding')
-                                        & (full_context_ht.vep.transcript_consequences.canonical == 1))
-
-    #logger.info('Importing mutation rate table and annotating as global')
-    #mu_ht = get_mutation_rate_ht()
-
-    context_ht.vep.transcript_consequences.transcript_id.show()
-
-    logger.info('Re-keying context ht')
-    context_ht = context_ht.key_by(context_ht.locus, context_ht.context, context_ht.ref, context_ht.alt)
-
-    logger.info('Writing out context ht')
-    context_ht.write(get_processed_context_ht_path(build), overwrite=True)
-    context_ht.describe()
+    fname = exac_exp_var_pickle if filtered else exp_var_pickle
+    with hl.hadoop_open(fname, 'rb') as f:
+        return pickle.load(f)
 
 
 def filter_to_missense(ht: hl.Table) -> hl.Table:
@@ -308,6 +332,7 @@ def filter_to_missense(ht: hl.Table) -> hl.Table:
     logger.info(f'ht count before filtration: {ht.count()}') # this printed 17209972
     logger.info('Annotating ht with most severe consequence')
     ht = add_most_severe_csq_to_tc_within_ht(ht) # from constraint_basics
+    logger.info(f'Consequence count: {ht.aggregate(hl.agg.counter(ht.vep.most_severe_consequence))}')
 
     # vep consequences from https://github.com/macarthur-lab/gnomad_hail/blob/master/utils/constants.py
     # missense definition from seqr searches
