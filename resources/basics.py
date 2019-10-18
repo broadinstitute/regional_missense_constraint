@@ -77,7 +77,7 @@ def get_acid_names() -> dict:
 
 def get_mutation_rate() -> dict:
     """
-    Reads in mutation rate table and stores as ht
+    Reads in mutation rate table and stores as dict
 
     :return: Dictionary of mutation rate information (key: context, value: (alt, mu_snp))
     :rtype: dict
@@ -101,7 +101,8 @@ def get_mutation_rate_ht() -> hl.Table:
     ht = hl.import_table(f'{mutation_rate_table_path}', impute=True)
     ht = ht.transmute(context=ht['from'], ref=ht['from'][1],
                                  alt=ht.to[1])
-    ht = ht.key_by('context', 'ref', 'alt')
+    ht = ht.transmute(alleles=[ht.ref, ht.alt])
+    ht = ht.key_by('context', 'alleles')
     ht = ht.select(ht.mu_snp)
     ht = ht.checkpoint(mutation_rate_ht, overwrite=True)
     return ht
@@ -217,7 +218,8 @@ def process_context_ht(build: str, trimers: bool) -> None:
     context_ht.vep.transcript_consequences.transcript_id.show()
 
     logger.info('Re-keying context ht')
-    context_ht = context_ht.key_by(context_ht.locus, context_ht.context, context_ht.ref, context_ht.alt)
+    #context_ht = context_ht.key_by(context_ht.locus, context_ht.context, context_ht.ref, context_ht.alt)
+    context_ht = context_ht.key_by('locus', 'alleles')
 
     logger.info('Writing out context ht')
     context_ht.write(get_processed_context_ht_path(build), overwrite=True)
@@ -306,14 +308,25 @@ def process_gencode_ht(build: str) -> None:
 # expected variants resource files
 MODEL_PREFIX = 'gs://regional_missense_constraint/model'
 EXP_PREFIX = f'{MODEL_PREFIX}/exp/'
-exp_var_pickle = f'{EXP_PREFIX}/expected_variants.pckl'
-exac_exp_var_pickle = f'{EXP_PREFIX}/exac_expected_variants.pckl' 
+exp_var_pickle = f'{EXP_PREFIX}/pickle/expected_variants.pckl'
+exac_exp_var_pickle = f'{EXP_PREFIX}/pickle/exac_expected_variants.pckl' 
 cov_ht = coverage_ht_path('exomes') # https://github.com/macarthur-lab/gnomad_hail/blob/master/resources/basics.py#L366
 exac_tsv_path = 'gs://gnomad-public/legacy/exacv1_downloads/release0.1/coverage'
 exac_cov_path = f'{EXAC_PREFIX}/coverage' 
 
 
-def load_exp_var(ExAC: bool=False) -> Dict[hl.Struct, int]:
+def exp_ht_path(ExAC: bool=False) -> str:
+    """
+    Returns path of context ht annotated with expected variant counts
+
+    :param bool ExAC: Whether to return table calculated on ExAC
+    :return: Path to expected variants ht
+    :rtype: str
+    """
+    return f'{EXP_PREFIX}/ExAC_exp_var.ht' if ExAC else f'{EXP_PREFIX}/exp_var.ht'
+
+
+def load_exp_var(ExAC: bool=False) -> Dict[hl.Struct, int]: # NOTE: I think this is used for the mu calculations; don't need this yet (as of 10/18)
     """
     Loads saved expected variant count from pickle
 
