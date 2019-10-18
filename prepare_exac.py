@@ -47,6 +47,9 @@ def main(args):
         logger.info('Filtering ExAC ht to only missense variants')
         ht = hl.read_table(exac_ht)
         ht = filter_to_missense(ht)
+        rg = hl.get_reference('GRCh37')
+        rg = rg.add_sequence(f'{get_reference_path("GRCh37")}.gz', f'{get_reference_path("GRCh37")}.fai')
+        ht = ht.annotate(context=hl.get_sequence(ht.locus.contig, ht.locus.position, before=1, after=1, reference_genome=rg))
         ht.naive_coalesce(500).write(filtered_exac_ht, overwrite=args.overwrite)
 
     #chroms = ['X', 'Y']
