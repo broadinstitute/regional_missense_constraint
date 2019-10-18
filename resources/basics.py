@@ -40,6 +40,7 @@ EXAC_PREFIX = f'{RESOURCE_PREFIX}/ExAC'
 exac_vcf = f'{EXAC_PREFIX}/ExAC.r0.3.sites.vep.vcf.gz'
 exac_ht = f'{EXAC_PREFIX}/ExAC.r0.3.sites.vep.ht'
 filtered_exac_ht = f'{EXAC_PREFIX}/ExAC.r0.3.missense_only.ht'
+filt_exac_cov_ht = f'{EXAC_PREFIX}/ExAC.r0.3.missense_only_cov.ht' # NOTE: this is only annotated with coverage for chr22
 
 
 ## Resources from Kaitlin

@@ -49,17 +49,33 @@ def main(args):
         ht = filter_to_missense(ht)
         ht.naive_coalesce(500).write(filtered_exac_ht, overwrite=args.overwrite)
 
+    #chroms = ['X', 'Y']
+    #for i in range(1, 23):
+    #    chroms.append[i]
+    chroms = ['22']
+
+    # NOTE: only calculated for chr22
     if args.import_cov:
-        chroms = ['X', 'Y']
-        for i in range(1, 23):
-                chroms.append[i]
         for c in chroms:
             tsv = f'{exac_tsv_path}/Panel.chr{c}.coverage.txt.gz'
             out = f'{exac_cov_path}/{c}_coverage.ht'
             ht = hl.import_table(tsv, min_partitions=100, impute=True, force_bgz=True)
             ht = ht.transmute(locus=hl.parse_locus(hl.format('%s:%s', ht['#chrom'], ht.pos)))
+            ht = ht.rename({'1': 'over_1', '5': 'over_5', '10': 'over_10', '15': 'over_15', '20': 'over_20', '25': 'over_25', 
+                            '30': 'over_30', '50': 'over_50', '100': 'over_100'})
             ht = ht.key_by('locus')
             ht.write(out, overwrite=args.overwrite)
+
+    if args.join_cov:
+        ht = hl.read_table(filtered_exac_ht)
+        for c in chroms:
+            cov_path = f'{exac_cov_path}/{c}_coverage.ht'
+            cov_ht = hl.read_table(cov_path)
+            ht = ht.annotate(coverage=cov_ht[ht.locus])
+        ht.describe()
+        ht.show()
+        ht.write(filt_exac_cov_ht, overwrite=args.overwrite)
+
 
 
 if __name__ == '__main__':
@@ -68,6 +84,7 @@ if __name__ == '__main__':
     parser.add_argument('--import_vcf', help='Import ExAC VCF and write to ht', action='store_true')
     parser.add_argument('--filter_ht', help='Filter ExAC ht to missense variants', action='store_true')
     parser.add_argument('--import_cov', help='Import coverage files', action='store_true')
+    parser.add_argument('--join_cov', help='Annotate ExAC ht with coverage', action='store_true')
     parser.add_argument('--overwrite', help='Overwrite existing data', action='store_true')
     parser.add_argument('--slack_channel', help='Send message to Slack channel/user', default='@kc')
     args = parser.parse_args()
