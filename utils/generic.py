@@ -210,7 +210,7 @@ def filter_to_missense(ht: hl.Table) -> hl.Table:
     return ht
 
 
-def filter_to_autosome_and_par(ht: hl.Table, rg: hl.ReferenceGenome) -> hl.Table:
+def filter_alt_decoy(ht: hl.Table, rg: hl.ReferenceGenome) -> hl.Table:
     """
     Filters input table to autosomes, X/X PAR, and Y (not mito or alt/decoy contigs). Also annotates each locus with region type.
 

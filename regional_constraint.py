@@ -107,9 +107,9 @@ def main(args):
         context_ht = hl.filter_intervals(context_ht, [hl.parse_locus_interval(rg.contigs[21], reference_genome=rg)])
         exome_ht = hl.filter_intervals(exome_ht, [hl.parse_locus_interval(rg.contigs[21], reference_genome=rg)])
     else:
-        logger.info('Filtering to autosomes and PAR regions')
-        context_ht = filter_to_autosome_and_par(context_ht)
-        exome_ht = filter_to_autosome_and_par(exome_ht)
+        logger.info('Removing alt/decoy contig calls and annotating with region type')
+        context_ht = filter_alt_decoy(context_ht)
+        exome_ht = filter_alt_decoy(exome_ht)
 
     if args.calc_exp:
         exp_ht = calculate_expected(context_ht, exac)
