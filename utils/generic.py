@@ -146,7 +146,7 @@ def process_context_ht(build: str, trimers: bool) -> None:
     div_ht = get_divergence_score_ht()
     context_ht = context_ht.annotate(div=hl.cond(
                                                 hl.is_defined(div_ht[context_ht.vep.transcript_consequences.transcript_id]),
-                                                div_ht[context_ht.vep.transcript_consequences.transcript_id],
+                                                div_ht[context_ht.vep.transcript_consequences.transcript_id].divergence,
                                                 0.0564635))
 
     logger.info('Re-keying context ht by locus and alleles')
