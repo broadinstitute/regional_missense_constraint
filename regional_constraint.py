@@ -89,6 +89,8 @@ def main(args):
     logger.info('Reading in exome ht') 
     if exac:
         exome_ht = hl.read_table(filt_exac_cov_ht)
+        # NOTE forgot to annotate exac ht with region type so manually adding here
+        exome_ht = exome_ht.annotate(region_type='autosome_xpar')
     else:   
         exome_ht = prepare_ht(hl.read_table(filtered_exomes_ht_path), args.trimers)  
     
