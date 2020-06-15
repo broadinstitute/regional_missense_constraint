@@ -11,7 +11,7 @@ logger.setLevel(logging.INFO)
 
 def calculate_expected(context_ht: hl.Table, exac: bool) -> hl.Table:
     """
-    Annotates context ht with expected variants count (adjusted by mutation rate, divergence score, and region type
+    Annotates context ht with expected variants count (adjusted by mutation rate, divergence score, and region type)
 
     :param Table context_ht: Context ht
     :param bool exac: Whether the data is ExAC data
