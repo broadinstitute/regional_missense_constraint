@@ -1,5 +1,27 @@
 import logging
 
+import hail as hl
+
+from gnomad.resources.resource_utils import DataException
+from gnomad_lof.constraint.constraint_basics import (
+    add_most_severe_csq_to_tc_within_ht,
+    prepare_ht,
+)
+from rmc.resources.basics import (
+    acid_names_path,
+    codon_table_path,
+    divergence_ht,
+    divergence_scores_path,
+    get_full_context_ht_path,
+    get_gencode_gtf_path,
+    get_gencode_ht_path,
+    get_processed_context_ht_path,
+    get_processed_gencode_ht_path,
+    mutation_rate_ht,
+    mutation_rate_table_path,
+)
+from rmc.resources.resource_utils import BUILDS, MISSENSE
+
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -240,12 +262,13 @@ def filter_to_missense(ht: hl.Table) -> hl.Table:
     return ht
 
 
-def filter_alt_decoy(ht: hl.Table, rg: hl.ReferenceGenome) -> hl.Table:
+def filter_alt_decoy(ht: hl.Table) -> hl.Table:
     """
-    Filters input table to autosomes, X/X PAR, and Y (not mito or alt/decoy contigs). Also annotates each locus with region type.
+    Filters input table to autosomes, X/X PAR, and Y (not mito or alt/decoy contigs). 
+
+    Also annotates each locus with region type.
 
     :param Table ht: Input ht to be filtered/annotated
-    :param ReferenceGenome rg: Reference genome of Table
     :return: Table filtered to autosomes/PAR and annotated with PAR status
     :rtype: hl.Table
     """
