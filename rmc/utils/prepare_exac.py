@@ -3,6 +3,7 @@ import logging
 
 import hail as hl
 
+from gnomad.resources.resource_utils import import_sites_vcf
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vep import CSQ_ORDER
@@ -60,9 +61,9 @@ def main(args):
 
     if args.import_vcf:
         logger.info("Importing ExAC VCF")
-        ht = hl.import_vcf(
-            exac_vcf, force_bgz=True, min_partitions=args.min_partitions
-        ).rows()
+        ht = import_sites_vcf(
+            path=exac_vcf, force_bgz=True, min_partitions=args.min_partitions
+        )
         ht = ht.naive_coalesce(args.n_partitions).write(
             exac_ht, overwrite=args.overwrite
         )
