@@ -3,6 +3,7 @@ import logging
 
 import hail as hl
 
+from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vep import CSQ_ORDER
 from rmc.resources.basics import (
@@ -12,7 +13,6 @@ from rmc.resources.basics import (
     exac_vcf,
     filt_exac_cov_ht,
     filtered_exac_ht,
-    get_reference_path,
 )
 from rmc.resources.resource_utils import MISSENSE
 from rmc.slack_creds import slack_token
@@ -34,9 +34,9 @@ def filter_to_missense(ht: hl.Table) -> hl.Table:
     :return: ExAC ht filtered to missense variants
     :rtype: Table
     """
-    logger.info(f"ht count before filtration {ht.count()}")
-    csqs = hl.literal(CSQ_ORDER)
+    logger.info(f"HT count before filtration: {ht.count()}")
 
+    csqs = hl.literal(CSQ_ORDER)
     ht = ht.explode(ht.info.CSQ)
     ht = ht.annotate(
         most_severe_consequence=csqs.find(lambda c: ht.info.CSQ.contains(c))
@@ -45,19 +45,12 @@ def filter_to_missense(ht: hl.Table) -> hl.Table:
         f"Consequence counts:{ht.aggregate(hl.agg.counter(ht.most_severe_consequence))}"
     )
 
-    logger.info("Filtering to missense variants")
-    missense = [
-        "stop_lost",
-        "initiator_codon_variant",
-        "start_lost",
-        "protein_altering_variant",
-        "missense_variant",
-    ]
+    logger.info("Filtering to missense variants...")
     ht = ht.filter(hl.literal(MISSENSE).contains(ht.most_severe_consequence))
-    logger.info(f"ht count after filtration: {ht.count()}")
-    logger.info("Deduplicating keys")
+    logger.info(f"HT count after filtration: {ht.count()}")
+    logger.info("Deduplicating keys...")
     ht = ht.distinct()
-    logger.info(f"ht count after dedup: {ht.count()}")
+    logger.info(f"HT count after dedup: {ht.count()}")
     return ht
 
 
@@ -67,18 +60,18 @@ def main(args):
 
     if args.import_vcf:
         logger.info("Importing ExAC VCF")
-        mt = hl.import_vcf(exac_vcf, force_bgz=True)
-        ht = mt.rows()
-        ht = ht.naive_coalesce(1000).write(exac_ht, overwrite=args.overwrite)
+        ht = hl.import_vcf(
+            exac_vcf, force_bgz=True, min_partitions=args.min_partitions
+        ).rows()
+        ht = ht.naive_coalesce(args.n_partitions).write(
+            exac_ht, overwrite=args.overwrite
+        )
 
     if args.filter_ht:
         logger.info("Filtering ExAC ht to only missense variants")
         ht = hl.read_table(exac_ht)
         ht = filter_to_missense(ht)
-        rg = hl.get_reference("GRCh37")
-        rg = rg.add_sequence(
-            f'{get_reference_path("GRCh37")}.gz', f'{get_reference_path("GRCh37")}.fai'
-        )
+        rg = get_reference_genome(ht.locus, add_sequence=True)
         ht = ht.annotate(
             context=hl.get_sequence(
                 ht.locus.contig,
@@ -88,7 +81,9 @@ def main(args):
                 reference_genome=rg,
             )
         )
-        ht.naive_coalesce(500).write(filtered_exac_ht, overwrite=args.overwrite)
+        ht.naive_coalesce(args.n_partitions).write(
+            filtered_exac_ht, overwrite=args.overwrite
+        )
 
     # chroms = ['X', 'Y']
     # for i in range(1, 23):
@@ -97,10 +92,12 @@ def main(args):
 
     # NOTE: only calculated for chr22
     if args.import_cov:
-        for c in chroms:
-            tsv = f"{exac_tsv_path}/Panel.chr{c}.coverage.txt.gz"
-            out = f"{exac_cov_path}/{c}_coverage.ht"
-            ht = hl.import_table(tsv, min_partitions=100, impute=True, force_bgz=True)
+        for chrom in chroms:
+            tsv = f"{exac_tsv_path}/Panel.chr{chrom}.coverage.txt.gz"
+            out = f"{exac_cov_path}/{chrom}_coverage.ht"
+            ht = hl.import_table(
+                tsv, min_partitions=args.min_partitions, impute=True, force_bgz=True
+            )
             ht = ht.transmute(
                 locus=hl.parse_locus(hl.format("%s:%s", ht["#chrom"], ht.pos))
             )
@@ -118,14 +115,16 @@ def main(args):
                 }
             )
             ht = ht.key_by("locus")
+            ht = ht.naive_coalesce(args.n_partitions)
             ht.write(out, overwrite=args.overwrite)
 
     if args.join_cov:
         ht = hl.read_table(filtered_exac_ht)
-        for c in chroms:
-            cov_path = f"{exac_cov_path}/{c}_coverage.ht"
+        for chrom in chroms:
+            cov_path = f"{exac_cov_path}/{chrom}_coverage.ht"
             cov_ht = hl.read_table(cov_path)
             ht = ht.annotate(coverage=cov_ht[ht.locus])
+        ht = ht.naive_coalesce(args.n_partitions)
         ht.write(filt_exac_cov_ht, overwrite=args.overwrite)
 
 
@@ -145,6 +144,18 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--join_cov", help="Annotate ExAC ht with coverage", action="store_true"
+    )
+    parser.add_argument(
+        "--min_partitions",
+        help="Minimum number of partitions for imported data",
+        default=100,
+        type=int,
+    )
+    parser.add_argument(
+        "--n_partitions",
+        help="Desired number of partitions for output HTs",
+        default=500,
+        type=int,
     )
     parser.add_argument(
         "--overwrite", help="Overwrite existing data", action="store_true"
