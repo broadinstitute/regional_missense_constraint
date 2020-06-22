@@ -1,6 +1,7 @@
 RESOURCE_PREFIX = "gs://regional_missense_constraint/resources"
 BUILDS = ["GRCh37", "GRCh38"]
 
+
 # Missense variant VEP annotations
 MISSENSE = [
     "stop_lost",
@@ -9,3 +10,18 @@ MISSENSE = [
     "protein_altering_variant",
     "missense_variant",
 ]
+
+
+# Import related resources
+def import_gencode(**kwargs) -> hl.Table:
+	"""
+	Converts Gencode GTF to Table.
+
+	:return: Table
+	:rtype: hl.Table
+	"""
+    gencode = hl.experimental.import_gtf(**kwargs)
+    gencode = gencode.filter(
+        (gencode.feature == "exon") & (gencode.gene_type == "protein_coding") & (gencode.level != "3")
+    )
+    return gencode
