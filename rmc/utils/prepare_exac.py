@@ -3,17 +3,14 @@ import logging
 
 import hail as hl
 
-from gnomad.resources.resource_utils import import_sites_vcf
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 from gnomad.utils.vep import CSQ_ORDER
-from rmc.resources.basics import (
-    exac_cov_path,
-    exac_ht,
-    exac_tsv_path,
-    exac_vcf,
-    filt_exac_cov_ht,
-    filtered_exac_ht,
+from rmc.resources.grch37.exac import (
+    coverage,
+    exac,
+    filtered_exac,
+    filtered_exac_cov,
 )
 from rmc.resources.resource_utils import MISSENSE
 from rmc.slack_creds import slack_token
@@ -59,18 +56,9 @@ def main(args):
 
     hl.init(log="/prepare_exac.log")
 
-    if args.import_vcf:
-        logger.info("Importing ExAC VCF")
-        ht = import_sites_vcf(
-            path=exac_vcf, force_bgz=True, min_partitions=args.min_partitions
-        )
-        ht = ht.naive_coalesce(args.n_partitions).write(
-            exac_ht, overwrite=args.overwrite
-        )
-
     if args.filter_ht:
         logger.info("Filtering ExAC ht to only missense variants")
-        ht = hl.read_table(exac_ht)
+        ht = exac.ht()
         ht = filter_to_missense(ht)
         rg = get_reference_genome(ht.locus, add_sequence=True)
         ht = ht.annotate(
@@ -83,50 +71,15 @@ def main(args):
             )
         )
         ht.naive_coalesce(args.n_partitions).write(
-            filtered_exac_ht, overwrite=args.overwrite
+            filtered_exac.path, overwrite=args.overwrite
         )
 
-    # chroms = ['X', 'Y']
-    # for i in range(1, 23):
-    #    chroms.append[i]
-    chroms = ["22"]
-
-    # NOTE: only calculated for chr22
-    if args.import_cov:
-        for chrom in chroms:
-            tsv = f"{exac_tsv_path}/Panel.chr{chrom}.coverage.txt.gz"
-            out = f"{exac_cov_path}/{chrom}_coverage.ht"
-            ht = hl.import_table(
-                tsv, min_partitions=args.min_partitions, impute=True, force_bgz=True
-            )
-            ht = ht.transmute(
-                locus=hl.parse_locus(hl.format("%s:%s", ht["#chrom"], ht.pos))
-            )
-            ht = ht.rename(
-                {
-                    "1": "over_1",
-                    "5": "over_5",
-                    "10": "over_10",
-                    "15": "over_15",
-                    "20": "over_20",
-                    "25": "over_25",
-                    "30": "over_30",
-                    "50": "over_50",
-                    "100": "over_100",
-                }
-            )
-            ht = ht.key_by("locus")
-            ht = ht.naive_coalesce(args.n_partitions)
-            ht.write(out, overwrite=args.overwrite)
-
     if args.join_cov:
-        ht = hl.read_table(filtered_exac_ht)
-        for chrom in chroms:
-            cov_path = f"{exac_cov_path}/{chrom}_coverage.ht"
-            cov_ht = hl.read_table(cov_path)
-            ht = ht.annotate(coverage=cov_ht[ht.locus])
+        ht = filtered_exac.ht()
+        coverage_ht = coverage.ht()
+        ht = ht.annotate(coverage=coverage_ht[ht.locus])
         ht = ht.naive_coalesce(args.n_partitions)
-        ht.write(filt_exac_cov_ht, overwrite=args.overwrite)
+        ht.write(filtered_exac_cov.path, overwrite=args.overwrite)
 
 
 if __name__ == "__main__":
@@ -135,22 +88,10 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--import_vcf", help="Import ExAC VCF and write to ht", action="store_true"
-    )
-    parser.add_argument(
         "--filter_ht", help="Filter ExAC ht to missense variants", action="store_true"
     )
     parser.add_argument(
-        "--import_cov", help="Import coverage files", action="store_true"
-    )
-    parser.add_argument(
         "--join_cov", help="Annotate ExAC ht with coverage", action="store_true"
-    )
-    parser.add_argument(
-        "--min_partitions",
-        help="Minimum number of partitions for imported data",
-        default=100,
-        type=int,
     )
     parser.add_argument(
         "--n_partitions",
