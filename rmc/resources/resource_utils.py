@@ -21,8 +21,9 @@ def import_gencode(**kwargs) -> hl.Table:
 	:return: Table
 	:rtype: hl.Table
 	"""
-    gencode = hl.experimental.import_gtf(**kwargs)
-    gencode = gencode.filter(
-        (gencode.feature == "exon") & (gencode.gene_type == "protein_coding") & (gencode.level != "3")
-    )
-    return gencode
+	gencode = hl.experimental.import_gtf(**kwargs)
+	gencode = gencode.filter(
+	    (gencode.feature == "exon") & (gencode.gene_type == "protein_coding") & (gencode.level != "3")
+	)
+	return gencode
+	
