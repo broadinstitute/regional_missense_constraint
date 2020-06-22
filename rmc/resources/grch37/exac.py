@@ -4,6 +4,7 @@ from gnomad.resources.resource_utils import (
     import_sites_vcf,
     TableResource,
 )
+from rmc.resources.basics import EXP_PREFIX
 from rmc.resources.resource_utils import RESOURCE_PREFIX
 
 
@@ -80,9 +81,6 @@ Contains coverage infromation for ONLY chr22.
 
 
 # Observed/expected count related resources
-MODEL_PREFIX = "gs://regional_missense_constraint/model"
-EXP_PREFIX = f"{MODEL_PREFIX}/exp/"
-
 expected = TableResource(path=f"{EXP_PREFIX}/ExAC_exp_var.ht")
 """
 Table annotated with expected variant counts
