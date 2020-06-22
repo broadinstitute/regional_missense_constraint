@@ -27,7 +27,7 @@ MUTATION_RATE_TABLE_PATH = f"{RESOURCE_PREFIX}/mutation_rate_table.tsv"
 DIVERGENCE_SCORES_TSV_PATH = (
     f"{RESOURCE_PREFIX}/divsites_gencodev19_all_transcripts.tsv"
 )
-divergence = TableResource(
+divergence_scores = TableResource(
     path=f"{RESOURCE_PREFIX}/div_scores.ht",
     import_func=hl.import_table,
     import_args={

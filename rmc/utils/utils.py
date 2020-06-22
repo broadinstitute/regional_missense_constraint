@@ -1,4 +1,5 @@
 import logging
+from typing import Dict
 
 import hail as hl
 
@@ -8,18 +9,15 @@ from gnomad_lof.constraint.constraint_basics import (
     prepare_ht,
 )
 from rmc.resources.basics import (
-    acid_names_path,
-    codon_table_path,
-    divergence_ht,
-    divergence_scores_path,
-    get_full_context_ht_path,
-    get_gencode_gtf_path,
-    get_gencode_ht_path,
-    get_processed_context_ht_path,
-    get_processed_gencode_ht_path,
-    mutation_rate_ht,
-    mutation_rate_table_path,
+    ACID_NAMES_PATH,
+    CODON_TABLE_PATH,
+    divergence_scores,
+    DIVERGENCE_SCORES_TSV_PATH,
+    mutation_rate,
+    MUTATION_RATE_TABLE_PATH,
 )
+import rmc.resources.grch37.reference_data as grch37
+import rmc.resources.grch38.reference_data as grch38
 from rmc.resources.resource_utils import BUILDS, MISSENSE
 
 
@@ -32,7 +30,7 @@ logger.setLevel(logging.INFO)
 
 
 ## Resources from Kaitlin
-def get_codon_lookup() -> dict:
+def get_codon_lookup() -> Dict:
     """
     Reads in codon lookup table and returns as dictionary (key: codon, value: amino acid)
 
@@ -40,7 +38,7 @@ def get_codon_lookup() -> dict:
     :rtype: dict
     """
     codon_lookup = {}
-    with hl.hadoop_open(codon_table_path) as c:
+    with hl.hadoop_open(CODON_TABLE_PATH) as c:
         c.readline()
         for line in c:
             line = line.strip().split(" ")
@@ -48,7 +46,7 @@ def get_codon_lookup() -> dict:
     return codon_lookup
 
 
-def get_acid_names() -> dict:
+def get_acid_names() -> Dict:
     """
     Reads in amino acid table and stores as dict (key: 3 letter name, value: (long name, one letter name)
 
@@ -56,7 +54,7 @@ def get_acid_names() -> dict:
     :rtype: dict
     """
     acid_map = {}
-    with hl.hadoop_open(acid_names_path) as a:
+    with hl.hadoop_open(ACID_NAMES_PATH) as a:
         a.readline()
         for line in a:
             line = line.strip().split("\t")
@@ -64,7 +62,7 @@ def get_acid_names() -> dict:
     return acid_map
 
 
-def get_mutation_rate() -> dict:
+def get_mutation_rate() -> Dict:
     """
     Reads in mutation rate table and stores as dict
 
@@ -73,41 +71,14 @@ def get_mutation_rate() -> dict:
     """
     mu = {}
     # from    n_kmer  p_any_snp_given_kmer    mu_kmer to      count_snp       p_snp_given_kmer        mu_snp
-    with hl.hadoop_open(mutation_rate_table_path) as m:
+    with hl.hadoop_open(MUTATION_RATE_TABLE_PATH) as m:
         for line in m:
-            (
-                context,
-                n_kmer,
-                p_any_snp_given_kmer,
-                mu_kmer,
-                new_kmer,
-                count_snp,
-                p_snp_given_kmer,
-                mu_snp,
-            ) = line.strip().split("\t")
+            context, _, _, _, new_kmer, _, _, mu_snp = line.strip().split("\t")
             mu[context] = (new_kmer[1], mu_snp)
     return mu
 
 
-def get_mutation_rate_ht(overwrite: bool = True) -> hl.Table:
-    """
-    Reads in mutation rate table and stores as ht
-
-    :param bool overwrite: Whether to overwrite data
-    :return: Mutation rate information in ht
-    :rtype: Table
-    """
-    # from	n_kmer	p_any_snp_given_kmer	mu_kmer	to	count_snp	p_snp_given_kmer	mu_snp
-    ht = hl.import_table(mutation_rate_table_path, impute=True)
-    ht = ht.transmute(context=ht["from"], ref=ht["from"][1], alt=ht.to[1])
-    ht = ht.transmute(alleles=[ht.ref, ht.alt])
-    ht = ht.key_by("context", "alleles")
-    ht = ht.select(ht.mu_snp)
-    ht = ht.checkpoint(mutation_rate_ht, overwrite=overwrite)
-    return ht
-
-
-def get_divergence_scores() -> dict:
+def get_divergence_scores() -> Dict:
     """
     Reads in divergence score file and stores as dict (key: transcript, value: score)
 
@@ -115,7 +86,7 @@ def get_divergence_scores() -> dict:
     :rtype: dict
     """
     div_scores = {}
-    with hl.hadoop_open(divergence_scores_path) as d:
+    with hl.hadoop_open(DIVERGENCE_SCORES_TSV_PATH) as d:
         d.readline()
         for line in d:
             transcript, score = line.strip().split("\t")
@@ -126,29 +97,18 @@ def get_divergence_scores() -> dict:
     return div_scores
 
 
-def get_divergence_score_ht(overwrite: bool = True) -> hl.Table:
-    """
-    Reads in divergence score file and writes out to ht
-
-    :param bool overwrite: Whether to overwrite
-    :return: Divergence score ht
-    :rtype: Table
-    """
-    ht = hl.import_table(divergence_scores_path, impute=True)
-    ht = ht.transmute(transcript=ht.transcript.split(".")[0])
-    ht = ht.key_by("transcript")
-    ht.write(divergence_ht, overwrite=overwrite)
-    return ht
-
-
 ## Functions to process reference genome related resources
-def process_context_ht(build: str, trimers: bool) -> None:
+def process_context_ht(
+    build: str, trimers: bool, overwrite: bool, n_partitions: int = 1000
+) -> None:
     """
     Imports reference fasta (SNPs only, VEP'd) as ht
     Filters to canonical protein coding transcripts
 
-    :param str build: Reference genome build; one of BUILDS
-    :param bool trimers: Whether to filter to trimers or heptamers
+    :param str build: Reference genome build; must be one of BUILDS.
+    :param bool trimers: Whether to filter to trimers or heptamers.
+    :param bool overwrite: Whether to overwrite output.
+    :param int n_partitions: Number of desired partitions for output. Default is 1000.
     :return: None
     :rtype: None
     """
@@ -156,12 +116,14 @@ def process_context_ht(build: str, trimers: bool) -> None:
         raise DataException(f"Build must be one of {BUILDS}.")
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht")
-    full_context_ht = prepare_ht(
-        hl.read_table(get_full_context_ht_path(build)), trimers
-    )  # from constraint_basics
-    logger.info(f"Full ht count: {full_context_ht.count()}")
+    if build == "GRCh37":
+        full_context_ht = grch37.full_context.ht()
+    else:
+        full_context_ht = grch37.full_context.ht()
+    full_context_ht = prepare_ht(full_context_ht, trimers)
+    logger.info(f"Full HT count: {full_context_ht.count()}")
 
-    logger.info("Filtering to canonical protein coding transcripts")
+    logger.info("Filtering to canonical protein coding transcripts...")
     full_context_ht = full_context_ht.explode(
         full_context_ht.vep.transcript_consequences
     )
@@ -174,16 +136,16 @@ def process_context_ht(build: str, trimers: bool) -> None:
     logger.info(
         "Importing codon translation table and amino acid names and annotating as globals"
     )
-    full_context_ht = full_context_ht.annotate_globals(
+    context_ht = context_ht.annotate_globals(
         codon_translation=get_codon_lookup(), acid_names=get_acid_names()
     )
 
     logger.info("Importing mutation rates and joining to context ht")
-    mu_ht = get_mutation_rate_ht()
+    mu_ht = mutation_rate.ht()
     context_ht = context_ht.key_by("context", "alleles").join(mu_ht, how="left")
 
     logger.info("Importing divergence scores and annotating context ht")
-    div_ht = get_divergence_score_ht()
+    div_ht = divergence_scores.ht()
     context_ht = context_ht.annotate(
         div=hl.cond(
             hl.is_defined(div_ht[context_ht.vep.transcript_consequences.transcript_id]),
@@ -193,21 +155,21 @@ def process_context_ht(build: str, trimers: bool) -> None:
     )
 
     logger.info("Re-keying context ht by locus and alleles")
-    # context_ht = context_ht.key_by(context_ht.locus, context_ht.context, context_ht.ref, context_ht.alt)
     context_ht = context_ht.key_by("locus", "alleles")
 
     logger.info("Writing out context ht")
-    context_ht = context_ht.naive_coalesce(10000)
-    context_ht.write(get_processed_context_ht_path(build), overwrite=True)
+    context_ht = context_ht.naive_coalesce(n_partitions)
+    context_ht.write(get_processed_context_ht_path(build), overwrite=overwrite)
     context_ht.describe()
 
 
 ## Functions to process exon/transcript related resourcces
-def process_gencode_ht(build: str) -> None:
+def process_gencode_ht(build: str, overwrite: bool) -> None:
     """
     Imports gencode gtf as ht,filters to protein coding transcripts, and writes out as ht
 
-    :param str build: Reference genome build; one of BUILDS
+    :param str build: Reference genome build; must be one of BUILDS.
+    :param bool overwrite: Whether to overwrite output.
     :return: None
     :rtype: None
     """
@@ -215,11 +177,12 @@ def process_gencode_ht(build: str) -> None:
         raise DataException(f"Build must be one of {BUILDS}.")
 
     logger.info("Reading in gencode gtf")
-    ht = hl.experimental.import_gtf(
-        get_gencode_gtf_path(build),
-        reference_genome=f"GRCh{build}",
-        skip_invalid_contigs=True,
-    )
+    if build == "GRCh37":
+        ht = grch37.gencode.ht()
+        output_path = grch37.processed_gencode.path
+    else:
+        ht = grch38.gencode.ht()
+        output_path = grch38.processed_gencode.path
 
     logger.info(
         "Filtering gencode gtf to exons in protein coding genes with support levels 1 and 2"
@@ -227,26 +190,26 @@ def process_gencode_ht(build: str) -> None:
     ht = ht.filter(
         (ht.feature == "exon") & (ht.gene_type == "protein_coding") & (ht.level != "3")
     )
-    ht = ht.checkpoint(get_gencode_ht_path(build), overwrite=True)
 
     logger.info("Grouping gencode ht by transcript ID")
     ht = ht.key_by(ht.transcript_id)
     ht = ht.select(ht.frame, ht.exon_number, ht.gene_name, ht.interval)
     ht = ht.collect_by_key()
-    ht.write(get_processed_gencode_ht_path(build), overwrite=True)
+    ht.write(output_path, overwrite=overwrite)
 
 
 ## Functions for obs/exp related resources
-def filter_to_missense(ht: hl.Table) -> hl.Table:
+def filter_to_missense(ht: hl.Table, n_partitions: int = 5000) -> hl.Table:
     """
-    Filters input table to missense variants only
+    Filters input Table to missense variants.
 
-    :param Table ht: Input ht to be filtered
-    :return: Table filtered to only missense variants
+    :param Table ht: Input Table to be filtered.
+    :param int n_partitions: Number of desired partitions for output.
+    :return: Table filtered to only missense variants.
     :rtype: hl.Table
     """
-    logger.info(f"ht count before filtration: {ht.count()}")  # this printed 17209972
-    logger.info("Annotating ht with most severe consequence")
+    logger.info(f"HT count before filtration: {ht.count()}")  # this printed 17209972
+    logger.info("Annotating HT with most severe consequence...")
     ht = add_most_severe_csq_to_tc_within_ht(ht)  # from constraint_basics
     logger.info(
         f"Consequence count: {ht.aggregate(hl.agg.counter(ht.vep.most_severe_consequence))}"
@@ -254,25 +217,24 @@ def filter_to_missense(ht: hl.Table) -> hl.Table:
 
     # vep consequences from https://github.com/macarthur-lab/gnomad_hail/blob/master/utils/constants.py
     # missense definition from seqr searches
-    logger.info("Filtering to missense variants")
+    logger.info("Filtering to missense variants...")
     ht = ht.filter(hl.literal(MISSENSE).contains(ht.vep.most_severe_consequence))
-    logger.info(f"ht count after filtration: {ht.count()}")  # this printed 6818793
+    logger.info(f"HT count after filtration: {ht.count()}")  # this printed 6818793
 
-    ht = ht.naive_coalesce(5000)
-    return ht
+    return ht.naive_coalesce(n_partitions)
 
 
 def filter_alt_decoy(ht: hl.Table) -> hl.Table:
     """
-    Filters input table to autosomes, X/X PAR, and Y (not mito or alt/decoy contigs). 
+    Filters input Table to autosomes, X/X PAR, and Y (not mito or alt/decoy contigs). 
 
     Also annotates each locus with region type.
 
-    :param Table ht: Input ht to be filtered/annotated
-    :return: Table filtered to autosomes/PAR and annotated with PAR status
+    :param Table ht: Input Table to be filtered/annotated.
+    :return: Table filtered to autosomes/PAR and annotated with PAR status.
     :rtype: hl.Table
     """
-    logger.info(f"ht count before filtration: {ht.count()}")
+    logger.info(f"HT count before filtration: {ht.count()}")
     ht = ht.annotate(
         region_type=hl.case()
         .when((ht.locus.in_autosome() | ht.locus.in_x_par()), "autosome_xpar")
@@ -280,7 +242,7 @@ def filter_alt_decoy(ht: hl.Table) -> hl.Table:
         .when(ht.locus.in_y_nonpar(), "y")
         .default("remove")
     )
-    logger.info("Filtering to autosomes + X/Y")
+    logger.info("Filtering to autosomes + X/Y..")
     ht = ht.filter(ht.region_type == "remove", keep=False)
-    logger.info(f"ht count after filtration: {ht.count()}")
+    logger.info(f"HT count after filtration: {ht.count()}")
     return ht
