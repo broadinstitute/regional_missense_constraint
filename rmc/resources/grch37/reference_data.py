@@ -5,7 +5,7 @@ from gnomad.resources.resource_utils import (
     TableResource,
     VersionedTableResource,
 )
-from .resource_utils import RESOURCE_PREFIX, FLAGSHIP_LOF
+from rmc.resources.resource_utils import RESOURCE_PREFIX, FLAGSHIP_LOF
 
 
 ## Reference genome related resources
