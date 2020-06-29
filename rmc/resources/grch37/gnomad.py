@@ -12,7 +12,7 @@ Processed gnomAD exomes Table.
 Dropped colocated variants in vep annotation and removed all non-pass variants.
 Also annotated with context Table (sequence context, transcript information, most severe consequence).
 """
-filtered_exomes = TableResource(path=f"{RESOURCE_PREFIX}/ht/exomes_missense_only.ht")
+filtered_exomes = TableResource(path=f"{RESOURCE_PREFIX}/GRCh37/gnomad/ht/exomes_missense_only.ht")
 """
 Processed gnomAD exomes Table filtered to missense variants only.
 """

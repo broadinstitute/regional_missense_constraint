@@ -23,7 +23,7 @@ processed_context = VersionedTableResource(
     default_version="20190430",
     versions={
         "20190430": TableResource(
-            path=f"{RESOURCE_PREFIX}/ht/context/context_fasta_snps_only_vep_20190430.ht",
+            path=f"{RESOURCE_PREFIX}/GRCh37/reference_data/ht/context_fasta_snps_only_vep_20190430.ht",
         )
     },
 )
@@ -32,7 +32,7 @@ gencode = VersionedTableResource(
     default_version="v19",
     versions={
         "v19": TableResource(
-            path=f"{RESOURCE_PREFIX}/ht/context/gencode.v19.annotation.ht",
+            path=f"{RESOURCE_PREFIX}/GRCh37/reference_data/ht/gencode.v19.annotation.ht",
             import_func=import_gencode,
             import_args={
                 "path": f"{RESOURCE_PREFIX}/gencode.v19.annotation.gtf",
@@ -48,7 +48,7 @@ processed_gencode = VersionedTableResource(
     default_version="v19",
     versions={
         "v30lift37": TableResource(
-            path=f"{RESOURCE_PREFIX}/ht/context/gencode.v19.exons.ht",
+            path=f"{RESOURCE_PREFIX}/GRCh37/reference_data/ht/gencode.v19.exons.ht",
         )
     },
 )

@@ -38,10 +38,10 @@ def _import_coverage(**kwargs) -> hl.Table:
 
 
 # Files for direct comparison with Kaitlin's code
-EXAC_PREFIX = f"{RESOURCE_PREFIX}/ExAC"
+EXAC_PREFIX = f"{RESOURCE_PREFIX}/GRCh37/exac"
 
 exac = TableResource(
-    path=f"{EXAC_PREFIX}/ExAC.r0.3.sites.vep.vcf.gz",
+    path=f"{EXAC_PREFIX}/ht/ExAC.r0.3.sites.ht",
     import_func=import_sites_vcf,
     import_args={
         "path": f"{EXAC_PREFIX}/ExAC.r0.3.sites.vep.vcf.gz",
@@ -55,7 +55,7 @@ Resource for full ExAC dataset
 """
 
 coverage = TableResource(
-    path=f"{EXAC_PREFIX}/coverage/22_coverage.ht",
+    path=f"{EXAC_PREFIX}/ht/22_coverage.ht",
     import_func=_import_coverage,
     import_args={
         "path": "gs://gnomad-public/legacy/exacv1_downloads/release0.1/coverage/Panel.chr22.coverage.txt.gz",
@@ -68,12 +68,12 @@ coverage = TableResource(
 Resource with ExAC coverage
 """
 
-filtered_exac = TableResource(path=f"{EXAC_PREFIX}/ExAC.r0.3.missense_only.ht")
+filtered_exac = TableResource(path=f"{EXAC_PREFIX}/ht/ExAC.r0.3.missense_only.ht")
 """
 Resource for ExAC dataset filtered to missense variants only and annotated with trimer context
 """
 
-filtered_exac_cov = TableResource(path=f"{EXAC_PREFIX}/ExAC.r0.3.missense_only_cov.ht")
+filtered_exac_cov = TableResource(path=f"{EXAC_PREFIX}/ht/ExAC.r0.3.missense_only_cov.ht")
 """
 ExAC dataset filtered to missense variants only and annotated with trimer context and coverage information.
 Contains coverage infromation for ONLY chr22.
@@ -81,7 +81,7 @@ Contains coverage infromation for ONLY chr22.
 
 
 # Observed/expected count related resources
-expected = TableResource(path=f"{EXP_PREFIX}/ExAC_exp_var.ht")
+expected = TableResource(path=f"{EXP_PREFIX}/ht/ExAC_exp_var.ht")
 """
 Table annotated with expected variant counts
 """

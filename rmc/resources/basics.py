@@ -27,14 +27,14 @@ def _import_mu(**kwargs) -> hl.Table:
 
 ## Kaitlin's resources
 # Original regional missense constraint resource files
-CODON_TABLE_PATH = f"{RESOURCE_PREFIX}/codons_lookup.tsv"
-ACID_NAMES_PATH = f"{RESOURCE_PREFIX}/acid_names.tsv"
-MUTATION_RATE_TABLE_PATH = f"{RESOURCE_PREFIX}/mutation_rate_table.tsv"
+CODON_TABLE_PATH = f"{RESOURCE_PREFIX}/amino_acids/codons_lookup.tsv"
+ACID_NAMES_PATH = f"{RESOURCE_PREFIX}/amino_acids/acid_names.tsv"
+MUTATION_RATE_TABLE_PATH = f"{RESOURCE_PREFIX}/GRCh37/exac/mutation_rate_table.tsv"
 DIVERGENCE_SCORES_TSV_PATH = (
-    f"{RESOURCE_PREFIX}/divsites_gencodev19_all_transcripts.tsv"
+    f"{RESOURCE_PREFIX}/GRCh37/exac/divsites_gencodev19_all_transcripts.tsv"
 )
 divergence_scores = TableResource(
-    path=f"{RESOURCE_PREFIX}/div_scores.ht",
+    path=f"{RESOURCE_PREFIX}/GRCh37/exac/ht/div_scores.ht",
     import_func=hl.import_table,
     import_args={
         "path": DIVERGENCE_SCORES_TSV_PATH,
@@ -47,7 +47,7 @@ divergence_scores = TableResource(
 Table with divergence score between humans and macaques for each canonical transcript in Gencode v19.
 """
 mutation_rate = TableResource(
-    path=f"{RESOURCE_PREFIX}/ht/mutation_rate.ht",
+    path=f"{RESOURCE_PREFIX}/GRCh37/exac/ht/mutation_rate.ht",
     import_func=_import_mu,
     import_args={
         "path": MUTATION_RATE_TABLE_PATH,
