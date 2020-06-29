@@ -4,6 +4,12 @@ from gnomad.resources.resource_utils import TableResource
 from rmc.resources.resource_utils import FLAGSHIP_LOF, RESOURCE_PREFIX
 
 
+LOGGING_PATH = "gs://regional_missense_constraint/logs"
+"""
+Path to bucket that stores hail logs.
+"""
+
+
 def _import_mu(**kwargs) -> hl.Table:
     """
     Imports mutation rate information from Kaitlin into Table.
