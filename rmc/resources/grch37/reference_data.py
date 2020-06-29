@@ -29,26 +29,26 @@ processed_context = VersionedTableResource(
 )
 
 gencode = VersionedTableResource(
-    default_version="v30lift37",
+    default_version="v19",
     versions={
-        "v30lift37": TableResource(
-            path=f"{RESOURCE_PREFIX}/ht/context/gencode.v30lift37.basic.annotation.ht",
+        "v19": TableResource(
+            path=f"{RESOURCE_PREFIX}/ht/context/gencode.v19.annotation.ht",
             import_func=import_gencode,
             import_args={
-                "path": f"{RESOURCE_PREFIX}/gencode.v30lift37.basic.annotation.gtf",
+                "path": f"{RESOURCE_PREFIX}/gencode.v19.annotation.gtf",
                 "reference_genome": "GRCh37",
                 "skip_invalid_contigs": True,
-                "min_partitions": 1000,
+                "min_partitions": 500,
             },
         )
     },
 )
 
 processed_gencode = VersionedTableResource(
-    default_version="v30lift37",
+    default_version="v19",
     versions={
         "v30lift37": TableResource(
-            path=f"{RESOURCE_PREFIX}/ht/context/gencode.v30lift37.exons.ht",
+            path=f"{RESOURCE_PREFIX}/ht/context/gencode.v19.exons.ht",
         )
     },
 )
