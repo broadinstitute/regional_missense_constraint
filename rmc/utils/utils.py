@@ -34,6 +34,9 @@ def get_codon_lookup() -> Dict:
     """
     Reads in codon lookup table and returns as dictionary (key: codon, value: amino acid)
 
+    .. note:: 
+        This is only necessary for testing on ExAC and should be replaced with VEP annotations.
+
     :return: Dictionary of codon translation
     :rtype: dict
     """
@@ -116,10 +119,11 @@ def process_context_ht(
         raise DataException(f"Build must be one of {BUILDS}.")
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht")
+
     if build == "GRCh37":
         full_context_ht = grch37.full_context.ht()
     else:
-        full_context_ht = grch37.full_context.ht()
+        full_context_ht = grch38.full_context.ht()
     full_context_ht = prepare_ht(full_context_ht, trimers)
     logger.info(f"Full HT count: {full_context_ht.count()}")
 
@@ -240,7 +244,7 @@ def filter_alt_decoy(ht: hl.Table) -> hl.Table:
         .when((ht.locus.in_autosome() | ht.locus.in_x_par()), "autosome_xpar")
         .when(ht.locus.in_x_nonpar(), "x_nonpar")
         .when(ht.locus.in_y_nonpar(), "y")
-        .default("remove")
+        .or_missing()
     )
     logger.info("Filtering to autosomes + X/Y..")
     ht = ht.filter(ht.region_type == "remove", keep=False)
