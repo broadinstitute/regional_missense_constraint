@@ -1,7 +1,7 @@
 import hail as hl
 
 BUILDS = ["GRCh37", "GRCh38"]
-FLAGSHIP_LOF = "gs://gnomad-public/papers/2019-flagship-lof/v1.0/"
+FLAGSHIP_LOF = "gs://gnomad-public/papers/2019-flagship-lof/v1.0"
 RESOURCE_PREFIX = "gs://regional_missense_constraint/resources"
 
 

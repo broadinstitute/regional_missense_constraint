@@ -15,7 +15,7 @@ full_context = VersionedTableResource(
         "20181129": TableResource(
             path=f"{FLAGSHIP_LOF}/context/Homo_sapiens_assembly19.fasta.snps_only.vep_20181129.ht",
         )
-        # NOTE: no import_func yet because not super clear how this was imported by Konrad
+        # NOTE: no import_func necessary for this (will not need to update until we switch to MANE transcripts)
     },
 )
 

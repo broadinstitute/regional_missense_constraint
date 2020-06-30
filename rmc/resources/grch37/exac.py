@@ -16,9 +16,6 @@ def _import_coverage(**kwargs) -> hl.Table:
 	:rtype: hl.Table
 	"""
     coverage = hl.import_table(**kwargs)
-    coverage = coverage.transmute(
-        locus=hl.parse_locus(hl.format("%s:%s", coverage["#chrom"], coverage.pos))
-    )
     coverage = coverage.rename(
         {
             "1": "over_1",
@@ -32,7 +29,7 @@ def _import_coverage(**kwargs) -> hl.Table:
             "100": "over_100",
         }
     )
-    coverage = coverage.key_by("locus")
+    coverage = coverage.key_by(locus=hl.locus(coverage["#chrom"], coverage.pos))
     coverage = coverage.naive_coalesce(100)
     return coverage
 
@@ -73,7 +70,9 @@ filtered_exac = TableResource(path=f"{EXAC_PREFIX}/ht/ExAC.r0.3.missense_only.ht
 Resource for ExAC dataset filtered to missense variants only and annotated with trimer context
 """
 
-filtered_exac_cov = TableResource(path=f"{EXAC_PREFIX}/ht/ExAC.r0.3.missense_only_cov.ht")
+filtered_exac_cov = TableResource(
+    path=f"{EXAC_PREFIX}/ht/ExAC.r0.3.missense_only_cov.ht"
+)
 """
 ExAC dataset filtered to missense variants only and annotated with trimer context and coverage information.
 Contains coverage infromation for ONLY chr22.
