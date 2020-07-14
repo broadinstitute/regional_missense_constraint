@@ -247,6 +247,6 @@ def filter_alt_decoy(ht: hl.Table) -> hl.Table:
         .or_missing()
     )
     logger.info("Filtering to autosomes + X/Y..")
-    ht = ht.filter(ht.region_type == "remove", keep=False)
+    ht = ht.filter(hl.is_defined(ht.region_type))
     logger.info(f"HT count after filtration: {ht.count()}")
     return ht
