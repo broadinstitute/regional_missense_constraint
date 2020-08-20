@@ -53,6 +53,10 @@ def calculate_expected(context_ht: hl.Table, coverage_ht: hl.Table,) -> hl.Table
     """
     Annotates context Table with expected variants count (adjusted by mutation rate, divergence score, and region type).
 
+    .. note::
+        This function is currently ExAC-specific.
+        TODO: look into whether can reuse models from gnomad_lof for gnomAD v2 exomes
+
     :param Table context_ht: Context Table.
     :return: Context Table with expected variant annotations.
     :rtype: hl.Table
@@ -118,7 +122,7 @@ def calculate_observed(
         "chrom": ht.locus.contig,
         "pos": ht.locus.position,
     }
-    exome_ht = exome_ht.annotate(**groupings)
+    ht = ht.annotate(**groupings)
 
     # NOTE: count variants from gnomAD lof repo
     # https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/generic.py#L68
@@ -145,10 +149,9 @@ def calculate_observed(
             scan_sum=hl.array_scan(lambda i, j: i + j, 0, ht.variant_info.variant_count)
         )
 
-    else:
-        return ht.group_by(ht.transcript, ht.exon,).aggregate(
-            observed=hl.agg.sum(ht.variant_count)
-        )
+    return ht.group_by(ht.transcript, ht.exon,).aggregate(
+        observed=hl.agg.sum(ht.variant_count)
+    )
 
 
 def main(args):
@@ -158,7 +161,6 @@ def main(args):
 
     try:
         if args.pre_process_data:
-            # TODO: will have to annotate context HT with new mutation HT when running on gnomAD
             logger.info("Preprocessing reference fasta and gencode files...")
             process_context_ht("GRCh37", args.trimers)
 
@@ -181,22 +183,22 @@ def main(args):
                 "|"
             )
 
-            logger.info("Filtering to canonical transcripts only...")
-            # NOTE: filter_vep_to_canonical_transcripts doesn't work because of vep format in ExAC HT (in csq format from vcf export)
-            # Searching for 'YES' based on this line of code from vep.py: "canonical": hl.cond(element.canonical == 1, "YES", "")
-            exome_ht = exome_ht.filter(
-                exome_ht.info.CSQ.split("\|")[canon_idx].contains("YES")
-            )
-
             # Move necessary annotations out of info struct and into top level annotations
             exome_ht = exome_ht.transmute(
                 ac=exome_ht.info.AC_Adj[0],
                 VQSLOD=exome_ht.info.VQSLOD,
                 coverage=exome_ht.coverage.median,
+                canonical=exome_ht.info.CSQ.split("\|")[csq.index("CANONICAL")]
+                == "YES",
                 transcript=exome_ht.info.CSQ.split("\|")[csq.index("Feature")],
                 exon=exome_ht.info.CSQ.split("\|")[csq.index("EXON")],
                 gene=exome_ht.info.CSQ.split("\|")[csq.index("Gene")],
             )
+
+            logger.info("Filtering to canonical transcripts only...")
+            # NOTE: filter_vep_to_canonical_transcripts doesn't work because of vep format in ExAC HT (in csq format from vcf export)
+            # Searching for 'YES' based on this line of code from vep.py: "canonical": hl.cond(element.canonical == 1, "YES", "")
+            exome_ht = exome_ht.filter(exome_ht.canonical)
 
         else:
             exome_ht = prepare_ht(filtered_exomes.ht(), args.trimers)
@@ -225,12 +227,6 @@ def main(args):
             )
             context_ht = filter_alt_decoy(context_ht)
             exome_ht = filter_alt_decoy(exome_ht)
-
-        if args.calc_exp:
-            context_ht = calculate_expected(context_ht, coverage_ht)
-
-        if args.calc_obs:
-            exome_ht = calculate_observed(exome_ht)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
