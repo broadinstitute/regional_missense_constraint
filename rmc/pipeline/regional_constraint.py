@@ -5,7 +5,7 @@ import hail as hl
 
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
-from gnomad_lof.constraint_utils.generic import count_variants, prepare_ht
+from gnomad_lof.constraint_utils.generic import prepare_ht
 from rmc.resources.basics import logging_path
 from rmc.resources.grch37.exac import coverage, filtered_exac_cov
 from rmc.resources.grch37.gnomad import filtered_exomes, processed_exomes
