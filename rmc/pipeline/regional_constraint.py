@@ -153,8 +153,8 @@ def calculate_observed(
                 hl.struct(chrom=ht.chrom, pos=ht.chrom, variant_count=ht.variant_count,)
             )
         )
-        # Sort the array of structs by position (will need to run this one chromosome at a time)
-        ht = ht.transmute(variant_info=hl.sorted(ht.variant_info, key=lambda x: x[1]))
+        # Sort the array of structs by chrom, then by position 
+        ht = ht.transmute(variant_info=hl.sorted(ht.variant_info, key=lambda x: (x[0], x[1])))
         ht = ht.annotate(
             scan_sum=hl.array_scan(lambda i, j: i + j, 0, ht.variant_info.variant_count)
         )
