@@ -111,7 +111,7 @@ def calculate_observed(
 
     :param Table ht: Input Table.
     :param Table gencode_ht: Gencode Table grouped by transcript and exon number.
-    :param bool scan: Whether to perform a scan on the Table.
+    :param bool scan: Whether to perform a scan to get cumulative variant counts within exons.
     :param bool exac: Whether the input Table is ExAC data.
     :param bool omit_methylation: Whether to omit grouping the Table by methylation. Must be true if `exac` is True.
     :param int n_partitions: Number of partitions used during the `group_by` operation.
