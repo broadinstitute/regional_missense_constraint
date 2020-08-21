@@ -11,9 +11,10 @@ from rmc.resources.grch37.exac import coverage, filtered_exac_cov
 from rmc.resources.grch37.gnomad import filtered_exomes, processed_exomes
 from rmc.resources.grch37.reference_data import processed_context, processed_gencode
 from rmc.slack_creds import slack_token
-from rmc.utils.utils import (
+from rmc.utils.generic import (
     filter_alt_decoy,
     filter_to_missense,
+    keep_criteria,
     process_context_ht,
     process_gencode_ht,
 )
@@ -25,28 +26,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("regional_missense_constraint")
 logger.setLevel(logging.INFO)
-
-
-def _keep_criteria(ht: hl.Table, exac: bool) -> hl.expr.BooleanExpression:
-    """
-    Returns Boolean expression to filter variants in input Table.
-
-    :param hl.Table ht: Input Table.
-    :param bool exac: Whether input Table is ExAC data.
-    :return: Keep criteria Boolean expression.
-    :rtype: hl.expr.BooleanExpression
-    """
-    # ExAC keep criteria: adjusted AC <= 123 and VQSLOD >= -2.632
-    # Also remove variants with median depth < 1
-    if exac:
-        keep_criteria = (
-            (ht.ac <= 123) & (ht.ac > 0) & (ht.VQSLOD >= -2.632) & (ht.coverage > 1)
-        )
-    else:
-        # TODO: check about impose_high_af_cutoff upfront
-        keep_criteria = (ht.ac > 0) & (ht.pass_filters)
-
-    return keep_criteria
 
 
 def calculate_expected(context_ht: hl.Table, coverage_ht: hl.Table,) -> hl.Table:
@@ -118,7 +97,7 @@ def calculate_observed(
     :return: Table annotated with observed variant counts.
     :rtype: hl.Table
     """
-    ht = ht.filter(_keep_criteria(ht, exac))
+    ht = ht.filter(keep_criteria(ht, exac))
 
     # Create dictionary of additional values to group variants by
     # Need these additional groupings to do scans correctly downstream

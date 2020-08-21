@@ -198,6 +198,28 @@ def process_gencode_ht(build: str, overwrite: bool) -> None:
 
 
 ## Functions for obs/exp related resources
+def keep_criteria(ht: hl.Table, exac: bool) -> hl.expr.BooleanExpression:
+    """
+    Returns Boolean expression to filter variants in input Table.
+
+    :param hl.Table ht: Input Table.
+    :param bool exac: Whether input Table is ExAC data.
+    :return: Keep criteria Boolean expression.
+    :rtype: hl.expr.BooleanExpression
+    """
+    # ExAC keep criteria: adjusted AC <= 123 and VQSLOD >= -2.632
+    # Also remove variants with median depth < 1
+    if exac:
+        keep_criteria = (
+            (ht.ac <= 123) & (ht.ac > 0) & (ht.VQSLOD >= -2.632) & (ht.coverage > 1)
+        )
+    else:
+        # TODO: check about impose_high_af_cutoff upfront
+        keep_criteria = (ht.ac > 0) & (ht.pass_filters)
+
+    return keep_criteria
+
+
 def filter_to_missense(ht: hl.Table, n_partitions: int = 5000) -> hl.Table:
     """
     Filters input Table to missense variants.
