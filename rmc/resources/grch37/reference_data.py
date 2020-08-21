@@ -47,7 +47,7 @@ gencode = VersionedTableResource(
 processed_gencode = VersionedTableResource(
     default_version="v19",
     versions={
-        "v30lift37": TableResource(
+        "19": TableResource(
             path=f"{RESOURCE_PREFIX}/GRCh37/reference_data/ht/gencode.v19.exons.ht",
         )
     },

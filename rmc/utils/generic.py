@@ -188,18 +188,13 @@ def process_gencode_ht(build: str, overwrite: bool) -> None:
         ht = grch38.gencode.ht()
         output_path = grch38.processed_gencode.path
 
-    logger.info(
-        "Filtering gencode gtf to exons in protein coding genes with support levels 1 and 2"
-    )
-    ht = ht.filter(
-        (ht.feature == "exon") & (ht.gene_type == "protein_coding") & (ht.level != "3")
-    )
+    logger.info("Filtering gencode gtf to exons in protein coding genes...")
+    ht = ht.filter((ht.feature == "exon") & (ht.gene_type == "protein_coding"))
 
-    logger.info("Grouping gencode ht by transcript ID")
-    ht = ht.key_by(ht.transcript_id)
-    ht = ht.select(ht.frame, ht.exon_number, ht.gene_name, ht.interval)
-    ht = ht.collect_by_key()
-    ht.write(output_path, overwrite=overwrite)
+    logger.info("Keying by transcript and exon number...")
+    # Stripping decimal from transcript to match transcript in exome data
+    ht = ht.transmute(transcript=ht.transcript_id.split("\.")[0])
+    return ht.key_by("transcript", "exon_number").select()
 
 
 ## Functions for obs/exp related resources
