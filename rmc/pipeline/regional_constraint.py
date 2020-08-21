@@ -96,7 +96,12 @@ def calculate_expected(context_ht: hl.Table, coverage_ht: hl.Table,) -> hl.Table
 
 
 def calculate_observed(
-    ht: hl.Table, scan: bool, exac: bool, omit_methylation: bool, n_partitions: int
+    ht: hl.Table,
+    gencode_ht: hl.Table,
+    scan: bool,
+    exac: bool,
+    omit_methylation: bool,
+    n_partitions: int,
 ) -> hl.Table:
     """
     Groups input Table by transcript and exon and calculates observed variants count.
@@ -105,6 +110,7 @@ def calculate_observed(
     Otherwise, annotates input Table with observed variants counts per exon.
 
     :param Table ht: Input Table.
+    :param Table gencode_ht: Gencode Table grouped by transcript and exon number.
     :param bool scan: Whether to perform a scan on the Table.
     :param bool exac: Whether the input Table is ExAC data.
     :param bool omit_methylation: Whether to omit grouping the Table by methylation. Must be true if `exac` is True.
@@ -121,8 +127,12 @@ def calculate_observed(
         "exon": ht.exon,
         "chrom": ht.locus.contig,
         "pos": ht.locus.position,
+        "coverage": ht.coverage.median,
     }
     ht = ht.annotate(**groupings)
+
+    # Reformat exon number annotation on HT
+    ht = ht.transmute(exon_number=ht.exon.split("\/")[0])
 
     # NOTE: count variants from gnomAD lof repo
     # https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/generic.py#L68
@@ -143,15 +153,21 @@ def calculate_observed(
                 hl.struct(chrom=ht.chrom, pos=ht.chrom, variant_count=ht.variant_count,)
             )
         )
-        # Sort the array of structs by position
+        # Sort the array of structs by position (will need to run this one chromosome at a time)
         ht = ht.transmute(variant_info=hl.sorted(ht.variant_info, key=lambda x: x[1]))
-        return ht.annotate(
+        ht = ht.annotate(
             scan_sum=hl.array_scan(lambda i, j: i + j, 0, ht.variant_info.variant_count)
         )
 
-    return ht.group_by(ht.transcript, ht.exon,).aggregate(
-        observed=hl.agg.sum(ht.variant_count)
-    )
+    else:
+        # Group HT by transcript and exon and get overall counts per exon
+        ht = ht.group_by(ht.transcript, ht.exon,).aggregate(
+            observed=hl.agg.sum(ht.variant_count)
+        )
+
+    # Left join the observed counts onto the gencode HT and return
+    # TODO: exons with no observed counts have missing values after the join. should I set to 0?
+    return gencode_ht.join(ht.key_by("transcript", "exon_number"), how="left")
 
 
 def main(args):
