@@ -155,7 +155,7 @@ def process_context_ht(
     logger.info("Importing divergence scores and annotating context ht")
     div_ht = divergence_scores.ht()
     context_ht = context_ht.annotate(
-        div=hl.cond(
+        div=hl.if_else(
             hl.is_defined(div_ht[context_ht.vep.transcript_consequences.transcript_id]),
             div_ht[context_ht.vep.transcript_consequences.transcript_id].divergence,
             0.0564635,
