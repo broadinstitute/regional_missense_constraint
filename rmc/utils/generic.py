@@ -4,6 +4,7 @@ from typing import Dict
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.vep import filter_vep_to_canonical_transcripts
 from gnomad_lof.constraint.constraint_basics import (
     add_most_severe_csq_to_tc_within_ht,
     prepare_ht,
@@ -122,8 +123,11 @@ def process_context_ht(
 
     if build == "GRCh37":
         full_context_ht = grch37.full_context.ht()
+        output_path = grch37.processed_context.path
     else:
         full_context_ht = grch38.full_context.ht()
+        output_path = grch38.processed_context.path
+
     full_context_ht = prepare_ht(full_context_ht, trimers)
     logger.info(f"Full HT count: {full_context_ht.count()}")
 
@@ -163,17 +167,16 @@ def process_context_ht(
 
     logger.info("Writing out context ht")
     context_ht = context_ht.naive_coalesce(n_partitions)
-    context_ht.write(get_processed_context_ht_path(build), overwrite=overwrite)
+    context_ht.write(output_path, overwrite=overwrite)
     context_ht.describe()
 
 
 ## Functions to process exon/transcript related resourcces
-def process_gencode_ht(build: str, overwrite: bool) -> None:
+def process_gencode_ht(build: str) -> None:
     """
     Imports gencode gtf as ht,filters to protein coding transcripts, and writes out as ht
 
     :param str build: Reference genome build; must be one of BUILDS.
-    :param bool overwrite: Whether to overwrite output.
     :return: None
     :rtype: None
     """
@@ -183,10 +186,9 @@ def process_gencode_ht(build: str, overwrite: bool) -> None:
     logger.info("Reading in gencode gtf")
     if build == "GRCh37":
         ht = grch37.gencode.ht()
-        output_path = grch37.processed_gencode.path
+
     else:
         ht = grch38.gencode.ht()
-        output_path = grch38.processed_gencode.path
 
     logger.info("Filtering gencode gtf to exons in protein coding genes...")
     ht = ht.filter((ht.feature == "exon") & (ht.gene_type == "protein_coding"))
@@ -222,23 +224,24 @@ def keep_criteria(ht: hl.Table, exac: bool) -> hl.expr.BooleanExpression:
 
 def filter_to_missense(ht: hl.Table, n_partitions: int = 5000) -> hl.Table:
     """
-    Filters input Table to missense variants.
+    Filters input Table to missense variants in canonical transcripts only.
 
     :param Table ht: Input Table to be filtered.
     :param int n_partitions: Number of desired partitions for output.
     :return: Table filtered to only missense variants.
     :rtype: hl.Table
     """
-    logger.info(f"HT count before filtration: {ht.count()}")  
+    logger.info("Filtering to canonical transcripts...")
+    ht = filter_vep_to_canonical_transcripts(ht)
+
     logger.info("Annotating HT with most severe consequence...")
-    ht = add_most_severe_csq_to_tc_within_ht(ht)  
+    ht = add_most_severe_csq_to_tc_within_ht(ht)
     logger.info(
         f"Consequence count: {ht.aggregate(hl.agg.counter(ht.vep.most_severe_consequence))}"
     )
 
     logger.info("Filtering to missense variants...")
     ht = ht.filter(hl.literal(MISSENSE).contains(ht.vep.most_severe_consequence))
-    logger.info(f"HT count after filtration: {ht.count()}")  # this printed 6818793
 
     return ht.naive_coalesce(n_partitions)
 

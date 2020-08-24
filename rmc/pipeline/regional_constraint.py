@@ -41,9 +41,10 @@ def main(args):
             logger.info("Preprocessing GENCODE GTF information...")
             process_gencode_ht("GRCh37")
 
-            logger.info("Filtering gnomAD exomes HT to missense variants only...")
+            logger.info(
+                "Filtering gnomAD exomes HT to missense variants in canonical transcripts only..."
+            )
             exome_ht = processed_exomes.ht()
-            # TODO: make filter to missense filter to canonical transcripts only
             exome_ht = filter_to_missense(exome_ht)
             exome_ht.write(filtered_exomes.path, overwrite=args.overwrite)
 
