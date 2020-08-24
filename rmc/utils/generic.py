@@ -131,15 +131,10 @@ def process_context_ht(
     full_context_ht = prepare_ht(full_context_ht, trimers)
     logger.info(f"Full HT count: {full_context_ht.count()}")
 
-    logger.info("Filtering to canonical protein coding transcripts...")
-    full_context_ht = full_context_ht.explode(
-        full_context_ht.vep.transcript_consequences
+    logger.info(
+        "Filtering to missense variants in canonical protein coding transcripts..."
     )
-    context_ht = full_context_ht.filter(
-        (full_context_ht.vep.transcript_consequences.biotype == "protein_coding")
-        & (full_context_ht.vep.transcript_consequences.canonical == 1)
-    )
-    logger.info(f"Count after filtration: {context_ht.count()}")
+    context_ht = filter_to_missense(full_context_ht)
 
     logger.info(
         "Importing codon translation table and amino acid names and annotating as globals"
@@ -162,6 +157,11 @@ def process_context_ht(
         )
     )
 
+    logger.info("Moving transcript ID and exon number to top level annotation")
+    context_ht = context_ht.annotate(
+        transcript=context_ht.vep.transcript_consequences.transcript_id,
+        exon=context_ht.vep.transcript_consequences.exon.split("\/")[0],
+    )
     logger.info("Re-keying context ht by locus and alleles")
     context_ht = context_ht.key_by("locus", "alleles")
 

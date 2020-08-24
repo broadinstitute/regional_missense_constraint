@@ -1,3 +1,5 @@
+import logging
+
 import hail as hl
 
 from gnomad_lof.constraint_utils.generic import count_variants
@@ -24,6 +26,7 @@ def calculate_expected(context_ht: hl.Table, coverage_ht: hl.Table) -> hl.Table:
     :return: Context Table with expected variant annotations.
     :rtype: hl.Table
     """
+    logger.info("Filtering to missense only...")
     logger.info("Annotating context HT with median ExAC coverage...")
     context_ht = context_ht.annotate(exac_cov=coverage_ht[context_ht.key].median)
 
@@ -54,6 +57,9 @@ def calculate_expected(context_ht: hl.Table, coverage_ht: hl.Table) -> hl.Table:
             (0.089 + 0.217 * hl.log(context_ht.raw_expected)),
         )
         .default(context_ht.raw_expected)
+    )
+    context_ht = context_ht.group_by("transcript", "exon").aggregate(
+        exp=hl.agg.sum(context_ht.expected)
     )
     return context_ht
 
