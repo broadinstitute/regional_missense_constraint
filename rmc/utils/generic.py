@@ -229,15 +229,13 @@ def filter_to_missense(ht: hl.Table, n_partitions: int = 5000) -> hl.Table:
     :return: Table filtered to only missense variants.
     :rtype: hl.Table
     """
-    logger.info(f"HT count before filtration: {ht.count()}")  # this printed 17209972
+    logger.info(f"HT count before filtration: {ht.count()}")  
     logger.info("Annotating HT with most severe consequence...")
-    ht = add_most_severe_csq_to_tc_within_ht(ht)  # from constraint_basics
+    ht = add_most_severe_csq_to_tc_within_ht(ht)  
     logger.info(
         f"Consequence count: {ht.aggregate(hl.agg.counter(ht.vep.most_severe_consequence))}"
     )
 
-    # vep consequences from https://github.com/macarthur-lab/gnomad_hail/blob/master/utils/constants.py
-    # missense definition from seqr searches
     logger.info("Filtering to missense variants...")
     ht = ht.filter(hl.literal(MISSENSE).contains(ht.vep.most_severe_consequence))
     logger.info(f"HT count after filtration: {ht.count()}")  # this printed 6818793

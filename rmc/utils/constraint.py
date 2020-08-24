@@ -97,8 +97,6 @@ def calculate_observed(
     # Reformat exon number annotation on HT
     ht = ht.transmute(exon_number=ht.exon.split("\/")[0])
 
-    # NOTE: count variants from gnomAD lof repo
-    # https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/generic.py#L68
     # Need force_grouping to be true to return a Table and not a struct
     if exac:
         omit_methylation = True
