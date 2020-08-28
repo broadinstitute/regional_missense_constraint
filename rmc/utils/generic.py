@@ -103,7 +103,7 @@ def get_divergence_scores() -> Dict:
 
 ## Functions to process reference genome related resources
 def process_context_ht(
-    build: str, trimers: bool, overwrite: bool, n_partitions: int = 1000
+    build: str, trimers: bool = True, overwrite: bool = True, n_partitions: int = 1000
 ) -> None:
     """
     Imports reference fasta (SNPs only, VEP'd) as ht
@@ -119,7 +119,7 @@ def process_context_ht(
     if build not in BUILDS:
         raise DataException(f"Build must be one of {BUILDS}.")
 
-    logger.info("Reading in SNPs-only, VEP-annotated context ht")
+    logger.info("Reading in SNPs-only, VEP-annotated context ht...")
 
     if build == "GRCh37":
         full_context_ht = grch37.full_context.ht()
@@ -129,43 +129,53 @@ def process_context_ht(
         output_path = grch38.processed_context.path
 
     full_context_ht = prepare_ht(full_context_ht, trimers)
-    logger.info(f"Full HT count: {full_context_ht.count()}")
 
     logger.info(
         "Filtering to missense variants in canonical protein coding transcripts..."
     )
-    context_ht = filter_to_missense(full_context_ht)
+    context_ht = filter_vep_to_canonical_transcripts(full_context_ht)
+
+    # NOTE: Had issues with filtering using most_severe_consequence in nb, so switched code here
+    # Also discovered that transcript_consequences always has a length of 1 in notebook (at least in chr22)
+    context_ht = context_ht.filter(
+        context_ht.vep.transcript_consequences[0].consequence_terms.contains(
+            "missense_variant"
+        )
+    )
 
     logger.info(
-        "Importing codon translation table and amino acid names and annotating as globals"
+        "Importing codon translation table and amino acid names and annotating as globals..."
     )
     context_ht = context_ht.annotate_globals(
         codon_translation=get_codon_lookup(), acid_names=get_acid_names()
     )
 
-    logger.info("Importing mutation rates and joining to context ht")
+    # NOTE: trimers must be True for this join to work correctly (for ExAC mu ht)
+    logger.info("Importing mutation rates and joining to context HT...")
     mu_ht = mutation_rate.ht()
-    context_ht = context_ht.key_by("context", "alleles").join(mu_ht, how="left")
+    context_ht = context_ht.annotate(
+        mu_snp=mu_ht[context_ht.context, context_ht.alleles].mu_snp
+    )
 
-    logger.info("Importing divergence scores and annotating context ht")
+    logger.info("Importing divergence scores and annotating context HT...")
     div_ht = divergence_scores.ht()
     context_ht = context_ht.annotate(
         div=hl.if_else(
-            hl.is_defined(div_ht[context_ht.vep.transcript_consequences.transcript_id]),
-            div_ht[context_ht.vep.transcript_consequences.transcript_id].divergence,
+            hl.is_defined(
+                div_ht[context_ht.vep.transcript_consequences[0].transcript_id]
+            ),
+            div_ht[context_ht.vep.transcript_consequences[0].transcript_id].divergence,
             0.0564635,
         )
     )
 
-    logger.info("Moving transcript ID and exon number to top level annotation")
+    logger.info("Moving transcript ID and exon number to top level annotation...")
     context_ht = context_ht.annotate(
-        transcript=context_ht.vep.transcript_consequences.transcript_id,
-        exon=context_ht.vep.transcript_consequences.exon.split("\/")[0],
+        transcript=context_ht.vep.transcript_consequences[0].transcript_id,
+        exon=context_ht.vep.transcript_consequences[0].exon.split("\/")[0],
     )
-    logger.info("Re-keying context ht by locus and alleles")
-    context_ht = context_ht.key_by("locus", "alleles")
 
-    logger.info("Writing out context ht")
+    logger.info("Writing out context HT...")
     context_ht = context_ht.naive_coalesce(n_partitions)
     context_ht.write(output_path, overwrite=overwrite)
     context_ht.describe()
