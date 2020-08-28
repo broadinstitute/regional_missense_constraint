@@ -54,20 +54,22 @@ def main(args):
         if exac:
             exome_ht = filtered_exac_cov.ht().select("context", "coverage")
             coverage_ht = coverage.ht()
-            csq = "Allele|Gene|Feature|Feature_type|Consequence|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|SYMBOL|SYMBOL_SOURCE|HGNC_ID|BIOTYPE|CANONICAL|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|SIFT|PolyPhen|EXON|INTRON|DOMAINS|HGVSc|HGVSp|GMAF|AFR_MAF|AMR_MAF|ASN_MAF|EUR_MAF|AA_MAF|EA_MAF|CLIN_SIG|SOMATIC|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF_info|LoF_flags|LoF_filter|LoF".split(
-                "|"
-            )
+            csq = "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral"
+            csq = csq.split("|")
 
             # Move necessary annotations out of info struct and into top level annotations
             exome_ht = exome_ht.transmute(
-                ac=exome_ht.info.AC_Adj[0],
+                ac=exome_ht.info.AC_Adj[exome_ht.a_index - 1],
                 VQSLOD=exome_ht.info.VQSLOD,
                 coverage=exome_ht.coverage.median,
-                canonical=exome_ht.info.CSQ.split("\|")[csq.index("CANONICAL")]
+                canonical=exome_ht.info.CSQ[exome_ht.a_index - 1].split("\|")[
+                    csq.index("CANONICAL")
+                ]
                 == "YES",
-                transcript=exome_ht.info.CSQ.split("\|")[csq.index("Feature")],
-                exon=exome_ht.info.CSQ.split("\|")[csq.index("EXON")],
-                gene=exome_ht.info.CSQ.split("\|")[csq.index("Gene")],
+                transcript=exome_ht.info.CSQ[exome_ht.a_index - 1].split("\|")[
+                    csq.index("Feature")
+                ],
+                exon=exome_ht.info.CSQ[exome_ht.a_index - 1].split("\|")[csq.index("EXON")],
             )
 
             logger.info("Filtering to canonical transcripts only...")
@@ -81,7 +83,7 @@ def main(args):
 
         logger.info("Reading in context HT and gencode HT...")
         context_ht = processed_context.ht()
-        gencode_ht = processed_gencode.ht()
+        #gencode_ht = processed_gencode.ht()
 
         if args.test:
             logger.info("Inferring build of exome HT...")
