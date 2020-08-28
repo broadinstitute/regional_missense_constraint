@@ -2,7 +2,7 @@ import logging
 
 import hail as hl
 
-from gnomad_lof.constraint_utils.generic import count_variants
+# from gnomad_lof.constraint_utils.generic import count_variants
 from rmc.utils.generic import keep_criteria
 
 
@@ -75,71 +75,14 @@ def calculate_expected(context_ht: hl.Table, coverage_ht: hl.Table) -> hl.Table:
     return context_ht
 
 
-def calculate_observed(
-    ht: hl.Table,
-    gencode_ht: hl.Table,
-    exac: bool,
-    omit_methylation: bool,
-    n_partitions: int,
-) -> hl.Table:
+def calculate_observed(ht: hl.Table, exac: bool) -> hl.Table:
     """
-    Groups input Table by transcript and exon and calculates observed variants count.
-
-    Annotates input Table with an array containing cumulative variant counts.
-    Also adds annotation with total number of observed variants per exon.
+    Groups input Table by transcript and aggregates observed variants count per transcript.
 
     :param Table ht: Input Table.
-    :param Table gencode_ht: Gencode Table grouped by transcript and exon number.
     :param bool exac: Whether the input Table is ExAC data.
-    :param bool omit_methylation: Whether to omit grouping the Table by methylation. Must be true if `exac` is True.
-    :param int n_partitions: Number of partitions used during the `group_by` operation.
     :return: Table annotated with observed variant counts.
     :rtype: hl.Table
     """
     ht = ht.filter(keep_criteria(ht, exac))
-
-    # Create dictionary of additional values to group variants by
-    # Need these additional groupings to do scans correctly downstream
-    groupings = {
-        "transcript": ht.transcript,
-        "exon": ht.exon,
-        "chrom": ht.locus.contig,
-        "pos": ht.locus.position,
-        "coverage": ht.coverage.median,
-    }
-    ht = ht.annotate(**groupings)
-
-    # Reformat exon number annotation on HT
-    ht = ht.transmute(exon_number=ht.exon.split("\/")[0])
-
-    # Need force_grouping to be true to return a Table and not a struct
-    if exac:
-        omit_methylation = True
-    ht = count_variants(
-        ht,
-        omit_methylation=omit_methylation,
-        additional_grouping=list(groupings),
-        partition_hint=n_partitions,
-        force_grouping=True,
-    )
-
-    # Group HT by transcript and exon and collect variants + variant counts into an array of structs
-    ht = ht.group_by(ht.transcript, ht.exon,).aggregate(
-        variant_info=hl.agg.collect(
-            hl.struct(chrom=ht.chrom, pos=ht.chrom, variant_count=ht.variant_count,)
-        )
-    )
-    # Sort the array of structs by chrom, then by position
-    ht = ht.transmute(
-        variant_info=hl.sorted(ht.variant_info, key=lambda x: (x[0], x[1]))
-    )
-    ht = ht.annotate(
-        scan_sum=hl.array_scan(lambda i, j: i + j, 0, ht.variant_info.variant_count)
-    )
-
-    # Add overall count per exon to HT
-    ht = ht.annotate(observed=ht.scan_sum[-1])
-
-    # Left join the observed counts onto the gencode HT and return
-    # TODO: exons with no observed counts have missing values after the join. should I set to 0?
-    return gencode_ht.join(ht.key_by("transcript", "exon_number"), how="left")
+    return ht.group_by(ht.transcript).aggregate(observed=hl.agg.count())
