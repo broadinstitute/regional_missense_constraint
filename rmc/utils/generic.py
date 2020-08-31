@@ -256,25 +256,20 @@ def filter_to_missense(ht: hl.Table, n_partitions: int = 5000) -> hl.Table:
     return ht.naive_coalesce(n_partitions)
 
 
-def filter_alt_decoy(ht: hl.Table) -> hl.Table:
+def filter_to_region_type(ht: hl.Table, region: str) -> hl.Table:
     """
-    Filters input Table to autosomes, X/X PAR, and Y (not mito or alt/decoy contigs). 
+    Filters input Table to autosomes + chrX PAR, chrX non-PAR, or chrY non-PAR. 
 
-    Also annotates each locus with region type.
-
-    :param Table ht: Input Table to be filtered/annotated.
-    :return: Table filtered to autosomes/PAR and annotated with PAR status.
+    :param hl.Table ht: Input Table to be filtered.
+    :param str region: Desired region type. One of 'autosomes', 'chrX', or 'chrY'.
+    :return: Table filtered to autosomes/PAR, chrX, or chrY.
     :rtype: hl.Table
     """
-    logger.info(f"HT count before filtration: {ht.count()}")
-    ht = ht.annotate(
-        region_type=hl.case()
-        .when((ht.locus.in_autosome() | ht.locus.in_x_par()), "autosome_xpar")
-        .when(ht.locus.in_x_nonpar(), "x_nonpar")
-        .when(ht.locus.in_y_nonpar(), "y")
-        .or_missing()
-    )
-    logger.info("Filtering to autosomes + X/Y..")
-    ht = ht.filter(hl.is_defined(ht.region_type))
-    logger.info(f"HT count after filtration: {ht.count()}")
+    if region == "chrX":
+        ht = ht.filter(ht.locus.in_x_nonpar())
+        ht = ht.filter(ht.locus.in_autosome() | ht.locus.in_x_par())
+    elif region == "chrY":
+        ht = ht.filter(ht.locus.in_y_nonpar())
+    else:
+        ht = ht.filter(ht.locus.in_autosome() | ht.locus.in_x_par())
     return ht

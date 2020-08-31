@@ -13,7 +13,7 @@ from rmc.resources.grch37.reference_data import processed_context
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import calculate_expected, calculate_observed
 from rmc.utils.generic import (
-    filter_alt_decoy,
+    filter_to_region_type,
     filter_to_missense,
     process_context_ht,
 )
@@ -71,10 +71,15 @@ def main(args):
 
         else:
             logger.info(
-                "Removing alt/decoy contig calls and annotating with region type..."
+                "Creating autosomes-only, chrX non-PAR-only, and chrY non-PAR-only HT versions..."
             )
-            context_ht = filter_alt_decoy(context_ht)
-            exome_ht = filter_alt_decoy(exome_ht)
+            context_x_ht = filter_to_region_type(context_ht, "chrX")
+            context_y_ht = filter_to_region_type(context_ht, "chrY")
+            context_ht = filter_to_region_type(context_ht, "autosomes")
+
+            exome_x_ht = filter_to_region_type(exome_ht, "chrX")
+            exome_y_ht = filter_to_region_type(exome_ht, "chrY")
+            exome_ht = filter_to_region_type(exome_ht, "chrX")
 
     finally:
         logger.info("Copying hail log to logging bucket...")
