@@ -9,7 +9,6 @@ from rmc.resources.grch37.exac import (
     coverage,
     exac,
     filtered_exac,
-    filtered_exac_cov,
 )
 from rmc.slack_creds import slack_token
 
@@ -18,6 +17,21 @@ CSQ = "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|I
 """
 VEP CSQ format taken from ExAC release 1.0 VCF header.
 """
+
+KEEP_FIELDS = [
+    "context",
+    "ac",
+    "vqslod",
+    "transcript",
+    "exon",
+    "coverage",
+    "a_index",
+    "was_split",
+]
+"""
+Fields to select from the ExAC HT.
+"""
+
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -59,30 +73,30 @@ def main(args):
 
     hl.init(log="/prepare_exac.log")
 
-    if args.filter_ht:
-        logger.info("Filtering ExAC ht to only missense variants")
-        ht = exac.ht()
-        ht = filter_to_missense(ht)
-        rg = get_reference_genome(ht.locus, add_sequence=True)
-        ht = ht.annotate(
-            context=hl.get_sequence(
-                ht.locus.contig,
-                ht.locus.position,
-                before=1,
-                after=1,
-                reference_genome=rg,
-            )
-        )
-        ht.naive_coalesce(args.n_partitions).write(
-            filtered_exac.path, overwrite=args.overwrite
-        )
+    logger.info("Filtering ExAC HT to missense variants on chr22...")
+    ht = exac.ht()
+    ht = hl.filter_intervals(ht, [hl.parse_locus_interval("22")])
+    ht = filter_to_missense(ht)
 
-    if args.join_cov:
-        ht = filtered_exac.ht()
-        coverage_ht = coverage.ht()
-        ht = ht.annotate(coverage=coverage_ht[ht.locus])
-        ht = ht.naive_coalesce(args.n_partitions)
-        ht.write(filtered_exac_cov.path, overwrite=args.overwrite)
+    # Move necessary annotations out of info struct and into top level annotations
+    # Also add coverage annotation
+    coverage_ht = coverage.ht()
+    ht = ht.transmute(
+        ac=ht.info.AC_Adj[ht.a_index - 1],
+        vqslod=ht.info.VQSLOD,
+        coverage=coverage_ht[ht.locus],
+    )
+
+    # Add context bases
+    rg = get_reference_genome(ht.locus, add_sequence=True)
+    ht = ht.annotate(
+        context=hl.get_sequence(
+            ht.locus.contig, ht.locus.position, before=1, after=1, reference_genome=rg,
+        )
+    ).select(*KEEP_FIELDS)
+    ht.naive_coalesce(args.n_partitions).write(
+        filtered_exac.path, overwrite=args.overwrite
+    )
 
 
 if __name__ == "__main__":
@@ -90,12 +104,6 @@ if __name__ == "__main__":
         "This script prepares the ExAC sites vcf for RMC testing"
     )
 
-    parser.add_argument(
-        "--filter_ht", help="Filter ExAC ht to missense variants", action="store_true"
-    )
-    parser.add_argument(
-        "--join_cov", help="Annotate ExAC ht with coverage", action="store_true"
-    )
     parser.add_argument(
         "--n_partitions",
         help="Desired number of partitions for output HTs",

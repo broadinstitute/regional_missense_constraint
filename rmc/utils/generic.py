@@ -223,7 +223,7 @@ def keep_criteria(ht: hl.Table, exac: bool) -> hl.expr.BooleanExpression:
     # Also remove variants with median depth < 1
     if exac:
         keep_criteria = (
-            (ht.ac <= 123) & (ht.ac > 0) & (ht.VQSLOD >= -2.632) & (ht.coverage > 1)
+            (ht.ac <= 123) & (ht.ac > 0) & (ht.vqslod >= -2.632) & (ht.coverage > 1)
         )
     else:
         # TODO: check about impose_high_af_cutoff upfront

@@ -67,15 +67,9 @@ Resource with ExAC coverage
 
 filtered_exac = TableResource(path=f"{EXAC_PREFIX}/ht/ExAC.r1.missense_only.ht")
 """
-Resource for ExAC dataset filtered to missense variants only and annotated with trimer context
+ExAC dataset filtered to missense variants only on chromosome 22.
+Also annotated with trimer context and coverage information.
 """
-
-filtered_exac_cov = TableResource(path=f"{EXAC_PREFIX}/ht/ExAC.r1.missense_only_cov.ht")
-"""
-ExAC dataset filtered to missense variants only and annotated with trimer context and coverage information.
-Contains coverage infromation for ONLY chr22.
-"""
-
 
 # Observed/expected count related resources
 expected = TableResource(path=f"{EXP_PREFIX}/ht/ExAC_exp_var.ht")
