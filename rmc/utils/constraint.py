@@ -1,4 +1,5 @@
 import logging
+from typing import Tuple, Union
 
 import hail as hl
 
@@ -12,6 +13,152 @@ logging.basicConfig(
 )
 logger = logging.getLogger("constraint_utils")
 logger.setLevel(logging.INFO)
+
+
+def search_for_break(
+    context_ht: hl.Table,
+    obs_ht: hl.Table,
+    exp_ht: hl.Table,
+    transcript: str,
+    prediction_flag: Tuple(float, int),
+    max_value: float,
+) -> Union[hl.Table, None]:
+    """
+    Searches for breakpoints in a transcript. 
+
+    Currently designed for one transcript at a time.
+
+    Expects context HT to contain the following fields:
+        - locus
+        - alleles
+        - transcript
+        - coverage (median)
+        - mu
+    Also expects:
+        - multiallelic variants in context HT have been split
+        - context HT is autosomes/PAR only, X non-PAR only, or Y non-PAR only.
+
+    Returns HT filtered to lines with maximum chisq if chisq >= max_value, otherwise returns None.
+
+    :param hl.Table context_ht: Context Table. 
+    :param hl.Table obs_ht: Table grouped by transcript with observed variant counts per transcript.
+        Expects observed counts field to be named `observed`.
+    :param hl.Table exp_ht: Table grouped by transcript with expected variant counts per transcript.
+        Expects expected counts field to be named `expected`.
+    :param str transcript: Transcript of interest.
+    :param Tuple(float, int) prediction_flag: Adjustments to mutation rate based on chromosomal location
+        (autosomes/PAR, X non-PAR, Y non-PAR). 
+        E.g., prediction flag for autosomes/PAR is (0.4190964, 11330208)
+    """
+    logger.info("Annotating HT with observed counts...")
+    ht = context_ht.annotate(_obs=obs_ht.index(context_ht.key, all_matches=True))
+    ht = ht.transmute(observed=hl.if_else(hl.is_defined(ht._obs), 1, 0))
+
+    logger.info("Annotating HT with total expected/observed counts...")
+    ht = ht.annotate(
+        total_exp=exp_ht[ht.transcript].expected,
+        total_obs=obs_ht[ht.transcript].observed,
+    )
+
+    logger.info(
+        "Annotating HT with cumulative expected/observed counts per transcript..."
+    )
+    ht.annotate(
+        cumulative_expected=hl.scan.group_by(
+            ht.transcript, prediction_flag[0] + prediction_flag[1] * hl.scan.sum(ht.mu)
+        ),
+        cumulative_observed=hl.scan.group_by(ht.transcript, hl.scan.sum(ht.observed)),
+    )
+
+    logger.info("Annotating HT with overall observed/expected value...")
+    logger.info(
+        "Also annotating HT with forward scan section observed/expected value..."
+    )
+    # NOTE: Capping observed/expected values at 1
+    ht = ht.annotate(
+        obs_exp=hl.or_missing(
+            hl.len(ht.cumulative_observed) != 0,
+            hl.min(
+                ht.cumulative_observed[transcript] / ht.cumulative_expected[transcript],
+                1,
+            ),
+        ),
+        overall_obs_exp=hl.min(ht.total_obs / ht.total_exp, 1),
+    )
+
+    logger.info("Adding forward scan section nulls and alts...")
+    # Add forwards sections (going through positions from smaller to larger)
+    # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
+    # section_alt = stats.dpois(section_obs, section_exp*section_obs_exp)[0]
+    ht = ht.annotate(
+        null=hl.or_missing(
+            hl.len(ht.cumulative_observed) != 0,
+            hl.dpois(
+                ht.cumulative_observed[transcript],
+                ht.cumulative_expected[transcript] * ht.overall_obs_exp,
+            ),
+        ),
+        alt=hl.or_missing(
+            hl.len(ht.cumulative_observed) != 0,
+            hl.dpois(
+                ht.cumulative_observed[transcript],
+                ht.cumulative_expected[transcript] * ht.obs_exp,
+            ),
+        ),
+    )
+
+    logger.info("Adding reverse section observeds and expecteds...")
+    # reverse value = total value - cumulative value
+    ht = ht.annotate(
+        reverse_obs=hl.or_missing(
+            hl.len(ht.cumulative_observed) != 0,
+            ht.total_obs - ht.cumulative_observed[transcript],
+        ),
+        reverse_exp=hl.or_missing(
+            hl.len(ht.cumulative_expected) != 0,
+            ht.total_exp - ht.cumulative_expected[transcript],
+            # 0
+        ),
+    )
+
+    # Set reverse o/e to missing if reverse expected value is 0 (to avoid NaNs)
+    # Also cap reverse observed/expected at 1
+    ht = ht.annotate(
+        reverse_obs_exp=hl.or_missing(
+            ht.reverse_exp != 0, hl.min(ht.reverse_obs / ht.reverse_exp, 1),
+        )
+    )
+
+    logger.info("Adding reverse section nulls and alts...")
+    ht = ht.annotate(
+        reverse_null=hl.or_missing(
+            hl.is_defined(ht.reverse_obs),
+            hl.dpois(ht.reverse_obs, ht.reverse_exp * ht.overall_obs_exp),
+        ),
+        reverse_alt=hl.or_missing(
+            hl.is_defined(ht.reverse_obs),
+            hl.dpois(ht.reverse_obs, ht.reverse_exp * ht.reverse_obs_exp),
+        ),
+    )
+
+    logger.info("Multiplying all section nulls and all section alts...")
+    # Kaitlin stores all nulls/alts in section_null and section_alt and then multiplies
+    # e.g., p1 = prod(section_null_ps)
+    ht = ht.annotate(
+        section_null=ht.null * ht.reverse_null, section_alt=ht.alt * ht.reverse_alt,
+    )
+
+    logger.info("Adding chisq value and getting max chisq...")
+    ht = ht.annotate(chisq=(2 * (hl.log(ht.section_alt) - hl.log(ht.section_null))))
+
+    # "The default chi-squared value for one break to be considered significant is
+    # 10.8 (p ~ 10e-3) and is 13.8 (p ~ 10e-4) for two breaks. These currently cannot
+    # be adjusted."
+    max_chisq = ht.aggregate(hl.agg.max(ht.chisq))
+    if max_chisq >= max_value:
+        return ht.filter(ht.chisq == max_chisq)
+
+    return None
 
 
 def calculate_expected(context_ht: hl.Table, coverage_ht: hl.Table) -> hl.Table:
