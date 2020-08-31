@@ -9,14 +9,13 @@ from gnomad_lof.constraint_utils.generic import prepare_ht
 from rmc.resources.basics import logging_path
 from rmc.resources.grch37.exac import filtered_exac
 from rmc.resources.grch37.gnomad import filtered_exomes, processed_exomes
-from rmc.resources.grch37.reference_data import processed_context, processed_gencode
+from rmc.resources.grch37.reference_data import processed_context
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import calculate_expected, calculate_observed
 from rmc.utils.generic import (
     filter_alt_decoy,
     filter_to_missense,
     process_context_ht,
-    process_gencode_ht,
 )
 
 
@@ -38,9 +37,6 @@ def main(args):
             logger.info("Preprocessing reference fasta and gencode files...")
             process_context_ht("GRCh37", args.trimers)
 
-            logger.info("Preprocessing GENCODE GTF information...")
-            process_gencode_ht("GRCh37")
-
             logger.info(
                 "Filtering gnomAD exomes HT to missense variants in canonical transcripts only..."
             )
@@ -56,11 +52,9 @@ def main(args):
 
         else:
             exome_ht = prepare_ht(filtered_exomes.ht(), args.trimers)
-            coverage_ht = None
 
         logger.info("Reading in context HT and gencode HT...")
         context_ht = processed_context.ht()
-        # gencode_ht = processed_gencode.ht()
 
         if args.test:
             logger.info("Inferring build of exome HT...")
