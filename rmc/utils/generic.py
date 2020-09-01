@@ -241,6 +241,11 @@ def filter_to_missense(ht: hl.Table, n_partitions: int = 5000) -> hl.Table:
     :return: Table filtered to only missense variants.
     :rtype: hl.Table
     """
+    if "was_split" not in ht.row:
+        logger.info("Splitting multiallelic variants and filtering to SNPs...")
+        ht = hl.split_multi(ht)
+        ht = ht.filter(hl.is_snp(ht.alleles[0], ht.alleles[1]))
+
     logger.info("Filtering to canonical transcripts...")
     ht = filter_vep_to_canonical_transcripts(ht)
 

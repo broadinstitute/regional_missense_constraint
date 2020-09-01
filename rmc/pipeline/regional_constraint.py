@@ -38,9 +38,14 @@ def main(args):
             process_context_ht("GRCh37", args.trimers)
 
             logger.info(
+                "Filtering gnomAD exomes HT to SNPs and annotating with variant type, methylation, and coverage..."
+            )
+            exome_ht = prepare_ht(exome_ht, args.trimers)
+            exome_ht = processed_exomes.ht()
+
+            logger.info(
                 "Filtering gnomAD exomes HT to missense variants in canonical transcripts only..."
             )
-            exome_ht = processed_exomes.ht()
             exome_ht = filter_to_missense(exome_ht)
             exome_ht.write(filtered_exomes.path, overwrite=args.overwrite)
 
@@ -51,7 +56,7 @@ def main(args):
             exome_ht = filtered_exac.ht()
 
         else:
-            exome_ht = prepare_ht(filtered_exomes.ht(), args.trimers)
+            exome_ht = filtered_exomes.ht()
 
         logger.info("Reading in context HT and gencode HT...")
         context_ht = processed_context.ht()
