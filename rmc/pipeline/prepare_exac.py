@@ -81,7 +81,7 @@ def main(args):
     # Move necessary annotations out of info struct and into top level annotations
     # Also add coverage annotation
     coverage_ht = coverage.ht()
-    ht = ht.transmute(
+    ht = ht.annotate(
         ac=ht.info.AC_Adj[ht.a_index - 1],
         vqslod=ht.info.VQSLOD,
         coverage=coverage_ht[ht.locus],

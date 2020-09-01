@@ -38,7 +38,7 @@ def _import_coverage(**kwargs) -> hl.Table:
 EXAC_PREFIX = f"{RESOURCE_PREFIX}/GRCh37/exac"
 
 exac = TableResource(
-    path=f"{EXAC_PREFIX}/ht/ExAC.r1.sites.ht",
+    path=f"{EXAC_PREFIX}/ht/ExAC.r1.sites.vep.ht",
     import_func=import_sites_vcf,
     import_args={
         "path": f"{EXAC_PREFIX}/ExAC.r1.sites.vep.vcf.gz",
