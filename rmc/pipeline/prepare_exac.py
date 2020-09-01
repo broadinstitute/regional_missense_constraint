@@ -74,8 +74,16 @@ def main(args):
     hl.init(log="/prepare_exac.log")
 
     logger.info("Filtering ExAC HT to missense variants on chr22...")
+    # NOTE: picked 3 example genes: MYH9 (1 break), PI4KA (2 breaks), MAPK1 (no breaks)
     ht = exac.ht()
-    ht = hl.filter_intervals(ht, [hl.parse_locus_interval("22")])
+    ht = hl.filter_intervals(
+        ht,
+        [
+            hl.parse_locus_interval("22:21061979-21213705"),
+            hl.parse_locus_interval("22:22108789-22221970"),
+            hl.parse_locus_interval("22:36677327-36784063"),
+        ],
+    )
     ht = filter_to_missense(ht)
 
     # Move necessary annotations out of info struct and into top level annotations
