@@ -40,8 +40,8 @@ def main(args):
             logger.info(
                 "Filtering gnomAD exomes HT to SNPs and annotating with variant type, methylation, and coverage..."
             )
-            exome_ht = prepare_ht(exome_ht, args.trimers)
             exome_ht = processed_exomes.ht()
+            exome_ht = prepare_ht(exome_ht, args.trimers)
 
             logger.info(
                 "Filtering gnomAD exomes HT to missense variants in canonical transcripts only..."
