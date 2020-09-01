@@ -58,7 +58,7 @@ def main(args):
         else:
             exome_ht = filtered_exomes.ht()
 
-        logger.info("Reading in context HT and gencode HT...")
+        logger.info("Reading in context HT...")
         context_ht = processed_context.ht()
 
         if args.test:

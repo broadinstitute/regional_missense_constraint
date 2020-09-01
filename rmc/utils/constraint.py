@@ -216,10 +216,9 @@ def calculate_expected(context_ht: hl.Table, coverage_ht: hl.Table) -> hl.Table:
         .default(context_ht.expected)
     )
 
-    context_ht = context_ht.group_by("transcript").aggregate(
+    return context_ht.group_by("transcript").aggregate(
         expected=hl.agg.sum(context_ht.expected)
     )
-    return context_ht
 
 
 def calculate_observed(ht: hl.Table, exac: bool) -> hl.Table:
