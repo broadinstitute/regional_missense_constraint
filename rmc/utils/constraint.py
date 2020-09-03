@@ -88,6 +88,39 @@ def calculate_expected(context_ht: hl.Table, coverage_ht: hl.Table) -> hl.Table:
     )
 
 
+def annotate_observed_expected(
+    ht: hl.Table, obs_ht: hl.Table, exp_ht: hl.Table
+) -> hl.Table:
+    """
+    Annotates input Table with total number of observed and expected variants per transcript.
+
+    Also annotates Table with overall observed/expected value.
+    Expects that keys of ht and obs_ht match. 
+
+    :param hl.Table ht: Input Table. 
+    :param hl.Table obs_ht: Table grouped by transcript with observed variant counts per transcript.
+        Expects observed counts field to be named `observed`.
+    :param hl.Table exp_ht: Table grouped by transcript with expected variant counts per transcript.
+        Expects expected counts field to be named `expected`.
+    :return: Table annotated with observed, expected, and observed/expected values.
+    :rtype: hl.Table.
+    """
+    logger.info("Annotating HT with observed counts...")
+    ht = ht.annotate(_obs=obs_ht.index(ht.key, all_matches=True))
+    ht = ht.transmute(observed=hl.if_else(hl.is_defined(ht._obs), 1, 0))
+
+    logger.info("Annotating HT with total expected/observed counts...")
+    ht = ht.annotate(
+        total_exp=exp_ht[ht.transcript].expected,
+        total_obs=obs_ht[ht.transcript].observed,
+    )
+
+    logger.info(
+        "Annotating overall observed/expected value (capped at 1) and returning HT..."
+    )
+    return ht.annotate(overall_obs_exp=hl.min(ht.total_obs / ht.total_exp, 1))
+
+
 def search_for_break(
     context_ht: hl.Table,
     obs_ht: hl.Table,
@@ -124,16 +157,11 @@ def search_for_break(
         E.g., prediction flag for autosomes/PAR is (0.4190964, 11330208)
     :param float chisq_threshold: Chisq threshold for significance. 
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
+    :return: Table filtered to rows with maximum chisq value IF max chisq is larger than chisq_threshold.
+        Otherwise, returns None.
+    :rtype: Union[hl.Table, None]
     """
-    logger.info("Annotating HT with observed counts...")
-    ht = context_ht.annotate(_obs=obs_ht.index(context_ht.key, all_matches=True))
-    ht = ht.transmute(observed=hl.if_else(hl.is_defined(ht._obs), 1, 0))
-
-    logger.info("Annotating HT with total expected/observed counts...")
-    ht = ht.annotate(
-        total_exp=exp_ht[ht.transcript].expected,
-        total_obs=obs_ht[ht.transcript].observed,
-    )
+    ht = annotate_observed_expected(context_ht, obs_ht, exp_ht)
 
     logger.info(
         "Annotating HT with cumulative expected/observed counts per transcript..."
@@ -145,10 +173,7 @@ def search_for_break(
         cumulative_observed=hl.scan.group_by(ht.transcript, hl.scan.sum(ht.observed)),
     )
 
-    logger.info("Annotating HT with overall observed/expected value...")
-    logger.info(
-        "Also annotating HT with forward scan section observed/expected value..."
-    )
+    logger.info("Annotating HT with forward scan section observed/expected value...")
     # NOTE: Capping observed/expected values at 1
     ht = ht.annotate(
         obs_exp=hl.or_missing(
@@ -158,7 +183,6 @@ def search_for_break(
                 1,
             ),
         ),
-        overall_obs_exp=hl.min(ht.total_obs / ht.total_exp, 1),
     )
 
     logger.info("Adding forward scan section nulls and alts...")
