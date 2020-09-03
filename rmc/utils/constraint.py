@@ -89,19 +89,25 @@ def calculate_expected(context_ht: hl.Table, coverage_ht: hl.Table) -> hl.Table:
 
 
 def annotate_observed_expected(
-    ht: hl.Table, obs_ht: hl.Table, exp_ht: hl.Table
+    ht: hl.Table, obs_ht: hl.Table, exp_ht: hl.Table, group_by_transcript: bool = True,
 ) -> hl.Table:
     """
-    Annotates input Table with total number of observed and expected variants per transcript.
+    Annotates input Table with total number of observed and expected variants.
 
+    Groups Table by transcript or section of transcript. 
     Also annotates Table with overall observed/expected value.
-    Expects that keys of ht and obs_ht match. 
+
+    .. note::
+        - obs_ht will be grouped by section of transcript only after finding first breakpoint in transcript.
+        - Expects that keys of input ht and obs_ht match.
 
     :param hl.Table ht: Input Table. 
     :param hl.Table obs_ht: Table grouped by transcript with observed variant counts per transcript.
         Expects observed counts field to be named `observed`.
     :param hl.Table exp_ht: Table grouped by transcript with expected variant counts per transcript.
         Expects expected counts field to be named `expected`.
+    :param bool group_by_transcript: Whether the observed Table is grouped by transcript. Default is True.
+        If False, expects that observed Table is grouped by section of transcript.
     :return: Table annotated with observed, expected, and observed/expected values.
     :rtype: hl.Table.
     """
@@ -110,9 +116,12 @@ def annotate_observed_expected(
     ht = ht.transmute(observed=hl.if_else(hl.is_defined(ht._obs), 1, 0))
 
     logger.info("Annotating HT with total expected/observed counts...")
+    if group_by_transcript:
+        group_expr = ht.transcript
+    else:
+        group_expr = ht.section
     ht = ht.annotate(
-        total_exp=exp_ht[ht.transcript].expected,
-        total_obs=obs_ht[ht.transcript].observed,
+        total_exp=exp_ht[group_expr].expected, total_obs=obs_ht[group_expr].observed,
     )
 
     logger.info(
