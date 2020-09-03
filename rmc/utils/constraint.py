@@ -94,7 +94,7 @@ def search_for_break(
     exp_ht: hl.Table,
     transcript: str,
     prediction_flag: Tuple(float, int),
-    max_value: float,
+    chisq_threshold: float,
 ) -> Union[hl.Table, None]:
     """
     Searches for breakpoints in a transcript. 
@@ -122,6 +122,8 @@ def search_for_break(
     :param Tuple(float, int) prediction_flag: Adjustments to mutation rate based on chromosomal location
         (autosomes/PAR, X non-PAR, Y non-PAR). 
         E.g., prediction flag for autosomes/PAR is (0.4190964, 11330208)
+    :param float chisq_threshold: Chisq threshold for significance. 
+        Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
     """
     logger.info("Annotating HT with observed counts...")
     ht = context_ht.annotate(_obs=obs_ht.index(context_ht.key, all_matches=True))
@@ -228,7 +230,7 @@ def search_for_break(
     # 10.8 (p ~ 10e-3) and is 13.8 (p ~ 10e-4) for two breaks. These currently cannot
     # be adjusted."
     max_chisq = ht.aggregate(hl.agg.max(ht.chisq))
-    if max_chisq >= max_value:
+    if max_chisq >= chisq_threshold:
         return ht.filter(ht.chisq == max_chisq)
 
     return None
