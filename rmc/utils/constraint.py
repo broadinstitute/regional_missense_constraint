@@ -130,6 +130,18 @@ def annotate_observed_expected(
     return ht.annotate(overall_obs_exp=hl.min(ht.total_obs / ht.total_exp, 1))
 
 
+def get_cumulative_scan_expr():
+    """
+    TODO: Finish filling out this function and create functions for nulls/alt + reverse null/alt
+    """
+    return hl.struct(
+        cumulative_expected=hl.scan.group_by(
+            ht.transcript, prediction_flag[0] + prediction_flag[1] * hl.scan.sum(ht.mu)
+        ),
+        cumulative_observed=hl.scan.group_by(ht.transcript, hl.scan.sum(ht.observed)),
+    )
+
+
 def search_for_break(
     context_ht: hl.Table,
     obs_ht: hl.Table,
