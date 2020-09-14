@@ -148,7 +148,6 @@ def get_cumulative_scan_expr(
         E.g., prediction flag for autosomes/PAR is (0.4190964, 11330208)
     :rtype: hl.expr.StructExpression
     """
-    # TODO: Create functions for nulls/alt + reverse null/alt
     return hl.struct(
         cumulative_expected=hl.scan.group_by(
             transcript_expr,
@@ -158,6 +157,20 @@ def get_cumulative_scan_expr(
             transcript_expr, hl.scan.sum(observed_expr)
         ),
     )
+
+
+def get_obs_exp_exprs():
+    """
+    """
+    # TODO: Fill out this function to get forward/reverse obs and exp?
+    pass
+
+
+def get_null_alt_expr():
+    """
+    """
+    # TODO: Fill out this function for nulls/alt + reverse null/alt 
+    pass
 
 
 def search_for_break(
@@ -255,7 +268,6 @@ def search_for_break(
         reverse_exp=hl.or_missing(
             hl.len(ht.cumulative_expected) != 0,
             ht.total_exp - ht.cumulative_expected[transcript],
-            # 0
         ),
     )
 
