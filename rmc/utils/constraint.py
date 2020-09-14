@@ -113,7 +113,7 @@ def annotate_observed_expected(
     """
     logger.info("Annotating HT with observed counts...")
     ht = ht.annotate(_obs=obs_ht.index(ht.key, all_matches=True))
-    ht = ht.transmute(observed=hl.if_else(hl.is_defined(ht._obs), 1, 0))
+    ht = ht.transmute(observed=hl.int(hl.is_defined(ht._obs)))
 
     logger.info("Annotating HT with total expected/observed counts...")
     if group_by_transcript:
@@ -187,7 +187,7 @@ def search_for_break(
     logger.info(
         "Annotating HT with cumulative expected/observed counts per transcript..."
     )
-    ht.annotate(
+    ht = ht.annotate(
         cumulative_expected=hl.scan.group_by(
             ht.transcript, prediction_flag[0] + prediction_flag[1] * hl.scan.sum(ht.mu)
         ),
