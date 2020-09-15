@@ -159,17 +159,41 @@ def get_cumulative_scan_expr(
     )
 
 
-def get_obs_exp_exprs():
+def get_reverse_obs_exp_expr(
+    cond_expr: hl.expr.BooleanExpression,
+    total_obs_expr: hl.expr.Int64Expression,
+    total_exp_expr: hl.expr.Float64Expression,
+    scan_obs_expr: hl.expr.Int64Expression,
+    scan_exp_expr: hl.expr.Float64Expression,
+) -> hl.expr.StructExpression:
     """
+    Returns the "reverse" section observed and expected variant counts.
+
+    The reverse counts are the counts moving from larger to smaller positions 
+    (backwards from the end of the transcript back to the beginning of the transcript).
+    reverse value = total value - cumulative value
+
+    .. note::
+        This function is designed to run on one transcript at a time.
+
+    :param hl.expr.BooleanExpression cond_expr: Conditional expression to check before calculating reverse observed or expected value.
+        Should be that the cumulative scan expression length isn't 0 when searching for the first break, or
+        that the length of the cumulative scan expression length is 2 when searching for an additional break.
+    :param hl.expr.Int64Expression total_obs_expr: Expression containing total number of observed variants for transcript.
+    :param hl.expr.Float64Expression total_exp_expr: Expression containing total number of expected variants for transcript.
+    :param hl.expr.Int64Expression scan_obs_expr: Expression containing cumulative number of observed variants for transcript.
+    :param hl.expr.Float64Expression scan_expr_expr: Expression containing cumulative number of expected variants for transcript.
     """
-    # TODO: Fill out this function to get forward/reverse obs and exp?
-    pass
+    return hl.struct(
+        reverse_obs=hl.or_missing(cond_expr, total_obs_expr - scan_obs_expr),
+        reverse_exp=hl.or_missing(cond_expr, total_exp_expr - scan_exp_expr),
+    )
 
 
 def get_null_alt_expr():
     """
     """
-    # TODO: Fill out this function for nulls/alt + reverse null/alt 
+    # TODO: Fill out this function for nulls/alt + reverse null/alt
     pass
 
 
