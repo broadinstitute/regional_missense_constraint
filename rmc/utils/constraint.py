@@ -213,26 +213,38 @@ def get_null_alt_expr(
     ],
 ) -> hl.expr.StructExpression:
     """
+    Calculates null and alt values in preparation for chi-squared test to find significant breaks.
 
-    .. note::
-        All parameter values except overall_oe_expr should be different for forward vs reverse null and alt calculations.
+    All parameter values depend on the direction of calculation (forward/reverse) and 
+    number of breaks (searching for first break or searching for additional break).
 
-        For forward null/alts, values for obs_expr and and exp_expr should be:
-            - Expression containing cumulative numbers for entire transcript.
-            - Expression containing cumulative numbers for section of transcript 
-                between the first breakpoint and the end of the transcript.
-        For reverse null/alts, values for obs_expr and and exp_expr should be:
-            - Reverse counts for entire transcript.
-            - Reverse counts for section of transcript between first breakpoint and end.
-        overall_oe_expr and section_oe_expr should correspond to the values above.
+    For forward null/alts, values for obs_expr and and exp_expr should be:
+        - Expression containing cumulative numbers for entire transcript.
+        - Expression containing cumulative numbers for section of transcript 
+            between the beginning or end of the transcript and the first breakpoint.
+    For reverse null/alts, values for obs_expr and and exp_expr should be:
+        - Reverse counts for entire transcript.
+        - Reverse counts for section of transcript.
+    
+    For forward null/alts, values for overall_oe_expr and section_oe_expr should be:
+        - Expression containing observed/expected value for entire transcript and
+            expression containing observed/expected value calculated on cumulative observed and expected
+            variants at each position.
+        - Expression containing observed/expected value for section of transcript.
+    For reverse null/alts, values for overall_oe_expr and section_oe_expr should be:
+        - Expression containing observed/expected value for entire transcript and
+            expression containing observed/expected value calculated on reverse observed variants value
+            (total observed - cumulative observed count).
+        - Expression containing observed/expected value for section of transcript and 
+            expression containing reverse observed/expected value for section of transcript.
 
-        For forward null/alts, cond_expr should check:
-            - That the length of the obs_expr isn't 0 when searching for the first break.
-            - That the length of the obs_expr is 2 when searching for a second additional break.
-        For reverse null/alts, cond_expr should check:
-            - That the reverse observed value for the entire transcript is defined when searching for the first break.
-            - That the reverse observed value for the section between the first breakpoint and the end of the transcript
-                 is defined when searching for a second additional break.
+    For forward null/alts, cond_expr should check:
+        - That the length of the obs_expr isn't 0 when searching for the first break.
+        - That the length of the obs_expr is 2 when searching for a second additional break.
+    For reverse null/alts, cond_expr should check:
+        - That the reverse observed value for the entire transcript is defined when searching for the first break.
+        - That the reverse observed value for the section between the first breakpoint and the end of the transcript
+             is defined when searching for a second additional break.
 
     :param hl.expr.BooleanExpression cond_expr: Conditional expression to check before calculating null and alt values.
     :param hl.expr.Float64Expression overall_oe_expr: Expression of overall observed/expected value.
