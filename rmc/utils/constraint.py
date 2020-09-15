@@ -132,14 +132,21 @@ def annotate_observed_expected(
 
 def get_cumulative_scan_expr(
     transcript_expr: hl.expr.StringExpression,
-    mu_expr: hl.expr.Float64Expression,
     observed_expr: hl.expr.Int64Expression,
+    mu_expr: hl.expr.Float64Expression,
     prediction_flag: Tuple(float, int),
 ) -> hl.expr.StructExpression:
     """
     Creates struct with cumulative number of observed and expected variants.
 
-    :param hl.expr.StringExpression transcript_expr: Transcript expression.
+    .. note::
+        This function can produce the scan when searching for the first break or when searching for a second additional break.
+            - When searching for the first break, this function should group by the transcript name (e.g., 'ENST00000255882').
+            - When searching for an additional break, this function should group by the section of the transcript 
+                (e.g., 'first' for before the first breakpoint or 'second' for after the first breakpoint).
+
+    :param hl.expr.StringExpression transcript_expr: Expression containing transcript if searching for first break.
+        Otherwise, expression containing transcript section if searching for second additional break.
     :param hl.expr.Float64Expression mu_expr: Mutation rate expression.
     :param hl.expr.Int64Expression observed_expr: Observed variants expression.
     :return: Struct containing the cumulative number of observed and expected variants.
@@ -149,12 +156,12 @@ def get_cumulative_scan_expr(
     :rtype: hl.expr.StructExpression
     """
     return hl.struct(
+        cumulative_observed=hl.scan.group_by(
+            transcript_expr, hl.scan.sum(observed_expr)
+        ),
         cumulative_expected=hl.scan.group_by(
             transcript_expr,
             prediction_flag[0] + prediction_flag[1] * hl.scan.sum(mu_expr),
-        ),
-        cumulative_observed=hl.scan.group_by(
-            transcript_expr, hl.scan.sum(observed_expr)
         ),
     )
 
