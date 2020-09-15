@@ -1,5 +1,5 @@
 import logging
-from typing import Tuple, Union
+from typing import Dict, Tuple, Union
 
 import hail as hl
 
@@ -153,6 +153,7 @@ def get_cumulative_scan_expr(
     :param Tuple(float, int) prediction_flag: Adjustments to mutation rate based on chromosomal location
         (autosomes/PAR, X non-PAR, Y non-PAR). 
         E.g., prediction flag for autosomes/PAR is (0.4190964, 11330208)
+    :return: Struct containing scan expressions for cumulative observed and expected variant counts.
     :rtype: hl.expr.StructExpression
     """
     return hl.struct(
@@ -170,8 +171,8 @@ def get_reverse_obs_exp_expr(
     cond_expr: hl.expr.BooleanExpression,
     total_obs_expr: hl.expr.Int64Expression,
     total_exp_expr: hl.expr.Float64Expression,
-    scan_obs_expr: hl.expr.Int64Expression,
-    scan_exp_expr: hl.expr.Float64Expression,
+    scan_obs_expr: Dict[hl.expr.StringExpression, hl.expr.Int64Expression],
+    scan_exp_expr: Dict[hl.expr.StringExpression, hl.expr.Float64Expression],
 ) -> hl.expr.StructExpression:
     """
     Returns the "reverse" section observed and expected variant counts.
@@ -188,8 +189,10 @@ def get_reverse_obs_exp_expr(
         that the length of the cumulative scan expression length is 2 when searching for an additional break.
     :param hl.expr.Int64Expression total_obs_expr: Expression containing total number of observed variants for transcript.
     :param hl.expr.Float64Expression total_exp_expr: Expression containing total number of expected variants for transcript.
-    :param hl.expr.Int64Expression scan_obs_expr: Expression containing cumulative number of observed variants for transcript.
-    :param hl.expr.Float64Expression scan_expr_expr: Expression containing cumulative number of expected variants for transcript.
+    :param Dict[hl.expr.StringExpression, hl.expr.Int64Expression] scan_obs_expr: Expression containing cumulative number of observed variants for transcript.
+    :param Dict[hl.expr.StringExpression, hl.expr.Float64Expression] scan_expr_expr: Expression containing cumulative number of expected variants for transcript.
+    :return: Struct with reverse observed and expected variant counts.
+    :rtype: hl.expr.StructExpression
     """
     return hl.struct(
         reverse_obs=hl.or_missing(cond_expr, total_obs_expr - scan_obs_expr),
@@ -197,11 +200,52 @@ def get_reverse_obs_exp_expr(
     )
 
 
-def get_null_alt_expr():
+def get_null_alt_expr(
+    cond_expr: hl.expr.BooleanExpression,
+    overall_oe_expr: hl.expr.Float64Expression,
+    section_oe_expr: hl.expr.Float64Expression,
+    obs_expr: Union[
+        Dict[hl.expr.StringExpression, hl.expr.Int64Expression], hl.expr.Int64Expression
+    ],
+    exp_expr: Union[
+        Dict[hl.expr.StringExpression, hl.expr.Float64Expression],
+        hl.expr.Float64Expression,
+    ],
+) -> hl.expr.StructExpression:
     """
+
+    .. note::
+        All parameter values except overall_oe_expr should be different for forward vs reverse null and alt calculations.
+
+        For forward null/alts, values for obs_expr and and exp_expr should be:
+            - Expression containing cumulative numbers for entire transcript.
+            - Expression containing cumulative numbers for section of transcript 
+                between the first breakpoint and the end of the transcript.
+        For reverse null/alts, values for obs_expr and and exp_expr should be:
+            - Reverse counts for entire transcript.
+            - Reverse counts for section of transcript between first breakpoint and end.
+        overall_oe_expr and section_oe_expr should correspond to the values above.
+
+        For forward null/alts, cond_expr should check:
+            - That the length of the obs_expr isn't 0 when searching for the first break.
+            - That the length of the obs_expr is 2 when searching for a second additional break.
+        For reverse null/alts, cond_expr should check:
+            - That the reverse observed value for the entire transcript is defined when searching for the first break.
+            - That the reverse observed value for the section between the first breakpoint and the end of the transcript
+                 is defined when searching for a second additional break.
+
+    :param hl.expr.BooleanExpression cond_expr: Conditional expression to check before calculating null and alt values.
+    :param hl.expr.Float64Expression overall_oe_expr: Expression of overall observed/expected value.
+    :param hl.expr.Float64Expression section_oe_expr: Expression of section observed/expected value.
+    :param Union[Dict[hl.expr.StringExpression, hl.expr.Int64Expression], hl.expr.Int64Expression] obs_expr: Expression containing observed variants count.
+    :param Union[Dict[hl.expr.StringExpression, hl.expr.Float64Expression], hl.expr.Float64Expression] exp_expr: Expression containing expected variants count.
+    :return: Struct containing forward or reverse null and alt values (either when searching for first or second break).
+    :rtype: hl.expr.StructExpression
     """
-    # TODO: Fill out this function for nulls/alt + reverse null/alt
-    pass
+    return hl.struct(
+        null=hl.or_missing(cond_expr, hl.dpois(obs_expr, exp_expr * overall_oe_expr)),
+        alt=hl.or_missing(cond_expr, hl.dpois(obs_expr, exp_expr * section_oe_expr)),
+    )
 
 
 def search_for_break(
