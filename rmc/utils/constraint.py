@@ -28,6 +28,23 @@ def calculate_observed(ht: hl.Table, exac: bool) -> hl.Table:
     return ht.group_by(ht.transcript).aggregate(observed=hl.agg.count())
 
 
+def get_coverage_correction(ht: hl.Table) -> float:
+    """
+    Gets coverage correction for expected variants count.
+
+    :param hl.Table ht: Input Table.
+    :return: Coverage correction float.
+    :rtype: float
+    """
+    median_cov = ht.aggregate(hl.agg.approx_median(ht.coverage))
+
+    if median_cov < 1:
+        return 0.089
+    if median_cov >= 1 & median_cov < 50:
+        return 0.089 + 0.217 * hl.log(median_cov)
+    return 1
+
+
 def calculate_expected(context_ht: hl.Table, coverage_ht: hl.Table) -> hl.Table:
     """
     Returns table of transcripts and the total number of expected variants per transcript.
@@ -73,14 +90,9 @@ def calculate_expected(context_ht: hl.Table, coverage_ht: hl.Table) -> hl.Table:
     )
 
     # Adjust expected counts based on depth
+    coverage_correction = get_coverage_correction(context_ht)
     context_ht = context_ht.transmute(
-        expected=hl.case()
-        .when(context_ht.coverage < 1, context_ht.expected * 0.089)
-        .when(
-            ((context_ht.coverage >= 1) & (context_ht.coverage < 50)),
-            (0.089 + 0.217 * hl.log(context_ht.coverage)) * context_ht.expected,
-        )
-        .default(context_ht.expected)
+        expected=context_ht.expected * coverage_correction
     )
 
     return context_ht.group_by("transcript").aggregate(
@@ -93,6 +105,7 @@ def get_cumulative_scan_expr(
     observed_expr: hl.expr.Int64Expression,
     mu_expr: hl.expr.Float64Expression,
     prediction_flag: Tuple(float, int),
+    coverage_correction: float,
 ) -> hl.expr.StructExpression:
     """
     Creates struct with cumulative number of observed and expected variants.
@@ -111,13 +124,16 @@ def get_cumulative_scan_expr(
     :param Tuple(float, int) prediction_flag: Adjustments to mutation rate based on chromosomal location
         (autosomes/PAR, X non-PAR, Y non-PAR). 
         E.g., prediction flag for autosomes/PAR is (0.4190964, 11330208)
+    :param float coverage correction: Coverage correction for expected variant counts.
     :return: Struct containing scan expressions for cumulative observed and expected variant counts.
     :rtype: hl.expr.StructExpression
     """
     return hl.struct(
         cumulative_observed=hl.scan.group_by(search_expr, hl.scan.sum(observed_expr)),
         cumulative_expected=hl.scan.group_by(
-            search_expr, prediction_flag[0] + prediction_flag[1] * hl.scan.sum(mu_expr),
+            search_expr,
+            (prediction_flag[0] + prediction_flag[1] * hl.scan.sum(mu_expr))
+            * coverage_correction,
         ),
     )
 
@@ -301,7 +317,9 @@ def search_for_break(
         Otherwise, returns None.
     :rtype: Union[hl.Table, None]
     """
+    # TODO: fix search_str and coverage correction
     ht = annotate_observed_expected(context_ht, obs_ht, exp_ht, group_by_transcript)
+    coverage_correction = get_coverage_correction(ht)
 
     logger.info(
         "Annotating HT with cumulative expected/observed counts per transcript..."
@@ -312,6 +330,7 @@ def search_for_break(
             observed_expr=ht.observed,
             mu_expr=ht.mu,
             prediction_flag=prediction_flag,
+            coverage_correction=coverage_correction,
         )
     )
 
