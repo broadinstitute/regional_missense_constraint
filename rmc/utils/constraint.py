@@ -88,6 +88,43 @@ def calculate_expected(context_ht: hl.Table, coverage_ht: hl.Table) -> hl.Table:
     )
 
 
+def get_cumulative_scan_expr(
+    transcript_expr: hl.expr.StringExpression,
+    observed_expr: hl.expr.Int64Expression,
+    mu_expr: hl.expr.Float64Expression,
+    prediction_flag: Tuple(float, int),
+) -> hl.expr.StructExpression:
+    """
+    Creates struct with cumulative number of observed and expected variants.
+
+    .. note::
+        This function can produce the scan when searching for the first break or when searching for a second additional break.
+            - When searching for the first break, this function should group by the transcript name (e.g., 'ENST00000255882').
+            - When searching for an additional break, this function should group by the section of the transcript 
+                (e.g., 'first' for before the first breakpoint or 'second' for after the first breakpoint).
+
+    :param hl.expr.StringExpression transcript_expr: Expression containing transcript if searching for first break.
+        Otherwise, expression containing transcript section if searching for second additional break.
+    :param hl.expr.Float64Expression mu_expr: Mutation rate expression.
+    :param hl.expr.Int64Expression observed_expr: Observed variants expression.
+    :return: Struct containing the cumulative number of observed and expected variants.
+    :param Tuple(float, int) prediction_flag: Adjustments to mutation rate based on chromosomal location
+        (autosomes/PAR, X non-PAR, Y non-PAR). 
+        E.g., prediction flag for autosomes/PAR is (0.4190964, 11330208)
+    :return: Struct containing scan expressions for cumulative observed and expected variant counts.
+    :rtype: hl.expr.StructExpression
+    """
+    return hl.struct(
+        cumulative_observed=hl.scan.group_by(
+            transcript_expr, hl.scan.sum(observed_expr)
+        ),
+        cumulative_expected=hl.scan.group_by(
+            transcript_expr,
+            prediction_flag[0] + prediction_flag[1] * hl.scan.sum(mu_expr),
+        ),
+    )
+
+
 def annotate_observed_expected(
     ht: hl.Table, obs_ht: hl.Table, exp_ht: hl.Table, group_by_transcript: bool = True,
 ) -> hl.Table:
@@ -130,43 +167,6 @@ def annotate_observed_expected(
     return ht.annotate(overall_obs_exp=hl.min(ht.total_obs / ht.total_exp, 1))
 
 
-def get_cumulative_scan_expr(
-    transcript_expr: hl.expr.StringExpression,
-    observed_expr: hl.expr.Int64Expression,
-    mu_expr: hl.expr.Float64Expression,
-    prediction_flag: Tuple(float, int),
-) -> hl.expr.StructExpression:
-    """
-    Creates struct with cumulative number of observed and expected variants.
-
-    .. note::
-        This function can produce the scan when searching for the first break or when searching for a second additional break.
-            - When searching for the first break, this function should group by the transcript name (e.g., 'ENST00000255882').
-            - When searching for an additional break, this function should group by the section of the transcript 
-                (e.g., 'first' for before the first breakpoint or 'second' for after the first breakpoint).
-
-    :param hl.expr.StringExpression transcript_expr: Expression containing transcript if searching for first break.
-        Otherwise, expression containing transcript section if searching for second additional break.
-    :param hl.expr.Float64Expression mu_expr: Mutation rate expression.
-    :param hl.expr.Int64Expression observed_expr: Observed variants expression.
-    :return: Struct containing the cumulative number of observed and expected variants.
-    :param Tuple(float, int) prediction_flag: Adjustments to mutation rate based on chromosomal location
-        (autosomes/PAR, X non-PAR, Y non-PAR). 
-        E.g., prediction flag for autosomes/PAR is (0.4190964, 11330208)
-    :return: Struct containing scan expressions for cumulative observed and expected variant counts.
-    :rtype: hl.expr.StructExpression
-    """
-    return hl.struct(
-        cumulative_observed=hl.scan.group_by(
-            transcript_expr, hl.scan.sum(observed_expr)
-        ),
-        cumulative_expected=hl.scan.group_by(
-            transcript_expr,
-            prediction_flag[0] + prediction_flag[1] * hl.scan.sum(mu_expr),
-        ),
-    )
-
-
 def get_reverse_obs_exp_expr(
     cond_expr: hl.expr.BooleanExpression,
     total_obs_expr: hl.expr.Int64Expression,
@@ -195,8 +195,8 @@ def get_reverse_obs_exp_expr(
     :rtype: hl.expr.StructExpression
     """
     return hl.struct(
-        reverse_obs=hl.or_missing(cond_expr, total_obs_expr - scan_obs_expr),
-        reverse_exp=hl.or_missing(cond_expr, total_exp_expr - scan_exp_expr),
+        obs=hl.or_missing(cond_expr, total_obs_expr - scan_obs_expr),
+        exp=hl.or_missing(cond_expr, total_exp_expr - scan_exp_expr),
     )
 
 
@@ -306,19 +306,19 @@ def search_for_break(
         "Annotating HT with cumulative expected/observed counts per transcript..."
     )
     ht = ht.annotate(
-        cumulative_expected=hl.scan.group_by(
-            ht.transcript, prediction_flag[0] + prediction_flag[1] * hl.scan.sum(ht.mu)
-        ),
-        cumulative_observed=hl.scan.group_by(ht.transcript, hl.scan.sum(ht.observed)),
+        scan_counts=get_cumulative_scan_expr(
+            ht.transcript, ht.observed, ht.mu, prediction_flag
+        )
     )
 
     logger.info("Annotating HT with forward scan section observed/expected value...")
     # NOTE: Capping observed/expected values at 1
     ht = ht.annotate(
         obs_exp=hl.or_missing(
-            hl.len(ht.cumulative_observed) != 0,
+            hl.len(ht.scan_counts.cumulative_observed) != 0,
             hl.min(
-                ht.cumulative_observed[transcript] / ht.cumulative_expected[transcript],
+                ht.scan_counts.cumulative_observed[transcript]
+                / ht.scan_counts.cumulative_expected[transcript],
                 1,
             ),
         ),
@@ -329,60 +329,53 @@ def search_for_break(
     # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
     # section_alt = stats.dpois(section_obs, section_exp*section_obs_exp)[0]
     ht = ht.annotate(
-        null=hl.or_missing(
-            hl.len(ht.cumulative_observed) != 0,
-            hl.dpois(
-                ht.cumulative_observed[transcript],
-                ht.cumulative_expected[transcript] * ht.overall_obs_exp,
-            ),
-        ),
-        alt=hl.or_missing(
-            hl.len(ht.cumulative_observed) != 0,
-            hl.dpois(
-                ht.cumulative_observed[transcript],
-                ht.cumulative_expected[transcript] * ht.obs_exp,
-            ),
-        ),
+        forward=get_null_alt_expr(
+            cond_expr=hl.len(ht.cumulative_observed) != 0,
+            overall_oe_expr=ht.overall_obs_exp,
+            section_oe_expr=ht.obs_exp,
+            obs_expr=ht.cumulative_observed[transcript],
+            exp_expr=ht.cumulative_expected[transcript],
+        )
     )
 
     logger.info("Adding reverse section observeds and expecteds...")
     # reverse value = total value - cumulative value
     ht = ht.annotate(
-        reverse_obs=hl.or_missing(
-            hl.len(ht.cumulative_observed) != 0,
-            ht.total_obs - ht.cumulative_observed[transcript],
-        ),
-        reverse_exp=hl.or_missing(
-            hl.len(ht.cumulative_expected) != 0,
-            ht.total_exp - ht.cumulative_expected[transcript],
-        ),
+        reverse_counts=get_reverse_obs_exp_expr(
+            cond_expr=hl.len(ht.cumulative_observed) != 0,
+            total_obs_expr=ht.total_obs,
+            total_exp_expr=ht.total_exp,
+            scan_obs_expr=ht.cumulative_observed[transcript],
+            scan_exp_expr=ht.cumulative_expected[transcript],
+        )
     )
 
     # Set reverse o/e to missing if reverse expected value is 0 (to avoid NaNs)
     # Also cap reverse observed/expected at 1
     ht = ht.annotate(
         reverse_obs_exp=hl.or_missing(
-            ht.reverse_exp != 0, hl.min(ht.reverse_obs / ht.reverse_exp, 1),
+            ht.reverse_counts.exp != 0,
+            hl.min(ht.reverse_counts.obs / ht.reverse_counts.exp, 1),
         )
     )
 
     logger.info("Adding reverse section nulls and alts...")
     ht = ht.annotate(
-        reverse_null=hl.or_missing(
-            hl.is_defined(ht.reverse_obs),
-            hl.dpois(ht.reverse_obs, ht.reverse_exp * ht.overall_obs_exp),
-        ),
-        reverse_alt=hl.or_missing(
-            hl.is_defined(ht.reverse_obs),
-            hl.dpois(ht.reverse_obs, ht.reverse_exp * ht.reverse_obs_exp),
-        ),
+        reverse=get_null_alt_expr(
+            cond_expr=hl.len(ht.scan_counts.cumulative_observed) != 0,
+            overall_oe_expr=ht.overall_obs_exp,
+            section_oe_expr=ht.obs_exp,
+            obs_expr=ht.scan_counts.cumulative_observed[transcript],
+            exp_expr=ht.scan_counts.cumulative_expected[transcript],
+        )
     )
 
     logger.info("Multiplying all section nulls and all section alts...")
     # Kaitlin stores all nulls/alts in section_null and section_alt and then multiplies
     # e.g., p1 = prod(section_null_ps)
     ht = ht.annotate(
-        section_null=ht.null * ht.reverse_null, section_alt=ht.alt * ht.reverse_alt,
+        section_null=ht.forward.null * ht.reverse.null,
+        section_alt=ht.forward.alt * ht.reverse.alt,
     )
 
     logger.info("Adding chisq value and getting max chisq...")
