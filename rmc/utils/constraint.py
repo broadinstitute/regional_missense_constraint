@@ -28,20 +28,18 @@ def calculate_observed(ht: hl.Table, exac: bool) -> hl.Table:
     return ht.group_by(ht.transcript).aggregate(observed=hl.agg.count())
 
 
-def get_coverage_correction(ht: hl.Table) -> float:
+def get_coverage_correction(coverage: float) -> float:
     """
     Gets coverage correction for expected variants count.
 
-    :param hl.Table ht: Input Table.
+    :param float ht: Input coverage. Should be median coverage at position.
     :return: Coverage correction float.
     :rtype: float
     """
-    median_cov = ht.aggregate(hl.agg.approx_median(ht.coverage))
-
-    if median_cov < 1:
+    if coverage < 1:
         return 0.089
-    if median_cov >= 1 & median_cov < 50:
-        return 0.089 + 0.217 * hl.log(median_cov)
+    if coverage >= 1 & coverage < 50:
+        return 0.089 + 0.217 * hl.log(coverage)
     return 1
 
 
@@ -90,7 +88,9 @@ def calculate_expected(context_ht: hl.Table, coverage_ht: hl.Table) -> hl.Table:
     )
 
     # Adjust expected counts based on depth
-    coverage_correction = get_coverage_correction(context_ht)
+    coverage_correction = get_coverage_correction(
+        context_ht.aggregate(hl.agg.approx_median(context_ht.coverage))
+    )
     context_ht = context_ht.transmute(
         expected=context_ht.expected * coverage_correction
     )
@@ -277,7 +277,7 @@ def search_for_break(
     context_ht: hl.Table,
     obs_ht: hl.Table,
     exp_ht: hl.Table,
-    search_str: str,
+    search_field: hl.expr.StringExpression,
     prediction_flag: Tuple(float, int),
     chisq_threshold: float,
     group_by_transcript: bool,
@@ -285,7 +285,7 @@ def search_for_break(
     """
     Searches for breakpoints in a transcript. 
 
-    Currently designed to run one transcript at a time.
+    Currently designed to run one transcript at a time. Expects input Table to be filtered to single transcript.
 
     Expects context HT to contain the following fields:
         - locus
@@ -304,8 +304,7 @@ def search_for_break(
         Expects observed counts field to be named `observed`.
     :param hl.Table exp_ht: Table grouped by transcript with expected variant counts per transcript.
         Expects expected counts field to be named `expected`.
-    :param str search_str: String that describes search space. Either transcript when searching for first break,
-        or break section name (e.g., 'first', 'second') if searching for second additional break.
+    :param hl.expr.StringExpression search_field: Field of table to search. Value should be either 'transcript' or 'section'. 
     :param Tuple(float, int) prediction_flag: Adjustments to mutation rate based on chromosomal location
         (autosomes/PAR, X non-PAR, Y non-PAR). 
         E.g., prediction flag for autosomes/PAR is (0.4190964, 11330208)
@@ -317,20 +316,18 @@ def search_for_break(
         Otherwise, returns None.
     :rtype: Union[hl.Table, None]
     """
-    # TODO: fix search_str and coverage correction
     ht = annotate_observed_expected(context_ht, obs_ht, exp_ht, group_by_transcript)
-    coverage_correction = get_coverage_correction(ht)
 
     logger.info(
         "Annotating HT with cumulative expected/observed counts per transcript..."
     )
     ht = ht.annotate(
         scan_counts=get_cumulative_scan_expr(
-            search_expr=ht[search_str],
+            search_expr=ht[search_field],
             observed_expr=ht.observed,
             mu_expr=ht.mu,
             prediction_flag=prediction_flag,
-            coverage_correction=coverage_correction,
+            coverage_correction=get_coverage_correction(ht.coverage),
         )
     )
 
@@ -340,8 +337,8 @@ def search_for_break(
         obs_exp=hl.or_missing(
             hl.len(ht.scan_counts.cumulative_observed) != 0,
             hl.min(
-                ht.scan_counts.cumulative_observed[search_str]
-                / ht.scan_counts.cumulative_expected[search_str],
+                ht.scan_counts.cumulative_observed[search_field]
+                / ht.scan_counts.cumulative_expected[search_field],
                 1,
             ),
         ),
@@ -356,8 +353,8 @@ def search_for_break(
             cond_expr=hl.len(ht.cumulative_observed) != 0,
             overall_oe_expr=ht.overall_obs_exp,
             section_oe_expr=ht.obs_exp,
-            obs_expr=ht.cumulative_observed[search_str],
-            exp_expr=ht.cumulative_expected[search_str],
+            obs_expr=ht.cumulative_observed[search_field],
+            exp_expr=ht.cumulative_expected[search_field],
         )
     )
 
@@ -368,8 +365,8 @@ def search_for_break(
             cond_expr=hl.len(ht.cumulative_observed) != 0,
             total_obs_expr=ht.total_obs,
             total_exp_expr=ht.total_exp,
-            scan_obs_expr=ht.cumulative_observed[search_str],
-            scan_exp_expr=ht.cumulative_expected[search_str],
+            scan_obs_expr=ht.cumulative_observed[search_field],
+            scan_exp_expr=ht.cumulative_expected[search_field],
         )
     )
 
@@ -388,8 +385,8 @@ def search_for_break(
             cond_expr=hl.len(ht.scan_counts.cumulative_observed) != 0,
             overall_oe_expr=ht.overall_obs_exp,
             section_oe_expr=ht.obs_exp,
-            obs_expr=ht.scan_counts.cumulative_observed[search_str],
-            exp_expr=ht.scan_counts.cumulative_expected[search_str],
+            obs_expr=ht.scan_counts.cumulative_observed[search_field],
+            exp_expr=ht.scan_counts.cumulative_expected[search_field],
         )
     )
 
