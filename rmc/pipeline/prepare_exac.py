@@ -5,15 +5,32 @@ import hail as hl
 
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
-from gnomad.utils.vep import CSQ_ORDER
 from rmc.resources.grch37.exac import (
     coverage,
     exac,
     filtered_exac,
-    filtered_exac_cov,
 )
-from rmc.resources.resource_utils import MISSENSE
 from rmc.slack_creds import slack_token
+
+
+CSQ = "Allele|Consequence|IMPACT|SYMBOL|Gene|Feature_type|Feature|BIOTYPE|EXON|INTRON|HGVSc|HGVSp|cDNA_position|CDS_position|Protein_position|Amino_acids|Codons|Existing_variation|ALLELE_NUM|DISTANCE|STRAND|FLAGS|VARIANT_CLASS|MINIMISED|SYMBOL_SOURCE|HGNC_ID|CANONICAL|TSL|APPRIS|CCDS|ENSP|SWISSPROT|TREMBL|UNIPARC|GENE_PHENO|SIFT|PolyPhen|DOMAINS|HGVS_OFFSET|GMAF|AFR_MAF|AMR_MAF|EAS_MAF|EUR_MAF|SAS_MAF|AA_MAF|EA_MAF|ExAC_MAF|ExAC_Adj_MAF|ExAC_AFR_MAF|ExAC_AMR_MAF|ExAC_EAS_MAF|ExAC_FIN_MAF|ExAC_NFE_MAF|ExAC_OTH_MAF|ExAC_SAS_MAF|CLIN_SIG|SOMATIC|PHENO|PUBMED|MOTIF_NAME|MOTIF_POS|HIGH_INF_POS|MOTIF_SCORE_CHANGE|LoF|LoF_filter|LoF_flags|LoF_info|context|ancestral"
+"""
+VEP CSQ format taken from ExAC release 1.0 VCF header.
+"""
+
+KEEP_FIELDS = [
+    "context",
+    "ac",
+    "vqslod",
+    "transcript",
+    "exon",
+    "coverage",
+    "a_index",
+    "was_split",
+]
+"""
+Fields to select from the ExAC HT.
+"""
 
 
 logging.basicConfig(
@@ -24,62 +41,70 @@ logger = logging.getLogger("prepare_exac")
 logger.setLevel(logging.INFO)
 
 
-def filter_to_missense(ht: hl.Table) -> hl.Table:
+def filter_to_missense(ht: hl.Table, csq: str = CSQ) -> hl.Table:
     """
-    Filter ExAC ht to missense variants
+    Filter ExAC Table to missense variants in canonical transcripts.
 
-    :param Table ht: ExAC ht
-    :return: ExAC ht filtered to missense variants
-    :rtype: Table
+    :param hl.Table ht: ExAC Table.
+    :param str csq: String with format of VEP CSQ field. Default is CSQ.
+    :return: Filtered ExAC Table. 
+    :rtype: hl.Table
     """
-    logger.info(f"HT count before filtration: {ht.count()}")
+    logger.info("Splitting multiallelic variants and filtering to SNPs...")
+    ht = hl.split_multi(ht)
+    ht = ht.filter(hl.is_snp(ht.alleles[0], ht.alleles[1]))
 
-    csqs = hl.literal(CSQ_ORDER)
-    ht = ht.explode(ht.info.CSQ)
+    logger.info("Adding canonical, transcript, exon, and consequence information...")
+    csq = csq.split("|")
     ht = ht.annotate(
-        most_severe_consequence=csqs.find(lambda c: ht.info.CSQ.contains(c))
-    )
-    logger.info(
-        f"Consequence counts:{ht.aggregate(hl.agg.counter(ht.most_severe_consequence))}"
+        canonical=ht.info.CSQ[ht.a_index - 1].split("\|")[csq.index("CANONICAL")]
+        == "YES",
+        transcript=ht.info.CSQ[ht.a_index - 1].split("\|")[csq.index("Feature")],
+        exon=ht.info.CSQ[ht.a_index - 1].split("\|")[csq.index("EXON")],
+        consequence=ht.info.CSQ[ht.a_index - 1].split("\|")[csq.index("Consequence")],
     )
 
-    logger.info("Filtering to missense variants...")
-    ht = ht.filter(hl.literal(MISSENSE).contains(ht.most_severe_consequence))
-    logger.info(f"HT count after filtration: {ht.count()}")
-    logger.info("Deduplicating keys...")
-    ht = ht.distinct()
-    logger.info(f"HT count after dedup: {ht.count()}")
-    return ht
+    # NOTE: Using most severe consequence didn't work properly when testing in a notebook
+    logger.info("Filtering to missense variants in canonical transcripts only...")
+    return ht.filter((ht.canonical) & (ht.consequence.contains("missense_variant")))
 
 
 def main(args):
 
     hl.init(log="/prepare_exac.log")
 
-    if args.filter_ht:
-        logger.info("Filtering ExAC ht to only missense variants")
-        ht = exac.ht()
-        ht = filter_to_missense(ht)
-        rg = get_reference_genome(ht.locus, add_sequence=True)
-        ht = ht.annotate(
-            context=hl.get_sequence(
-                ht.locus.contig,
-                ht.locus.position,
-                before=1,
-                after=1,
-                reference_genome=rg,
-            )
-        )
-        ht.naive_coalesce(args.n_partitions).write(
-            filtered_exac.path, overwrite=args.overwrite
-        )
+    logger.info("Filtering ExAC HT to missense variants on chr22...")
+    # NOTE: picked 3 example genes: MYH9 (1 break), PI4KA (2 breaks), MAPK1 (no breaks)
+    ht = exac.ht()
+    ht = hl.filter_intervals(
+        ht,
+        [
+            hl.parse_locus_interval("22:21061979-21213705"),
+            hl.parse_locus_interval("22:22108789-22221970"),
+            hl.parse_locus_interval("22:36677327-36784063"),
+        ],
+    )
+    ht = filter_to_missense(ht)
 
-    if args.join_cov:
-        ht = filtered_exac.ht()
-        coverage_ht = coverage.ht()
-        ht = ht.annotate(coverage=coverage_ht[ht.locus])
-        ht = ht.naive_coalesce(args.n_partitions)
-        ht.write(filtered_exac_cov.path, overwrite=args.overwrite)
+    # Move necessary annotations out of info struct and into top level annotations
+    # Also add coverage annotation
+    coverage_ht = coverage.ht()
+    ht = ht.annotate(
+        ac=ht.info.AC_Adj[ht.a_index - 1],
+        vqslod=ht.info.VQSLOD,
+        coverage=coverage_ht[ht.locus],
+    )
+
+    # Add context bases
+    rg = get_reference_genome(ht.locus, add_sequence=True)
+    ht = ht.annotate(
+        context=hl.get_sequence(
+            ht.locus.contig, ht.locus.position, before=1, after=1, reference_genome=rg,
+        )
+    ).select(*KEEP_FIELDS)
+    ht.naive_coalesce(args.n_partitions).write(
+        filtered_exac.path, overwrite=args.overwrite
+    )
 
 
 if __name__ == "__main__":
@@ -87,12 +112,6 @@ if __name__ == "__main__":
         "This script prepares the ExAC sites vcf for RMC testing"
     )
 
-    parser.add_argument(
-        "--filter_ht", help="Filter ExAC ht to missense variants", action="store_true"
-    )
-    parser.add_argument(
-        "--join_cov", help="Annotate ExAC ht with coverage", action="store_true"
-    )
     parser.add_argument(
         "--n_partitions",
         help="Desired number of partitions for output HTs",

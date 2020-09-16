@@ -4,6 +4,7 @@ from typing import Dict
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.vep import filter_vep_to_canonical_transcripts
 from gnomad_lof.constraint.constraint_basics import (
     add_most_severe_csq_to_tc_within_ht,
     prepare_ht,
@@ -102,7 +103,7 @@ def get_divergence_scores() -> Dict:
 
 ## Functions to process reference genome related resources
 def process_context_ht(
-    build: str, trimers: bool, overwrite: bool, n_partitions: int = 1000
+    build: str, trimers: bool = True, overwrite: bool = True, n_partitions: int = 1000
 ) -> None:
     """
     Imports reference fasta (SNPs only, VEP'd) as ht
@@ -118,62 +119,74 @@ def process_context_ht(
     if build not in BUILDS:
         raise DataException(f"Build must be one of {BUILDS}.")
 
-    logger.info("Reading in SNPs-only, VEP-annotated context ht")
+    logger.info("Reading in SNPs-only, VEP-annotated context ht...")
 
     if build == "GRCh37":
         full_context_ht = grch37.full_context.ht()
+        output_path = grch37.processed_context.path
     else:
         full_context_ht = grch38.full_context.ht()
-    full_context_ht = prepare_ht(full_context_ht, trimers)
-    logger.info(f"Full HT count: {full_context_ht.count()}")
+        output_path = grch38.processed_context.path
 
-    logger.info("Filtering to canonical protein coding transcripts...")
-    full_context_ht = full_context_ht.explode(
-        full_context_ht.vep.transcript_consequences
-    )
-    context_ht = full_context_ht.filter(
-        (full_context_ht.vep.transcript_consequences.biotype == "protein_coding")
-        & (full_context_ht.vep.transcript_consequences.canonical == 1)
-    )
-    logger.info(f"Count after filtration: {context_ht.count()}")
+    full_context_ht = prepare_ht(full_context_ht, trimers)
 
     logger.info(
-        "Importing codon translation table and amino acid names and annotating as globals"
+        "Filtering to missense variants in canonical protein coding transcripts..."
+    )
+    context_ht = filter_vep_to_canonical_transcripts(full_context_ht)
+
+    # NOTE: Had issues with filtering using most_severe_consequence in nb, so switched code here
+    # Also discovered that transcript_consequences always has a length of 1 in notebook (at least in chr22)
+    context_ht = context_ht.filter(
+        context_ht.vep.transcript_consequences[0].consequence_terms.contains(
+            "missense_variant"
+        )
+    )
+
+    logger.info(
+        "Importing codon translation table and amino acid names and annotating as globals..."
     )
     context_ht = context_ht.annotate_globals(
         codon_translation=get_codon_lookup(), acid_names=get_acid_names()
     )
 
-    logger.info("Importing mutation rates and joining to context ht")
+    # NOTE: trimers must be True for this join to work correctly (for ExAC mu ht)
+    logger.info("Importing mutation rates and joining to context HT...")
     mu_ht = mutation_rate.ht()
-    context_ht = context_ht.key_by("context", "alleles").join(mu_ht, how="left")
+    context_ht = context_ht.annotate(
+        mu_snp=mu_ht[context_ht.context, context_ht.alleles].mu_snp
+    )
 
-    logger.info("Importing divergence scores and annotating context ht")
+    logger.info("Importing divergence scores and annotating context HT...")
     div_ht = divergence_scores.ht()
     context_ht = context_ht.annotate(
-        div=hl.cond(
-            hl.is_defined(div_ht[context_ht.vep.transcript_consequences.transcript_id]),
-            div_ht[context_ht.vep.transcript_consequences.transcript_id].divergence,
+        div=hl.if_else(
+            hl.is_defined(
+                div_ht[context_ht.vep.transcript_consequences[0].transcript_id]
+            ),
+            div_ht[context_ht.vep.transcript_consequences[0].transcript_id].divergence,
             0.0564635,
         )
     )
 
-    logger.info("Re-keying context ht by locus and alleles")
-    context_ht = context_ht.key_by("locus", "alleles")
+    logger.info("Moving transcript ID and exon number to top level annotation...")
+    context_ht = context_ht.annotate(
+        transcript=context_ht.vep.transcript_consequences[0].transcript_id,
+        exon=context_ht.vep.transcript_consequences[0].exon.split("\/")[0],
+    )
 
-    logger.info("Writing out context ht")
+    logger.info("Writing out context HT...")
     context_ht = context_ht.naive_coalesce(n_partitions)
-    context_ht.write(get_processed_context_ht_path(build), overwrite=overwrite)
+    context_ht.write(output_path, overwrite=overwrite)
     context_ht.describe()
 
 
 ## Functions to process exon/transcript related resourcces
-def process_gencode_ht(build: str, overwrite: bool) -> None:
+def process_gencode_ht(build: str) -> None:
     """
     Imports gencode gtf as ht,filters to protein coding transcripts, and writes out as ht
 
     :param str build: Reference genome build; must be one of BUILDS.
-    :param bool overwrite: Whether to overwrite output.
     :return: None
     :rtype: None
     """
@@ -183,70 +196,85 @@ def process_gencode_ht(build: str, overwrite: bool) -> None:
     logger.info("Reading in gencode gtf")
     if build == "GRCh37":
         ht = grch37.gencode.ht()
-        output_path = grch37.processed_gencode.path
+
     else:
         ht = grch38.gencode.ht()
-        output_path = grch38.processed_gencode.path
 
-    logger.info(
-        "Filtering gencode gtf to exons in protein coding genes with support levels 1 and 2"
-    )
-    ht = ht.filter(
-        (ht.feature == "exon") & (ht.gene_type == "protein_coding") & (ht.level != "3")
-    )
+    logger.info("Filtering gencode gtf to exons in protein coding genes...")
+    ht = ht.filter((ht.feature == "exon") & (ht.gene_type == "protein_coding"))
 
-    logger.info("Grouping gencode ht by transcript ID")
-    ht = ht.key_by(ht.transcript_id)
-    ht = ht.select(ht.frame, ht.exon_number, ht.gene_name, ht.interval)
-    ht = ht.collect_by_key()
-    ht.write(output_path, overwrite=overwrite)
+    logger.info("Keying by transcript and exon number...")
+    # Stripping decimal from transcript to match transcript in exome data
+    ht = ht.transmute(transcript=ht.transcript_id.split("\.")[0])
+    return ht.key_by("transcript", "exon_number").select()
 
 
 ## Functions for obs/exp related resources
+def keep_criteria(ht: hl.Table, exac: bool) -> hl.expr.BooleanExpression:
+    """
+    Returns Boolean expression to filter variants in input Table.
+
+    :param hl.Table ht: Input Table.
+    :param bool exac: Whether input Table is ExAC data.
+    :return: Keep criteria Boolean expression.
+    :rtype: hl.expr.BooleanExpression
+    """
+    # ExAC keep criteria: adjusted AC <= 123 and VQSLOD >= -2.632
+    # Also remove variants with median depth < 1
+    if exac:
+        keep_criteria = (
+            (ht.ac <= 123) & (ht.ac > 0) & (ht.vqslod >= -2.632) & (ht.coverage > 1)
+        )
+    else:
+        # TODO: check about impose_high_af_cutoff upfront
+        keep_criteria = (ht.ac > 0) & (ht.pass_filters)
+
+    return keep_criteria
+
+
 def filter_to_missense(ht: hl.Table, n_partitions: int = 5000) -> hl.Table:
     """
-    Filters input Table to missense variants.
+    Filters input Table to missense variants in canonical transcripts only.
 
     :param Table ht: Input Table to be filtered.
     :param int n_partitions: Number of desired partitions for output.
     :return: Table filtered to only missense variants.
     :rtype: hl.Table
     """
-    logger.info(f"HT count before filtration: {ht.count()}")  # this printed 17209972
+    if "was_split" not in ht.row:
+        logger.info("Splitting multiallelic variants and filtering to SNPs...")
+        ht = hl.split_multi(ht)
+        ht = ht.filter(hl.is_snp(ht.alleles[0], ht.alleles[1]))
+
+    logger.info("Filtering to canonical transcripts...")
+    ht = filter_vep_to_canonical_transcripts(ht)
+
     logger.info("Annotating HT with most severe consequence...")
-    ht = add_most_severe_csq_to_tc_within_ht(ht)  # from constraint_basics
+    ht = add_most_severe_csq_to_tc_within_ht(ht)
     logger.info(
         f"Consequence count: {ht.aggregate(hl.agg.counter(ht.vep.most_severe_consequence))}"
     )
 
-    # vep consequences from https://github.com/macarthur-lab/gnomad_hail/blob/master/utils/constants.py
-    # missense definition from seqr searches
     logger.info("Filtering to missense variants...")
     ht = ht.filter(hl.literal(MISSENSE).contains(ht.vep.most_severe_consequence))
-    logger.info(f"HT count after filtration: {ht.count()}")  # this printed 6818793
 
     return ht.naive_coalesce(n_partitions)
 
 
-def filter_alt_decoy(ht: hl.Table) -> hl.Table:
+def filter_to_region_type(ht: hl.Table, region: str) -> hl.Table:
     """
-    Filters input Table to autosomes, X/X PAR, and Y (not mito or alt/decoy contigs). 
+    Filters input Table to autosomes + chrX PAR, chrX non-PAR, or chrY non-PAR. 
 
-    Also annotates each locus with region type.
-
-    :param Table ht: Input Table to be filtered/annotated.
-    :return: Table filtered to autosomes/PAR and annotated with PAR status.
+    :param hl.Table ht: Input Table to be filtered.
+    :param str region: Desired region type. One of 'autosomes', 'chrX', or 'chrY'.
+    :return: Table filtered to autosomes/PAR, chrX, or chrY.
     :rtype: hl.Table
     """
-    logger.info(f"HT count before filtration: {ht.count()}")
-    ht = ht.annotate(
-        region_type=hl.case()
-        .when((ht.locus.in_autosome() | ht.locus.in_x_par()), "autosome_xpar")
-        .when(ht.locus.in_x_nonpar(), "x_nonpar")
-        .when(ht.locus.in_y_nonpar(), "y")
-        .or_missing()
-    )
-    logger.info("Filtering to autosomes + X/Y..")
-    ht = ht.filter(hl.is_defined(ht.region_type))
-    logger.info(f"HT count after filtration: {ht.count()}")
+    if region == "chrX":
+        ht = ht.filter(ht.locus.in_x_nonpar())
+        ht = ht.filter(ht.locus.in_autosome() | ht.locus.in_x_par())
+    elif region == "chrY":
+        ht = ht.filter(ht.locus.in_y_nonpar())
+    else:
+        ht = ht.filter(ht.locus.in_autosome() | ht.locus.in_x_par())
     return ht

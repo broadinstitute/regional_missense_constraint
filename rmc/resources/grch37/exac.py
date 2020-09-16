@@ -38,10 +38,10 @@ def _import_coverage(**kwargs) -> hl.Table:
 EXAC_PREFIX = f"{RESOURCE_PREFIX}/GRCh37/exac"
 
 exac = TableResource(
-    path=f"{EXAC_PREFIX}/ht/ExAC.r0.3.sites.ht",
+    path=f"{EXAC_PREFIX}/ht/ExAC.r1.sites.vep.ht",
     import_func=import_sites_vcf,
     import_args={
-        "path": f"{EXAC_PREFIX}/ExAC.r0.3.sites.vep.vcf.gz",
+        "path": f"{EXAC_PREFIX}/ExAC.r1.sites.vep.vcf.gz",
         "force_bgz": True,
         "min_partitions": 500,
         "reference_genome": "GRCh37",
@@ -65,19 +65,11 @@ coverage = TableResource(
 Resource with ExAC coverage
 """
 
-filtered_exac = TableResource(path=f"{EXAC_PREFIX}/ht/ExAC.r0.3.missense_only.ht")
+filtered_exac = TableResource(path=f"{EXAC_PREFIX}/ht/ExAC.r1.missense_only.ht")
 """
-Resource for ExAC dataset filtered to missense variants only and annotated with trimer context
+ExAC dataset filtered to missense variants only on chromosome 22 (specifically MYH9, PI4KA, MAPK1).
+Also annotated with trimer context and coverage information.
 """
-
-filtered_exac_cov = TableResource(
-    path=f"{EXAC_PREFIX}/ht/ExAC.r0.3.missense_only_cov.ht"
-)
-"""
-ExAC dataset filtered to missense variants only and annotated with trimer context and coverage information.
-Contains coverage infromation for ONLY chr22.
-"""
-
 
 # Observed/expected count related resources
 expected = TableResource(path=f"{EXP_PREFIX}/ht/ExAC_exp_var.ht")
