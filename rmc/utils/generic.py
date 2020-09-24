@@ -1,25 +1,25 @@
 import logging
-from typing import Dict
+from typing import Dict, Tuple, Union
 
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.vep import filter_vep_to_canonical_transcripts
 from gnomad_lof.constraint.constraint_basics import (
     add_most_severe_csq_to_tc_within_ht,
+    annotate_constraint_groupings,
     prepare_ht,
 )
+from gnomad_lof.constraint_utils.generic import fast_filter_vep
 from rmc.resources.basics import (
     ACID_NAMES_PATH,
     CODON_TABLE_PATH,
-    divergence_scores,
     DIVERGENCE_SCORES_TSV_PATH,
     mutation_rate,
     MUTATION_RATE_TABLE_PATH,
 )
 import rmc.resources.grch37.reference_data as grch37
 import rmc.resources.grch38.reference_data as grch38
-from rmc.resources.resource_utils import BUILDS, MISSENSE
+from rmc.resources.resource_utils import BUILDS
 
 
 logging.basicConfig(
@@ -106,12 +106,17 @@ def process_context_ht(
     build: str, trimers: bool = True, overwrite: bool = True, n_partitions: int = 1000
 ) -> None:
     """
-    Imports reference fasta (SNPs only, VEP'd) as ht
-    Filters to canonical protein coding transcripts
+    Imports reference fasta (SNPs only, annotated with VEP) as a hail Table.
+
+    Filters to missense variants in canonical protein coding transcripts. 
+    Also annotates with probability of mutation for each variant.
+
+    .. note::
+        `trimers` needs to be True for gnomAD v2.
 
     :param str build: Reference genome build; must be one of BUILDS.
-    :param bool trimers: Whether to filter to trimers or heptamers.
-    :param bool overwrite: Whether to overwrite output.
+    :param bool trimers: Whether to filter to trimers or heptamers. Default is True.
+    :param bool overwrite: Whether to overwrite output. Default is True.
     :param int n_partitions: Number of desired partitions for output. Default is 1000.
     :return: None
     :rtype: None
@@ -122,73 +127,45 @@ def process_context_ht(
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
 
     if build == "GRCh37":
-        full_context_ht = grch37.full_context.ht()
+        ht = grch37.full_context.ht()
         output_path = grch37.processed_context.path
     else:
-        full_context_ht = grch38.full_context.ht()
+        ht = grch38.full_context.ht()
         output_path = grch38.processed_context.path
 
-    full_context_ht = prepare_ht(full_context_ht, trimers)
+    # prepare_ht annotates HT with: ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
+    ht = prepare_ht(ht, trimers)
 
     logger.info(
         "Filtering to missense variants in canonical protein coding transcripts..."
     )
-    context_ht = filter_vep_to_canonical_transcripts(full_context_ht)
+    ht = filter_to_missense(ht)
 
-    # NOTE: Had issues with filtering using most_severe_consequence in nb, so switched code here
-    # Also discovered that transcript_consequences always has a length of 1 in notebook (at least in chr22)
-    context_ht = context_ht.filter(
-        context_ht.vep.transcript_consequences[0].consequence_terms.contains(
-            "missense_variant"
-        )
-    )
-
-    logger.info(
-        "Importing codon translation table and amino acid names and annotating as globals..."
-    )
-    context_ht = context_ht.annotate_globals(
-        codon_translation=get_codon_lookup(), acid_names=get_acid_names()
-    )
-
-    # NOTE: trimers must be True for this join to work correctly (for ExAC mu ht)
-    logger.info("Importing mutation rates and joining to context HT...")
+    logger.info("Annotating with mutation rate...")
+    # Mutation rate HT is keyed by context, ref, alt, methylation level
     mu_ht = mutation_rate.ht()
-    context_ht = context_ht.annotate(
-        mu_snp=mu_ht[context_ht.context, context_ht.alleles].mu_snp
+    ht, grouping = annotate_constraint_groupings(ht)
+    ht = ht.filter(hl.is_defined(ht.exome_coverage))
+    ht = ht.select(
+        "context", "ref", "alt", "methylation_level", "exome_coverage", *grouping
     )
-
-    logger.info("Importing divergence scores and annotating context HT...")
-    div_ht = divergence_scores.ht()
-    context_ht = context_ht.annotate(
-        div=hl.if_else(
-            hl.is_defined(
-                div_ht[context_ht.vep.transcript_consequences[0].transcript_id]
-            ),
-            div_ht[context_ht.vep.transcript_consequences[0].transcript_id].divergence,
-            0.0564635,
-        )
-    )
-
-    logger.info("Moving transcript ID and exon number to top level annotation...")
-    context_ht = context_ht.annotate(
-        transcript=context_ht.vep.transcript_consequences[0].transcript_id,
-        exon=context_ht.vep.transcript_consequences[0].exon.split("\/")[0],
+    ht = ht.annotate(
+        mu_snp=mu_ht[ht.context, ht.ref, ht.alt, ht.methylation_level].mu_snp
     )
 
     logger.info("Writing out context HT...")
-    context_ht = context_ht.naive_coalesce(n_partitions)
-    context_ht.write(output_path, overwrite=overwrite)
-    context_ht.describe()
+    ht = ht.naive_coalesce(n_partitions)
+    ht.write(output_path, overwrite=overwrite)
 
 
-## Functions to process exon/transcript related resourcces
-def process_gencode_ht(build: str) -> None:
+## Functions for obs/exp related resources
+def get_exome_bases(build: str) -> int:
     """
-    Imports gencode gtf as ht,filters to protein coding transcripts, and writes out as ht
+    Imports gencode gtf into a hail Table, filters to coding regions, and sums all positions to get the number of bases in the exome.
 
     :param str build: Reference genome build; must be one of BUILDS.
-    :return: None
-    :rtype: None
+    :return: Number of bases in the exome.
+    :rtype: int
     """
     if build not in BUILDS:
         raise DataException(f"Build must be one of {BUILDS}.")
@@ -200,16 +177,15 @@ def process_gencode_ht(build: str) -> None:
     else:
         ht = grch38.gencode.ht()
 
-    logger.info("Filtering gencode gtf to exons in protein coding genes...")
-    ht = ht.filter((ht.feature == "exon") & (ht.gene_type == "protein_coding"))
+    logger.info("Filtering gencode gtf to feature type == CDS...")
+    ht = ht.filter((ht.feature == "CDS"))
 
-    logger.info("Keying by transcript and exon number...")
-    # Stripping decimal from transcript to match transcript in exome data
-    ht = ht.transmute(transcript=ht.transcript_id.split("\.")[0])
-    return ht.key_by("transcript", "exon_number").select()
+    logger.info("Summing total bases in exome...")
+    # GENCODE is 1-based
+    ht = ht.annotate(cds_len=(ht.interval.end - ht.interval.start) + 1)
+    return ht.aggregate(hl.agg.sum(ht.cds_len))
 
 
-## Functions for obs/exp related resources
 def keep_criteria(ht: hl.Table, exac: bool) -> hl.expr.BooleanExpression:
     """
     Returns Boolean expression to filter variants in input Table.
@@ -226,8 +202,7 @@ def keep_criteria(ht: hl.Table, exac: bool) -> hl.expr.BooleanExpression:
             (ht.ac <= 123) & (ht.ac > 0) & (ht.vqslod >= -2.632) & (ht.coverage > 1)
         )
     else:
-        # TODO: check about impose_high_af_cutoff upfront
-        keep_criteria = (ht.ac > 0) & (ht.pass_filters)
+        keep_criteria = (ht.ac > 0) & (ht.af < 0.001) & (ht.pass_filters)
 
     return keep_criteria
 
@@ -247,17 +222,20 @@ def filter_to_missense(ht: hl.Table, n_partitions: int = 5000) -> hl.Table:
         ht = ht.filter(hl.is_snp(ht.alleles[0], ht.alleles[1]))
 
     logger.info("Filtering to canonical transcripts...")
-    ht = filter_vep_to_canonical_transcripts(ht)
+    ht = fast_filter_vep(
+        ht, vep_root="vep", syn=False, canonical=True, filter_empty=True
+    )
 
     logger.info("Annotating HT with most severe consequence...")
     ht = add_most_severe_csq_to_tc_within_ht(ht)
-    logger.info(
-        f"Consequence count: {ht.aggregate(hl.agg.counter(ht.vep.most_severe_consequence))}"
+    ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences).explode(
+        ht.transcript_consequences
     )
 
     logger.info("Filtering to missense variants...")
-    ht = ht.filter(hl.literal(MISSENSE).contains(ht.vep.most_severe_consequence))
-
+    ht = ht.filter(
+        ht.transcript_consequence.most_severe_consequence == "missense_variant"
+    )
     return ht.naive_coalesce(n_partitions)
 
 
@@ -272,9 +250,57 @@ def filter_to_region_type(ht: hl.Table, region: str) -> hl.Table:
     """
     if region == "chrX":
         ht = ht.filter(ht.locus.in_x_nonpar())
-        ht = ht.filter(ht.locus.in_autosome() | ht.locus.in_x_par())
     elif region == "chrY":
         ht = ht.filter(ht.locus.in_y_nonpar())
     else:
         ht = ht.filter(ht.locus.in_autosome() | ht.locus.in_x_par())
     return ht
+
+
+def get_coverage_correction_expr(
+    coverage: hl.expr.Float64Expression,
+    coverage_model: Tuple[float, float],
+    high_cov_cutoff: int = 40,
+) -> Union[float, hl.expr.Float64Expression]:
+    """
+    Gets coverage correction for expected variants count.
+
+    .. note:: 
+        Default high coverage cutoff taken from gnomAD LoF repo.
+
+    :param hl.expr.Float64Expression ht: Input coverage expression. Should be median coverage at position.
+    :param Tuple[float, float] coverage_model: Model to determine coverage correction factor necessary
+         for calculating expected variants at low coverage sites.
+    :param int high_cov_cutoff: Cutoff for high coverage. Default is 40. 
+    :return: Coverage correction expression.
+    :rtype: hl.expr.Float64Expression
+    """
+    if coverage == 0:
+        return 0
+    if coverage >= 1 & coverage < high_cov_cutoff:
+        return coverage_model[1] * hl.log(coverage) + coverage_model[0]
+    return 1
+
+
+def get_plateau_model(
+    locus_expr: hl.expr.LocusExpression,
+    cpg_expr: hl.expr.BooleanExpression,
+    globals_expr: hl.expr.StructExpression,
+):
+    """
+    Gets model to determine adjustment to mutation rate based on locus type and variant type (CpG transition, no-CpG transition, transversion).
+
+    .. note::
+        This function expects that the context Table has each plateau model (autosome, X, Y) added as global annotations.
+
+    :param hl.expr.LocusExpression locus_expr: Locus expression.
+    :param hl.expr.BooleanExpression: Expression showing whether site is a CpG site.
+    :param hl.expr.StructExpression globals_expr: Expression containing global annotations of context HT. Must contain plateau models as annotations.
+    """
+    if locus_expr.in_x_nonpar():
+        plateau_model = hl.literal(globals_expr.plateau_x_models.total)[cpg_expr]
+    elif locus_expr.in_y_nonpar():
+        plateau_model = hl.literal(globals_expr.plateau_y_models.total)[cpg_expr]
+    else:
+        plateau_model = hl.literal(globals_expr.plateau_model.total)[cpg_expr]
+    return plateau_model
