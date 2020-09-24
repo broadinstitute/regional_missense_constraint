@@ -20,10 +20,10 @@ full_context = VersionedTableResource(
 )
 
 processed_context = VersionedTableResource(
-    default_version="20190430",
+    default_version="v1",
     versions={
-        "20190430": TableResource(
-            path=f"{RESOURCE_PREFIX}/GRCh37/reference_data/ht/context_fasta_snps_only_vep_20190430.ht",
+        "v1": TableResource(
+            path=f"{RESOURCE_PREFIX}/GRCh37/reference_data/ht/context_fasta_snps_only_vep_v1.ht",
         )
     },
 )
