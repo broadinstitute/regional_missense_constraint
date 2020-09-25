@@ -3,8 +3,14 @@ from typing import Dict, Tuple, Union
 
 import hail as hl
 
-# from gnomad_lof.constraint_utils.generic import count_variants
-from rmc.utils.generic import keep_criteria
+from gnomad.utils.reference_genome import get_reference_genome
+from gnomad_lof.constraint_utils.generic import annotate_variant_types
+from rmc.utils.generic import (
+    filter_to_missense,
+    get_exome_bases,
+    get_plateau_model,
+    keep_criteria,
+)
 
 
 logging.basicConfig(
