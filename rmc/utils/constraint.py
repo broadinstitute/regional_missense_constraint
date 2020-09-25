@@ -467,16 +467,73 @@ def search_for_break(
     )
 
 
-def search_for_two_breaks(exome_ht: hl.Table):
+def search_for_two_breaks(
+    ht: hl.Table, exome_ht: hl.Table, transcript: str, chisq_threshold: float
+) -> Union[Tuple(float, Tuple(int, int)), None]:
     """
+    Searches for evidence of constraint within a set window size/number of base pairs.
+
+    Function is designed to search in transcripts that didn't have one single significant break.
+    Currently designed to one run one transcript at a time.
+
+    Assumes that:
+        - Input Table has a field named 'transcript'.
+
+    :param hl.Table ht: Input Table.
+    :param hl.Table exome_ht: Table containing variants from gnomAD exomes.
+    :param str transcript: Transcript of interest.
+    :param float chisq_threshold: Chi-square significance threshold. 
+        Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
+    :return: Tuple of largest chi-square value and breakpoint positions if significant break was found. Otherwise, None.
+    :rtype: Union[hl.Table, None]
     """
-    window = (
+    break_size = (
         get_avg_bases_between_mis(
             exome_ht, get_reference_genome(exome_ht.head(1).locus).name
         )
         * 10
     )
-    logger.info(f"Window size for simultaneous breaks: {window}")
+    logger.info(
+        f"Number of bases to search for constraint (size for simultaneous breaks): {break_size}"
+    )
+
+    # I don't think there's any way to search for simultaneous breaks without a loop?
+    ht = ht.filter(ht.transcript == transcript)
+    start_pos = ht.head(1).take(1).locus.position
+    end_pos = ht.tail(1).take(1).locus.position
+    best_chisq = 0
+    breakpoints = ()
+
+    while start_pos < end_pos:
+        ht = ht.annotate(
+            section=hl.case()
+            # Position is within window if pos is larger than start_pos and
+            # less than start_pos + window size, then pos is within window
+            .when(
+                (ht.locus.position >= start_pos)
+                & (ht.locus.position < (start_pos + break_size)),
+                hl.format("%s_%s", ht.transcript, "window"),
+            )
+            # If pos < start_pos, pos is outside of window and pre breaks
+            .when(
+                ht.locus.position < start_pos, hl.format("%s_%s", ht.transcript, "pre")
+            )
+            # Otherwise, pos is outside window and post breaks
+            .default(hl.format("%s_%s", ht.transcript, "post"))
+        )
+        new_ht = process_sections(ht, chisq_threshold)
+
+        # Check if found break
+        if new_ht.aggregate(hl.agg.counter(new_ht.is_break) > 0):
+            max_chisq = new_ht.aggregate(hl.agg.max(new_ht.max_chisq))
+            if (max_chisq > best_chisq) and (max_chisq >= chisq_threshold):
+                breakpoints = (start_pos, (start_pos + break_size) - 1)
+
+        start_pos += 1
+
+    if best_chisq != 0:
+        return (best_chisq, breakpoints)
+    return None
 
 
 def process_transcripts(ht: hl.Table, chisq_threshold: float):
@@ -539,11 +596,17 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
     return search_for_break(ht, "transcript", chisq_threshold)
 
 
-def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
+def process_sections(ht: hl.Table, chisq_threshold: float):
     """
-    Search for additional breaks in a transcript after finding one significant break.
+    Search for breaks within given sections of a transcript. 
 
-    TODO: Update this function so that it can search for numerous additional breaks.
+    Expects that input Table has the following annotations:
+        - cpg
+        - observed
+        - mu_snp
+        - coverage_correction
+        - section
+    Also assumes that Table's globals contain plateau models.
 
     :param hl.Table ht: Input Table.
     :param float chisq_threshold: Chi-square significance threshold. 
@@ -551,45 +614,6 @@ def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
     :return: Table annotated with whether position is a breakpoint. 
     :rtype: hl.Table
     """
-    # TODO: this block of code needs to go elsewhere or be generalized if this function will search for
-    # multiple additional breaks
-    logger.info("Getting set of transcripts with one break...")
-    first_break_ht = ht.filter(ht.is_break)
-    first_break_ht = first_break_ht.select().key_by("transcript")
-    transcripts = first_break_ht.aggregate(
-        hl.agg.collect_as_set(first_break_ht.transcript), _localize=False
-    )
-
-    logger.info("Filtering to transcripts with one break...")
-    # Also rename scans from first break as these will be overwritten when searching for additional break
-    ht = ht.filter(transcripts.contains(ht.transcript))
-    ht = ht.rename(
-        {
-            "scan_counts": "first_scan_counts",
-            "reverse": "first_reverse",
-            "forward_obs_exp": "first_forward_obs_exp",
-            "reverse_obs_exp": "first_reverse_obs_exp",
-            "is_break": "is_first_break",
-        }
-    )
-
-    logger.info(
-        "Splitting each transcript into two sections: pre first break and post..."
-    )
-    ht = ht.annotate(
-        section=hl.if_else(
-            ~ht.is_first_break,
-            hl.if_else(
-                ht.locus.position > first_break_ht[ht.transcript].locus.position,
-                hl.format("%s_%s", ht.transcript, "post"),
-                hl.format("%s_%s", ht.transcript, "pre"),
-            ),
-            # If position is breakpoint, add to second section ("post")
-            # this is because the first position of a scan is always missing anyway
-            hl.format("%s_%s", ht.transcript, "post"),
-        )
-    )
-
     logger.info(
         "Getting total observed and expected counts for each transcript section..."
     )
@@ -633,3 +657,62 @@ def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
         scan_exp_expr=ht.scan_counts.cumulative_exp[ht.section],
     )
     return search_for_break(ht, "section", chisq_threshold)
+
+
+def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
+    """
+    Search for additional breaks in a transcript after finding one significant break.
+
+    Expects that input Table has the following annotations:
+        - cpg
+        - observed
+        - mu_snp
+        - coverage_correction
+        - transcript
+    Also assumes that Table's globals contain plateau models.
+
+
+    :param hl.Table ht: Input Table.
+    :param float chisq_threshold: Chi-square significance threshold. 
+        Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
+    :return: Table annotated with whether position is a breakpoint. 
+    :rtype: hl.Table
+    """
+    # TODO: generalize function so that it can search for more than one additional break
+    logger.info("Getting set of transcripts with one break...")
+    first_break_ht = ht.filter(ht.is_break)
+    first_break_ht = first_break_ht.select().key_by("transcript")
+    transcripts = first_break_ht.aggregate(
+        hl.agg.collect_as_set(first_break_ht.transcript), _localize=False
+    )
+
+    logger.info("Filtering to transcripts with one break...")
+    # Also rename scans from first break as these will be overwritten when searching for additional break
+    ht = ht.filter(transcripts.contains(ht.transcript))
+    ht = ht.rename(
+        {
+            "scan_counts": "first_scan_counts",
+            "reverse": "first_reverse",
+            "forward_obs_exp": "first_forward_obs_exp",
+            "reverse_obs_exp": "first_reverse_obs_exp",
+            "is_break": "is_first_break",
+        }
+    )
+
+    logger.info(
+        "Splitting each transcript into two sections: pre first break and post..."
+    )
+    ht = ht.annotate(
+        section=hl.if_else(
+            ~ht.is_first_break,
+            hl.if_else(
+                ht.locus.position > first_break_ht[ht.transcript].locus.position,
+                hl.format("%s_%s", ht.transcript, "post"),
+                hl.format("%s_%s", ht.transcript, "pre"),
+            ),
+            # If position is breakpoint, add to second section ("post")
+            # this is because the first position of a scan is always missing anyway
+            hl.format("%s_%s", ht.transcript, "post"),
+        )
+    )
+    return process_sections(ht, chisq_threshold)
