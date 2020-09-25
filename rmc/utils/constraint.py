@@ -3,6 +3,7 @@ from typing import Dict, Tuple, Union
 
 import hail as hl
 
+from gnomad.utils.reference_genome import get_reference_genome
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 from rmc.utils.generic import (
     filter_to_missense,
@@ -76,7 +77,7 @@ def calculate_expected(
     )
 
 
-def get_avg_bases_between_mis(ht: hl.Table, build: str):
+def get_avg_bases_between_mis(ht: hl.Table, build: str) -> int:
     """
     Returns average number of bases between observed missense variation.
 
@@ -87,8 +88,8 @@ def get_avg_bases_between_mis(ht: hl.Table, build: str):
     when searching for two simultaneous breaks.
 
     :param hl.Table ht: Input gnomAD Table.
-    :return: Average number of bases between observed missense variants.
-    :rtype: float
+    :return: Average number of bases between observed missense variants, rounded to the nearest integer,
+    :rtype: int
     """
     logger.info("Getting total number of bases in the exome (based on GENCODE)...")
     total_bases = get_exome_bases(build)
@@ -98,7 +99,7 @@ def get_avg_bases_between_mis(ht: hl.Table, build: str):
     )
     ht = filter_to_missense(ht)
     total_variants = ht.count()
-    return total_bases / total_variants
+    return round(total_bases / total_variants)
 
 
 def get_cumulative_scan_expr(
@@ -455,22 +456,31 @@ def search_for_break(
     # 10.8 (p ~ 10e-3) and is 13.8 (p ~ 10e-4) for two breaks. These currently cannot
     # be adjusted."
     group_ht = ht.group_by(search_field).aggregate(max_chisq=hl.agg.max(ht.chisq))
-    ht = ht.annotate(
-        max_chisq=group_ht[ht.transcript].max_chisq
-    )
+    ht = ht.annotate(max_chisq=group_ht[ht.transcript].max_chisq)
     return ht.annotate(
-        is_break=hl.if_else(
-            (ht.chisq == ht.max_chisq)
-            & (ht.chisq >= chisq_threshold)
-        )
+        is_break=((ht.chisq == ht.max_chisq) & (ht.chisq >= chisq_threshold))
     )
 
 
-def process_transcripts(ht: hl.Table):
+def search_for_two_breaks(exome_ht: hl.Table):
     """
-    Annotates input Table with cumulative observed, expected, and observed/expected values.
+    """
+    window = (
+        get_avg_bases_between_mis(
+            exome_ht, get_reference_genome(exome_ht.head(1).locus).name
+        )
+        * 10
+    )
+    logger.info("Window size for simultaneous breaks: {window}")
 
-    Annotates values for both forward (moving from smaller to larger positions) and reverse (moving from larger to smaller positions) directions.
+
+def process_transcripts(ht: hl.Table, chisq_threshold: float):
+    """
+    Annotates each position in Table with whether that position is a significant breakpoint.
+
+    Also annotates input Table with cumulative observed, expected, and observed/expected values
+    for both forward (moving from smaller to larger positions) and reverse (moving from larger to 
+    smaller positions) directions.
 
     Expects input Table to have the following fields:
         - locus
@@ -486,10 +496,10 @@ def process_transcripts(ht: hl.Table):
         - Global annotations contains plateau models.
 
     :param hl.Table ht: Input Table. annotated with observed and expected variants counts per transcript.
-    :param str transcript: Transcript of interest.
     :param float chisq_threshold: Chi-square significance threshold. 
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
     :return: Table with cumulative observed, expected, and observed/expected values annotated for forward and reverse directions.
+        Table also annotated with boolean for whether each position is a breakpoint.
     :rtype: hl.Table
     """
     logger.info(
@@ -512,7 +522,7 @@ def process_transcripts(ht: hl.Table):
     )
     # cond_expr here skips the first line of the HT, as the cumulative values
     # of the first line will always be empty when using a scan
-    return get_reverse_exprs(
+    ht = get_reverse_exprs(
         ht=ht,
         cond_expr=hl.len(ht.scan_counts.cumulative_obs) != 0,
         total_obs_expr=ht.observed,
@@ -520,3 +530,5 @@ def process_transcripts(ht: hl.Table):
         scan_obs_expr=ht.scan_counts.cumulative_obs[ht.transcript],
         scan_exp_expr=ht.scan_counts.cumulative_exp[ht.transcript],
     )
+
+    return search_for_break(ht, "transcript", chisq_threshold)
