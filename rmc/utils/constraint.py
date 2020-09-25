@@ -228,6 +228,7 @@ def get_fwd_exprs(
     :return: Table with forward values annotated
     :rtype: hl.Table
     """
+
     ht = ht.annotate(
         scan_counts=get_cumulative_scan_expr(
             search_expr=ht[search_field],
@@ -237,10 +238,14 @@ def get_fwd_exprs(
             coverage_correction_expr=coverage_correction_expr,
         )
     )
+    if search_field == "transcript":
+        ht = ht.annotate(cond_expr=hl.len(ht.scan_counts.cumulative_observed) != 0)
+    else:
+        ht = ht.annotate(cond_expr=hl.len(ht.scan_counts.cumulative_observed) > 1)
 
     return ht.annotate(
         forward_obs_exp=get_obs_exp_expr(
-            hl.len(ht.scan_counts.cumulative_observed) != 0,
+            ht.cond_expr,
             ht.scan_counts.cumulative_observed[ht[search_field]],
             ht.scan_counts.cumulative_expected[ht[search_field]],
         )
@@ -471,7 +476,7 @@ def search_for_two_breaks(exome_ht: hl.Table):
         )
         * 10
     )
-    logger.info("Window size for simultaneous breaks: {window}")
+    logger.info(f"Window size for simultaneous breaks: {window}")
 
 
 def process_transcripts(ht: hl.Table, chisq_threshold: float):
@@ -532,3 +537,99 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
     )
 
     return search_for_break(ht, "transcript", chisq_threshold)
+
+
+def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
+    """
+    Search for additional breaks in a transcript after finding one significant break.
+
+    TODO: Update this function so that it can search for numerous additional breaks.
+
+    :param hl.Table ht: Input Table.
+    :param float chisq_threshold: Chi-square significance threshold. 
+        Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
+    :return: Table annotated with whether position is a breakpoint. 
+    :rtype: hl.Table
+    """
+    # TODO: this block of code needs to go elsewhere or be generalized if this function will search for
+    # multiple additional breaks
+    logger.info("Getting set of transcripts with one break...")
+    first_break_ht = ht.filter(ht.is_break)
+    first_break_ht = first_break_ht.select().key_by("transcript")
+    transcripts = first_break_ht.aggregate(
+        hl.agg.collect_as_set(first_break_ht.transcript), _localize=False
+    )
+
+    logger.info("Filtering to transcripts with one break...")
+    # Also rename scans from first break as these will be overwritten when searching for additional break
+    ht = ht.filter(transcripts.contains(ht.transcript))
+    ht = ht.rename(
+        {
+            "scan_counts": "first_scan_counts",
+            "reverse": "first_reverse",
+            "forward_obs_exp": "first_forward_obs_exp",
+            "reverse_obs_exp": "first_reverse_obs_exp",
+            "is_break": "is_first_break",
+        }
+    )
+
+    logger.info(
+        "Splitting each transcript into two sections: pre first break and post..."
+    )
+    ht = ht.annotate(
+        section=hl.if_else(
+            ~ht.is_first_break,
+            hl.if_else(
+                ht.locus.position > first_break_ht[ht.transcript].locus.position,
+                hl.format("%s_%s", ht.transcript, "post"),
+                hl.format("%s_%s", ht.transcript, "pre"),
+            ),
+            # If position is breakpoint, add to second section ("post")
+            # this is because the first position of a scan is always missing anyway
+            hl.format("%s_%s", ht.transcript, "post"),
+        )
+    )
+
+    logger.info(
+        "Getting total observed and expected counts for each transcript section..."
+    )
+    ht = ht.annotate(plateau_model=get_plateau_model(ht.locus, ht.cpg, ht.globals))
+    section_group = ht.group_by(ht.section).aggregate(
+        obs=hl.agg.sum(ht.observed),
+        exp=(hl.agg.sum(ht.mu_snp) * ht.plateau_model[1] + ht.plateau_model[0])
+        * ht.coverage_correction,
+    )
+    ht = ht.annotate(
+        break_obs=section_group[ht.section].obs,
+        break_exp=section_group[ht.section].exp,
+    )
+
+    logger.info(
+        "Annotating HT with cumulative observed and expected counts for each transcript section..."
+    )
+    ht = get_fwd_exprs(
+        ht=ht,
+        search_field="section",
+        observed_expr=ht.observed,
+        mu_expr=ht.mu_snp,
+        locus_expr=ht.locus,
+        cpg_expr=ht.cpg,
+        globals_expr=ht.globals,
+        coverage_correction_expr=ht.coverage_correction,
+    )
+
+    logger.info(
+        "Annotating HT with reverse observed and expected counts for each transcript section..."
+    )
+    # cond_expr here skips the first line of the HT, as the cumulative values
+    # of the first line will always be empty when using a scan
+    ht = get_reverse_exprs(
+        ht=ht,
+        # This cond expression searches for the start of the second section
+        cond_expr=hl.len(ht.scan_counts.cumulative_obs) > 1,
+        total_obs_expr=ht.break_obs,
+        total_exp_expr=ht.break_exp,
+        scan_obs_expr=ht.scan_counts.cumulative_obs[ht.section],
+        scan_exp_expr=ht.scan_counts.cumulative_exp[ht.section],
+    )
+    return search_for_break(ht, "section", chisq_threshold)
