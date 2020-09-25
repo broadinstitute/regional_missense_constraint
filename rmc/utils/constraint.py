@@ -365,7 +365,7 @@ def get_section_expr(dpois_expr: hl.expr.ArrayExpression,) -> hl.expr.Float64Exp
 
 def search_for_break(
     ht: hl.Table, search_field: hl.str, chisq_threshold: float,
-) -> Union[hl.Table, None]:
+) -> hl.Table:
     """
     Searches for breakpoints in a transcript. 
 
@@ -387,9 +387,8 @@ def search_for_break(
     :param hl.expr.StringExpression search_field: Field of table to search. Value should be either 'transcript' or 'section'. 
     :param float chisq_threshold: Chi-square significance threshold. 
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
-    :return: Table filtered to rows with maximum chisq value IF max chisq is larger than chisq_threshold.
-        Otherwise, returns None.
-    :rtype: Union[hl.Table, None]
+    :return: Table annotated with whether position is a breakpoint. 
+    :rtype: hl.Table
     """
     logger.info("Adding forward scan section nulls and alts...")
     # Add forwards sections (going through positions from smaller to larger)
@@ -455,11 +454,16 @@ def search_for_break(
     # "The default chi-squared value for one break to be considered significant is
     # 10.8 (p ~ 10e-3) and is 13.8 (p ~ 10e-4) for two breaks. These currently cannot
     # be adjusted."
-    max_chisq = ht.aggregate(hl.agg.max(ht.chisq))
-    if max_chisq >= chisq_threshold:
-        return ht.filter(ht.chisq == max_chisq)
-
-    return None
+    group_ht = ht.group_by(search_field).aggregate(max_chisq=hl.agg.max(ht.chisq))
+    ht = ht.annotate(
+        max_chisq=group_ht[ht.transcript].max_chisq
+    )
+    return ht.annotate(
+        is_break=hl.if_else(
+            (ht.chisq == ht.max_chisq)
+            & (ht.chisq >= chisq_threshold)
+        )
+    )
 
 
 def process_transcripts(ht: hl.Table):
