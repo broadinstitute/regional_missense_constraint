@@ -77,29 +77,30 @@ def calculate_expected(
     )
 
 
-def get_avg_bases_between_mis(ht: hl.Table, build: str) -> int:
+def get_obs_exp_expr(
+    cond_expr: hl.expr.BooleanExpression,
+    obs_expr: hl.expr.Int64Expression,
+    exp_expr: hl.expr.Float64Expression,
+) -> hl.expr.Float64Expression:
     """
-    Returns average number of bases between observed missense variation.
+    Returns observed/expected annotation based on inputs.
 
-    For example, if the total number of bases is 30, and the total number of missense variants is 10,
-    this function will return 3.
+    Caps observed/expected value at 1.
 
-    This function is used to determine the minimum size window to check for significant missense depletion
-    when searching for two simultaneous breaks.
+    Function can generate observed/expected values across the entire transcript or section of a transcript depending on inputs.
+    Function can also generate 'forward' (moving from smaller to larger positions") or 'reverse' (moving from larger to smaller positions)
+    section obs/exp values.
 
-    :param hl.Table ht: Input gnomAD Table.
-    :return: Average number of bases between observed missense variants, rounded to the nearest integer,
-    :rtype: int
+    .. note::
+        `cond_expr` should vary depending on size/direction of section being annotated.  
+
+    :param hl.expr.BooleanExpression cond_expr: Condition to check prior to adding obs/exp expression.
+    :param hl.expr.Int64Expression obs_expr: Expression containing number of observed variants.
+    :param hl.expr.Float64Expression exp_expr: Expression containing number of expected variants.
+    :return: Observed/expected expression.
+    :rtype: hl.expr.Float64Expression
     """
-    logger.info("Getting total number of bases in the exome (based on GENCODE)...")
-    total_bases = get_exome_bases(build)
-
-    logger.info(
-        "Filtering to missense variants in canonical protein coding transcripts..."
-    )
-    ht = filter_to_missense(ht)
-    total_variants = ht.count()
-    return round(total_bases / total_variants)
+    return hl.or_missing(cond_expr, hl.min(obs_expr / exp_expr, 1))
 
 
 def get_cumulative_scan_expr(
@@ -138,32 +139,6 @@ def get_cumulative_scan_expr(
             * coverage_correction_expr,
         ),
     )
-
-
-def get_obs_exp_expr(
-    cond_expr: hl.expr.BooleanExpression,
-    obs_expr: hl.expr.Int64Expression,
-    exp_expr: hl.expr.Float64Expression,
-) -> hl.expr.Float64Expression:
-    """
-    Returns observed/expected annotation based on inputs.
-
-    Caps observed/expected value at 1.
-
-    Function can generate observed/expected values across the entire transcript or section of a transcript depending on inputs.
-    Function can also generate 'forward' (moving from smaller to larger positions") or 'reverse' (moving from larger to smaller positions)
-    section obs/exp values.
-
-    .. note::
-        `cond_expr` should vary depending on size/direction of section being annotated.  
-
-    :param hl.expr.BooleanExpression cond_expr: Condition to check prior to adding obs/exp expression.
-    :param hl.expr.Int64Expression obs_expr: Expression containing number of observed variants.
-    :param hl.expr.Float64Expression exp_expr: Expression containing number of expected variants.
-    :return: Observed/expected expression.
-    :rtype: hl.expr.Float64Expression
-    """
-    return hl.or_missing(cond_expr, hl.min(obs_expr / exp_expr, 1))
 
 
 def get_reverse_obs_exp_expr(
@@ -465,6 +440,31 @@ def search_for_break(
     return ht.annotate(
         is_break=((ht.chisq == ht.max_chisq) & (ht.chisq >= chisq_threshold))
     )
+
+
+def get_avg_bases_between_mis(ht: hl.Table, build: str) -> int:
+    """
+    Returns average number of bases between observed missense variation.
+
+    For example, if the total number of bases is 30, and the total number of missense variants is 10,
+    this function will return 3.
+
+    This function is used to determine the minimum size window to check for significant missense depletion
+    when searching for two simultaneous breaks.
+
+    :param hl.Table ht: Input gnomAD Table.
+    :return: Average number of bases between observed missense variants, rounded to the nearest integer,
+    :rtype: int
+    """
+    logger.info("Getting total number of bases in the exome (based on GENCODE)...")
+    total_bases = get_exome_bases(build)
+
+    logger.info(
+        "Filtering to missense variants in canonical protein coding transcripts..."
+    )
+    ht = filter_to_missense(ht)
+    total_variants = ht.count()
+    return round(total_bases / total_variants)
 
 
 def search_for_two_breaks(
