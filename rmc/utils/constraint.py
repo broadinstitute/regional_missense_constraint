@@ -213,6 +213,105 @@ def get_reverse_obs_exp_expr(
     )
 
 
+def get_fwd_exprs(
+    ht: hl.Table,
+    search_field: str,
+    observed_expr: hl.expr.Int64Expression,
+    mu_expr: hl.expr.Float64Expression,
+    locus_expr: hl.expr.LocusExpression,
+    cpg_expr: hl.expr.BooleanExpression,
+    globals_expr: hl.expr.StructExpression,
+    coverage_correction_expr: hl.expr.Float64Expression,
+) -> hl.Table:
+    """
+    Calls `get_cumulative_scan_expr and `get_obs_exp_expr` to add the forward section cumulative observed, expected, and observed/expected values.
+
+    .. note::
+        'Forward' refers to moving through the transcript from smaller to larger chromosomal positions.
+
+    :param hl.Table ht: Input Table.
+    :param str search_field: Name of field to group by prior to running scan. Should be 'transcript' if searching for the first break.
+        Otherwise, should be transcript section if searching for additional breaks.
+    :param hl.expr.Int64Expression observed_expr: Expression containing number of observed variants per site.
+    :param hl.expr.Float64Expression mu_expr: Expression containing mutation rate probability of site.
+    :param hl.expr.LocusExpression locus_expr: Locus expression.
+    :param hl.expr.BooleanExpression cpg_expr: Expression showing whether site is a CpG site.
+    :param hl.expr.StructExpression globals_expr: Expression containing global annotations of context HT. Must contain plateau models as annotations.
+    :param hl.expr.Float64Expression coverage_correction_expr: Expression containing coverage correction necessary to adjust
+        expected variant counts at low coverage sites.
+    :return: Table with forward values annotated
+    :rtype: hl.Table
+    """
+
+    ht = ht.annotate(
+        scan_counts=get_cumulative_scan_expr(
+            search_expr=ht[search_field],
+            observed_expr=observed_expr,
+            mu_expr=mu_expr,
+            plateau_model=get_plateau_model(locus_expr, cpg_expr, globals_expr),
+            coverage_correction_expr=coverage_correction_expr,
+        )
+    )
+    if search_field == "transcript":
+        ht = ht.annotate(cond_expr=hl.len(ht.scan_counts.cumulative_observed) != 0)
+    else:
+        ht = ht.annotate(cond_expr=hl.len(ht.scan_counts.cumulative_observed) > 1)
+
+    return ht.annotate(
+        forward_obs_exp=get_obs_exp_expr(
+            ht.cond_expr,
+            ht.scan_counts.cumulative_observed[ht[search_field]],
+            ht.scan_counts.cumulative_expected[ht[search_field]],
+        )
+    )
+
+
+def get_reverse_exprs(
+    ht: hl.Table,
+    cond_expr: hl.expr.BooleanExpression,
+    total_obs_expr: hl.expr.Int64Expression,
+    total_exp_expr: hl.expr.Float64Expression,
+    scan_obs_expr: Dict[hl.expr.StringExpression, hl.expr.Int64Expression],
+    scan_exp_expr: Dict[hl.expr.StringExpression, hl.expr.Float64Expression],
+) -> hl.Table:
+    """
+    Calls `get_reverse_obs_exp_expr` and `get_obs_exp_expr` to add the reverse section cumulative observed, expected, and observed/expected values.
+
+    .. note::
+        'Reverse' refers to moving through the transcript from larger to smaller chromosomal positions.
+
+    :param hl.Table ht: Input Table.
+    :param hl.expr.BooleanExpression cond_expr: Condition to check before calculating reverse values.
+    :param hl.expr.Int64Expression total_obs_expr: Expression containing total number of observed variants per transcript (if searching for first break)
+        or per section (if searching for additional breaks).
+    :param hl.expr.Float64Expression total_exp_expr: Expression containing total number of expected variants per transcript (if searching for first break)
+        or per section (if searching for additional breaks).
+    :param Dict[hl.expr.StringExpression, hl.expr.Int64Expression] scan_obs_expr: Expression containing cumulative number of observed variants per transcript
+        (if searching for first break) or per section (if searching for additional breaks).
+    :param Dict[hl.expr.StringExpression, hl.expr.Float64Expression] scan_exp_expr: Expression containing cumulative number of expected variants per transcript
+        (if searching for first break) or per section (if searching for additional breaks).
+    :return: Table with reverse values annotated
+    :rtype: hl.Table
+    """
+    # reverse value = total value - cumulative value
+    ht = ht.annotate(
+        reverse=get_reverse_obs_exp_expr(
+            cond_expr=cond_expr,
+            total_obs_expr=total_obs_expr,
+            total_exp_expr=total_exp_expr,
+            scan_obs_expr=scan_obs_expr,
+            scan_exp_expr=scan_exp_expr,
+        )
+    )
+
+    # Set reverse o/e to missing if reverse expected value is 0 (to avoid NaNs)
+    return ht.annotate(
+        reverse_obs_exp=get_obs_exp_expr(
+            (ht.reverse_counts.exp != 0), ht.reverse_counts.obs, ht.reverse_counts.exp
+        )
+    )
+
+
 def get_null_alt_expr(
     cond_expr: hl.expr.BooleanExpression,
     overall_oe_expr: hl.expr.Float64Expression,
