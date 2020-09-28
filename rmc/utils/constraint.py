@@ -107,8 +107,8 @@ def get_cumulative_scan_expr(
     search_expr: hl.expr.StringExpression,
     observed_expr: hl.expr.Int64Expression,
     mu_expr: hl.expr.Float64Expression,
-    prediction_flag: Tuple(float, int),
-    coverage_correction: float,
+    plateau_model: Tuple[hl.expr.Float64Expression, hl.expr.Float64Expression],
+    coverage_correction_expr: hl.expr.Float64Expression,
 ) -> hl.expr.StructExpression:
     """
     Creates struct with cumulative number of observed and expected variants.
@@ -124,63 +124,21 @@ def get_cumulative_scan_expr(
     :param hl.expr.Float64Expression mu_expr: Mutation rate expression.
     :param hl.expr.Int64Expression observed_expr: Observed variants expression.
     :return: Struct containing the cumulative number of observed and expected variants.
-    :param Tuple(float, int) prediction_flag: Adjustments to mutation rate based on chromosomal location
-        (autosomes/PAR, X non-PAR, Y non-PAR). 
-        E.g., prediction flag for autosomes/PAR is (0.4190964, 11330208)
-    :param float coverage correction: Coverage correction for expected variant counts.
+    :param Tuple[hl.expr.Float64Expression, hl.expr.Float64Expression] plateau_model: Model to determine adjustment to mutation rate
+        based on locus type and CpG status.
+    :param hl.expr.Float64Expression coverage correction: Expression containing coverage correction necessary to adjust
+        expected variant counts at low coverage sites.
     :return: Struct containing scan expressions for cumulative observed and expected variant counts.
     :rtype: hl.expr.StructExpression
     """
     return hl.struct(
-        cumulative_observed=hl.scan.group_by(search_expr, hl.scan.sum(observed_expr)),
-        cumulative_expected=hl.scan.group_by(
+        cumulative_obs=hl.scan.group_by(search_expr, hl.scan.sum(observed_expr)),
+        cumulative_exp=hl.scan.group_by(
             search_expr,
-            (prediction_flag[0] + prediction_flag[1] * hl.scan.sum(mu_expr))
-            * coverage_correction,
+            (plateau_model[1] * hl.scan.sum(mu_expr) + plateau_model[0])
+            * coverage_correction_expr,
         ),
     )
-
-
-def annotate_observed_expected(
-    ht: hl.Table, obs_ht: hl.Table, exp_ht: hl.Table, group_by_transcript: bool = True,
-) -> hl.Table:
-    """
-    Annotates input Table with total number of observed and expected variants.
-
-    Groups Table by transcript or section of transcript. 
-    Also annotates Table with overall observed/expected value.
-
-    .. note::
-        - obs_ht will be grouped by section of transcript only after finding first breakpoint in transcript.
-        - Expects that keys of input ht and obs_ht match.
-
-    :param hl.Table ht: Input Table. 
-    :param hl.Table obs_ht: Table grouped by transcript with observed variant counts per transcript.
-        Expects observed counts field to be named `observed`.
-    :param hl.Table exp_ht: Table grouped by transcript with expected variant counts per transcript.
-        Expects expected counts field to be named `expected`.
-    :param bool group_by_transcript: Whether the observed Table is grouped by transcript. Default is True.
-        If False, expects that observed Table is grouped by section of transcript.
-    :return: Table annotated with observed, expected, and observed/expected values.
-    :rtype: hl.Table.
-    """
-    logger.info("Annotating HT with observed counts...")
-    ht = ht.annotate(_obs=obs_ht.index(ht.key, all_matches=True))
-    ht = ht.transmute(observed=hl.int(hl.is_defined(ht._obs)))
-
-    logger.info("Annotating HT with total expected/observed counts...")
-    if group_by_transcript:
-        group_expr = ht.transcript
-    else:
-        group_expr = ht.section
-    ht = ht.annotate(
-        total_exp=exp_ht[group_expr].expected, total_obs=obs_ht[group_expr].observed,
-    )
-
-    logger.info(
-        "Annotating overall observed/expected value (capped at 1) and returning HT..."
-    )
-    return ht.annotate(overall_obs_exp=hl.min(ht.total_obs / ht.total_exp, 1))
 
 
 def get_reverse_obs_exp_expr(
