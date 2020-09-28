@@ -273,9 +273,8 @@ def get_reverse_exprs(
     )
 
 
-def get_null_alt_expr(
+def get_dpois_expr(
     cond_expr: hl.expr.BooleanExpression,
-    overall_oe_expr: hl.expr.Float64Expression,
     section_oe_expr: hl.expr.Float64Expression,
     obs_expr: Union[
         Dict[hl.expr.StringExpression, hl.expr.Int64Expression], hl.expr.Int64Expression
@@ -320,17 +319,29 @@ def get_null_alt_expr(
              is defined when searching for a second additional break.
 
     :param hl.expr.BooleanExpression cond_expr: Conditional expression to check before calculating null and alt values.
-    :param hl.expr.Float64Expression overall_oe_expr: Expression of overall observed/expected value.
     :param hl.expr.Float64Expression section_oe_expr: Expression of section observed/expected value.
     :param Union[Dict[hl.expr.StringExpression, hl.expr.Int64Expression], hl.expr.Int64Expression] obs_expr: Expression containing observed variants count.
     :param Union[Dict[hl.expr.StringExpression, hl.expr.Float64Expression], hl.expr.Float64Expression] exp_expr: Expression containing expected variants count.
     :return: Struct containing forward or reverse null and alt values (either when searching for first or second break).
     :rtype: hl.expr.StructExpression
     """
-    return hl.struct(
-        null=hl.or_missing(cond_expr, hl.dpois(obs_expr, exp_expr * overall_oe_expr)),
-        alt=hl.or_missing(cond_expr, hl.dpois(obs_expr, exp_expr * section_oe_expr)),
-    )
+    return hl.or_missing(cond_expr, hl.dpois(obs_expr, exp_expr * section_oe_expr))
+
+
+def get_section_expr(dpois_expr: hl.expr.ArrayExpression,) -> hl.expr.Float64Expression:
+    """
+    Builds null or alt model by multiplying all section null or alt distributions.
+
+    For example, when checking for the first break in a transcript, the transcript is broken into two sections:
+    pre-breakpoint and post-breakpoint. Each section's null and alt distributions must be multiplied 
+    to later test the significance of the break.
+
+    :param hl.expr.ArrayExpression dpois_expr: ArrayExpression that contains all section nulls or alts. 
+        Needs to be reduced to single float by multiplying each number in the array.
+    :return: Overall section distribution.
+    :rtype: hl.expr.Float64Expression
+    """
+    return hl.fold(lambda i, j: i * j, 1, dpois_expr)
 
 
 def search_for_break(
