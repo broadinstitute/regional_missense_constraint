@@ -277,7 +277,7 @@ def get_coverage_correction_expr(
     """
     if coverage == 0:
         return 0
-    if coverage >= 1 & coverage < high_cov_cutoff:
+    if coverage >= 1 and coverage < high_cov_cutoff:
         return coverage_model[1] * hl.log(coverage) + coverage_model[0]
     return 1
 
@@ -297,10 +297,11 @@ def get_plateau_model(
     :param hl.expr.BooleanExpression: Expression showing whether site is a CpG site.
     :param hl.expr.StructExpression globals_expr: Expression containing global annotations of context HT. Must contain plateau models as annotations.
     """
+    # NOTE: not sure if need to add `hl.literal` around the plateau models
     if locus_expr.in_x_nonpar():
-        plateau_model = hl.literal(globals_expr.plateau_x_models.total)[cpg_expr]
+        plateau_model = globals_expr.plateau_x_models.total[cpg_expr]
     elif locus_expr.in_y_nonpar():
-        plateau_model = hl.literal(globals_expr.plateau_y_models.total)[cpg_expr]
+        plateau_model = globals_expr.plateau_y_models.total[cpg_expr]
     else:
-        plateau_model = hl.literal(globals_expr.plateau_model.total)[cpg_expr]
+        plateau_model = globals_expr.plateau_model.total[cpg_expr]
     return plateau_model
