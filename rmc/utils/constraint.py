@@ -122,7 +122,7 @@ def get_cumulative_scan_expr(
     :param hl.expr.Int64Expression observed_expr: Observed variants expression.
     :return: Struct containing the cumulative number of observed and expected variants.
     :param Tuple[hl.expr.Float64Expression, hl.expr.Float64Expression] plateau_model: Model to determine adjustment to mutation rate
-        based on locus type and variant type (CpG transition, no-CpG transition, transversion).
+        based on locus type and CpG status.
     :param hl.expr.Float64Expression coverage correction: Expression containing coverage correction necessary to adjust
         expected variant counts at low coverage sites.
     :return: Struct containing scan expressions for cumulative observed and expected variant counts.
