@@ -3,8 +3,14 @@ from typing import Dict, Tuple, Union
 
 import hail as hl
 
-# from gnomad_lof.constraint_utils.generic import count_variants
-from rmc.utils.generic import keep_criteria
+from gnomad.utils.reference_genome import get_reference_genome
+from gnomad_lof.constraint_utils.generic import annotate_variant_types
+from rmc.utils.generic import (
+    filter_to_missense,
+    get_exome_bases,
+    get_plateau_model,
+    keep_criteria,
+)
 
 
 logging.basicConfig(
@@ -17,9 +23,10 @@ logger.setLevel(logging.INFO)
 
 def calculate_observed(ht: hl.Table, exac: bool) -> hl.Table:
     """
-    Groups input Table by transcript and aggregates observed variants count per transcript.
+    Groups input Table by transcript, filters based on `keep_criteria`,
+    and aggregates observed variants count per transcript.
 
-    :param Table ht: Input Table.
+    :param hl.Table ht: Input Table.
     :param bool exac: Whether the input Table is ExAC data.
     :return: Table annotated with observed variant counts.
     :rtype: hl.Table
@@ -28,76 +35,72 @@ def calculate_observed(ht: hl.Table, exac: bool) -> hl.Table:
     return ht.group_by(ht.transcript).aggregate(observed=hl.agg.count())
 
 
-def get_coverage_correction(coverage: float) -> float:
-    """
-    Gets coverage correction for expected variants count.
-
-    :param float ht: Input coverage. Should be median coverage at position.
-    :return: Coverage correction float.
-    :rtype: float
-    """
-    if coverage < 1:
-        return 0.089
-    if coverage >= 1 & coverage < 50:
-        return 0.089 + 0.217 * hl.log(coverage)
-    return 1
-
-
-def calculate_expected(context_ht: hl.Table, coverage_ht: hl.Table) -> hl.Table:
+def calculate_expected(
+    context_ht: hl.Table,
+    plateau_models: Dict[str, Tuple[float, float]],
+    coverage_correction_str: str,
+) -> hl.Table:
     """
     Returns table of transcripts and the total number of expected variants per transcript.
 
     Expected variants count is adjusted by mutation rate, divergence score, and region type.
 
     .. note::
-        This function is currently ExAC-specific.
-        TODO: look into whether can reuse models from gnomad_lof for gnomAD v2 exomes
+        Expects that context_ht is annotated with mutation rate.
 
-    :param Table context_ht: Context Table.
+    :param hl.Table context_ht: Context Table.
+    :param Dict[str, Tuple[float, float]]] plateau_model: Models to determine adjustment to mutation rate
+        based on locus type and CpG status.
+    :param str coverage_correction_str: Name of coverage correction field in input Table. Default is 'coverage_correction'.
+        This field is necessary for adjusting expected variant counts at low coverage sites.
     :return: Table grouped by transcript with expected variant counts per transcript.
     :rtype: hl.Table
     """
-    logger.info("Annotating context HT with median ExAC coverage...")
-    context_ht = context_ht.annotate(exac_cov=coverage_ht[context_ht.key].median)
-
-    logger.info("Adjusting mutation rate with divergence scores...")
-    # p_mut2 = p_mut1*(1 + (0.31898*div_score))
-    context_ht = context_ht.annotate(
-        mu=context_ht.mu_snp * (1 + (0.31898 * context_ht.div)) * 0.9822219
-    )
+    logger.info("Pulling mutation rate adjustment from plateau model...")
+    context_ht = annotate_variant_types(context_ht)
+    model = hl.literal(plateau_models.total)[context_ht.cpg]
 
     logger.info("Grouping by transcript...")
     context_ht = context_ht.group_by(
         context_ht.transcript, context_ht.region_type, context_ht.coverage
-    ).aggregate(raw_expected=hl.agg.sum(context_ht.mu))
+    ).aggregate(raw_expected=hl.agg.sum(context_ht.mu_snp))
 
     logger.info("Processing context HT to calculate number of expected variants...")
-    # Annotate prediction flag based on context HT locus type
-    # Region type annotation added when filtering alt and decoy contigs
+    # Adjust mutation rate with HT with plateau model
     context_ht = context_ht.transmute(
-        expected=hl.case()
-        .when(
-            context_ht.region_type == "x_nonpar",
-            (0.3715167 + 7796945 * context_ht.raw_expected),
-        )
-        .when(
-            context_ht.region_type == "y",
-            (0.05330181 + 2457366 * context_ht.raw_expected),
-        )
-        .default(0.4190964 + 11330208 * context_ht.raw_expected)
+        mu_agg=context_ht.raw_expected * model[1] + model[0]
     )
 
     # Adjust expected counts based on depth
-    coverage_correction = get_coverage_correction(
-        context_ht.aggregate(hl.agg.approx_median(context_ht.coverage))
-    )
-    context_ht = context_ht.transmute(
-        expected=context_ht.expected * coverage_correction
+    return context_ht.annotate(
+        expected=context_ht.mu_agg * context_ht[coverage_correction_str],
     )
 
-    return context_ht.group_by("transcript").aggregate(
-        expected=hl.agg.sum(context_ht.expected)
-    )
+
+def get_obs_exp_expr(
+    cond_expr: hl.expr.BooleanExpression,
+    obs_expr: hl.expr.Int64Expression,
+    exp_expr: hl.expr.Float64Expression,
+) -> hl.expr.Float64Expression:
+    """
+    Returns observed/expected annotation based on inputs.
+
+    Caps observed/expected value at 1.
+
+    Function can generate observed/expected values across the entire transcript or section of a transcript depending on inputs.
+    Function can also generate 'forward' (moving from smaller to larger positions") or 'reverse' (moving from larger to smaller positions)
+    section obs/exp values.
+
+    .. note::
+        `cond_expr` should vary depending on size/direction of section being annotated.  
+
+    :param hl.expr.BooleanExpression cond_expr: Condition to check prior to adding obs/exp expression.
+    :param hl.expr.Int64Expression obs_expr: Expression containing number of observed variants.
+    :param hl.expr.Float64Expression exp_expr: Expression containing number of expected variants.
+    :return: Observed/expected expression.
+    :rtype: hl.expr.Float64Expression
+    """
+    return hl.or_missing(cond_expr, hl.min(obs_expr / exp_expr, 1))
 
 
 def get_cumulative_scan_expr(
