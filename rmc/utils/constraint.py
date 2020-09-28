@@ -227,7 +227,7 @@ def get_fwd_exprs(
     Calls `get_cumulative_scan_expr and `get_obs_exp_expr` to add the forward section cumulative observed, expected, and observed/expected values.
 
     .. note::
-        'Forward' refers to moving through the transcript from smaller to larger positions.
+        'Forward' refers to moving through the transcript from smaller to larger chromosomal positions.
 
     :param hl.Table ht: Input Table.
     :param str search_field: Name of field to group by prior to running scan. Should be 'transcript' if searching for the first break.
@@ -278,7 +278,7 @@ def get_reverse_exprs(
     Calls `get_reverse_obs_exp_expr` and `get_obs_exp_expr` to add the reverse section cumulative observed, expected, and observed/expected values.
 
     .. note::
-        'Reverse' refers to moving through the transcript from larger to smaller positions.
+        'Reverse' refers to moving through the transcript from larger to smaller chromosomal positions.
 
     :param hl.Table ht: Input Table.
     :param hl.expr.BooleanExpression cond_expr: Condition to check before calculating reverse values.
