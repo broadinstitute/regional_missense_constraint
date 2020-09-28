@@ -50,7 +50,7 @@ def calculate_expected(
 
     :param hl.Table context_ht: Context Table.
     :param Dict[str, Tuple[float, float]]] plateau_model: Models to determine adjustment to mutation rate
-        based on locus type and variant type (CpG transition, no-CpG transition, transversion).
+        based on locus type and CpG status.
     :param str coverage_correction_str: Name of coverage correction field in input Table. Default is 'coverage_correction'.
         This field is necessary for adjusting expected variant counts at low coverage sites.
     :return: Table grouped by transcript with expected variant counts per transcript.
