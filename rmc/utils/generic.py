@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Tuple, Union
+from typing import Dict, Tuple
 
 import hail as hl
 
@@ -133,13 +133,13 @@ def process_context_ht(
         ht = grch38.full_context.ht()
         output_path = grch38.processed_context.path
 
-    # prepare_ht annotates HT with: ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
+    # `prepare_ht` annotates HT with: ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
     ht = prepare_ht(ht, trimers)
 
     logger.info(
-        "Filtering to missense variants in canonical protein coding transcripts..."
+        "Filtering to canonical transcripts and annotating with most severe consequence..."
     )
-    ht = filter_to_missense(ht)
+    ht = process_vep(ht)
 
     logger.info("Annotating with mutation rate...")
     # Mutation rate HT is keyed by context, ref, alt, methylation level
@@ -147,7 +147,15 @@ def process_context_ht(
     ht, grouping = annotate_constraint_groupings(ht)
     ht = ht.filter(hl.is_defined(ht.exome_coverage))
     ht = ht.select(
-        "context", "ref", "alt", "methylation_level", "exome_coverage", *grouping
+        "context",
+        "ref",
+        "alt",
+        "methylation_level",
+        "exome_coverage",
+        "cpg",
+        "transition",
+        "variant_type",
+        *grouping,
     )
     ht = ht.annotate(
         mu_snp=mu_ht[ht.context, ht.ref, ht.alt, ht.methylation_level].mu_snp
@@ -207,13 +215,19 @@ def keep_criteria(ht: hl.Table, exac: bool) -> hl.expr.BooleanExpression:
     return keep_criteria
 
 
-def filter_to_missense(ht: hl.Table, n_partitions: int = 5000) -> hl.Table:
+def process_vep(
+    ht: hl.Table, filter: bool = False, csq: str = None, n_partitions: int = 5000
+) -> hl.Table:
     """
-    Filters input Table to missense variants in canonical transcripts only.
+    Filters input Table to canonical transcripts only.
 
-    :param Table ht: Input Table to be filtered.
+    Option to filter Table to specific variant consequence (csq).
+
+    :param Table ht: Input Table.
+    :param bool filter: Whether to filter Table to a specific consequence. Default is False.
+    :param str csq: Desired consequence. Default is None. Must be specified if filter is True.
     :param int n_partitions: Number of desired partitions for output.
-    :return: Table filtered to only missense variants.
+    :return: Table filtered to canonical transcripts with option to filter to specific variant consequence.
     :rtype: hl.Table
     """
     if "was_split" not in ht.row:
@@ -231,10 +245,9 @@ def filter_to_missense(ht: hl.Table, n_partitions: int = 5000) -> hl.Table:
     ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
     ht = ht.explode(ht.transcript_consequences)
 
-    logger.info("Filtering to missense variants...")
-    ht = ht.filter(
-        ht.transcript_consequences.most_severe_consequence == "missense_variant"
-    )
+    if filter:
+        logger.info(f"Filtering to {csq}...")
+        ht = ht.filter(ht.transcript_consequences.most_severe_consequence == csq)
     return ht.naive_coalesce(n_partitions)
 
 
@@ -260,7 +273,7 @@ def get_coverage_correction_expr(
     coverage: hl.expr.Float64Expression,
     coverage_model: Tuple[float, float],
     high_cov_cutoff: int = 40,
-) -> Union[float, hl.expr.Float64Expression]:
+) -> hl.expr.Float64Expression:
     """
     Gets coverage correction for expected variants count.
 
@@ -274,33 +287,37 @@ def get_coverage_correction_expr(
     :return: Coverage correction expression.
     :rtype: hl.expr.Float64Expression
     """
-    if coverage == 0:
-        return 0
-    if coverage >= 1 and coverage < high_cov_cutoff:
-        return coverage_model[1] * hl.log(coverage) + coverage_model[0]
-    return 1
+    return (
+        hl.case()
+        .when(coverage == 0, 0.0)
+        .when(
+            (coverage >= 1) & (coverage < high_cov_cutoff),
+            coverage_model[1] * hl.log(coverage) + coverage_model[0],
+        )
+        .default(1.0)
+    )
 
 
 def get_plateau_model(
     locus_expr: hl.expr.LocusExpression,
     cpg_expr: hl.expr.BooleanExpression,
     globals_expr: hl.expr.StructExpression,
-):
+) -> hl.expr.Float64Expression:
     """
-    Gets model to determine adjustment to mutation rate based on locus type and variant type (CpG transition, no-CpG transition, transversion).
+    Gets model to determine adjustment to mutation rate based on locus type and CpG status.
 
     .. note::
         This function expects that the context Table has each plateau model (autosome, X, Y) added as global annotations.
 
     :param hl.expr.LocusExpression locus_expr: Locus expression.
-    :param hl.expr.BooleanExpression: Expression showing whether site is a CpG site.
+    :param hl.expr.BooleanExpression: Expression describing whether site is a CpG site.
     :param hl.expr.StructExpression globals_expr: Expression containing global annotations of context HT. Must contain plateau models as annotations.
+    :return: Plateau model for locus type.
+    :rtype: hl.expr.Float64Expression
     """
-    # NOTE: not sure if need to add `hl.literal` around the plateau models
-    if locus_expr.in_x_nonpar():
-        plateau_model = globals_expr.plateau_x_models.total[cpg_expr]
-    elif locus_expr.in_y_nonpar():
-        plateau_model = globals_expr.plateau_y_models.total[cpg_expr]
-    else:
-        plateau_model = globals_expr.plateau_model.total[cpg_expr]
-    return plateau_model
+    return (
+        hl.case()
+        .when(locus_expr.in_x_nonpar(), globals_expr.plateau_x_models.total[cpg_expr])
+        .when(locus_expr.in_y_nonpar(), globals_expr.plateau_y_models.total[cpg_expr])
+        .default(globals_expr.plateau_model.total[cpg_expr])
+    )
