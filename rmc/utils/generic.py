@@ -154,7 +154,8 @@ def process_context_ht(
         "exome_coverage",
         "cpg",
         "transition",
-        "variant_type" * grouping,
+        "variant_type",
+        *grouping,
     )
     ht = ht.annotate(
         mu_snp=mu_ht[ht.context, ht.ref, ht.alt, ht.methylation_level].mu_snp
