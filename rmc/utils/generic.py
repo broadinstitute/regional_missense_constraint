@@ -133,13 +133,8 @@ def process_context_ht(
         ht = grch38.full_context.ht()
         output_path = grch38.processed_context.path
 
-    # prepare_ht annotates HT with: ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
+    # `prepare_ht` annotates HT with: ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
     ht = prepare_ht(ht, trimers)
-
-    logger.info(
-        "Filtering to missense variants in canonical protein coding transcripts..."
-    )
-    ht = filter_to_missense(ht)
 
     logger.info("Annotating with mutation rate...")
     # Mutation rate HT is keyed by context, ref, alt, methylation level
@@ -147,7 +142,14 @@ def process_context_ht(
     ht, grouping = annotate_constraint_groupings(ht)
     ht = ht.filter(hl.is_defined(ht.exome_coverage))
     ht = ht.select(
-        "context", "ref", "alt", "methylation_level", "exome_coverage", *grouping
+        "context",
+        "ref",
+        "alt",
+        "methylation_level",
+        "exome_coverage",
+        "cpg",
+        "transition",
+        "variant_type" * grouping,
     )
     ht = ht.annotate(
         mu_snp=mu_ht[ht.context, ht.ref, ht.alt, ht.methylation_level].mu_snp
