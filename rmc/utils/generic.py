@@ -136,6 +136,11 @@ def process_context_ht(
     # `prepare_ht` annotates HT with: ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
     ht = prepare_ht(ht, trimers)
 
+    logger.info(
+        "Filtering to canonical transcripts and annotating with most severe consequence..."
+    )
+    ht = process_vep(ht)
+
     logger.info("Annotating with mutation rate...")
     # Mutation rate HT is keyed by context, ref, alt, methylation level
     mu_ht = mutation_rate.ht()
@@ -209,13 +214,19 @@ def keep_criteria(ht: hl.Table, exac: bool) -> hl.expr.BooleanExpression:
     return keep_criteria
 
 
-def filter_to_missense(ht: hl.Table, n_partitions: int = 5000) -> hl.Table:
+def process_vep(
+    ht: hl.Table, filter: bool = False, csq: str = None, n_partitions: int = 5000
+) -> hl.Table:
     """
-    Filters input Table to missense variants in canonical transcripts only.
+    Filters input Table to canonical transcripts only.
 
-    :param Table ht: Input Table to be filtered.
+    Option to filter Table to specific variant consequence (csq).
+
+    :param Table ht: Input Table.
+    :param bool filter: Whether to filter Table to a specific consequence. Default is False.
+    :param str csq: Desired consequence. Default is None. Must be specified if filter is True.
     :param int n_partitions: Number of desired partitions for output.
-    :return: Table filtered to only missense variants.
+    :return: Table filtered to canonical transcripts with option to filter to specific variant consequence.
     :rtype: hl.Table
     """
     if "was_split" not in ht.row:
@@ -233,10 +244,9 @@ def filter_to_missense(ht: hl.Table, n_partitions: int = 5000) -> hl.Table:
     ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
     ht = ht.explode(ht.transcript_consequences)
 
-    logger.info("Filtering to missense variants...")
-    ht = ht.filter(
-        ht.transcript_consequences.most_severe_consequence == "missense_variant"
-    )
+    if filter:
+        logger.info(f"Filtering to {csq}...")
+        ht = ht.filter(ht.transcript_consequences.most_severe_consequence == csq)
     return ht.naive_coalesce(n_partitions)
 
 
