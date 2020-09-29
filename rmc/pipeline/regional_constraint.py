@@ -5,8 +5,8 @@ import hail as hl
 
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
-from gnomad_lof.constraint_utils.generic import prepare_ht
-from rmc.resources.basics import logging_path
+from gnomad_lof.constraint_utils.constraint_basics import prepare_ht
+from rmc.resources.basics import LOGGING_PATH
 from rmc.resources.grch37.exac import filtered_exac
 from rmc.resources.grch37.gnomad import filtered_exomes, processed_exomes
 from rmc.resources.grch37.reference_data import processed_context
@@ -88,7 +88,7 @@ def main(args):
 
     finally:
         logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(logging_path)
+        hl.copy_log(LOGGING_PATH)
 
 
 if __name__ == "__main__":
@@ -107,7 +107,7 @@ if __name__ == "__main__":
     )
 
     parser.add_argument(
-        "--trimers", help="Use trimers instead of heptamers", action="store_false"
+        "--trimers", help="Use trimers instead of heptamers", action="store_true"
     )
     parser.add_argument(
         "--exac", help="Use ExAC Table (not gnomAD Table)", action="store_true"
@@ -118,7 +118,7 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--pre_process_data", help="Pre-process data", action="store_true"
+        "--overwrite", help="Overwrite existing data", action="store_true"
     )
     parser.add_argument(
         "--slack_channel", help="Send message to Slack channel/user", default="@kc"
