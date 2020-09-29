@@ -214,9 +214,9 @@ def get_fwd_exprs(
         )
     )
     if search_field == "transcript":
-        ht = ht.annotate(cond_expr=hl.len(ht.scan_counts.cumulative_observed) != 0)
+        ht = ht.annotate(cond_expr=hl.len(ht.scan_counts.cumulative_obs) != 0)
     else:
-        ht = ht.annotate(cond_expr=hl.len(ht.scan_counts.cumulative_observed) > 1)
+        ht = ht.annotate(cond_expr=hl.len(ht.scan_counts.cumulative_obs) > 1)
 
     return ht.annotate(
         forward_obs_exp=get_obs_exp_expr(
@@ -268,7 +268,7 @@ def get_reverse_exprs(
     # Set reverse o/e to missing if reverse expected value is 0 (to avoid NaNs)
     return ht.annotate(
         reverse_obs_exp=get_obs_exp_expr(
-            (ht.reverse_counts.exp != 0), ht.reverse_counts.obs, ht.reverse_counts.exp
+            (ht.reverse_counts.exp != 0), ht.reverse.obs, ht.reverse.exp
         )
     )
 
