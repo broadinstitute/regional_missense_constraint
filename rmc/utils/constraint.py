@@ -322,7 +322,7 @@ def search_for_break(
         section_alts=ht.section_alts.append(
             get_dpois_expr(
                 cond_expr=hl.len(ht.scan_counts.cumulative_obs) != 0,
-                section_oe_expr=ht.section_obs_exp,
+                section_oe_expr=ht.forward_obs_exp,
                 obs_expr=ht.scan_counts.cumulative_obs[ht[search_field]],
                 exp_expr=ht.scan_counts.cumulative_exp[ht[search_field]],
             )
