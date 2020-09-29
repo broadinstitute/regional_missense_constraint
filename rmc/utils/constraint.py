@@ -462,8 +462,8 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
     ht = get_reverse_exprs(
         ht=ht,
         cond_expr=hl.len(ht.scan_counts.cumulative_obs) != 0,
-        total_obs_expr=ht.observed,
-        total_exp_expr=ht.expected,
+        total_obs_expr=ht.total_obs,
+        total_exp_expr=ht.total_exp,
         scan_obs_expr=ht.scan_counts.cumulative_obs[ht.transcript],
         scan_exp_expr=ht.scan_counts.cumulative_exp[ht.transcript],
     )
