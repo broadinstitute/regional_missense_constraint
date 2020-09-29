@@ -349,7 +349,7 @@ def search_for_break(
     obs_ht: hl.Table,
     exp_ht: hl.Table,
     search_field: hl.expr.StringExpression,
-    prediction_flag: Tuple(float, int),
+    prediction_flag: Tuple[float, int],
     chisq_threshold: float,
     group_by_transcript: bool,
 ) -> Union[hl.Table, None]:

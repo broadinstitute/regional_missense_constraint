@@ -1,11 +1,10 @@
 import hail as hl
 
 from gnomad.resources.resource_utils import (
-    import_gencode,
     TableResource,
     VersionedTableResource,
 )
-from rmc.resources.resource_utils import RESOURCE_PREFIX, FLAGSHIP_LOF
+from rmc.resources.resource_utils import FLAGSHIP_LOF, import_gencode, RESOURCE_PREFIX
 
 
 ## Reference genome related resources
@@ -47,7 +46,7 @@ gencode = VersionedTableResource(
 processed_gencode = VersionedTableResource(
     default_version="v19",
     versions={
-        "19": TableResource(
+        "v19": TableResource(
             path=f"{RESOURCE_PREFIX}/GRCh37/reference_data/ht/gencode.v19.exons.ht",
         )
     },
