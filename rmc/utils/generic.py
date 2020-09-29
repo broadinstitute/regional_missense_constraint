@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Tuple, Union
+from typing import Dict, Tuple
 
 import hail as hl
 
@@ -260,7 +260,7 @@ def get_coverage_correction_expr(
     coverage: hl.expr.Float64Expression,
     coverage_model: Tuple[float, float],
     high_cov_cutoff: int = 40,
-) -> Union[float, hl.expr.Float64Expression]:
+) -> hl.expr.Float64Expression:
     """
     Gets coverage correction for expected variants count.
 
@@ -274,33 +274,37 @@ def get_coverage_correction_expr(
     :return: Coverage correction expression.
     :rtype: hl.expr.Float64Expression
     """
-    if coverage == 0:
-        return 0
-    if coverage >= 1 and coverage < high_cov_cutoff:
-        return coverage_model[1] * hl.log(coverage) + coverage_model[0]
-    return 1
+    return (
+        hl.case()
+        .when(coverage == 0, 0.0)
+        .when(
+            (coverage >= 1) & (coverage < high_cov_cutoff),
+            coverage_model[1] * hl.log(coverage) + coverage_model[0],
+        )
+        .default(1.0)
+    )
 
 
 def get_plateau_model(
     locus_expr: hl.expr.LocusExpression,
     cpg_expr: hl.expr.BooleanExpression,
     globals_expr: hl.expr.StructExpression,
-):
+) -> hl.expr.Float64Expression:
     """
-    Gets model to determine adjustment to mutation rate based on locus type and variant type (CpG transition, no-CpG transition, transversion).
+    Gets model to determine adjustment to mutation rate based on locus type and CpG status.
 
     .. note::
         This function expects that the context Table has each plateau model (autosome, X, Y) added as global annotations.
 
     :param hl.expr.LocusExpression locus_expr: Locus expression.
-    :param hl.expr.BooleanExpression: Expression showing whether site is a CpG site.
+    :param hl.expr.BooleanExpression: Expression describing whether site is a CpG site.
     :param hl.expr.StructExpression globals_expr: Expression containing global annotations of context HT. Must contain plateau models as annotations.
+    :return: Plateau model for locus type.
+    :rtype: hl.expr.Float64Expression
     """
-    # NOTE: not sure if need to add `hl.literal` around the plateau models
-    if locus_expr.in_x_nonpar():
-        plateau_model = globals_expr.plateau_x_models.total[cpg_expr]
-    elif locus_expr.in_y_nonpar():
-        plateau_model = globals_expr.plateau_y_models.total[cpg_expr]
-    else:
-        plateau_model = globals_expr.plateau_model.total[cpg_expr]
-    return plateau_model
+    return (
+        hl.case()
+        .when(locus_expr.in_x_nonpar(), globals_expr.plateau_x_models.total[cpg_expr])
+        .when(locus_expr.in_y_nonpar(), globals_expr.plateau_y_models.total[cpg_expr])
+        .default(globals_expr.plateau_model.total[cpg_expr])
+    )
