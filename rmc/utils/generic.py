@@ -229,9 +229,7 @@ def filter_to_missense(ht: hl.Table, n_partitions: int = 5000) -> hl.Table:
     logger.info("Annotating HT with most severe consequence...")
     ht = add_most_severe_csq_to_tc_within_ht(ht)
     ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
-    ht = ht.explode(
-        ht.transcript_consequences
-    )
+    ht = ht.explode(ht.transcript_consequences)
 
     logger.info("Filtering to missense variants...")
     ht = ht.filter(
