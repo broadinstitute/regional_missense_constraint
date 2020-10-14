@@ -5,9 +5,8 @@ import hail as hl
 
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
-from gnomad_lof.constraint_utils.constraint_basics import build_models
-from gnomad_lof.constraint_utils.generic import prepare_ht
-from rmc.resources.basics import logging_path
+from gnomad_lof.constraint_utils.constraint_basics import build_models, prepare_ht
+from rmc.resources.basics import LOGGING_PATH
 from rmc.resources.grch37.exac import filtered_exac
 from rmc.resources.grch37.gnomad import (
     constraint_ht,
@@ -173,7 +172,7 @@ def main(args):
 
     finally:
         logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(logging_path)
+        hl.copy_log(LOGGING_PATH)
 
 
 if __name__ == "__main__":
@@ -181,7 +180,7 @@ if __name__ == "__main__":
         "This script searches for regional missense constraint in gnomAD"
     )
     parser.add_argument(
-        "--trimers", help="Use trimers instead of heptamers", action="store_false"
+        "--trimers", help="Use trimers instead of heptamers", action="store_true"
     )
     parser.add_argument(
         "--exac", help="Use ExAC Table (not gnomAD Table)", action="store_true"
@@ -204,6 +203,9 @@ if __name__ == "__main__":
         "--skip_calc_exp",
         help="Skip observed and expected variant calculations per transcript. Relevant only to gnomAD v2.1.1!",
         action="store_true",
+    )
+    parser.add_argument(
+        "--overwrite", help="Overwrite existing data", action="store_true"
     )
     parser.add_argument(
         "--slack_channel", help="Send message to Slack channel/user", default="@kc"
