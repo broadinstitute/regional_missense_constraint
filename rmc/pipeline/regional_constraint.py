@@ -166,9 +166,7 @@ def main(args):
         logger.info(
             "Annotating context HT with number of observed variants per site..."
         )
-        context_ht = context_ht.annotate(
-            _obs=obs_ht.index(context_ht.key, all_matches=True)
-        )
+        context_ht = context_ht.annotate(_obs=obs_ht.index(context_ht.key))
         context_ht = context_ht.transmute(
             observed=hl.int(hl.is_defined(context_ht._obs))
         )
