@@ -369,6 +369,47 @@ def search_for_break(
             scan_exp_expr=ht.cumulative_expected[search_field],
         )
     )
+    
+    # Set reverse o/e to missing if reverse expected value is 0 (to avoid NaNs)
+    # Also cap reverse observed/expected at 1
+    ht = ht.annotate(
+        reverse_obs_exp=hl.or_missing(
+            ht.reverse_counts.exp != 0,
+            hl.min(ht.reverse_counts.obs / ht.reverse_counts.exp, 1),
+        )
+    )
+
+    logger.info("Adding reverse section nulls and alts...")
+    ht = ht.annotate(
+        reverse=get_null_alt_expr(
+            cond_expr=hl.len(ht.scan_counts.cumulative_observed) != 0,
+            overall_oe_expr=ht.overall_obs_exp,
+            section_oe_expr=ht.obs_exp,
+            obs_expr=ht.scan_counts.cumulative_observed[search_field],
+            exp_expr=ht.scan_counts.cumulative_expected[search_field],
+        )
+    )
+
+    logger.info("Multiplying all section nulls and all section alts...")
+    # Kaitlin stores all nulls/alts in section_null and section_alt and then multiplies
+    # e.g., p1 = prod(section_null_ps)
+    ht = ht.annotate(
+        section_null=ht.forward.null * ht.reverse.null,
+        section_alt=ht.forward.alt * ht.reverse.alt,
+    )
+
+    logger.info("Adding chisq value and getting max chisq...")
+    ht = ht.annotate(chisq=(2 * (hl.log(ht.section_alt) - hl.log(ht.section_null))))
+
+    # "The default chi-squared value for one break to be considered significant is
+    # 10.8 (p ~ 10e-3) and is 13.8 (p ~ 10e-4) for two breaks. These currently cannot
+    # be adjusted."
+    max_chisq = ht.aggregate(hl.agg.max(ht.chisq))
+    if max_chisq >= chisq_threshold:
+        return ht.filter(ht.chisq == max_chisq)
+
+    return None
+
 
 
 def get_avg_bases_between_mis(ht: hl.Table, build: str) -> int:
@@ -397,7 +438,11 @@ def get_avg_bases_between_mis(ht: hl.Table, build: str) -> int:
 
 
 def search_for_two_breaks(
-    ht: hl.Table, exome_ht: hl.Table, transcript: str, chisq_threshold: float
+    ht: hl.Table,
+    exome_ht: hl.Table,
+    transcript: str,
+    chisq_threshold: float,
+    num_obs_var: int = 10,
 ) -> Union[Tuple(float, Tuple(int, int)), None]:
     """
     Searches for evidence of constraint within a set window size/number of base pairs.
@@ -413,6 +458,8 @@ def search_for_two_breaks(
     :param str transcript: Transcript of interest.
     :param float chisq_threshold: Chi-square significance threshold. 
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
+    :param int num_obs_var: Number of observed variants. Used when determining the window size for simultaneous breaks. 
+        Default is 10, meaning that the window size for simultaneous breaks is the average number of base pairs required to see 10 observed variants.
     :return: Tuple of largest chi-square value and breakpoint positions if significant break was found. Otherwise, None.
     :rtype: Union[hl.Table, None]
     """
@@ -420,7 +467,7 @@ def search_for_two_breaks(
         get_avg_bases_between_mis(
             exome_ht, get_reference_genome(exome_ht.head(1).locus).name
         )
-        * 10
+        * num_obs_var
     )
     logger.info(
         f"Number of bases to search for constraint (size for simultaneous breaks): {break_size}"
@@ -464,42 +511,3 @@ def search_for_two_breaks(
         return (best_chisq, breakpoints)
     return None
 
-    # Set reverse o/e to missing if reverse expected value is 0 (to avoid NaNs)
-    # Also cap reverse observed/expected at 1
-    ht = ht.annotate(
-        reverse_obs_exp=hl.or_missing(
-            ht.reverse_counts.exp != 0,
-            hl.min(ht.reverse_counts.obs / ht.reverse_counts.exp, 1),
-        )
-    )
-
-    logger.info("Adding reverse section nulls and alts...")
-    ht = ht.annotate(
-        reverse=get_null_alt_expr(
-            cond_expr=hl.len(ht.scan_counts.cumulative_observed) != 0,
-            overall_oe_expr=ht.overall_obs_exp,
-            section_oe_expr=ht.obs_exp,
-            obs_expr=ht.scan_counts.cumulative_observed[search_field],
-            exp_expr=ht.scan_counts.cumulative_expected[search_field],
-        )
-    )
-
-    logger.info("Multiplying all section nulls and all section alts...")
-    # Kaitlin stores all nulls/alts in section_null and section_alt and then multiplies
-    # e.g., p1 = prod(section_null_ps)
-    ht = ht.annotate(
-        section_null=ht.forward.null * ht.reverse.null,
-        section_alt=ht.forward.alt * ht.reverse.alt,
-    )
-
-    logger.info("Adding chisq value and getting max chisq...")
-    ht = ht.annotate(chisq=(2 * (hl.log(ht.section_alt) - hl.log(ht.section_null))))
-
-    # "The default chi-squared value for one break to be considered significant is
-    # 10.8 (p ~ 10e-3) and is 13.8 (p ~ 10e-4) for two breaks. These currently cannot
-    # be adjusted."
-    max_chisq = ht.aggregate(hl.agg.max(ht.chisq))
-    if max_chisq >= chisq_threshold:
-        return ht.filter(ht.chisq == max_chisq)
-
-    return None
