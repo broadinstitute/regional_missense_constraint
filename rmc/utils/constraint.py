@@ -440,7 +440,7 @@ def search_for_break(
             scan_exp_expr=ht.cumulative_expected[search_field],
         )
     )
-
+    
     # Set reverse o/e to missing if reverse expected value is 0 (to avoid NaNs)
     # Also cap reverse observed/expected at 1
     ht = ht.annotate(
@@ -480,3 +480,105 @@ def search_for_break(
         return ht.filter(ht.chisq == max_chisq)
 
     return None
+
+
+
+def get_avg_bases_between_mis(ht: hl.Table, build: str) -> int:
+    """
+    Returns average number of bases between observed missense variation.
+
+    For example, if the total number of bases is 30, and the total number of missense variants is 10,
+    this function will return 3.
+
+    This function is used to determine the minimum size window to check for significant missense depletion
+    when searching for two simultaneous breaks.
+
+    :param hl.Table ht: Input gnomAD Table.
+    :return: Average number of bases between observed missense variants, rounded to the nearest integer,
+    :rtype: int
+    """
+    logger.info("Getting total number of bases in the exome (based on GENCODE)...")
+    total_bases = get_exome_bases(build)
+
+    logger.info(
+        "Filtering to missense variants in canonical protein coding transcripts..."
+    )
+    ht = filter_to_missense(ht)
+    total_variants = ht.count()
+    return round(total_bases / total_variants)
+
+
+def search_for_two_breaks(
+    ht: hl.Table,
+    exome_ht: hl.Table,
+    transcript: str,
+    chisq_threshold: float,
+    num_obs_var: int = 10,
+) -> Union[Tuple(float, Tuple(int, int)), None]:
+    """
+    Searches for evidence of constraint within a set window size/number of base pairs.
+
+    Function is designed to search in transcripts that didn't have one single significant break.
+    Currently designed to one run one transcript at a time.
+
+    Assumes that:
+        - Input Table has a field named 'transcript'.
+
+    :param hl.Table ht: Input Table.
+    :param hl.Table exome_ht: Table containing variants from gnomAD exomes.
+    :param str transcript: Transcript of interest.
+    :param float chisq_threshold: Chi-square significance threshold. 
+        Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
+    :param int num_obs_var: Number of observed variants. Used when determining the window size for simultaneous breaks. 
+        Default is 10, meaning that the window size for simultaneous breaks is the average number of base pairs required to see 10 observed variants.
+    :return: Tuple of largest chi-square value and breakpoint positions if significant break was found. Otherwise, None.
+    :rtype: Union[hl.Table, None]
+    """
+    break_size = (
+        get_avg_bases_between_mis(
+            exome_ht, get_reference_genome(exome_ht.head(1).locus).name
+        )
+        * num_obs_var
+    )
+    logger.info(
+        f"Number of bases to search for constraint (size for simultaneous breaks): {break_size}"
+    )
+
+    # I don't think there's any way to search for simultaneous breaks without a loop?
+    ht = ht.filter(ht.transcript == transcript)
+    start_pos = ht.head(1).take(1).locus.position
+    end_pos = ht.tail(1).take(1).locus.position
+    best_chisq = 0
+    breakpoints = ()
+
+    while start_pos < end_pos:
+        ht = ht.annotate(
+            section=hl.case()
+            # Position is within window if pos is larger than start_pos and
+            # less than start_pos + window size, then pos is within window
+            .when(
+                (ht.locus.position >= start_pos)
+                & (ht.locus.position < (start_pos + break_size)),
+                hl.format("%s_%s", ht.transcript, "window"),
+            )
+            # If pos < start_pos, pos is outside of window and pre breaks
+            .when(
+                ht.locus.position < start_pos, hl.format("%s_%s", ht.transcript, "pre")
+            )
+            # Otherwise, pos is outside window and post breaks
+            .default(hl.format("%s_%s", ht.transcript, "post"))
+        )
+        new_ht = process_sections(ht, chisq_threshold)
+
+        # Check if found break
+        if new_ht.aggregate(hl.agg.counter(new_ht.is_break) > 0):
+            max_chisq = new_ht.aggregate(hl.agg.max(new_ht.max_chisq))
+            if (max_chisq > best_chisq) and (max_chisq >= chisq_threshold):
+                breakpoints = (start_pos, (start_pos + break_size) - 1)
+
+        start_pos += 1
+
+    if best_chisq != 0:
+        return (best_chisq, breakpoints)
+    return None
+
