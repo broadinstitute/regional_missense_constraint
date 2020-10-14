@@ -494,7 +494,7 @@ def search_for_break(
             scan_exp_expr=ht.cumulative_expected[search_field],
         )
     )
-    
+
     # Set reverse o/e to missing if reverse expected value is 0 (to avoid NaNs)
     # Also cap reverse observed/expected at 1
     ht = ht.annotate(
@@ -535,7 +535,7 @@ def search_for_break(
 
     return None
 
-  
+
 def process_transcripts(ht: hl.Table, chisq_threshold: float):
     """
     Annotates each position in Table with whether that position is a significant breakpoint.
@@ -658,7 +658,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     )
     return search_for_break(ht, "section", chisq_threshold)
 
-  
+
 def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
     """
     Search for additional breaks in a transcript after finding one significant break.
@@ -715,8 +715,8 @@ def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
         )
     )
     return process_sections(ht, chisq_threshold)
-  
-  
+
+
 def get_avg_bases_between_mis(ht: hl.Table, build: str) -> int:
     """
     Returns average number of bases between observed missense variation.
