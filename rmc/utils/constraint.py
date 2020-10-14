@@ -494,7 +494,7 @@ def search_for_break(
             scan_exp_expr=ht.cumulative_expected[search_field],
         )
     )
-    
+
     # Set reverse o/e to missing if reverse expected value is 0 (to avoid NaNs)
     # Also cap reverse observed/expected at 1
     ht = ht.annotate(
@@ -657,6 +657,64 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
         scan_exp_expr=ht.scan_counts.cumulative_exp[ht.section],
     )
     return search_for_break(ht, "section", chisq_threshold)
+
+
+def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
+    """
+    Search for additional breaks in a transcript after finding one significant break.
+    
+    Expects that input Table has the following annotations:
+        - cpg
+        - observed
+        - mu_snp
+        - coverage_correction
+        - transcript
+    Also assumes that Table's globals contain plateau models.
+
+    :param hl.Table ht: Input Table.
+    :param float chisq_threshold: Chi-square significance threshold. 
+        Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
+    :return: Table annotated with whether position is a breakpoint. 
+    :rtype: hl.Table
+    """
+    # TODO: generalize function so that it can search for more than one additional break
+    logger.info("Getting set of transcripts with one break...")
+    first_break_ht = ht.filter(ht.is_break)
+    first_break_ht = first_break_ht.select().key_by("transcript")
+    transcripts = first_break_ht.aggregate(
+        hl.agg.collect_as_set(first_break_ht.transcript), _localize=False
+    )
+
+    logger.info("Filtering to transcripts with one break...")
+    # Also rename scans from first break as these will be overwritten when searching for additional break
+    ht = ht.filter(transcripts.contains(ht.transcript))
+    ht = ht.rename(
+        {
+            "scan_counts": "first_scan_counts",
+            "reverse": "first_reverse",
+            "forward_obs_exp": "first_forward_obs_exp",
+            "reverse_obs_exp": "first_reverse_obs_exp",
+            "is_break": "is_first_break",
+        }
+    )
+
+    logger.info(
+        "Splitting each transcript into two sections: pre first break and post..."
+    )
+    ht = ht.annotate(
+        section=hl.if_else(
+            ~ht.is_first_break,
+            hl.if_else(
+                ht.locus.position > first_break_ht[ht.transcript].locus.position,
+                hl.format("%s_%s", ht.transcript, "post"),
+                hl.format("%s_%s", ht.transcript, "pre"),
+            ),
+            # If position is breakpoint, add to second section ("post")
+            # this is because the first position of a scan is always missing anyway
+            hl.format("%s_%s", ht.transcript, "post"),
+        )
+    )
+    return process_sections(ht, chisq_threshold)
 
 
 def get_avg_bases_between_mis(ht: hl.Table, build: str) -> int:
