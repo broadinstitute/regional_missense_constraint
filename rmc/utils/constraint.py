@@ -38,7 +38,14 @@ def calculate_observed(ht: hl.Table, exac: bool) -> hl.Table:
 
 def calculate_exp_per_base(
     context_ht: hl.Table,
-    groupings: List[str] = ["context", "ref", "alt", "cpg", "exome_coverage"],
+    groupings: List[str] = [
+        "context",
+        "ref",
+        "alt",
+        "cpg",
+        "methylation_level",
+        "exome_coverage",
+    ],
 ) -> hl.Table:
     """
     Returns table with expected variant counts annotated per base. 
@@ -75,14 +82,7 @@ def calculate_exp_per_base(
 
     logger.info("Annotating context HT with adjusted variant counts...")
     context_ht = context_ht.annotate(
-        adj_cov=group_ht[
-            context_ht.context,
-            context_ht.ref,
-            context_ht.alt,
-            context_ht.methylation_level,
-            context_ht.cpg,
-            context_ht.exome_coverage,
-        ].adj_cov
+        adj_cov=group_ht[context_ht.row.select(*groupings)].adj_cov
     )
     return context_ht.annotate(mu_adj=context_ht.mu_snp * context_ht.adj_cov)
 
