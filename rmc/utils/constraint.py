@@ -274,81 +274,75 @@ def get_null_alt_expr(
 
 
 def search_for_break(
-    ht: hl.Table, search_field: hl.str, chisq_threshold: float,
+    ht: hl.Table, search_field: hl.str, chisq_threshold: float = 10.8,
 ) -> hl.Table:
     """
-    Searches for breakpoints in a transcript. 
+    Searches for breakpoints in a transcript or within a transcript subsection.
 
-    Currently designed to run one transcript at a time. Expects input Table to be filtered to single transcript.
-
-    Expects context HT to contain the following fields:
+    Expects input context HT to contain the following fields:
         - locus
         - alleles
         - transcript or section
         - coverage (median)
         - mu
+        - scan_counts struct
+        - overall_obs_exp
+        - forward_obs_exp
+        - reverse struct
+        - reverse_obs_exp
     Also expects:
-        - multiallelic variants in context HT have been split.
-        - context HT is autosomes/PAR only, X non-PAR only, or Y non-PAR only.
+        - multiallelic variants in input HT have been split.
+        - Input HT is autosomes/PAR only, X non-PAR only, or Y non-PAR only.
 
     Returns HT filtered to lines with maximum chisq if chisq >= max_value, otherwise returns None.
 
-    :param hl.Table ht: Input Table.
+    :param hl.Table ht: Input context Table.
     :param hl.expr.StringExpression search_field: Field of table to search. Value should be either 'transcript' or 'section'. 
     :param float chisq_threshold: Chi-square significance threshold. 
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
+        Default is 10.8.
     :return: Table annotated with whether position is a breakpoint. 
     :rtype: hl.Table
     """
-    logger.info("Adding forward scan section nulls and alts...")
-    # Add forwards sections (going through positions from smaller to larger)
-    # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
-    # section_alt = stats.dpois(section_obs, section_exp*section_obs_exp)[0]
-    ht = ht.annotate(
-        section_nulls=hl.empty_array(hl.tfloat64),
-        section_alts=hl.empty_array(hl.tfloat64),
+    logger.info(
+        "Creating section null (no regional variability in missense depletion)\
+        and alt (evidence of domains of missense constraint) expressions..."
     )
     ht = ht.annotate(
-        section_nulls=ht.section_nulls.append(
+        section_nulls=[
+            # Add forwards section null (going through positions from smaller to larger)
+            # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
             get_dpois_expr(
                 cond_expr=hl.len(ht.scan_counts.cumulative_obs) != 0,
                 section_oe_expr=ht.overall_obs_exp,
                 obs_expr=ht.scan_counts.cumulative_obs[ht[search_field]],
                 exp_expr=ht.scan_counts.cumulative_exp[ht[search_field]],
-            )
-        )
-    )
-    ht = ht.annotate(
-        section_alts=ht.section_alts.append(
+            ),
+            # Add reverse section null (going through positions larger to smaller)
+            get_dpois_expr(
+                cond_expr=hl.is_defined(ht.reverse.obs),
+                section_oe_expr=ht.overall_obs_exp,
+                obs_expr=ht.reverse.obs,
+                exp_expr=ht.reverse.exp,
+            ),
+        ],
+        section_alts=[
+            # Add forward section alt
+            # section_alt = stats.dpois(section_obs, section_exp*section_obs_exp)[0]
             get_dpois_expr(
                 cond_expr=hl.len(ht.scan_counts.cumulative_obs) != 0,
                 section_oe_expr=ht.forward_obs_exp,
                 obs_expr=ht.scan_counts.cumulative_obs[ht[search_field]],
                 exp_expr=ht.scan_counts.cumulative_exp[ht[search_field]],
-            )
-        )
-    )
-
-    logger.info("Adding reverse section nulls and alts...")
-    ht = ht.annotate(
-        section_nulls=ht.section_nulls.append(
-            get_dpois_expr(
-                cond_expr=hl.is_defined(ht.reverse.obs),
-                section_oe_expr=ht.overall_obs_exp,
-                obs_expr=ht.reverse.obs,
-                exp_expr=ht.reverse.exp,
-            )
-        )
-    )
-    ht = ht.annotate(
-        section_alts=ht.section_alts.append(
+            ),
+            # Add reverse section alt
             get_dpois_expr(
                 cond_expr=hl.is_defined(ht.reverse.obs),
                 section_oe_expr=ht.reverse_obs_exp,
                 obs_expr=ht.reverse.obs,
                 exp_expr=ht.reverse.exp,
-            )
-        )
+            ),
+        ],
     )
 
     logger.info("Multiplying all section nulls and all section alts...")
