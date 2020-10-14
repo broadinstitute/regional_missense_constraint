@@ -1,12 +1,11 @@
 import hail as hl
 
 from gnomad.resources.resource_utils import (
-    import_gencode,
     TableResource,
     VersionedTableResource,
 )
 
-from rmc.resources.resource_utils import RESOURCE_PREFIX
+from rmc.resources.resource_utils import import_gencode, RESOURCE_PREFIX
 
 
 ## Exon/transcript related resources
