@@ -32,7 +32,8 @@ divergence_scores = TableResource(
 """
 Table with divergence score between humans and macaques for each canonical transcript in Gencode v19.
 """
-mutation_rate = TableResource(
+
+old_mutation_rate = TableResource(
     path=f"{RESOURCE_PREFIX}/GRCh37/exac/ht/mutation_rate.ht",
     import_func=get_old_mu_data,
     import_args={
@@ -41,7 +42,20 @@ mutation_rate = TableResource(
         "impute": True,
     },
 )
+"""
+Table with mutation rate calculated for ExAC constraint.
+"""
 
+## gnomAD resources
+mutation_rate = TableResource(
+    path=f"{FLAGSHIP_LOF}/model/mutation_rate_methylation_bins.ht",
+)
+"""
+Table with mutation rate recalculated for gnomAD constraint.
+
+This was calculated with `calculate_mu_by_downsampling` in 
+https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constraint_basics.py.
+"""
 
 ## Observed/expected count related resources
 # Expected variants resource files
