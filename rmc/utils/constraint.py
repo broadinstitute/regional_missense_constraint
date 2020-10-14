@@ -399,141 +399,95 @@ def get_section_expr(dpois_expr: hl.expr.ArrayExpression,) -> hl.expr.Float64Exp
 
 
 def search_for_break(
-    context_ht: hl.Table,
-    obs_ht: hl.Table,
-    exp_ht: hl.Table,
-    search_field: hl.expr.StringExpression,
-    prediction_flag: Tuple[float, int],
-    chisq_threshold: float,
-    group_by_transcript: bool,
-) -> Union[hl.Table, None]:
+    ht: hl.Table, search_field: hl.str, chisq_threshold: float = 10.8,
+) -> hl.Table:
     """
-    Searches for breakpoints in a transcript. 
+    Searches for breakpoints in a transcript or within a transcript subsection.
 
-    Currently designed to run one transcript at a time. Expects input Table to be filtered to single transcript.
-
-    Expects context HT to contain the following fields:
+    Expects input context HT to contain the following fields:
         - locus
         - alleles
         - transcript or section
         - coverage (median)
         - mu
+        - scan_counts struct
+        - overall_obs_exp
+        - forward_obs_exp
+        - reverse struct
+        - reverse_obs_exp
     Also expects:
-        - multiallelic variants in context HT have been split.
-        - context HT is autosomes/PAR only, X non-PAR only, or Y non-PAR only.
+        - multiallelic variants in input HT have been split.
+        - Input HT is autosomes/PAR only, X non-PAR only, or Y non-PAR only.
 
     Returns HT filtered to lines with maximum chisq if chisq >= max_value, otherwise returns None.
 
-    :param hl.Table context_ht: Context Table. 
-    :param hl.Table obs_ht: Table grouped by transcript with observed variant counts per transcript.
-        Expects observed counts field to be named `observed`.
-    :param hl.Table exp_ht: Table grouped by transcript with expected variant counts per transcript.
-        Expects expected counts field to be named `expected`.
+    :param hl.Table ht: Input context Table.
     :param hl.expr.StringExpression search_field: Field of table to search. Value should be either 'transcript' or 'section'. 
-    :param Tuple(float, int) prediction_flag: Adjustments to mutation rate based on chromosomal location
-        (autosomes/PAR, X non-PAR, Y non-PAR). 
-        E.g., prediction flag for autosomes/PAR is (0.4190964, 11330208)
-    :param float chisq_threshold: Chisq threshold for significance. 
+    :param float chisq_threshold: Chi-square significance threshold. 
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
-    :param bool group_by_transcript: Whether function should group by transcript. Should be True if searching 
-        for first break and False to search for an additional break. 
-    :return: Table filtered to rows with maximum chisq value IF max chisq is larger than chisq_threshold.
-        Otherwise, returns None.
-    :rtype: Union[hl.Table, None]
+        Default is 10.8.
+    :return: Table annotated with whether position is a breakpoint. 
+    :rtype: hl.Table
     """
-    ht = annotate_observed_expected(context_ht, obs_ht, exp_ht, group_by_transcript)
-
     logger.info(
-        "Annotating HT with cumulative expected/observed counts per transcript..."
+        "Creating section null (no regional variability in missense depletion)\
+        and alt (evidence of domains of missense constraint) expressions..."
     )
     ht = ht.annotate(
-        scan_counts=get_cumulative_scan_expr(
-            search_expr=ht[search_field],
-            observed_expr=ht.observed,
-            mu_expr=ht.mu,
-            prediction_flag=prediction_flag,
-            coverage_correction=get_coverage_correction(ht.coverage),
-        )
-    )
-
-    logger.info("Annotating HT with forward scan section observed/expected value...")
-    # NOTE: Capping observed/expected values at 1
-    ht = ht.annotate(
-        obs_exp=hl.or_missing(
-            hl.len(ht.scan_counts.cumulative_observed) != 0,
-            hl.min(
-                ht.scan_counts.cumulative_observed[search_field]
-                / ht.scan_counts.cumulative_expected[search_field],
-                1,
+        section_nulls=[
+            # Add forwards section null (going through positions from smaller to larger)
+            # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
+            get_dpois_expr(
+                cond_expr=hl.len(ht.scan_counts.cumulative_obs) != 0,
+                section_oe_expr=ht.overall_obs_exp,
+                obs_expr=ht.scan_counts.cumulative_obs[ht[search_field]],
+                exp_expr=ht.scan_counts.cumulative_exp[ht[search_field]],
             ),
-        ),
-    )
-
-    logger.info("Adding forward scan section nulls and alts...")
-    # Add forwards sections (going through positions from smaller to larger)
-    # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
-    # section_alt = stats.dpois(section_obs, section_exp*section_obs_exp)[0]
-    ht = ht.annotate(
-        forward=get_null_alt_expr(
-            cond_expr=hl.len(ht.cumulative_observed) != 0,
-            overall_oe_expr=ht.overall_obs_exp,
-            section_oe_expr=ht.obs_exp,
-            obs_expr=ht.cumulative_observed[search_field],
-            exp_expr=ht.cumulative_expected[search_field],
-        )
-    )
-
-    logger.info("Adding reverse section observeds and expecteds...")
-    # reverse value = total value - cumulative value
-    ht = ht.annotate(
-        reverse_counts=get_reverse_obs_exp_expr(
-            cond_expr=hl.len(ht.cumulative_observed) != 0,
-            total_obs_expr=ht.total_obs,
-            total_exp_expr=ht.total_exp,
-            scan_obs_expr=ht.cumulative_observed[search_field],
-            scan_exp_expr=ht.cumulative_expected[search_field],
-        )
-    )
-
-    # Set reverse o/e to missing if reverse expected value is 0 (to avoid NaNs)
-    # Also cap reverse observed/expected at 1
-    ht = ht.annotate(
-        reverse_obs_exp=hl.or_missing(
-            ht.reverse_counts.exp != 0,
-            hl.min(ht.reverse_counts.obs / ht.reverse_counts.exp, 1),
-        )
-    )
-
-    logger.info("Adding reverse section nulls and alts...")
-    ht = ht.annotate(
-        reverse=get_null_alt_expr(
-            cond_expr=hl.len(ht.scan_counts.cumulative_observed) != 0,
-            overall_oe_expr=ht.overall_obs_exp,
-            section_oe_expr=ht.obs_exp,
-            obs_expr=ht.scan_counts.cumulative_observed[search_field],
-            exp_expr=ht.scan_counts.cumulative_expected[search_field],
-        )
+            # Add reverse section null (going through positions larger to smaller)
+            get_dpois_expr(
+                cond_expr=hl.is_defined(ht.reverse.obs),
+                section_oe_expr=ht.overall_obs_exp,
+                obs_expr=ht.reverse.obs,
+                exp_expr=ht.reverse.exp,
+            ),
+        ],
+        section_alts=[
+            # Add forward section alt
+            # section_alt = stats.dpois(section_obs, section_exp*section_obs_exp)[0]
+            get_dpois_expr(
+                cond_expr=hl.len(ht.scan_counts.cumulative_obs) != 0,
+                section_oe_expr=ht.forward_obs_exp,
+                obs_expr=ht.scan_counts.cumulative_obs[ht[search_field]],
+                exp_expr=ht.scan_counts.cumulative_exp[ht[search_field]],
+            ),
+            # Add reverse section alt
+            get_dpois_expr(
+                cond_expr=hl.is_defined(ht.reverse.obs),
+                section_oe_expr=ht.reverse_obs_exp,
+                obs_expr=ht.reverse.obs,
+                exp_expr=ht.reverse.exp,
+            ),
+        ],
     )
 
     logger.info("Multiplying all section nulls and all section alts...")
     # Kaitlin stores all nulls/alts in section_null and section_alt and then multiplies
     # e.g., p1 = prod(section_null_ps)
     ht = ht.annotate(
-        section_null=ht.forward.null * ht.reverse.null,
-        section_alt=ht.forward.alt * ht.reverse.alt,
+        null=get_section_expr(ht.section_nulls), alt=get_section_expr(ht.section_alts),
     )
 
     logger.info("Adding chisq value and getting max chisq...")
-    ht = ht.annotate(chisq=(2 * (hl.log(ht.section_alt) - hl.log(ht.section_null))))
+    ht = ht.annotate(chisq=(2 * (hl.log(ht.alt) - hl.log(ht.null))))
 
     # "The default chi-squared value for one break to be considered significant is
     # 10.8 (p ~ 10e-3) and is 13.8 (p ~ 10e-4) for two breaks. These currently cannot
     # be adjusted."
-    max_chisq = ht.aggregate(hl.agg.max(ht.chisq))
-    if max_chisq >= chisq_threshold:
-        return ht.filter(ht.chisq == max_chisq)
-
-    return None
+    group_ht = ht.group_by(search_field).aggregate(max_chisq=hl.agg.max(ht.chisq))
+    ht = ht.annotate(max_chisq=group_ht[ht.transcript].max_chisq)
+    return ht.annotate(
+        is_break=((ht.chisq == ht.max_chisq) & (ht.chisq >= chisq_threshold))
+    )
 
 
 def process_transcripts(ht: hl.Table, chisq_threshold: float):
