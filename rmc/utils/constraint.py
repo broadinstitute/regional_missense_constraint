@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 import hail as hl
 
@@ -7,6 +7,7 @@ from gnomad.utils.reference_genome import get_reference_genome
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 from rmc.utils.generic import (
     filter_to_missense,
+    get_coverage_correction_expr,
     get_exome_bases,
     get_plateau_model,
     keep_criteria,
@@ -35,45 +36,98 @@ def calculate_observed(ht: hl.Table, exac: bool) -> hl.Table:
     return ht.group_by(ht.transcript).aggregate(observed=hl.agg.count())
 
 
-def calculate_expected(
+def calculate_exp_per_base(
     context_ht: hl.Table,
-    plateau_models: Dict[str, Tuple[float, float]],
-    coverage_correction_str: str,
+    groupings: List[str] = [
+        "context",
+        "ref",
+        "alt",
+        "cpg",
+        "methylation_level",
+        "exome_coverage",
+    ],
 ) -> hl.Table:
     """
-    Returns table of transcripts and the total number of expected variants per transcript.
+    Returns table with expected variant counts annotated per base. 
 
-    Expected variants count is adjusted by mutation rate, divergence score, and region type.
+    Expected variants count is mutation rate per SNP adjusted by CpG status and coverage.
 
     .. note::
-        Expects that context_ht is annotated with mutation rate.
+        Expects:
+        - context_ht is annotated with mutation rate (`mu_snp`).
+        - context_ht contains coverage and plateau models in global annotations (`coverage_model`, `plateau_models`).
 
     :param hl.Table context_ht: Context Table.
-    :param Dict[str, Tuple[float, float]]] plateau_model: Models to determine adjustment to mutation rate
-        based on locus type and CpG status.
-    :param str coverage_correction_str: Name of coverage correction field in input Table. Default is 'coverage_correction'.
-        This field is necessary for adjusting expected variant counts at low coverage sites.
+    :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate. 
+        Table must be annotated with these fields. Default fields are context, ref, alt, cpg, and exome_coverage.
     :return: Table grouped by transcript with expected variant counts per transcript.
     :rtype: hl.Table
     """
-    logger.info("Pulling mutation rate adjustment from plateau model...")
-    context_ht = annotate_variant_types(context_ht)
-    model = hl.literal(plateau_models.total)[context_ht.cpg]
+    logger.info(f"Grouping variants by {*groupings}...")
+    group_ht = context_ht.group_by(*groupings).aggregate(variant_count=hl.agg.count())
 
-    logger.info("Grouping by transcript...")
-    context_ht = context_ht.group_by(
-        context_ht.transcript, context_ht.region_type, context_ht.coverage
-    ).aggregate(raw_expected=hl.agg.sum(context_ht.mu_snp))
-
-    logger.info("Processing context HT to calculate number of expected variants...")
-    # Adjust mutation rate with HT with plateau model
-    context_ht = context_ht.transmute(
-        mu_agg=context_ht.raw_expected * model[1] + model[0]
+    logger.info("Getting coverage and plateau model corrections...")
+    group_ht = group_ht.annotate(
+        coverage_correction=get_coverage_correction_expr(
+            group_ht.exome_coverage, group_ht.coverage_model
+        )
+    )
+    model = get_plateau_model(context_ht.locus, context_ht.cpg, context_ht.globals)
+    group_ht = group_ht.annotate(
+        adj_cov=(
+            ((group_ht.variant_count * model[1]) + model[0])
+            * group_ht.coverage_correction
+        )
     )
 
-    # Adjust expected counts based on depth
-    return context_ht.annotate(
-        expected=context_ht.mu_agg * context_ht[coverage_correction_str],
+    logger.info("Annotating context HT with adjusted variant counts...")
+    context_ht = context_ht.annotate(
+        adj_cov=group_ht[context_ht.row.select(*groupings)].adj_cov
+    )
+    return context_ht.annotate(mu_adj=context_ht.mu_snp * context_ht.adj_cov)
+
+
+def calculate_exp_per_transcript(
+    context_ht: hl.Table, groupings: List[str] = ["transcript", "cpg", "exome_coverage"]
+) -> hl.Table:
+    """
+    Calculates the total number of expected variants per transcript.
+
+    Expected variants count is mutation rate per SNP adjusted based on CpG status and coverage.
+
+    .. note::
+        Expects:
+        - context_ht is annotated with mutation rate (`mu_snp`).
+        - context_ht contains coverage and plateau models in global annotations (`coverage_model`, `plateau_models`).
+
+    :param hl.Table context_ht: Context Table.
+    :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate. 
+        Table must be annotated with these fields. Default fields are transcript, cpg, and exome_coverage.
+    :return: Table grouped by transcript with expected variant counts per transcript.
+    :rtype: hl.Table
+    """
+    logger.info(f"Grouping by {*groupings}...")
+    group_ht = context_ht.group_by(*groupings,).aggregate(
+        mu_agg=hl.agg.sum(context_ht.mu_snp)
+    )
+
+    logger.info("Adjusting aggregated mutation rate with plateau model...")
+    model = get_plateau_model(context_ht.locus, context_ht.cpg, context_ht.globals)
+    group_ht = group_ht.transmute(mu_adj=group_ht.mu_agg * model[1] + model[0])
+
+    logger.info(
+        "Adjusting aggregated mutation rate with coverage correction to get expected counts..."
+    )
+    group_ht = group_ht.annotate(
+        coverage_correction=get_coverage_correction_expr(
+            group_ht.exome_coverage, group_ht.coverage_model
+        ),
+    )
+    group_ht = group_ht.annotate(_exp=(group_ht.mu_agg * group_ht.coverage_correction))
+
+    logger.info("Getting expected counts per transcript and returning...")
+    return group_ht.group_by("transcript").aggregate(
+        total_exp=hl.agg.sum(group_ht._exp)
     )
 
 

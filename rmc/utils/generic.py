@@ -216,7 +216,7 @@ def keep_criteria(ht: hl.Table, exac: bool) -> hl.expr.BooleanExpression:
 
 
 def process_vep(
-    ht: hl.Table, filter: bool = False, csq: str = None, n_partitions: int = 5000
+    ht: hl.Table, filter_csq: bool = False, csq: str = None, n_partitions: int = 5000
 ) -> hl.Table:
     """
     Filters input Table to canonical transcripts only.
@@ -245,7 +245,7 @@ def process_vep(
     ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
     ht = ht.explode(ht.transcript_consequences)
 
-    if filter:
+    if filter_csq:
         logger.info(f"Filtering to {csq}...")
         ht = ht.filter(ht.transcript_consequences.most_severe_consequence == csq)
     return ht.naive_coalesce(n_partitions)
@@ -289,12 +289,9 @@ def get_coverage_correction_expr(
     """
     return (
         hl.case()
-        .when(coverage == 0, 0.0)
-        .when(
-            (coverage >= 1) & (coverage < high_cov_cutoff),
-            coverage_model[1] * hl.log(coverage) + coverage_model[0],
-        )
-        .default(1.0)
+        .when(coverage == 0, 0)
+        .when(coverage >= high_cov_cutoff, 1)
+        .default(coverage_model[1] * hl.log10(coverage) + coverage_model[0])
     )
 
 
