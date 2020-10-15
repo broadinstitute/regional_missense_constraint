@@ -66,57 +66,34 @@ def calculate_exp_per_base(
     logger.info(f"Annotating HT with groupings: {groupings}...")
     context_ht = context_ht.annotate(variant=(context_ht.row.select(*groupings)))
 
-    logger.info("Getting cumulative counts per variant...")
+    logger.info("Getting aggregated mutation rate per variant...")
     context_ht = context_ht.annotate(
-        variant_count=hl.scan.group_by(context_ht.variant, hl.scan.count())
-    )
-
-    logger.info("Adjusting mutation rate using variant count and plateau model...")
-    model = get_plateau_model(context_ht.locus, context_ht.cpg, context_ht.globals)
-    context_ht = context_ht.annotate(
-        # Setting variant count to 1 here because if variant doesn't exist in scan dictionary,
-        # then this is its first occurence in the transcript
-        mu_agg=model[1]
-        * context_ht.mu_snp
-        * (context_ht.variant_count.get(context_ht.variant, 0) + 1)
-        + model[0]
-    )
-
-    logger.info(
-        "Adjusting aggregated mutation rate with coverage correction, scanning, and returning..."
-    )
-    context_ht = context_ht.annotate(
-        _exp=context_ht.mu_agg * context_ht.coverage_correction
-    )
-    return context_ht.annotate(
-        cumulative_exp=hl.scan.group_by(
-            context_ht.transcript, hl.scan.sum(context_ht._exp)
-        )
-    )  # currently returns 382
-
-    # NOTE: group_by method below returns too many expected variants (~440)
-    """logger.info(f"Grouping variants by {*groupings}...")
-    group_ht = context_ht.group_by(*groupings).aggregate(variant_count=hl.agg.count())
-
-    logger.info("Getting coverage and plateau model corrections...")
-    group_ht = group_ht.annotate(
-        coverage_correction=get_coverage_correction_expr(
-            group_ht.exome_coverage, group_ht.coverage_model
-        )
-    )
-    model = get_plateau_model(context_ht.locus, context_ht.cpg, context_ht.globals)
-    group_ht = group_ht.annotate(
-        adj_cov=(
-            ((group_ht.variant_count * model[1]) + model[0])
-            * group_ht.coverage_correction
+        mu_agg=hl.scan.group_by(
+            context_ht.variant,
+            (
+                hl.scan.count() * context_ht.mu_snp,
+                context_ht.cpg,
+                context_ht.coverage_correction,
+            ),
         )
     )
 
-    logger.info("Annotating context HT with adjusted variant counts...")
-    context_ht = context_ht.annotate(
-        adj_cov=group_ht[context_ht.row.select(*groupings)].adj_cov
+    logger.info("Adjusting mutation rate using plateau and models...")
+    model = get_plateau_model(
+        context_ht.locus, context_ht.cpg, context_ht.globals, include_cpg=True
     )
-    return context_ht.annotate(mu_adj=context_ht.mu_snp * context_ht.adj_cov)"""
+    context_ht = context_ht.annotate(
+        _exp=context_ht.mu_agg.map_values(
+            # i[0] is the cumulative variant count * mutation rate for that context/ref/alt/methylation level
+            # i[1] is whether the variant is a CpG
+            # i[2] is the coverage correction for that site
+            lambda i: (i[0] * model[i[1]][1] + model[i[1]][0])
+            * i[2]
+        )
+    )
+
+    logger.info("Aggregating proportion of expected variants per site and returning...")
+    return context_ht.annotate(cumulative_exp=hl.sum(context_ht._exp.values()))
 
 
 def calculate_exp_per_transcript(
