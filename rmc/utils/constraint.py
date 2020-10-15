@@ -36,7 +36,17 @@ def calculate_observed(ht: hl.Table, exac: bool) -> hl.Table:
     return ht.group_by(ht.transcript).aggregate(observed=hl.agg.count())
 
 
-def calculate_exp_per_base(context_ht: hl.Table,) -> hl.Table:
+def calculate_exp_per_base(
+    context_ht: hl.Table,
+    groupings: List[str] = [
+        "context",
+        "ref",
+        "alt",
+        "methylation_level",
+        "transcript",
+        "exome_coverage",
+    ],
+) -> hl.Table:
     """
     Returns table with expected variant counts annotated per base. 
 
@@ -48,19 +58,13 @@ def calculate_exp_per_base(context_ht: hl.Table,) -> hl.Table:
         - context_ht contains coverage and plateau models in global annotations (`coverage_model`, `plateau_models`).
 
     :param hl.Table context_ht: Context Table.
+    :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate. 
+        Table must be annotated with these fields. Default fields are context, ref, alt, methylation level, transcript, and exome_coverage.
     :return: Table grouped by transcript with expected variant counts per transcript.
     :rtype: hl.Table
     """
-    logger.info(f"Annotating HT with variant (context-ref-alt-coverage)...")
-    context_ht = context_ht.annotate(
-        variant=hl.format(
-            "%s-%s-%s-%s",
-            context_ht.context,
-            context_ht.ref,
-            context_ht.alt,
-            context_ht.exome_coverage,
-        )
-    )
+    logger.info(f"Annotating HT with groupings: {groupings}...")
+    context_ht = context_ht.annotate(variant=(context_ht.row.select(*groupings)))
 
     logger.info("Getting cumulative counts per variant...")
     context_ht = context_ht.annotate(
@@ -70,23 +74,12 @@ def calculate_exp_per_base(context_ht: hl.Table,) -> hl.Table:
     logger.info("Adjusting mutation rate using variant count and plateau model...")
     model = get_plateau_model(context_ht.locus, context_ht.cpg, context_ht.globals)
     context_ht = context_ht.annotate(
-        # Add plateau model adjustment only if variant found in dict, otherwise keep value at 0
-        # This is to avoid having lines with model[0] (intercept) when value should be 0
-        mu_agg=hl.if_else(
-            hl.is_defined(context_ht.variant_count.get(context_ht.variant)),
-            # Add one to scan count since the scan is always one value behind
-            # NOTE: adding 1 here returns a total cumulative exp count of 172, but expecting 283.2
-            # somehow, adding 2.65 instead of 1 gets pretty close to expected (returns 282)
-            (
-                model[1]
-                * (
-                    context_ht.mu_snp
-                    * (context_ht.variant_count[context_ht.variant] + 1)
-                )
-            )
-            + model[0],
-            0,
-        )
+        # Setting variant count to 1 here because if variant doesn't exist in scan dictionary,
+        # then this is its first occurence in the transcript
+        mu_agg=model[1]
+        * context_ht.mu_snp
+        * (context_ht.variant_count.get(context_ht.variant, 0) + 1)
+        + model[0]
     )
 
     logger.info(
@@ -99,7 +92,7 @@ def calculate_exp_per_base(context_ht: hl.Table,) -> hl.Table:
         cumulative_exp=hl.scan.group_by(
             context_ht.transcript, hl.scan.sum(context_ht._exp)
         )
-    )
+    )  # currently returns 382
 
     # NOTE: group_by method below returns too many expected variants (~440)
     """logger.info(f"Grouping variants by {*groupings}...")
