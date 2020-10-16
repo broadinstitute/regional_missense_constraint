@@ -101,6 +101,7 @@ def calculate_exp_per_base(
     )
 
     logger.info("Aggregating proportion of expected variants per site and returning...")
+    # NOTE: this line needs to be changed in order for this function to work on multiple transcripts at a time
     return context_ht.annotate(cumulative_exp=hl.sum(context_ht._exp.values()))
 
 
