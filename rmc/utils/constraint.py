@@ -54,7 +54,7 @@ def calculate_exp_per_base(
 
     .. note::
         This currently runs on a single transcript at a time.
-        
+
         Expects:
         - context_ht is annotated with mutation rate (`mu_snp`), context, ref, alt, and coverage (`exome_coverage`).
         - context_ht contains coverage and plateau models in global annotations (`coverage_model`, `plateau_models`).
@@ -73,7 +73,11 @@ def calculate_exp_per_base(
         mu_agg=hl.scan.group_by(
             context_ht.variant,
             hl.struct(
+                # Use scan sum here because this annotation stores the cumulative mutation rate for
+                # each context/ref/alt/methylation level
                 mu_agg=hl.scan.sum(context_ht.variant.mu_snp),
+                # Need _prev_nonnull to get the correct cpg and exome coverage for each scanned variant
+                # Without this, the scan pulls the values from the current line, NOT the previous line
                 cpg=hl.scan._prev_nonnull(context_ht.variant.cpg),
                 coverage_correction=get_coverage_correction_expr(
                     hl.scan._prev_nonnull(context_ht.variant.exome_coverage),
