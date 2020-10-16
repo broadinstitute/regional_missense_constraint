@@ -53,6 +53,8 @@ def calculate_exp_per_base(
     Expected variants count is mutation rate per SNP adjusted by CpG status and coverage.
 
     .. note::
+        This currently runs on a single transcript at a time.
+        
         Expects:
         - context_ht is annotated with mutation rate (`mu_snp`), context, ref, alt, and coverage (`exome_coverage`).
         - context_ht contains coverage and plateau models in global annotations (`coverage_model`, `plateau_models`).
