@@ -319,12 +319,12 @@ def get_plateau_model(
             hl.case()
             .when(locus_expr.in_x_nonpar(), globals_expr.plateau_x_models.total)
             .when(locus_expr.in_y_nonpar(), globals_expr.plateau_y_models.total)
-            .default(globals_expr.plateau_model.total)
+            .default(globals_expr.plateau_models.total)
         )
 
     return (
         hl.case()
         .when(locus_expr.in_x_nonpar(), globals_expr.plateau_x_models.total[cpg_expr])
         .when(locus_expr.in_y_nonpar(), globals_expr.plateau_y_models.total[cpg_expr])
-        .default(globals_expr.plateau_model.total[cpg_expr])
+        .default(globals_expr.plateau_models.total[cpg_expr])
     )
