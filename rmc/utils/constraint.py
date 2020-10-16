@@ -42,7 +42,9 @@ def calculate_exp_per_base(
         "context",
         "ref",
         "alt",
+        "cpg",
         "methylation_level",
+        "mu_snp",
         "transcript",
         "exome_coverage",
     ],
@@ -61,7 +63,7 @@ def calculate_exp_per_base(
 
     :param hl.Table context_ht: Context Table.
     :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate. 
-        Table must be annotated with these fields. Default fields are context, ref, alt, methylation level, transcript, and exome_coverage.
+        Table must be annotated with these fields. Default fields are context, ref, alt, cpg, methylation level, mu_snp, transcript, and exome_coverage.
     :return: Table grouped by transcript with expected variant counts per transcript.
     :rtype: hl.Table
     """
