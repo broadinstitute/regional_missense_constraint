@@ -52,14 +52,16 @@ def calculate_exp_per_base(
     """
     Returns table with expected variant counts annotated per base. 
 
-    Expected variants count is mutation rate per SNP adjusted by CpG status and coverage.
+    Expected variants count is mutation rate per SNP adjusted by location in the genome/CpG status (plateau model) and coverage (coverage model).
 
     .. note::
         This currently runs on a single transcript at a time.
 
         Expects:
-        - context_ht is annotated with mutation rate (`mu_snp`), context, ref, alt, and coverage (`exome_coverage`).
-        - context_ht contains coverage and plateau models in global annotations (`coverage_model`, `plateau_models`).
+        - context_ht is annotated with all of the fields in `groupings` and that the names match exactly.
+            That means, the HT should have context, ref, alt, CpG status, methylation level, mutation rate (`mu_snp`), 
+            transcript, and coverage (`exome_coverage`) if using the default value for `groupings`.
+        - context_ht contains coverage and plateau models in its global annotations (`coverage_model`, `plateau_models`).
 
     :param hl.Table context_ht: Context Table.
     :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate. 
@@ -70,7 +72,7 @@ def calculate_exp_per_base(
     logger.info(f"Annotating HT with groupings: {groupings}...")
     context_ht = context_ht.annotate(variant=(context_ht.row.select(*groupings)))
 
-    logger.info("Getting aggregated mutation rate per variant...")
+    logger.info("Getting cumulative aggregated mutation rate per variant...")
     context_ht = context_ht.annotate(
         mu_agg=hl.scan.group_by(
             context_ht.variant,
@@ -89,7 +91,7 @@ def calculate_exp_per_base(
         )
     )
 
-    logger.info("Adjusting mutation rate using plateau and models...")
+    logger.info("Adjusting mutation rate using plateau and coverage models...")
     model = get_plateau_model(
         context_ht.locus, context_ht.cpg, context_ht.globals, include_cpg=True
     )
