@@ -210,7 +210,9 @@ def keep_criteria(ht: hl.Table, exac: bool) -> hl.expr.BooleanExpression:
             (ht.ac <= 123) & (ht.ac > 0) & (ht.vqslod >= -2.632) & (ht.coverage > 1)
         )
     else:
-        keep_criteria = (ht.ac > 0) & (ht.af < 0.001) & (ht.pass_filters)
+        keep_criteria = (
+            (ht.ac > 0) & (ht.af < 0.001) & (ht.pass_filters) & (ht.exome_coverage > 0)
+        )
 
     return keep_criteria
 
