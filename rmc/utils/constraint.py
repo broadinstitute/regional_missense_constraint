@@ -70,10 +70,13 @@ def calculate_exp_per_base(
     context_ht = context_ht.annotate(
         mu_agg=hl.scan.group_by(
             context_ht.variant,
-            (
-                hl.scan.count() * context_ht.mu_snp,
-                context_ht.cpg,
-                context_ht.coverage_correction,
+            hl.struct(
+                mu_agg=hl.scan.sum(context_ht.variant.mu_snp),
+                cpg=hl.scan._prev_nonnull(context_ht.variant.cpg),
+                coverage_correction=get_coverage_correction_expr(
+                    hl.scan._prev_nonnull(context_ht.variant.exome_coverage),
+                    context_ht.coverage_model,
+                ),
             ),
         )
     )
@@ -84,11 +87,8 @@ def calculate_exp_per_base(
     )
     context_ht = context_ht.annotate(
         _exp=context_ht.mu_agg.map_values(
-            # i[0] is the cumulative variant count * mutation rate for that context/ref/alt/methylation level
-            # i[1] is whether the variant is a CpG
-            # i[2] is the coverage correction for that site
-            lambda i: (i[0] * model[i[1]][1] + model[i[1]][0])
-            * i[2]
+            lambda x: (x.mu_agg * model[x.cpg][1] + model[x.cpg][0])
+            * x.coverage_correction
         )
     )
 
