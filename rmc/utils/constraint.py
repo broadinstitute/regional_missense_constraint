@@ -111,7 +111,7 @@ def calculate_exp_per_base(
             lambda x: context_ht.all_exp.get(x), context_ht._transcript_exp_keys
         )
     )
-    return context_ht.annotate(cumulative_exp=hl.sum(context_ht._transcript_exp))
+    return context_ht.annotate(cumulative_exp=hl.sum(context_ht.transcript_exp))
 
 
 def calculate_exp_per_transcript(
