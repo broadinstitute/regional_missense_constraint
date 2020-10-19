@@ -17,7 +17,7 @@ from rmc.resources.grch37.gnomad import (
 from rmc.resources.grch37.reference_data import processed_context
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
-    calculate_expected,
+    calculate_exp_per_base,
     calculate_observed,
 )
 from rmc.utils.generic import (
@@ -164,12 +164,14 @@ def main(args):
             )
 
         logger.info(
-            "Annotating context HT with number of observed variants per site..."
+            "Annotating context HT with number of observed and expected variants per site..."
         )
         context_ht = context_ht.annotate(_obs=obs_ht.index(context_ht.key))
         context_ht = context_ht.transmute(
             observed=hl.int(hl.is_defined(context_ht._obs))
         )
+
+        context_ht = calculate_exp_per_base(context_ht, args.groupings.split(","))
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -204,6 +206,11 @@ if __name__ == "__main__":
         "--skip_calc_exp",
         help="Skip observed and expected variant calculations per transcript. Relevant only to gnomAD v2.1.1!",
         action="store_true",
+    )
+    parser.add_argument(
+        "--groupings",
+        help="Fields to group by when calculating expected variants per base",
+        default="context,ref,alt,cpg,methylation_level,mu_snp,transcript,exome_coverage",
     )
     parser.add_argument(
         "--overwrite", help="Overwrite existing data", action="store_true"
