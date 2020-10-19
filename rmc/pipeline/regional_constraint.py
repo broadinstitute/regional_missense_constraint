@@ -68,6 +68,7 @@ def main(args):
             exome_ht = filtered_exomes.ht()
 
         logger.info("Reading in context HT...")
+        # TODO: context HT wrote out with only ~104 partitions? need to repartition
         context_ht = processed_context.ht()
 
         if args.test:
