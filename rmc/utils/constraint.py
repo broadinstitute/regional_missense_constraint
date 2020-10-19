@@ -55,8 +55,6 @@ def calculate_exp_per_base(
     Expected variants count is mutation rate per SNP adjusted by location in the genome/CpG status (plateau model) and coverage (coverage model).
 
     .. note::
-        This currently runs on a single transcript at a time.
-
         Expects:
         - context_ht is annotated with all of the fields in `groupings` and that the names match exactly.
             That means, the HT should have context, ref, alt, CpG status, methylation level, mutation rate (`mu_snp`), 
@@ -96,15 +94,24 @@ def calculate_exp_per_base(
         context_ht.locus, context_ht.cpg, context_ht.globals, include_cpg=True
     )
     context_ht = context_ht.annotate(
-        _exp=context_ht.mu_agg.map_values(
+        all_exp=context_ht.mu_agg.map_values(
             lambda x: (x.mu_agg * model[x.cpg][1] + model[x.cpg][0])
             * x.coverage_correction
         )
     )
 
     logger.info("Aggregating proportion of expected variants per site and returning...")
-    # NOTE: this line needs to be changed in order for this function to work on multiple transcripts at a time
-    return context_ht.annotate(cumulative_exp=hl.sum(context_ht._exp.values()))
+    context_ht = context_ht.annotate(
+        transcript_exp_keys=context_ht.all_exp.keys().filter(
+            lambda x: x.transcript == context_ht.transcript
+        )
+    )
+    context_ht = context_ht.annotate(
+        transcript_exp=hl.map(
+            lambda x: context_ht.all_exp.get(x), context_ht._transcript_exp_keys
+        )
+    )
+    return context_ht.annotate(cumulative_exp=hl.sum(context_ht._transcript_exp))
 
 
 def calculate_exp_per_transcript(
