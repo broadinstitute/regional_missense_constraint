@@ -22,6 +22,20 @@ logger = logging.getLogger("constraint_utils")
 logger.setLevel(logging.INFO)
 
 
+GROUPINGS = [
+    "context",
+    "ref",
+    "alt",
+    "cpg",
+    "methylation_level",
+    "mu_snp",
+    "exome_coverage",
+]
+"""
+Core fields to group by when calculating expected variants per base.
+"""
+
+
 def calculate_observed(ht: hl.Table, exac: bool) -> hl.Table:
     """
     Groups input Table by transcript, filters based on `keep_criteria`,

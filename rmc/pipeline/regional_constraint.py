@@ -19,6 +19,7 @@ from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     calculate_exp_per_base,
     calculate_observed,
+    GROUPINGS,
 )
 from rmc.utils.generic import (
     filter_to_region_type,
@@ -170,7 +171,10 @@ def main(args):
         context_ht = context_ht.transmute(
             observed=hl.int(hl.is_defined(context_ht._obs))
         )
-        context_ht = calculate_exp_per_base(context_ht, args.groupings.split(","))
+
+        # Add transcript to core grouping fields
+        groupings = GROUPINGS.append("transcript")
+        context_ht = calculate_exp_per_base(context_ht, groupings)
         context_ht = context_ht.write(f"{temp_path}/context_obs_exp_annot.ht")
 
     finally:
@@ -206,11 +210,6 @@ if __name__ == "__main__":
         "--skip_calc_exp",
         help="Skip observed and expected variant calculations per transcript. Relevant only to gnomAD v2.1.1!",
         action="store_true",
-    )
-    parser.add_argument(
-        "--groupings",
-        help="Fields to group by when calculating expected variants per base",
-        default="context,ref,alt,cpg,methylation_level,mu_snp,transcript,exome_coverage",
     )
     parser.add_argument(
         "--overwrite", help="Overwrite existing data", action="store_true"
