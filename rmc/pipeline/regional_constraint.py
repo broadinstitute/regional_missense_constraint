@@ -26,6 +26,7 @@ from rmc.utils.generic import (
     filter_to_missense,
     generate_models,
     get_coverage_correction_expr,
+    keep_criteria,
     process_context_ht,
 )
 
@@ -65,111 +66,121 @@ def main(args):
 
             logger.info("Done preprocessing files")
 
-        logger.info("Reading in exome HT...")
-        if exac:
-            exome_ht = filtered_exac.ht()
+        if args.prep_for_constraint:
+            logger.info("Reading in exome HT...")
+            if exac:
+                exome_ht = filtered_exac.ht()
 
-        else:
-            exome_ht = filtered_exomes.ht()
+            else:
+                exome_ht = filtered_exomes.ht()
+                exome_ht = exome_ht.filter(keep_criteria(exome_ht))
 
-        logger.info("Reading in context HT...")
-        # TODO: context HT wrote out with only ~104 partitions? need to repartition
-        context_ht = processed_context.ht()
+            logger.info("Reading in context HT...")
+            # TODO: context HT wrote out with only ~104 partitions? need to repartition
+            context_ht = processed_context.ht()
 
-        logger.info("Building plateau and coverage models...")
-        coverage_ht = prop_obs_coverage.ht()
-        coverage_x_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_x.ht"))
-        coverage_y_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_y.ht"))
-
-        (
-            coverage_model,
-            plateau_models,
-            plateau_x_models,
-            plateau_y_models,
-        ) = generate_models(
-            coverage_ht, coverage_x_ht, coverage_y_ht, trimers=args.trimers
-        )
-
-        context_ht = context_ht.annotate(
-            coverage_correction=get_coverage_correction_expr(
-                context_ht.exome_coverage, coverage_model, args.high_cov_cutoff,
+            logger.info("Building plateau and coverage models...")
+            coverage_ht = prop_obs_coverage.ht()
+            coverage_x_ht = hl.read_table(
+                prop_obs_coverage.path.replace(".ht", "_x.ht")
             )
-        )
-        context_ht = context_ht.annotate_globals(
-            plateau_models=plateau_models,
-            plateau_x_models=plateau_x_models,
-            plateau_y_models=plateau_y_models,
-            coverage_model=coverage_model,
-        )
+            coverage_y_ht = hl.read_table(
+                prop_obs_coverage.path.replace(".ht", "_y.ht")
+            )
 
-        if not args.skip_calc_oe:
+            (
+                coverage_model,
+                plateau_models,
+                plateau_x_models,
+                plateau_y_models,
+            ) = generate_models(
+                coverage_ht, coverage_x_ht, coverage_y_ht, trimers=args.trimers
+            )
+
+            context_ht = context_ht.annotate_globals(
+                plateau_models=plateau_models,
+                plateau_x_models=plateau_x_models,
+                plateau_y_models=plateau_y_models,
+                coverage_model=coverage_model,
+            )
+            context_ht = context_ht.annotate(
+                coverage_correction=get_coverage_correction_expr(
+                    context_ht.exome_coverage, coverage_model, args.high_cov_cutoff,
+                )
+            )
+
+            if not args.skip_calc_oe:
+                logger.info(
+                    "Creating autosomes-only, chrX non-PAR-only, and chrY non-PAR-only HT versions..."
+                )
+                context_x_ht = filter_to_region_type(context_ht, "chrX")
+                context_y_ht = filter_to_region_type(context_ht, "chrY")
+                context_auto_ht = filter_to_region_type(context_ht, "autosomes")
+
+                logger.info("Calculating expected values per transcript...")
+                exp_ht = calculate_exp_per_transcript(
+                    context_auto_ht, locus_type="autosomes", groupings=groupings
+                )
+                exp_x_ht = calculate_exp_per_transcript(
+                    context_x_ht, locus_type="X", groupings=groupings
+                )
+                exp_y_ht = calculate_exp_per_transcript(
+                    context_y_ht, locus_type="Y", groupings=groupings
+                )
+                exp_ht = exp_ht.union(exp_x_ht).union(exp_y_ht)
+
+                logger.info(
+                    "Aggregating total observed variant counts per transcript..."
+                )
+                obs_ht = calculate_observed(exome_ht, exac)
+
+                logger.info(
+                    "Annotating total observed and expected values and overall observed/expected value "
+                    "(capped at 1) per transcript..."
+                )
+                context_ht = context_ht.annotate(
+                    total_exp=exp_ht[context_ht.transcript].expected,
+                    total_obs=obs_ht[context_ht.transcript].observed,
+                )
+                context_ht = context_ht.annotate(
+                    overall_obs_exp=hl.min(
+                        context_ht.total_obs / context_ht.total_exp, 1
+                    )
+                )
+
+            else:
+                logger.warning(
+                    "Using observed and expected values calculated on gnomAD v2.1.1 exomes..."
+                )
+                gnomad_constraint_ht = (
+                    constraint_ht.ht()
+                    .key_by("transcript")
+                    .select("obs_mis", "exp_mis", "oe_mis")
+                )
+
+                # Filter to canonical transcripts only and rename fields
+                gnomad_constraint_ht = gnomad_constraint_ht.filter(
+                    gnomad_constraint_ht.canonical
+                )
+                gnomad_constraint_ht = gnomad_constraint_ht.transmute(
+                    total_obs=gnomad_constraint_ht.obs_mis,
+                    total_exp=gnomad_constraint_ht.exp_mis,
+                    overall_obs_exp=gnomad_constraint_ht.oe_mis,
+                )
+                context_ht = context_ht.annotate(
+                    **gnomad_constraint_ht[context_ht.transcript]
+                )
+
             logger.info(
-                "Creating autosomes-only, chrX non-PAR-only, and chrY non-PAR-only HT versions..."
+                "Annotating context HT with number of observed and expected variants per site..."
             )
-            context_x_ht = filter_to_region_type(context_ht, "chrX")
-            context_y_ht = filter_to_region_type(context_ht, "chrY")
-            context_auto_ht = filter_to_region_type(context_ht, "autosomes")
-
-            logger.info("Calculating expected values per transcript...")
-            exp_ht = calculate_exp_per_transcript(
-                context_auto_ht, locus_type="autosomes", groupings=groupings
-            )
-            exp_x_ht = calculate_exp_per_transcript(
-                context_x_ht, locus_type="X", groupings=groupings
-            )
-            exp_y_ht = calculate_exp_per_transcript(
-                context_y_ht, locus_type="Y", groupings=groupings
-            )
-            exp_ht = exp_ht.union(exp_x_ht).union(exp_y_ht)
-
-            logger.info("Aggregating total observed variant counts per transcript...")
-            obs_ht = calculate_observed(exome_ht, exac)
-
-            logger.info(
-                "Annotating total observed and expected values and overall observed/expected value "
-                "(capped at 1) per transcript..."
-            )
-            context_ht = context_ht.annotate(
-                total_exp=exp_ht[context_ht.transcript].expected,
-                total_obs=obs_ht[context_ht.transcript].observed,
-            )
-            context_ht = context_ht.annotate(
-                overall_obs_exp=hl.min(context_ht.total_obs / context_ht.total_exp, 1)
+            context_ht = context_ht.annotate(_obs=exome_ht.index(context_ht.key))
+            context_ht = context_ht.transmute(
+                observed=hl.int(hl.is_defined(context_ht._obs))
             )
 
-        else:
-            logger.warning(
-                "Using observed and expected values calculated on gnomAD v2.1.1 exomes..."
-            )
-            gnomad_constraint_ht = (
-                constraint_ht.ht()
-                .key_by("transcript")
-                .select("obs_mis", "exp_mis", "oe_mis")
-            )
-
-            # Filter to canonical transcripts only and rename fields
-            gnomad_constraint_ht = gnomad_constraint_ht.filter(
-                gnomad_constraint_ht.canonical
-            )
-            gnomad_constraint_ht = gnomad_constraint_ht.transmute(
-                total_obs=gnomad_constraint_ht.obs_mis,
-                total_exp=gnomad_constraint_ht.exp_mis,
-                overall_obs_exp=gnomad_constraint_ht.oe_mis,
-            )
-            context_ht = context_ht.annotate(
-                **gnomad_constraint_ht[context_ht.transcript]
-            )
-
-        logger.info(
-            "Annotating context HT with number of observed and expected variants per site..."
-        )
-        context_ht = context_ht.annotate(_obs=exome_ht.index(context_ht.key))
-        context_ht = context_ht.transmute(
-            observed=hl.int(hl.is_defined(context_ht._obs))
-        )
-
-        context_ht = calculate_exp_per_base(context_ht, groupings)
-        context_ht = context_ht.write(f"{temp_path}/context_obs_exp_annot.ht")
+            context_ht = calculate_exp_per_base(context_ht, groupings)
+            context_ht = context_ht.write(f"{temp_path}/context_obs_exp_annot.ht")
 
     finally:
         logger.info("Copying hail log to logging bucket...")
