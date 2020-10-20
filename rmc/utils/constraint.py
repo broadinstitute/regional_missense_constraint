@@ -171,7 +171,7 @@ def get_exp_per_transcript(
         model = group_ht.plateau_y_models["total"][group_ht.cpg]
     else:
         model = group_ht.plateau_models["total"][group_ht.cpg]
-    model = plateau_model[group_ht.cpg]
+
     group_ht = group_ht.transmute(mu_adj=group_ht.mu_agg * model[1] + model[0])
 
     logger.info(
@@ -183,14 +183,14 @@ def get_exp_per_transcript(
         ),
     )
     group_ht = group_ht.annotate(
-        _exp=(group_ht.mu_adj * group_ht.coverage_correction),
+        _exp=group_ht.mu_adj * group_ht.coverage_correction,
         mu=group_ht.mu_agg * group_ht.coverage_correction,
     )
 
     # This also seems to be undercounting the number of expecteds
     logger.info("Getting expected counts per transcript and returning...")
     return group_ht.group_by("transcript").aggregate(
-        total_exp=hl.agg.sum(group_ht._exp)
+        total_exp=hl.agg.sum(group_ht._exp), mu_agg=hl.agg.sum(group_ht.mu)
     )
     # return context_ht.filter(context_ht.transcript == transcript).tail(1).cumulative_exp
 
