@@ -103,7 +103,7 @@ def get_divergence_scores() -> Dict:
 
 ## Functions to process reference genome related resources
 def process_context_ht(
-    build: str, trimers: bool = True, overwrite: bool = True, n_partitions: int = 1000
+    build: str, trimers: bool = True, overwrite: bool = True, n_partitions: int = 30000
 ) -> None:
     """
     Imports reference fasta (SNPs only, annotated with VEP) as a hail Table.
@@ -162,7 +162,7 @@ def process_context_ht(
     )
 
     logger.info("Writing out context HT...")
-    ht = ht.naive_coalesce(n_partitions)
+    ht = ht.repartition(n_partitions)
     ht.write(output_path, overwrite=overwrite)
 
 
