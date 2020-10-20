@@ -131,9 +131,8 @@ def calculate_exp_per_base(
     )
 
 
-def get_exp_per_transcript(
+def calculate_exp_per_transcript(
     context_ht: hl.Table,
-    transcript: str,
     locus_type: str,
     groupings: List[str] = [
         "context",
@@ -154,8 +153,8 @@ def get_exp_per_transcript(
         - Expects that input table contains coverage and plateau models in its global annotations (`coverage_model`, `plateau_models`).
 
     :param hl.Table context_ht: Context Table.
-    :param str transcript: Transcript of interest.
-    :param str locus_type: Locus type of in
+    :param str locus_type: Locus type of input table. One of "X", "Y", or "autosomes".
+        NOTE: will treat any input other than "X" or "Y" as autosomes.
     :return: Total expected variants count for transcript of interest.
     :rtype: hl.expr.Float64Expression
     """
