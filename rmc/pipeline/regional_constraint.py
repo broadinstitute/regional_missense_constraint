@@ -18,6 +18,7 @@ from rmc.resources.grch37.reference_data import processed_context
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     calculate_exp_per_base,
+    calc_exp_per_transcript,
     calculate_observed,
     GROUPINGS,
 )
@@ -41,6 +42,9 @@ def main(args):
 
     hl.init(log="/RMC.log")
     exac = args.exac
+
+    # Add transcript to core grouping fields
+    groupings = GROUPINGS.append("transcript")
 
     try:
         if args.pre_process_data:
@@ -72,19 +76,6 @@ def main(args):
         # TODO: context HT wrote out with only ~104 partitions? need to repartition
         context_ht = processed_context.ht()
 
-        if args.test:
-            logger.info("Inferring build of exome HT...")
-            rg = get_reference_genome(exome_ht.locus)
-
-            logger.info("Filtering to chr20 for testing...")
-            contigs = rg.contigs[19]
-            context_ht = hl.filter_intervals(
-                context_ht, [hl.parse_locus_interval(contigs, reference_genome=rg)]
-            )
-            exome_ht = hl.filter_intervals(
-                exome_ht, [hl.parse_locus_interval(contigs, reference_genome=rg)]
-            )
-
         logger.info("Building plateau and coverage models...")
         coverage_ht = prop_obs_coverage.ht()
         coverage_x_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_x.ht"))
@@ -109,9 +100,8 @@ def main(args):
             plateau_y_models=plateau_y_models,
             coverage_model=coverage_model,
         )
-        obs_ht = calculate_observed(exome_ht, exac)
 
-        if not args.skip_calc_exp:
+        if not args.skip_calc_oe:
             logger.info(
                 "Creating autosomes-only, chrX non-PAR-only, and chrY non-PAR-only HT versions..."
             )
@@ -119,15 +109,20 @@ def main(args):
             context_y_ht = filter_to_region_type(context_ht, "chrY")
             context_auto_ht = filter_to_region_type(context_ht, "autosomes")
 
-            logger.info("Calculating expected values...")
-            exp_ht = calculate_expected(context_auto_ht, coverage_model, plateau_models)
-            exp_x_ht = calculate_expected(
-                context_x_ht, coverage_model, plateau_x_models
+            logger.info("Calculating expected values per transcript...")
+            exp_ht = calc_exp_per_transcript(
+                context_auto_ht, locus_type="autosomes", groupings=groupings
             )
-            exp_y_ht = calculate_expected(
-                context_y_ht, coverage_model, plateau_y_models
+            exp_x_ht = calc_exp_per_transcript(
+                context_x_ht, locus_type="X", groupings=groupings
+            )
+            exp_y_ht = calc_exp_per_transcript(
+                context_y_ht, locus_type="Y", groupings=groupings
             )
             exp_ht = exp_ht.union(exp_x_ht).union(exp_y_ht)
+
+            logger.info("Aggregating total observed variant counts per transcript...")
+            obs_ht = calculate_observed(exome_ht, exac)
 
             logger.info(
                 "Annotating total observed and expected values and overall observed/expected value "
@@ -167,13 +162,11 @@ def main(args):
         logger.info(
             "Annotating context HT with number of observed and expected variants per site..."
         )
-        context_ht = context_ht.annotate(_obs=obs_ht.index(context_ht.key))
+        context_ht = context_ht.annotate(_obs=exome_ht.index(context_ht.key))
         context_ht = context_ht.transmute(
             observed=hl.int(hl.is_defined(context_ht._obs))
         )
 
-        # Add transcript to core grouping fields
-        groupings = GROUPINGS.append("transcript")
         context_ht = calculate_exp_per_base(context_ht, groupings)
         context_ht = context_ht.write(f"{temp_path}/context_obs_exp_annot.ht")
 
@@ -202,12 +195,7 @@ if __name__ == "__main__":
         "--pre_process_data", help="Pre-process data", action="store_true"
     )
     parser.add_argument(
-        "--test",
-        help="Filter to chr22 (for code testing purposes)",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--skip_calc_exp",
+        "--skip_calc_oe",
         help="Skip observed and expected variant calculations per transcript. Relevant only to gnomAD v2.1.1!",
         action="store_true",
     )
