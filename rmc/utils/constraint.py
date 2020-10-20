@@ -94,10 +94,11 @@ def calculate_exp_per_base(
         context_ht.locus, context_ht.cpg, context_ht.globals, include_cpg=True
     )
     context_ht = context_ht.annotate(
+        mu=context_ht.mu_agg.map_values(lambda x: (x.mu_agg) * x.coverage_correction),
         all_exp=context_ht.mu_agg.map_values(
             lambda x: (x.mu_agg * model[x.cpg][1] + model[x.cpg][0])
             * x.coverage_correction
-        )
+        ),
     )
 
     logger.info("Aggregating proportion of expected variants per site and returning...")
