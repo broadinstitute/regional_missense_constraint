@@ -170,8 +170,8 @@ def main(args):
         context_ht = context_ht.transmute(
             observed=hl.int(hl.is_defined(context_ht._obs))
         )
-
         context_ht = calculate_exp_per_base(context_ht, args.groupings.split(","))
+        context_ht = context_ht.write(f"{temp_path}/context_obs_exp_annot.ht")
 
     finally:
         logger.info("Copying hail log to logging bucket...")
