@@ -10,6 +10,12 @@ LOGGING_PATH = "gs://regional_missense_constraint/logs"
 Path to bucket that stores hail logs.
 """
 
+temp_path = "gs://regional_missense_constraint/temp"
+"""
+Path to bucket to store temporary files. 
+Used when checkpointing intermediate files.
+"""
+
 
 ## Kaitlin's resources
 # Original regional missense constraint resource files

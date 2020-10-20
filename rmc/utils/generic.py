@@ -103,7 +103,7 @@ def get_divergence_scores() -> Dict:
 
 ## Functions to process reference genome related resources
 def process_context_ht(
-    build: str, trimers: bool = True, overwrite: bool = True, n_partitions: int = 1000
+    build: str, trimers: bool = True, overwrite: bool = True, n_partitions: int = 30000
 ) -> None:
     """
     Imports reference fasta (SNPs only, annotated with VEP) as a hail Table.
@@ -162,7 +162,7 @@ def process_context_ht(
     )
 
     logger.info("Writing out context HT...")
-    ht = ht.naive_coalesce(n_partitions)
+    ht = ht.repartition(n_partitions)
     ht.write(output_path, overwrite=overwrite)
 
 
@@ -210,7 +210,9 @@ def keep_criteria(ht: hl.Table, exac: bool) -> hl.expr.BooleanExpression:
             (ht.ac <= 123) & (ht.ac > 0) & (ht.vqslod >= -2.632) & (ht.coverage > 1)
         )
     else:
-        keep_criteria = (ht.ac > 0) & (ht.af < 0.001) & (ht.pass_filters)
+        keep_criteria = (
+            (ht.ac > 0) & (ht.af < 0.001) & (ht.pass_filters) & (ht.exome_coverage > 0)
+        )
 
     return keep_criteria
 
@@ -299,6 +301,7 @@ def get_plateau_model(
     locus_expr: hl.expr.LocusExpression,
     cpg_expr: hl.expr.BooleanExpression,
     globals_expr: hl.expr.StructExpression,
+    include_cpg: bool = False,
 ) -> hl.expr.Float64Expression:
     """
     Gets model to determine adjustment to mutation rate based on locus type and CpG status.
@@ -307,14 +310,23 @@ def get_plateau_model(
         This function expects that the context Table has each plateau model (autosome, X, Y) added as global annotations.
 
     :param hl.expr.LocusExpression locus_expr: Locus expression.
-    :param hl.expr.BooleanExpression: Expression describing whether site is a CpG site.
+    :param hl.expr.BooleanExpression: Expression describing whether site is a CpG site. Required if include_cpg is False.
     :param hl.expr.StructExpression globals_expr: Expression containing global annotations of context HT. Must contain plateau models as annotations.
+    :param bool include_cpg: Whether to return full plateau model dictionary including CpG keys. Default is False.
     :return: Plateau model for locus type.
     :rtype: hl.expr.Float64Expression
     """
+    if include_cpg:
+        return (
+            hl.case()
+            .when(locus_expr.in_x_nonpar(), globals_expr.plateau_x_models.total)
+            .when(locus_expr.in_y_nonpar(), globals_expr.plateau_y_models.total)
+            .default(globals_expr.plateau_models.total)
+        )
+
     return (
         hl.case()
         .when(locus_expr.in_x_nonpar(), globals_expr.plateau_x_models.total[cpg_expr])
         .when(locus_expr.in_y_nonpar(), globals_expr.plateau_y_models.total[cpg_expr])
-        .default(globals_expr.plateau_model.total[cpg_expr])
+        .default(globals_expr.plateau_models.total[cpg_expr])
     )

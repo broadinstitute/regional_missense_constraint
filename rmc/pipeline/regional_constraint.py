@@ -17,8 +17,9 @@ from rmc.resources.grch37.gnomad import (
 from rmc.resources.grch37.reference_data import processed_context
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
-    calculate_expected,
+    calculate_exp_per_base,
     calculate_observed,
+    GROUPINGS,
 )
 from rmc.utils.generic import (
     filter_to_region_type,
@@ -68,6 +69,7 @@ def main(args):
             exome_ht = filtered_exomes.ht()
 
         logger.info("Reading in context HT...")
+        # TODO: context HT wrote out with only ~104 partitions? need to repartition
         context_ht = processed_context.ht()
 
         if args.test:
@@ -163,12 +165,17 @@ def main(args):
             )
 
         logger.info(
-            "Annotating context HT with number of observed variants per site..."
+            "Annotating context HT with number of observed and expected variants per site..."
         )
         context_ht = context_ht.annotate(_obs=obs_ht.index(context_ht.key))
         context_ht = context_ht.transmute(
             observed=hl.int(hl.is_defined(context_ht._obs))
         )
+
+        # Add transcript to core grouping fields
+        groupings = GROUPINGS.append("transcript")
+        context_ht = calculate_exp_per_base(context_ht, groupings)
+        context_ht = context_ht.write(f"{temp_path}/context_obs_exp_annot.ht")
 
     finally:
         logger.info("Copying hail log to logging bucket...")
