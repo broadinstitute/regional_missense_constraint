@@ -113,7 +113,7 @@ def calculate_exp_per_base(
         )
     )
     return context_ht.annotate(cumulative_exp=hl.sum(context_ht.transcript_exp)).select(
-        "cumulative_exp"
+        "cumulative_exp", "mu"
     )
 
 
