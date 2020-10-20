@@ -131,22 +131,67 @@ def calculate_exp_per_base(
     )
 
 
-def get_exp_per_transcript(
-    context_ht: hl.Table, transcript: str,
+def calculate_exp_per_transcript(
+    context_ht: hl.Table,
+    locus_type: str,
+    groupings: List[str] = [
+        "context",
+        "ref",
+        "alt",
+        "cpg",
+        "methylation_level",
+        "mu_snp",
+        "transcript",
+        "exome_coverage",
+    ],
 ) -> hl.expr.Float64Expression:
     """
     Returns the total number of expected variants for input transcript.
 
     .. note::
-        - Expects that `calculate_exp_per_base` has already been run. 
-        - Assumes context_ht has annotation `cumulative_exp` (result of running function above).
+        - Assumes that input table is filtered to autosomes/PAR only, X nonPAR only, or Y nonPAR only.
+        - Expects that input table contains coverage and plateau models in its global annotations (`coverage_model`, `plateau_models`).
 
     :param hl.Table context_ht: Context Table.
-    :param str transcript: Transcript of interest.
+    :param str locus_type: Locus type of input table. One of "X", "Y", or "autosomes".
+        NOTE: will treat any input other than "X" or "Y" as autosomes.
     :return: Total expected variants count for transcript of interest.
     :rtype: hl.expr.Float64Expression
     """
-    return context_ht.filter(context_ht.transcript == transcript).tail(1).cumulative_exp
+    logger.info(f"Grouping by {groupings}...")
+    group_ht = context_ht.group_by(*groupings).aggregate(
+        mu_agg=hl.agg.sum(context_ht.mu_snp)
+    )
+
+    logger.info("Adjusting aggregated mutation rate with plateau model...")
+    if locus_type == "X":
+        model = group_ht.plateau_x_models["total"][group_ht.cpg]
+    elif locus_type == "Y":
+        model = group_ht.plateau_y_models["total"][group_ht.cpg]
+    else:
+        model = group_ht.plateau_models["total"][group_ht.cpg]
+
+    group_ht = group_ht.transmute(mu_adj=group_ht.mu_agg * model[1] + model[0])
+
+    logger.info(
+        "Adjusting aggregated mutation rate with coverage correction to get expected counts..."
+    )
+    group_ht = group_ht.annotate(
+        coverage_correction=get_coverage_correction_expr(
+            group_ht.exome_coverage, group_ht.coverage_model
+        ),
+    )
+    group_ht = group_ht.annotate(
+        _exp=group_ht.mu_adj * group_ht.coverage_correction,
+        mu=group_ht.mu_agg * group_ht.coverage_correction,
+    )
+
+    # This also seems to be undercounting the number of expecteds
+    logger.info("Getting expected counts per transcript and returning...")
+    return group_ht.group_by("transcript").aggregate(
+        total_exp=hl.agg.sum(group_ht._exp), mu_agg=hl.agg.sum(group_ht.mu)
+    )
+    # return context_ht.filter(context_ht.transcript == transcript).tail(1).cumulative_exp
 
 
 def get_obs_exp_expr(
