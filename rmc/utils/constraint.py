@@ -187,6 +187,7 @@ def get_exp_per_transcript(
         mu=group_ht.mu_agg * group_ht.coverage_correction,
     )
 
+    # This also seems to be undercounting the number of expecteds
     logger.info("Getting expected counts per transcript and returning...")
     return group_ht.group_by("transcript").aggregate(
         total_exp=hl.agg.sum(group_ht._exp)
