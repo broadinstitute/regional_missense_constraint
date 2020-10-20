@@ -18,7 +18,7 @@ from rmc.resources.grch37.reference_data import processed_context
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     calculate_exp_per_base,
-    calc_exp_per_transcript,
+    calculate_exp_per_transcript,
     calculate_observed,
     GROUPINGS,
 )
@@ -110,13 +110,13 @@ def main(args):
             context_auto_ht = filter_to_region_type(context_ht, "autosomes")
 
             logger.info("Calculating expected values per transcript...")
-            exp_ht = calc_exp_per_transcript(
+            exp_ht = calculate_exp_per_transcript(
                 context_auto_ht, locus_type="autosomes", groupings=groupings
             )
-            exp_x_ht = calc_exp_per_transcript(
+            exp_x_ht = calculate_exp_per_transcript(
                 context_x_ht, locus_type="X", groupings=groupings
             )
-            exp_y_ht = calc_exp_per_transcript(
+            exp_y_ht = calculate_exp_per_transcript(
                 context_y_ht, locus_type="Y", groupings=groupings
             )
             exp_ht = exp_ht.union(exp_x_ht).union(exp_y_ht)
