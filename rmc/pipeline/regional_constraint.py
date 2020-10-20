@@ -3,10 +3,9 @@ import logging
 
 import hail as hl
 
-from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
-from gnomad_lof.constraint_utils.constraint_basics import build_models, prepare_ht
-from rmc.resources.basics import LOGGING_PATH
+from gnomad_lof.constraint_utils.constraint_basics import prepare_ht
+from rmc.resources.basics import LOGGING_PATH, temp_path
 from rmc.resources.grch37.exac import filtered_exac
 from rmc.resources.grch37.gnomad import (
     constraint_ht,
@@ -25,6 +24,7 @@ from rmc.utils.constraint import (
 from rmc.utils.generic import (
     filter_to_region_type,
     filter_to_missense,
+    generate_models,
     get_coverage_correction_expr,
     process_context_ht,
 )
@@ -80,14 +80,15 @@ def main(args):
         coverage_ht = prop_obs_coverage.ht()
         coverage_x_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_x.ht"))
         coverage_y_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_y.ht"))
-        coverage_model, plateau_models = build_models(
-            coverage_ht, args.trimers, weighted=True
-        )
 
-        # TODO: make half_cutoff (for coverage cutoff) True for X/Y?
-        # This would also mean saving a new coverage model
-        _, plateau_x_models = build_models(coverage_x_ht, args.trimers, weighted=True)
-        _, plateau_y_models = build_models(coverage_y_ht, args.trimers, weighted=True)
+        (
+            coverage_model,
+            plateau_models,
+            plateau_x_models,
+            plateau_y_models,
+        ) = generate_models(
+            coverage_ht, coverage_x_ht, coverage_y_ht, trimers=args.trimers
+        )
 
         context_ht = context_ht.annotate(
             coverage_correction=get_coverage_correction_expr(
@@ -193,6 +194,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pre_process_data", help="Pre-process data", action="store_true"
+    )
+    parser.add_argument(
+        "--prep_for_constraint",
+        help="Prepare tables for constraint calculations",
+        action="store_true",
     )
     parser.add_argument(
         "--skip_calc_oe",

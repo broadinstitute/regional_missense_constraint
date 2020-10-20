@@ -7,6 +7,7 @@ from gnomad.resources.resource_utils import DataException
 from gnomad_lof.constraint_utils.constraint_basics import (
     add_most_severe_csq_to_tc_within_ht,
     annotate_constraint_groupings,
+    build_models,
     prepare_ht,
 )
 from gnomad_lof.constraint_utils.generic import fast_filter_vep
@@ -269,6 +270,46 @@ def filter_to_region_type(ht: hl.Table, region: str) -> hl.Table:
     else:
         ht = ht.filter(ht.locus.in_autosome() | ht.locus.in_x_par())
     return ht
+
+
+def generate_models(
+    coverage_ht: hl.Table,
+    coverage_x_ht: hl.Table,
+    coverage_y_ht: hl.Table,
+    trimers: bool,
+    weighted: bool = True,
+) -> Tuple[
+    Tuple[float, float],
+    hl.expr.DictExpression,
+    hl.expr.DictExpression,
+    hl.expr.DictExpression,
+]:
+    """
+    Calls `build_models` from gnomAD LoF repo to generate models used to adjust expected variants count.
+
+    :param hl.Table coverage_ht: Table with proportion of variants observed by coverage (autosomes/PAR only).
+    :param hl.Table coverage_x_ht: Table with proportion of variants observed by coverage (chrX only).
+    :param hl.Table coverage_y_ht: Table with proportion of variants observed by coverage (chrY only).
+    :param bool trimers: Whether to use trimers instead of heptamers.
+    :param bool weighted: Whether to use weighted least squares when building models. Default is True.
+    :return: Coverage model, plateau models for autosomes, plateau models for chrX, plateau models for chrY. 
+    :rtype: Tuple[Tuple[float, float], hl.expr.DictExpression, hl.expr.DictExpression, hl.expr.DictExpression]
+    """
+    logger.info("Building autosomes/PAR plateau model and coverage model...")
+    coverage_model, plateau_models = build_models(
+        coverage_ht, trimers=trimers, weighted=weighted
+    )
+
+    logger.info("Building plateau models for chrX and chrY...")
+    # TODO: make half_cutoff (for coverage cutoff) True for X/Y?
+    # This would also mean saving new coverage model for allosomes
+    _, plateau_x_models = build_models(
+        coverage_x_ht, trimers=trimers, weighted=weighted
+    )
+    _, plateau_y_models = build_models(
+        coverage_y_ht, trimers=trimers, weighted=weighted
+    )
+    return (coverage_model, plateau_models, plateau_x_models, plateau_y_models)
 
 
 def get_coverage_correction_expr(
