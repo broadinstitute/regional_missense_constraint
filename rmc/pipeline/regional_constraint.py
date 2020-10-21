@@ -66,6 +66,7 @@ def main(args):
             )
             exome_ht = exome_ht.filter(keep_criteria(exome_ht))
             exome_ht.write(filtered_exomes.path, overwrite=args.overwrite)
+            logger.info("Done processing gnomAD exomes HT")
 
             logger.info("Preprocessing reference fasta (context) HT...")
             context_ht = process_context_ht("GRCh37", args.trimers)
