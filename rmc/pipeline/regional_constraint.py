@@ -14,6 +14,7 @@ from rmc.resources.grch37.gnomad import (
     prop_obs_coverage,
 )
 from rmc.resources.grch37.reference_data import processed_context
+from rmc.resources.resource_utils import MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     calculate_exp_per_base,
@@ -23,11 +24,11 @@ from rmc.utils.constraint import (
 )
 from rmc.utils.generic import (
     filter_to_region_type,
-    filter_to_missense,
     generate_models,
     get_coverage_correction_expr,
     keep_criteria,
     process_context_ht,
+    process_vep,
 )
 
 
@@ -49,9 +50,7 @@ def main(args):
 
     try:
         if args.pre_process_data:
-            logger.info("Preprocessing reference fasta and gencode files...")
-            process_context_ht("GRCh37", args.trimers)
-
+            logger.warning("Code currently only processes b37 data!")
             logger.info(
                 "Filtering gnomAD exomes HT to SNPs and annotating with variant type, methylation, and coverage..."
             )
@@ -61,8 +60,24 @@ def main(args):
             logger.info(
                 "Filtering gnomAD exomes HT to missense variants in canonical transcripts only..."
             )
-            exome_ht = filter_to_missense(exome_ht)
+            exome_ht = process_vep(exome_ht, filter_csq=True, csq=MISSENSE)
+            exome_ht = exome_ht.filter(keep_criteria(exome_ht))
             exome_ht.write(filtered_exomes.path, overwrite=args.overwrite)
+
+            logger.info("Preprocessing reference fasta (context) HT...")
+            context_ht = process_context_ht("GRCh37", args.trimers)
+
+            logger.info(
+                "Filtering context HT to all sites not found in gnomAD exomes + all rare, covered sites in gnomAD"
+            )
+            exome_join = exome_ht[context_ht.key]
+            context_ht = context_ht.filter(
+                hl.is_missing(exome_join) | keep_criteria(exome_join)
+            )
+
+            # NOTE: should use ~30k-40k partitions here
+            context_ht = context_ht.repartition(args.n_partitions)
+            context_ht.write(processed_context.path, overwrite=args.overwrite)
 
             logger.info("Done preprocessing files")
 
@@ -73,7 +88,6 @@ def main(args):
 
             else:
                 exome_ht = filtered_exomes.ht()
-                exome_ht = exome_ht.filter(keep_criteria(exome_ht))
 
             logger.info("Reading in context HT...")
             # TODO: context HT wrote out with only ~104 partitions? need to repartition
@@ -196,6 +210,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--exac", help="Use ExAC Table (not gnomAD Table)", action="store_true"
+    )
+    parser.add_argument(
+        "n_partitions", help="Desired number of partitions for output data", type=int,
     )
     parser.add_argument(
         "--high_cov_cutoff",
