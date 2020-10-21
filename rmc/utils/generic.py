@@ -185,12 +185,12 @@ def get_exome_bases(build: str) -> int:
     return ht.aggregate(hl.agg.sum(ht.cds_len))
 
 
-def keep_criteria(ht: hl.Table, exac: bool) -> hl.expr.BooleanExpression:
+def keep_criteria(ht: hl.Table, exac: bool = False) -> hl.expr.BooleanExpression:
     """
     Returns Boolean expression to filter variants in input Table.
 
     :param hl.Table ht: Input Table.
-    :param bool exac: Whether input Table is ExAC data.
+    :param bool exac: Whether input Table is ExAC data. Default is False.
     :return: Keep criteria Boolean expression.
     :rtype: hl.expr.BooleanExpression
     """
