@@ -21,7 +21,7 @@ from rmc.resources.basics import (
 )
 import rmc.resources.grch37.reference_data as grch37
 import rmc.resources.grch38.reference_data as grch38
-from rmc.resources.resource_utils import BUILDS
+from rmc.resources.resource_utils import BUILDS, MISSENSE
 
 
 logging.basicConfig(
@@ -105,27 +105,21 @@ def get_divergence_scores() -> Dict:
 
 ## Functions to process reference genome related resources
 def process_context_ht(
-    build: str,
-    trimers: bool = True,
-    missense_str: str = "missense_variant",
-    overwrite: bool = True,
-    n_partitions: int = 30000,
-) -> None:
+    build: str, trimers: bool = True, missense_str: str = MISSENSE,
+) -> hl.Table:
     """
-    Imports reference fasta (SNPs only, annotated with VEP) as a hail Table.
+    Prepares context HT (SNPs only, annotated with VEP) for regional missense constraint calculations.
 
     Filters to missense variants in canonical protein coding transcripts. 
-    Also annotates with probability of mutation for each variant.
+    Also annotates with probability of mutation for each variant, CpG status, and methylation level.
 
     .. note::
         `trimers` needs to be True for gnomAD v2.
 
     :param str build: Reference genome build; must be one of BUILDS.
     :param bool trimers: Whether to filter to trimers or heptamers. Default is True.
-    :param bool overwrite: Whether to overwrite output. Default is True.
-    :param int n_partitions: Number of desired partitions for output. Default is 1000.
-    :return: None
-    :rtype: None
+    :return: Context HT filtered to missense variants in canonical transcripts and annotated with mutation rate, CpG status, and methylation level.
+    :rtype: hl.Table
     """
     if build not in BUILDS:
         raise DataException(f"Build must be one of {BUILDS}.")
@@ -134,10 +128,8 @@ def process_context_ht(
 
     if build == "GRCh37":
         ht = grch37.full_context.ht()
-        output_path = grch37.processed_context.path
     else:
         ht = grch38.full_context.ht()
-        output_path = grch38.processed_context.path
 
     # `prepare_ht` annotates HT with: ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
     ht = prepare_ht(ht, trimers)
@@ -162,11 +154,7 @@ def process_context_ht(
         "variant_type",
         *grouping,
     )
-    ht = annotate_with_mu(ht, mu_ht)
-
-    logger.info("Writing out context HT...")
-    ht = ht.repartition(n_partitions)
-    ht.write(output_path, overwrite=overwrite)
+    return annotate_with_mu(ht, mu_ht)
 
 
 ## Functions for obs/exp related resources

@@ -5,14 +5,10 @@ FLAGSHIP_LOF = "gs://gnomad-public/papers/2019-flagship-lof/v1.0"
 RESOURCE_PREFIX = "gs://regional_missense_constraint/resources"
 
 
-# Missense variant VEP annotations
-MISSENSE = [
-    "stop_lost",
-    "initiator_codon_variant",
-    "start_lost",
-    "protein_altering_variant",
-    "missense_variant",
-]
+MISSENSE = "missense_variant"
+"""
+String representing missense variant VEP annotation.
+"""
 
 
 # Import related resources
