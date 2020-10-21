@@ -4,7 +4,6 @@ import logging
 import hail as hl
 
 from gnomad.utils.slack import slack_notifications
-from gnomad_lof.constraint_utils.constraint_basics import prepare_ht
 from rmc.resources.basics import LOGGING_PATH, temp_path
 from rmc.resources.grch37.exac import filtered_exac
 from rmc.resources.grch37.gnomad import (
@@ -52,15 +51,19 @@ def main(args):
         if args.pre_process_data:
             logger.warning("Code currently only processes b37 data!")
             logger.info(
-                "Filtering gnomAD exomes HT to SNPs and annotating with variant type, methylation, and coverage..."
-            )
-            exome_ht = processed_exomes.ht()
-            exome_ht = prepare_ht(exome_ht, args.trimers)
-
-            logger.info(
                 "Filtering gnomAD exomes HT to missense variants in canonical transcripts only..."
             )
+            exome_ht = processed_exomes.ht()
             exome_ht = process_vep(exome_ht, filter_csq=True, csq=MISSENSE)
+
+            # Move nested annotations into top level annotations
+            exome_ht = exome_ht.transmute(
+                ac=exome_ht.freq[0].AC,
+                af=exome_ht.freq[0].AF,
+                exome_coverage=exome_ht.coverage.exomes.median,
+            ).select(
+                "ac", "af", "pass_filters", "exome_coverage", "transcript_consequences"
+            )
             exome_ht = exome_ht.filter(keep_criteria(exome_ht))
             exome_ht.write(filtered_exomes.path, overwrite=args.overwrite)
 
@@ -90,7 +93,6 @@ def main(args):
                 exome_ht = filtered_exomes.ht()
 
             logger.info("Reading in context HT...")
-            # TODO: context HT wrote out with only ~104 partitions? need to repartition
             context_ht = processed_context.ht()
 
             logger.info("Building plateau and coverage models...")
