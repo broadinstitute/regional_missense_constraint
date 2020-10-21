@@ -4,9 +4,7 @@ from typing import Dict, List, Tuple, Union
 import hail as hl
 
 from gnomad.utils.reference_genome import get_reference_genome
-from gnomad_lof.constraint_utils.generic import annotate_variant_types
 from rmc.utils.generic import (
-    filter_to_missense,
     get_coverage_correction_expr,
     get_exome_bases,
     get_plateau_model,
