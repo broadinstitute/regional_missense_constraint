@@ -212,7 +212,7 @@ if __name__ == "__main__":
         "--exac", help="Use ExAC Table (not gnomAD Table)", action="store_true"
     )
     parser.add_argument(
-        "n_partitions", help="Desired number of partitions for output data", type=int,
+        "--n_partitions", help="Desired number of partitions for output data", type=int,
     )
     parser.add_argument(
         "--high_cov_cutoff",

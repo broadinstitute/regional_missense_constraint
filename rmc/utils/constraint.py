@@ -763,7 +763,7 @@ def search_for_two_breaks(
     transcript: str,
     chisq_threshold: float,
     num_obs_var: int = 10,
-) -> Union[Tuple(float, Tuple(int, int)), None]:
+) -> Union[Tuple[float, Tuple[int, int]], None]:
     """
     Searches for evidence of constraint within a set window size/number of base pairs.
 
