@@ -4,9 +4,7 @@ from typing import Dict, List, Tuple, Union
 import hail as hl
 
 from gnomad.utils.reference_genome import get_reference_genome
-from gnomad_lof.constraint_utils.generic import annotate_variant_types
 from rmc.utils.generic import (
-    filter_to_missense,
     get_coverage_correction_expr,
     get_exome_bases,
     get_plateau_model,
@@ -765,7 +763,7 @@ def search_for_two_breaks(
     transcript: str,
     chisq_threshold: float,
     num_obs_var: int = 10,
-) -> Union[Tuple(float, Tuple(int, int)), None]:
+) -> Union[Tuple[float, Tuple[int, int]], None]:
     """
     Searches for evidence of constraint within a set window size/number of base pairs.
 
