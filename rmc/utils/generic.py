@@ -7,6 +7,7 @@ from gnomad.resources.resource_utils import DataException
 from gnomad_lof.constraint_utils.constraint_basics import (
     add_most_severe_csq_to_tc_within_ht,
     annotate_constraint_groupings,
+    annotate_with_mu,
     build_models,
     prepare_ht,
 )
@@ -104,7 +105,11 @@ def get_divergence_scores() -> Dict:
 
 ## Functions to process reference genome related resources
 def process_context_ht(
-    build: str, trimers: bool = True, overwrite: bool = True, n_partitions: int = 30000
+    build: str,
+    trimers: bool = True,
+    missense_str: str = "missense_variant",
+    overwrite: bool = True,
+    n_partitions: int = 30000,
 ) -> None:
     """
     Imports reference fasta (SNPs only, annotated with VEP) as a hail Table.
@@ -138,15 +143,14 @@ def process_context_ht(
     ht = prepare_ht(ht, trimers)
 
     logger.info(
-        "Filtering to canonical transcripts and annotating with most severe consequence..."
+        f"Filtering to canonical transcripts, annotating with most severe consequence, and filtering to {missense_str}..."
     )
-    ht = process_vep(ht)
+    ht = process_vep(ht, filter_csq=True, csq=missense_str)
 
     logger.info("Annotating with mutation rate...")
     # Mutation rate HT is keyed by context, ref, alt, methylation level
-    mu_ht = mutation_rate.ht()
+    mu_ht = mutation_rate.ht().select("mu_snp")
     ht, grouping = annotate_constraint_groupings(ht)
-    ht = ht.filter(hl.is_defined(ht.exome_coverage))
     ht = ht.select(
         "context",
         "ref",
@@ -158,9 +162,7 @@ def process_context_ht(
         "variant_type",
         *grouping,
     )
-    ht = ht.annotate(
-        mu_snp=mu_ht[ht.context, ht.ref, ht.alt, ht.methylation_level].mu_snp
-    )
+    ht = annotate_with_mu(ht, mu_ht)
 
     logger.info("Writing out context HT...")
     ht = ht.repartition(n_partitions)
@@ -218,9 +220,7 @@ def keep_criteria(ht: hl.Table, exac: bool) -> hl.expr.BooleanExpression:
     return keep_criteria
 
 
-def process_vep(
-    ht: hl.Table, filter_csq: bool = False, csq: str = None, n_partitions: int = 5000
-) -> hl.Table:
+def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.Table:
     """
     Filters input Table to canonical transcripts only.
 
@@ -229,7 +229,6 @@ def process_vep(
     :param Table ht: Input Table.
     :param bool filter: Whether to filter Table to a specific consequence. Default is False.
     :param str csq: Desired consequence. Default is None. Must be specified if filter is True.
-    :param int n_partitions: Number of desired partitions for output.
     :return: Table filtered to canonical transcripts with option to filter to specific variant consequence.
     :rtype: hl.Table
     """
@@ -251,7 +250,7 @@ def process_vep(
     if filter_csq:
         logger.info(f"Filtering to {csq}...")
         ht = ht.filter(ht.transcript_consequences.most_severe_consequence == csq)
-    return ht.naive_coalesce(n_partitions)
+    return ht
 
 
 def filter_to_region_type(ht: hl.Table, region: str) -> hl.Table:
