@@ -64,9 +64,6 @@ def main(args):
             ).select(
                 "ac", "af", "pass_filters", "exome_coverage", "transcript_consequences"
             )
-            exome_ht = exome_ht.filter(keep_criteria(exome_ht))
-            exome_ht.write(filtered_exomes.path, overwrite=args.overwrite)
-            logger.info("Done processing gnomAD exomes HT")
 
             logger.info("Preprocessing reference fasta (context) HT...")
             context_ht = process_context_ht("GRCh37", args.trimers)
@@ -78,10 +75,12 @@ def main(args):
             context_ht = context_ht.filter(
                 hl.is_missing(exome_join) | keep_criteria(exome_join)
             )
-
             # NOTE: should use ~30k-40k partitions here
             context_ht = context_ht.repartition(args.n_partitions)
             context_ht.write(processed_context.path, overwrite=args.overwrite)
+
+            exome_ht = exome_ht.filter(keep_criteria(exome_ht))
+            exome_ht.write(filtered_exomes.path, overwrite=args.overwrite)
 
             logger.info("Done preprocessing files")
 
