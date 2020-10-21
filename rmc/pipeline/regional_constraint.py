@@ -57,12 +57,12 @@ def main(args):
             exome_ht = process_vep(exome_ht, filter_csq=True, csq=MISSENSE)
 
             # Move nested annotations into top level annotations
-            exome_ht = exome_ht.transmute(
+            exome_ht = exome_ht.select(
                 ac=exome_ht.freq[0].AC,
                 af=exome_ht.freq[0].AF,
+                pass_filters=exome_ht.pass_filters,
                 exome_coverage=exome_ht.coverage.exomes.median,
-            ).select(
-                "ac", "af", "pass_filters", "exome_coverage", "transcript_consequences"
+                transcript_consequences=exome_ht.transcript_consequences,
             )
 
             logger.info("Preprocessing reference fasta (context) HT...")
