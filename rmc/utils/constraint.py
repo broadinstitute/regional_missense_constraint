@@ -321,8 +321,7 @@ def get_fwd_exprs(
         ht = ht.annotate(cond_expr=hl.len(ht.cumulative_obs) != 0)
     else:
         ht = ht.annotate(cond_expr=hl.len(ht.cumulative_obs) > 1)
-        groupings.append("section")
-        ht = calculate_exp_per_base(ht, groupings)
+        ht = calculate_exp_per_base(ht, groupings + ["section"])
 
     return ht.annotate(
         forward_obs_exp=get_obs_exp_expr(
