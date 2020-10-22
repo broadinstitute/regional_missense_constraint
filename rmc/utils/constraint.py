@@ -171,7 +171,7 @@ def calculate_exp_per_transcript(
     else:
         model = group_ht.plateau_models["total"][group_ht.cpg]
 
-    group_ht = group_ht.transmute(mu_adj=group_ht.mu_agg * model[1] + model[0])
+    group_ht = group_ht.annotate(mu_adj=group_ht.mu_agg * model[1] + model[0])
 
     logger.info(
         "Adjusting aggregated mutation rate with coverage correction to get expected counts..."
