@@ -2,7 +2,7 @@ import hail as hl
 
 from gnomad.resources.resource_utils import TableResource
 from gnomad_lof.constraint_utils.constraint_basics import get_old_mu_data
-from rmc.resources.resource_utils import FLAGSHIP_LOF, RESOURCE_PREFIX
+from rmc.resources.resource_utils import FLAGSHIP_LOF, GNOMAD_VER, RESOURCE_PREFIX
 
 
 LOGGING_PATH = "gs://regional_missense_constraint/logs"
@@ -63,7 +63,14 @@ This was calculated with `calculate_mu_by_downsampling` in
 https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constraint_basics.py.
 """
 
-## Observed/expected count related resources
-# Expected variants resource files
+## Observed/expected related resources
 MODEL_PREFIX = "gs://regional_missense_constraint/model"
-EXP_PREFIX = f"{MODEL_PREFIX}/exp/"
+
+constraint_prep = VersionedTableResource(
+    default_version=GNOMAD_VER,
+    versions={
+        GNOMAD_VER: TableResource(
+            path=f"{MODEL_PREFIX}/{GNOMAD_VER}/context_obs_exp_annot.ht"
+        )
+    },
+)
