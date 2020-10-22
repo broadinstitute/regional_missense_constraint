@@ -99,3 +99,17 @@ Table containing transcripts with at least one break.
 
 Found when searching constraint_prep HT for transcripts for a single (first) break.
 """
+
+not_one_break = VersionedTableResource(
+    default_version=GNOMAD_VER,
+    versions={
+        GNOMAD_VER: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/not_one_break.ht"
+        )
+    },
+)
+"""
+Table containing transcripts without one significant break. 
+
+Input to searching for simultaneous breaks.
+"""
