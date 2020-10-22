@@ -45,7 +45,8 @@ def main(args):
     exac = args.exac
 
     # Add transcript to core grouping fields
-    groupings = GROUPINGS.append("transcript")
+    groupings = GROUPINGS
+    groupings.append("transcript")
 
     try:
         if args.pre_process_data:
