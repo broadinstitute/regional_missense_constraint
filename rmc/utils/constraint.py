@@ -47,7 +47,9 @@ def calculate_observed(ht: hl.Table, exac: bool) -> hl.Table:
     :rtype: hl.Table
     """
     ht = ht.filter(keep_criteria(ht, exac))
-    return ht.group_by(ht.transcript).aggregate(observed=hl.agg.count())
+    return ht.group_by(ht.transcript_consequences.transcript_id).aggregate(
+        observed=hl.agg.count()
+    )
 
 
 def calculate_exp_per_base(
