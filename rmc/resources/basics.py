@@ -1,8 +1,13 @@
 import hail as hl
 
-from gnomad.resources.resource_utils import TableResource
+from gnomad.resources.resource_utils import TableResource, VersionedTableResource
 from gnomad_lof.constraint_utils.constraint_basics import get_old_mu_data
-from rmc.resources.resource_utils import FLAGSHIP_LOF, GNOMAD_VER, RESOURCE_PREFIX
+from rmc.resources.resource_utils import (
+    FLAGSHIP_LOF,
+    GNOMAD_VER,
+    RESOURCE_PREFIX,
+    RMC_PREFIX,
+)
 
 
 LOGGING_PATH = "gs://regional_missense_constraint/logs"
@@ -64,7 +69,7 @@ https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constra
 """
 
 ## Observed/expected related resources
-MODEL_PREFIX = "gs://regional_missense_constraint/model"
+MODEL_PREFIX = f"{RMC_PREFIX}/model"
 
 constraint_prep = VersionedTableResource(
     default_version=GNOMAD_VER,
@@ -74,3 +79,23 @@ constraint_prep = VersionedTableResource(
         )
     },
 )
+"""
+Context Table ready for RMC calculations.
+
+HT is annotated with observed and expected variant counts per base.
+"""
+
+
+## Constraint related resources
+CONSTRAINT_PREFIX = f"{RMC_PREFIX}/constraint"
+one_break = VersionedTableResource(
+    default_version=GNOMAD_VER,
+    versions={
+        GNOMAD_VER: TableResource(path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/one_break.ht")
+    },
+)
+"""
+Table containing transcripts with at least one break. 
+
+Found when searching constraint_prep HT for transcripts for a single (first) break.
+"""
