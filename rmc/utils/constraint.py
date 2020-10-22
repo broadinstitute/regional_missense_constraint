@@ -9,7 +9,9 @@ from rmc.utils.generic import (
     get_exome_bases,
     get_plateau_model,
     keep_criteria,
+    process_vep,
 )
+from rmc.resources.resource_utils import MISSENSE
 
 
 logging.basicConfig(
@@ -69,7 +71,7 @@ def calculate_exp_per_base(
     .. note::
         Expects:
         - context_ht is annotated with all of the fields in `groupings` and that the names match exactly.
-            That means, the HT should have context, ref, alt, CpG status, methylation level, mutation rate (`mu_snp`), 
+            That means the HT should have context, ref, alt, CpG status, methylation level, mutation rate (`mu_snp`), 
             transcript, and coverage (`exome_coverage`) if using the default value for `groupings`.
         - context_ht contains coverage and plateau models in its global annotations (`coverage_model`, `plateau_models`).
 
@@ -218,42 +220,28 @@ def get_obs_exp_expr(
     return hl.or_missing(cond_expr, hl.min(obs_expr / exp_expr, 1))
 
 
-def get_cumulative_scan_expr(
-    search_expr: hl.expr.StringExpression,
-    observed_expr: hl.expr.Int64Expression,
-    mu_expr: hl.expr.Float64Expression,
-    plateau_model: Tuple[hl.expr.Float64Expression, hl.expr.Float64Expression],
-    coverage_correction_expr: hl.expr.Float64Expression,
-) -> hl.expr.StructExpression:
+def get_cumulative_obs_expr(
+    search_expr: hl.expr.StringExpression, observed_expr: hl.expr.Int64Expression,
+) -> hl.expr.DictExpression:
     """
-    Creates struct with cumulative number of observed and expected variants.
+    Creates struct with cumulative number of observed variants.
 
     .. note::
         This function can produce the scan when searching for the first break or when searching for a second additional break.
             - When searching for the first break, this function should group by the transcript name (e.g., 'ENST00000255882').
             - When searching for an additional break, this function should group by the section of the transcript 
                 (e.g., 'first' for before the first breakpoint or 'second' for after the first breakpoint).
+        This function has a known flaw: if there is an observed variant found at the end of the search field 
+        (transcript or section), it will NOT be counted due to the nature of `hl.scan`.
 
     :param hl.expr.StringExpression search_expr: Expression containing transcript if searching for first break.
         Otherwise, expression containing transcript section if searching for second additional break.
-    :param hl.expr.Float64Expression mu_expr: Mutation rate expression.
     :param hl.expr.Int64Expression observed_expr: Observed variants expression.
     :return: Struct containing the cumulative number of observed and expected variants.
-    :param Tuple[hl.expr.Float64Expression, hl.expr.Float64Expression] plateau_model: Model to determine adjustment to mutation rate
-        based on locus type and CpG status.
-    :param hl.expr.Float64Expression coverage correction: Expression containing coverage correction necessary to adjust
-        expected variant counts at low coverage sites.
-    :return: Struct containing scan expressions for cumulative observed and expected variant counts.
-    :rtype: hl.expr.StructExpression
+    :return: DictExpression containing scan expressions for cumulative observed variant counts for `search_expr`.
+    :rtype: hl.expr.DictExpression
     """
-    return hl.struct(
-        cumulative_obs=hl.scan.group_by(search_expr, hl.scan.sum(observed_expr)),
-        cumulative_exp=hl.scan.group_by(
-            search_expr,
-            (plateau_model[1] * hl.scan.sum(mu_expr) + plateau_model[0])
-            * coverage_correction_expr,
-        ),
-    )
+    return hl.scan.group_by(search_expr, hl.scan.sum(observed_expr))
 
 
 def get_reverse_obs_exp_expr(
@@ -293,17 +281,19 @@ def get_fwd_exprs(
     ht: hl.Table,
     search_field: str,
     observed_expr: hl.expr.Int64Expression,
-    mu_expr: hl.expr.Float64Expression,
-    locus_expr: hl.expr.LocusExpression,
-    cpg_expr: hl.expr.BooleanExpression,
-    globals_expr: hl.expr.StructExpression,
-    coverage_correction_expr: hl.expr.Float64Expression,
+    groupings: List[str] = GROUPINGS,
 ) -> hl.Table:
     """
-    Calls `get_cumulative_scan_expr and `get_obs_exp_expr` to add the forward section cumulative observed, expected, and observed/expected values.
+    Calls `get_cumulative_obs_expr`, `calculate_exp_per_base`, and `get_obs_exp_expr` to add the forward section cumulative observed, expected, and observed/expected values.
 
     .. note::
         'Forward' refers to moving through the transcript from smaller to larger chromosomal positions.
+        Expects:
+        - input HT is annotated with all of the fields in `groupings` and that the names match exactly.
+            That means the HT should have context, ref, alt, CpG status, methylation level, mutation rate (`mu_snp`), 
+            and coverage (`exome_coverage`) if using the default value for `groupings`.
+        - input HT is annotated with transcript or section.
+        - context_ht contains coverage and plateau models in its global annotations (`coverage_model`, `plateau_models`).
 
     :param hl.Table ht: Input Table.
     :param str search_field: Name of field to group by prior to running scan. Should be 'transcript' if searching for the first break.
@@ -315,29 +305,28 @@ def get_fwd_exprs(
     :param hl.expr.StructExpression globals_expr: Expression containing global annotations of context HT. Must contain plateau models as annotations.
     :param hl.expr.Float64Expression coverage_correction_expr: Expression containing coverage correction necessary to adjust
         expected variant counts at low coverage sites.
+    :param List[str] groupings: Core fields to group by when calculating expected variants per base. Default is GROUPINGS.
     :return: Table with forward values annotated
     :rtype: hl.Table
     """
 
     ht = ht.annotate(
-        scan_counts=get_cumulative_scan_expr(
-            search_expr=ht[search_field],
-            observed_expr=observed_expr,
-            mu_expr=mu_expr,
-            plateau_model=get_plateau_model(locus_expr, cpg_expr, globals_expr),
-            coverage_correction_expr=coverage_correction_expr,
+        cumulative_obs=get_cumulative_obs_expr(
+            search_expr=ht[search_field], observed_expr=observed_expr,
         )
     )
     if search_field == "transcript":
-        ht = ht.annotate(cond_expr=hl.len(ht.scan_counts.cumulative_obs) != 0)
+        ht = ht.annotate(cond_expr=hl.len(ht.cumulative_obs) != 0)
     else:
-        ht = ht.annotate(cond_expr=hl.len(ht.scan_counts.cumulative_obs) > 1)
+        ht = ht.annotate(cond_expr=hl.len(ht.cumulative_obs) > 1)
+        section_groupings = groupings.append("section")
+        ht = calculate_exp_per_base(ht, section_groupings)
 
     return ht.annotate(
         forward_obs_exp=get_obs_exp_expr(
             ht.cond_expr,
-            ht.scan_counts.cumulative_observed[ht[search_field]],
-            ht.scan_counts.cumulative_expected[ht[search_field]],
+            ht.cumulative_obs[ht[search_field]],
+            ht.cumulative_exp[ht[search_field]],
         )
     )
 
@@ -583,16 +572,7 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
         "Annotating HT with cumulative observed and expected counts for each transcript...\n"
         "(transcript-level forwards (moving from smaller to larger positions) values)"
     )
-    ht = get_fwd_exprs(
-        ht=ht,
-        search_field="transcript",
-        observed_expr=ht.observed,
-        mu_expr=ht.mu_snp,
-        locus_expr=ht.locus,
-        cpg_expr=ht.cpg,
-        globals_expr=ht.globals,
-        coverage_correction_expr=ht.coverage_correction,
-    )
+    ht = get_fwd_exprs(ht=ht, search_field="transcript", observed_expr=ht.observed,)
     logger.info(
         "Annotating HT with reverse observed and expected counts for each transcript...\n"
         "(transcript-level reverse (moving from larger to smaller positions) values)"
@@ -646,16 +626,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     logger.info(
         "Annotating HT with cumulative observed and expected counts for each transcript section..."
     )
-    ht = get_fwd_exprs(
-        ht=ht,
-        search_field="section",
-        observed_expr=ht.observed,
-        mu_expr=ht.mu_snp,
-        locus_expr=ht.locus,
-        cpg_expr=ht.cpg,
-        globals_expr=ht.globals,
-        coverage_correction_expr=ht.coverage_correction,
-    )
+    ht = get_fwd_exprs(ht=ht, search_field="section", observed_expr=ht.observed)
 
     logger.info(
         "Annotating HT with reverse observed and expected counts for each transcript section..."
@@ -732,7 +703,7 @@ def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
     return process_sections(ht, chisq_threshold)
 
 
-def get_avg_bases_between_mis(ht: hl.Table, build: str) -> int:
+def get_avg_bases_between_mis(ht: hl.Table, missense: str = MISSENSE) -> int:
     """
     Returns average number of bases between observed missense variation.
 
@@ -743,16 +714,17 @@ def get_avg_bases_between_mis(ht: hl.Table, build: str) -> int:
     when searching for two simultaneous breaks.
 
     :param hl.Table ht: Input gnomAD Table.
+    :param str missense: String representing missense variant VEP annotation. Default is MISSENSE.
     :return: Average number of bases between observed missense variants, rounded to the nearest integer,
     :rtype: int
     """
     logger.info("Getting total number of bases in the exome (based on GENCODE)...")
-    total_bases = get_exome_bases(build)
+    total_bases = get_exome_bases(build=get_reference_genome(ht.locus).name)
 
     logger.info(
         "Filtering to missense variants in canonical protein coding transcripts..."
     )
-    ht = filter_to_missense(ht)
+    ht = process_vep(ht, filter_csq=True, csq=missense)
     total_variants = ht.count()
     return round(total_bases / total_variants)
 
