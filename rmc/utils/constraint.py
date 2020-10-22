@@ -191,7 +191,7 @@ def calculate_exp_per_transcript(
     # This also seems to be undercounting the number of expecteds
     logger.info("Getting expected counts per transcript and returning...")
     return group_ht.group_by("transcript").aggregate(
-        total_exp=hl.agg.sum(group_ht._exp), mu_agg=hl.agg.sum(group_ht.mu)
+        expected=hl.agg.sum(group_ht._exp), mu_agg=hl.agg.sum(group_ht.mu)
     )
     # return context_ht.filter(context_ht.transcript == transcript).tail(1).cumulative_exp
 
