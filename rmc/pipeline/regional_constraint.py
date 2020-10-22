@@ -196,6 +196,7 @@ def main(args):
             )
 
             context_ht = calculate_exp_per_base(context_ht, groupings)
+            context_ht = context_ht.repartition(args.n_partitions)
             context_ht = context_ht.write(f"{temp_path}/context_obs_exp_annot.ht")
 
     finally:
