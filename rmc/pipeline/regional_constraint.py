@@ -45,7 +45,8 @@ def main(args):
     exac = args.exac
 
     # Add transcript to core grouping fields
-    groupings = GROUPINGS.append("transcript")
+    groupings = GROUPINGS
+    groupings.append("transcript")
 
     try:
         if args.pre_process_data:
@@ -196,6 +197,8 @@ def main(args):
             )
 
             context_ht = calculate_exp_per_base(context_ht, groupings)
+            # NOTE: Used 40k here (10/22/20)
+            context_ht = context_ht.repartition(args.n_partitions)
             context_ht = context_ht.write(f"{temp_path}/context_obs_exp_annot.ht")
 
     finally:
@@ -214,7 +217,10 @@ if __name__ == "__main__":
         "--exac", help="Use ExAC Table (not gnomAD Table)", action="store_true"
     )
     parser.add_argument(
-        "--n_partitions", help="Desired number of partitions for output data", type=int,
+        "--n_partitions",
+        help="Desired number of partitions for output data",
+        type=int,
+        default=40000,
     )
     parser.add_argument(
         "--high_cov_cutoff",
