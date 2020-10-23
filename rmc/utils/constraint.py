@@ -134,35 +134,32 @@ def calculate_exp_per_base(
     )
 
 
-def calculate_exp_per_transcript(
+def calculate_exp_per_section(
     context_ht: hl.Table,
     locus_type: str,
-    groupings: List[str] = [
-        "context",
-        "ref",
-        "alt",
-        "cpg",
-        "methylation_level",
-        "mu_snp",
-        "transcript",
-        "exome_coverage",
-    ],
+    search_field: str,
+    groupings: List[str] = GROUPINGS,
 ) -> hl.expr.Float64Expression:
     """
     Returns the total number of expected variants for input transcript.
 
     .. note::
+        - Assumes that context_ht is annotated with all of the fields in `groupings` and that the names match exactly.
         - Assumes that input table is filtered to autosomes/PAR only, X nonPAR only, or Y nonPAR only.
         - Expects that input table contains coverage and plateau models in its global annotations (`coverage_model`, `plateau_models`).
 
     :param hl.Table context_ht: Context Table.
     :param str locus_type: Locus type of input table. One of "X", "Y", or "autosomes".
         NOTE: will treat any input other than "X" or "Y" as autosomes.
+    :param str search_field: String representing section type. One of 'transcript' or 'section'. Context HT must be annotated with this field.
+    :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate. 
+        Table must be annotated with these fields.
     :return: Total expected variants count for transcript of interest.
     :rtype: hl.expr.Float64Expression
     """
-    logger.info(f"Grouping by {groupings}...")
-    group_ht = context_ht.group_by(*groupings).aggregate(
+    all_groupings = groupings + [search_field]
+    logger.info(f"Grouping by {all_groupings}...")
+    group_ht = context_ht.group_by(*all_groupings).aggregate(
         mu_agg=hl.agg.sum(context_ht.mu_snp)
     )
 
@@ -189,9 +186,8 @@ def calculate_exp_per_transcript(
         mu=group_ht.mu_agg * group_ht.coverage_correction,
     )
 
-    # This also seems to be undercounting the number of expecteds
-    logger.info("Getting expected counts per transcript and returning...")
-    return group_ht.group_by("transcript").aggregate(
+    logger.info(f"Getting expected counts per {search_field} and returning...")
+    return group_ht.group_by(search_field).aggregate(
         expected=hl.agg.sum(group_ht._exp), mu_agg=hl.agg.sum(group_ht.mu)
     )
 
