@@ -220,6 +220,7 @@ def main(args):
             one_break_ht = context_ht.filter(
                 transcripts.contains(context_ht.transcript)
             )
+            one_break_ht = one_break_ht.annotate_globals(transcripts=transcripts)
             one_break_ht.naive_coalesce(args.n_partitions).write(one_break.path)
 
             # Filter context HT to transcripts without a single significant break and write out
