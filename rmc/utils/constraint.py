@@ -193,7 +193,6 @@ def calculate_exp_per_transcript(
     return group_ht.group_by("transcript").aggregate(
         expected=hl.agg.sum(group_ht._exp), mu_agg=hl.agg.sum(group_ht.mu)
     )
-    # return context_ht.filter(context_ht.transcript == transcript).tail(1).cumulative_exp
 
 
 def get_obs_exp_expr(
@@ -573,7 +572,7 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
         "Annotating HT with cumulative observed and expected counts for each transcript...\n"
         "(transcript-level forwards (moving from smaller to larger positions) values)"
     )
-    ht = get_fwd_exprs(ht=ht, search_field="transcript", observed_expr=ht.observed,)
+    ht = get_fwd_exprs(ht=ht, search_field="transcript", observed_expr=ht.observed)
     logger.info(
         "Annotating HT with reverse observed and expected counts for each transcript...\n"
         "(transcript-level reverse (moving from larger to smaller positions) values)"
@@ -586,7 +585,7 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
         total_obs_expr=ht.total_obs,
         total_exp_expr=ht.total_exp,
         scan_obs_expr=ht.scan_counts.cumulative_obs[ht.transcript],
-        scan_exp_expr=ht.scan_counts.cumulative_exp[ht.transcript],
+        scan_exp_expr=ht.scan_counts.cumulative_exp,
     )
 
     return search_for_break(ht, "transcript", chisq_threshold)
@@ -641,7 +640,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
         total_obs_expr=ht.break_obs,
         total_exp_expr=ht.break_exp,
         scan_obs_expr=ht.scan_counts.cumulative_obs[ht.section],
-        scan_exp_expr=ht.scan_counts.cumulative_exp[ht.section],
+        scan_exp_expr=ht.scan_counts.cumulative_exp,
     )
     return search_for_break(ht, "section", chisq_threshold)
 
