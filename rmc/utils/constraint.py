@@ -669,7 +669,7 @@ def process_additional_breaks(
     logger.info(
         "Generating table keyed by transcripts (used to get breakpoint position later)..."
     )
-    first_break_ht = ht.select("transcript").key_by("transcript")
+    break_ht = ht.select("transcript").key_by("transcript")
 
     logger.info("Renaming scans fields to prepare to search for an additional break...")
     # Rename because these will be overwritten when searching for additional break
@@ -680,18 +680,19 @@ def process_additional_breaks(
             "reverse": f"{break_num - 1}_reverse",
             "forward_obs_exp": f"{break_num - 1}_forward_obs_exp",
             "reverse_obs_exp": f"{break_num - 1}_reverse_obs_exp",
-            "is_break": f"is_break_{break_num - 1}",
         }
     )
+    annot_expr = {f"is_break_{break_num - 1}": ht.is_break}
+    ht = ht.annotate(**annot_expr)
 
     logger.info(
         "Splitting each transcript into two sections: pre first break and post..."
     )
     ht = ht.annotate(
         section=hl.if_else(
-            ~ht.is_first_break,
+            ~ht.is_break,
             hl.if_else(
-                ht.locus.position > first_break_ht[ht.transcript].locus.position,
+                ht.locus.position > break_ht[ht.transcript].locus.position,
                 hl.format("%s_%s", ht.transcript, "post"),
                 hl.format("%s_%s", ht.transcript, "pre"),
             ),
