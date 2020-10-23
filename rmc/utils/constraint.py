@@ -324,9 +324,7 @@ def get_fwd_exprs(
 
     return ht.annotate(
         forward_obs_exp=get_obs_exp_expr(
-            ht.cond_expr,
-            ht.cumulative_obs[ht[search_field]],
-            ht.cumulative_exp[ht[search_field]],
+            ht.cond_expr, ht.cumulative_obs[ht[search_field]], ht.cumulative_exp,
         )
     )
 
@@ -488,10 +486,10 @@ def search_for_break(
             # Add forwards section null (going through positions from smaller to larger)
             # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
             get_dpois_expr(
-                cond_expr=hl.len(ht.scan_counts.cumulative_obs) != 0,
+                cond_expr=hl.len(ht.cumulative_obs) != 0,
                 section_oe_expr=ht.overall_obs_exp,
-                obs_expr=ht.scan_counts.cumulative_obs[ht[search_field]],
-                exp_expr=ht.scan_counts.cumulative_exp[ht[search_field]],
+                obs_expr=ht.cumulative_obs[ht[search_field]],
+                exp_expr=ht.cumulative_exp,
             ),
             # Add reverse section null (going through positions larger to smaller)
             get_dpois_expr(
@@ -505,10 +503,10 @@ def search_for_break(
             # Add forward section alt
             # section_alt = stats.dpois(section_obs, section_exp*section_obs_exp)[0]
             get_dpois_expr(
-                cond_expr=hl.len(ht.scan_counts.cumulative_obs) != 0,
+                cond_expr=hl.len(ht.cumulative_obs) != 0,
                 section_oe_expr=ht.forward_obs_exp,
-                obs_expr=ht.scan_counts.cumulative_obs[ht[search_field]],
-                exp_expr=ht.scan_counts.cumulative_exp[ht[search_field]],
+                obs_expr=ht.cumulative_obs[ht[search_field]],
+                exp_expr=ht.cumulative_exp,
             ),
             # Add reverse section alt
             get_dpois_expr(
@@ -581,11 +579,11 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
     # of the first line will always be empty when using a scan
     ht = get_reverse_exprs(
         ht=ht,
-        cond_expr=hl.len(ht.scan_counts.cumulative_obs) != 0,
+        cond_expr=hl.len(ht.cumulative_obs) != 0,
         total_obs_expr=ht.total_obs,
         total_exp_expr=ht.total_exp,
-        scan_obs_expr=ht.scan_counts.cumulative_obs[ht.transcript],
-        scan_exp_expr=ht.scan_counts.cumulative_exp,
+        scan_obs_expr=ht.cumulative_obs[ht.transcript],
+        scan_exp_expr=ht.cumulative_exp,
     )
 
     return search_for_break(ht, "transcript", chisq_threshold)
@@ -636,11 +634,11 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     ht = get_reverse_exprs(
         ht=ht,
         # This cond expression searches for the start of the second section
-        cond_expr=hl.len(ht.scan_counts.cumulative_obs) > 1,
+        cond_expr=hl.len(ht.cumulative_obs) > 1,
         total_obs_expr=ht.break_obs,
         total_exp_expr=ht.break_exp,
-        scan_obs_expr=ht.scan_counts.cumulative_obs[ht.section],
-        scan_exp_expr=ht.scan_counts.cumulative_exp,
+        scan_obs_expr=ht.cumulative_obs[ht.section],
+        scan_exp_expr=ht.cumulative_exp,
     )
     return search_for_break(ht, "section", chisq_threshold)
 
