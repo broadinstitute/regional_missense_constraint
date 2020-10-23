@@ -117,6 +117,7 @@ def calculate_exp_per_base(
         ),
     )
 
+    # TODO: fix me
     logger.info("Aggregating proportion of expected variants per site and returning...")
     context_ht = context_ht.annotate(
         transcript_exp_keys=context_ht.all_exp.keys().filter(
