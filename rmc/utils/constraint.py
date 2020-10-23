@@ -613,6 +613,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     ht = ht.annotate(plateau_model=get_plateau_model(ht.locus, ht.cpg, ht.globals))
     section_group = ht.group_by(ht.section).aggregate(
         obs=hl.agg.sum(ht.observed),
+        # TODO: FIXME!!!!!! update calc exp per transcript > calc exp per group
         exp=(hl.agg.sum(ht.mu_snp) * ht.plateau_model[1] + ht.plateau_model[0])
         * ht.coverage_correction,
     )
@@ -669,7 +670,7 @@ def process_additional_breaks(
     logger.info(
         "Generating table keyed by transcripts (used to get breakpoint position later)..."
     )
-    break_ht = ht.select("transcript").key_by("transcript")
+    break_ht = ht.filter(ht.is_break).key_by("transcript")
 
     logger.info("Renaming scans fields to prepare to search for an additional break...")
     # Rename because these will be overwritten when searching for additional break
