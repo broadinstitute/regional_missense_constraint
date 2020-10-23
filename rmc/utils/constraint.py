@@ -643,7 +643,9 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     return search_for_break(ht, "section", chisq_threshold)
 
 
-def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
+def process_additional_breaks(
+    ht: hl.Table, break_num: int, chisq_threshold: float
+) -> hl.Table:
     """
     Search for additional breaks in a transcript after finding one significant break.
     
@@ -657,6 +659,7 @@ def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
     Also assumes that Table's globals contain plateau models.
 
     :param hl.Table ht: Input Table.
+    :param int break_num: Number of additional break: 2 for second break, 3 for third, etc.
     :param float chisq_threshold: Chi-square significance threshold. 
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
     :return: Table annotated with whether position is a breakpoint. 
@@ -666,18 +669,18 @@ def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
     logger.info(
         "Generating table keyed by transcripts (used to get breakpoint position later)..."
     )
-    first_break_ht = ht.select().key_by("transcript")
+    first_break_ht = ht.select("transcript").key_by("transcript")
 
     logger.info("Renaming scans fields to prepare to search for an additional break...")
     # Rename because these will be overwritten when searching for additional break
     ht = ht.rename(
         {
-            "cumulative_obs": "first_cumulative_obs",
-            "cumulative_exp": "first_cumulative_exp",
-            "reverse": "first_reverse",
-            "forward_obs_exp": "first_forward_obs_exp",
-            "reverse_obs_exp": "first_reverse_obs_exp",
-            "is_break": "is_first_break",
+            "cumulative_obs": f"{break_num - 1}_cumulative_obs",
+            "cumulative_exp": f"{break_num - 1}_cumulative_exp",
+            "reverse": f"{break_num - 1}_reverse",
+            "forward_obs_exp": f"{break_num - 1}_forward_obs_exp",
+            "reverse_obs_exp": f"{break_num - 1}_reverse_obs_exp",
+            "is_break": f"is_break_{break_num - 1}",
         }
     )
 
