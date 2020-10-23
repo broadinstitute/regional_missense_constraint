@@ -672,7 +672,8 @@ def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
     # Rename because these will be overwritten when searching for additional break
     ht = ht.rename(
         {
-            "scan_counts": "first_scan_counts",
+            "cumulative_obs": "first_cumulative_obs",
+            "cumulative_exp": "first_cumulative_exp",
             "reverse": "first_reverse",
             "forward_obs_exp": "first_forward_obs_exp",
             "reverse_obs_exp": "first_reverse_obs_exp",
