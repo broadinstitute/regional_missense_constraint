@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Union
 
 import hail as hl
 
@@ -734,7 +734,7 @@ def search_for_two_breaks(
     transcript: str,
     chisq_threshold: float,
     num_obs_var: int = 10,
-) -> Union[Tuple[float, Tuple[int, int]], None]:
+) -> Union[hl.Table, None]:
     """
     Searches for evidence of constraint within a set window size/number of base pairs.
 
@@ -771,6 +771,7 @@ def search_for_two_breaks(
     best_chisq = 0
     breakpoints = ()
 
+    breaks = {}
     while start_pos < end_pos:
         ht = ht.annotate(
             section=hl.case()
@@ -795,9 +796,13 @@ def search_for_two_breaks(
             max_chisq = new_ht.aggregate(hl.agg.max(new_ht.max_chisq))
             if (max_chisq > best_chisq) and (max_chisq >= chisq_threshold):
                 breakpoints = (start_pos, (start_pos + break_size) - 1)
+                best_chisq = max_chisq
+                annot_expr = {f"{transcript}_breakpoints": breakpoints}
+                new_ht = new_ht.annotate_globals(**annot_expr)
+                breaks[max_chisq] = [new_ht]
 
         start_pos += 1
 
     if best_chisq != 0:
-        return (best_chisq, breakpoints)
+        return breaks[best_chisq]
     return None
