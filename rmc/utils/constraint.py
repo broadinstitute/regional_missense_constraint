@@ -650,6 +650,7 @@ def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
     """
     Search for additional breaks in a transcript after finding one significant break.
     
+    Expects that input Table is filtered to only transcripts already containing one significant break.
     Expects that input Table has the following annotations:
         - cpg
         - observed
@@ -665,16 +666,13 @@ def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
     :rtype: hl.Table
     """
     # TODO: generalize function so that it can search for more than one additional break
-    logger.info("Getting set of transcripts with one break...")
-    first_break_ht = ht.filter(ht.is_break)
-    first_break_ht = first_break_ht.select().key_by("transcript")
-    transcripts = first_break_ht.aggregate(
-        hl.agg.collect_as_set(first_break_ht.transcript), _localize=False
+    logger.info(
+        "Generating table keyed by transcripts (used to get breakpoint position later)..."
     )
+    first_break_ht = ht.select().key_by("transcript")
 
-    logger.info("Filtering to transcripts with one break...")
-    # Also rename scans from first break as these will be overwritten when searching for additional break
-    ht = ht.filter(transcripts.contains(ht.transcript))
+    logger.info("Renaming scans fields to prepare to search for an additional break...")
+    # Rename because these will be overwritten when searching for additional break
     ht = ht.rename(
         {
             "scan_counts": "first_scan_counts",
