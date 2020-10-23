@@ -4,7 +4,14 @@ import logging
 import hail as hl
 
 from gnomad.utils.slack import slack_notifications
-from rmc.resources.basics import constraint_prep, LOGGING_PATH, temp_path
+from rmc.resources.basics import (
+    constraint_prep,
+    LOGGING_PATH,
+    multiple_breaks,
+    not_one_break,
+    one_break,
+    temp_path,
+)
 from rmc.resources.grch37.exac import filtered_exac
 from rmc.resources.grch37.gnomad import (
     constraint_ht,
@@ -20,8 +27,7 @@ from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
     GROUPINGS,
-    not_one_break,
-    one_break,
+    process_additional_breaks,
     process_transcripts,
 )
 from rmc.utils.generic import (
@@ -202,14 +208,17 @@ def main(args):
             context_ht = calculate_exp_per_base(context_ht, groupings)
             # NOTE: Used 40k here (10/22/20)
             context_ht = context_ht.repartition(args.n_partitions)
-            # TODO: write this into constraint_prep instead of temp
-            context_ht = context_ht.write(f"{temp_path}/context_obs_exp_annot.ht")
+            context_ht = context_ht.write(
+                constraint_prep.path, overwrite=args.overwrite
+            )
 
         if args.search_for_first_break:
             logger.info("Searching for transcripts with a significant break...")
             context_ht = constraint_prep.ht()
             context_ht = process_transcripts(context_ht, args.chisq_threshold)
-            context_ht = context_ht.checkpoint(f"{temp_path}/first_break.ht")
+            context_ht = context_ht.checkpoint(
+                f"{temp_path}/first_break.ht", overwrite=True
+            )
 
             # Filter HT to transcripts with one significant break and write out
             # Try 20k partitions for both of these HTs?
@@ -220,12 +229,68 @@ def main(args):
             one_break_ht = context_ht.filter(
                 transcripts.contains(context_ht.transcript)
             )
-            one_break_ht = one_break_ht.annotate_globals(transcripts=transcripts)
-            one_break_ht.naive_coalesce(args.n_partitions).write(one_break.path)
+            one_break_ht = one_break_ht.annotate_globals(
+                break_1_transcripts=transcripts
+            )
+            one_break_ht.naive_coalesce(args.n_partitions).write(
+                one_break.path, overwrite=args.overwrite
+            )
 
             # Filter context HT to transcripts without a single significant break and write out
             not_one_break_ht = context_ht.anti_join(one_break_ht)
-            not_one_break_ht.naive_coalesce(args.n_partitions).write(not_one_break.path)
+            not_one_break_ht.naive_coalesce(args.n_partitions).write(
+                not_one_break.path, overwrite=args.overwrite
+            )
+
+        if args.search_for_additional_breaks:
+            logger.info(
+                "Searching for additional breaks in transcripts with at least one significant break..."
+            )
+            context_ht = one_break.ht()
+            break_ht = context_ht
+
+            # Start break number counter at 2
+            break_num = 2
+
+            while True:
+                # Search for additional breaks
+                # This technically should search for two additional breaks at a time:
+                # this calls `process_sections`, which checks each section of the transcript for a break
+                # sections are transcript section pre and post first breakpoint
+                break_ht = process_additional_breaks(break_ht, args.chisq_threshold)
+                break_ht = break_ht.checkpoint(
+                    f"{temp_path}/break_{break_num}.ht", overwrite=True
+                )
+
+                # Filter context HT to lines with break and check for transcripts with >1 break
+                is_break_ht = is_break_ht.filter(is_break_ht.is_break)
+                group_ht = is_break_ht.group_by("transcript").aggregate(
+                    n=hl.agg.count()
+                )
+                group_ht = group_ht.filter(group_ht.n > 1)
+
+                # Exit loop if no additional breaks are found for any transcripts
+                if group_ht.count() == 0:
+                    break
+
+                # Otherwise, pull transcripts and annotate context ht
+                transcripts = group_ht.aggregate(
+                    hl.agg.collect_as_set(group_ht.transcript), _localize=False
+                )
+                globals_annot_expr = {f"break_{break_num}_transcripts": transcripts}
+                context_ht = context_ht.annotate_globals(**globals_annot_expr,)
+                annot_expr = {
+                    f"break_{break_num}_chisq": break_ht[context_ht.key].chisq,
+                    f"is_{break_num}_break": break_ht[context_ht.key].is_break,
+                    f"break_{break_num}_null": break_ht[context_ht.key].null,
+                    f"break_{break_num}_alt": break_ht[context_ht.key].alt,
+                }
+                context_ht = context_ht.annotate(**annot_expr,)
+
+                break_ht = break_ht.filter(transcripts.contains(break_ht.transcript))
+                break_num += 1
+
+            context_ht.write(multiple_breaks.path, overwrite=args.overwrite)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -276,6 +341,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--search_for_first_break",
         help="Initial search for one break in all transcripts",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--search_for_additional_breaks",
+        help="Search for additional break in transcripts with one significant break",
         action="store_true",
     )
     parser.add_argument(
