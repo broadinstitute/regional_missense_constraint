@@ -7,7 +7,7 @@ from gnomad.utils.slack import slack_notifications
 from rmc.resources.basics import (
     constraint_prep,
     LOGGING_PATH,
-    multiple_breaks
+    multiple_breaks,
     not_one_break,
     one_break,
     simul_break,
