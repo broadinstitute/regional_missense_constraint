@@ -4,7 +4,14 @@ import logging
 import hail as hl
 
 from gnomad.utils.slack import slack_notifications
-from rmc.resources.basics import constraint_prep, LOGGING_PATH, temp_path
+from rmc.resources.basics import (
+    constraint_prep,
+    LOGGING_PATH,
+    not_one_break,
+    one_break,
+    simul_break,
+    temp_path,
+)
 from rmc.resources.grch37.exac import filtered_exac
 from rmc.resources.grch37.gnomad import (
     constraint_ht,
@@ -20,9 +27,8 @@ from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
     GROUPINGS,
-    not_one_break,
-    one_break,
     process_transcripts,
+    search_for_two_breaks,
 )
 from rmc.utils.generic import (
     filter_to_region_type,
@@ -227,6 +233,43 @@ def main(args):
             not_one_break_ht = context_ht.anti_join(one_break_ht)
             not_one_break_ht.naive_coalesce(args.n_partitions).write(not_one_break.path)
 
+        if args.search_for_simul_breaks:
+            logger.info(
+                "Searching for two simultaneous breaks in transcripts that didn't have \
+                a single significant break..."
+            )
+            context_ht = not_one_break.ht()
+            exome_ht = filtered_exomes.ht()
+            transcripts = context_ht.aggregate(
+                hl.agg.collect_as_set(context_ht.transcript), _localize=False
+            )
+
+            two_breaks = {}
+            for transcript in transcripts:
+                break_info = search_for_two_breaks(
+                    ht=context_ht,
+                    exome_ht=exome_ht,
+                    transcript=transcript,
+                    chisq_threshold=args.chisq_threshold,
+                    num_obs_var=args.num_obs_var,
+                )
+
+                # If search_for_two_breaks doesn't return None, store the return value (HT)
+                if break_info:
+                    two_breaks[transcript] = break_info
+
+            # Join all small tables and return
+            two_breaks = hl.literal(two_breaks)
+            no_break_transcripts = transcripts.difference(two_breaks.key_set())
+            simul_break_ht = hl.fold(
+                lambda i, j: i.union(j), hl.utils.range_table(0), two_breaks.values()
+            )
+            simul_break_ht = simul_break_ht.annotate_globals(
+                no_break_transcripts=no_break_transcripts,
+                two_break_transcripts=two_breaks.key_set(),
+            )
+            simul_break_ht.repartition(args.n_partitions).write(simul_break.path)
+
     finally:
         logger.info("Copying hail log to logging bucket...")
         hl.copy_log(LOGGING_PATH)
@@ -261,6 +304,12 @@ if __name__ == "__main__":
         default=10.8,
     )
     parser.add_argument(
+        "--num_obs_var",
+        help="Number of observed variants. Used when determining the window size for simultaneous breaks.",
+        type=int,
+        default=10,
+    )
+    parser.add_argument(
         "--pre_process_data", help="Pre-process data", action="store_true"
     )
     parser.add_argument(
@@ -276,6 +325,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--search_for_first_break",
         help="Initial search for one break in all transcripts",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--search_for_simul_breaks",
+        help="Search for two simultaneous breaks in transcripts without a single significant break",
         action="store_true",
     )
     parser.add_argument(
