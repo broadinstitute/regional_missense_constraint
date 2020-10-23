@@ -4,7 +4,7 @@ import logging
 import hail as hl
 
 from gnomad.utils.slack import slack_notifications
-from rmc.resources.basics import LOGGING_PATH, temp_path
+from rmc.resources.basics import constraint_prep, LOGGING_PATH, temp_path
 from rmc.resources.grch37.exac import filtered_exac
 from rmc.resources.grch37.gnomad import (
     constraint_ht,
@@ -20,6 +20,9 @@ from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
     GROUPINGS,
+    not_one_break,
+    one_break,
+    process_transcripts,
 )
 from rmc.utils.generic import (
     filter_to_region_type,
@@ -199,7 +202,30 @@ def main(args):
             context_ht = calculate_exp_per_base(context_ht, groupings)
             # NOTE: Used 40k here (10/22/20)
             context_ht = context_ht.repartition(args.n_partitions)
+            # TODO: write this into constraint_prep instead of temp
             context_ht = context_ht.write(f"{temp_path}/context_obs_exp_annot.ht")
+
+        if args.search_for_first_break:
+            logger.info("Searching for transcripts with a significant break...")
+            context_ht = constraint_prep.ht()
+            context_ht = process_transcripts(context_ht, args.chisq_threshold)
+            context_ht = context_ht.checkpoint(f"{temp_path}/first_break.ht")
+
+            # Filter HT to transcripts with one significant break and write out
+            # Try 20k partitions for both of these HTs?
+            is_break_ht = context_ht.filter(context_ht.is_break)
+            transcripts = one_break_ht.aggregate(
+                hl.agg.collect_as_set(is_break_ht.transcript), _localize=False
+            )
+            one_break_ht = context_ht.filter(
+                transcripts.contains(context_ht.transcript)
+            )
+            one_break_ht = one_break_ht.annotate_globals(transcripts=transcripts)
+            one_break_ht.naive_coalesce(args.n_partitions).write(one_break.path)
+
+            # Filter context HT to transcripts without a single significant break and write out
+            not_one_break_ht = context_ht.anti_join(one_break_ht)
+            not_one_break_ht.naive_coalesce(args.n_partitions).write(not_one_break.path)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -229,6 +255,12 @@ if __name__ == "__main__":
         default=40,
     )
     parser.add_argument(
+        "--chisq_threshold",
+        help="Chi-square significance threshold. Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).",
+        type=float,
+        default=10.8,
+    )
+    parser.add_argument(
         "--pre_process_data", help="Pre-process data", action="store_true"
     )
     parser.add_argument(
@@ -239,6 +271,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--skip_calc_oe",
         help="Skip observed and expected variant calculations per transcript. Relevant only to gnomAD v2.1.1!",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--search_for_first_break",
+        help="Initial search for one break in all transcripts",
         action="store_true",
     )
     parser.add_argument(
