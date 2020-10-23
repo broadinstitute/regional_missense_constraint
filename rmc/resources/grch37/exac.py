@@ -4,7 +4,6 @@ from gnomad.resources.resource_utils import (
     import_sites_vcf,
     TableResource,
 )
-from rmc.resources.basics import EXP_PREFIX
 from rmc.resources.resource_utils import RESOURCE_PREFIX
 
 
@@ -69,10 +68,4 @@ filtered_exac = TableResource(path=f"{EXAC_PREFIX}/ht/ExAC.r1.missense_only.ht")
 """
 ExAC dataset filtered to missense variants only on chromosome 22 (specifically MYH9, PI4KA, MAPK1).
 Also annotated with trimer context and coverage information.
-"""
-
-# Observed/expected count related resources
-expected = TableResource(path=f"{EXP_PREFIX}/ht/ExAC_exp_var.ht")
-"""
-Table annotated with expected variant counts
 """
