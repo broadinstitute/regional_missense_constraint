@@ -114,13 +114,26 @@ Table containing transcripts without one significant break.
 Input to searching for simultaneous breaks.
 """
 
+multiple_breaks = VersionedTableResource(
+    default_version=GNOMAD_VER,
+    versions={
+        GNOMAD_VER: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/multiple_breaks.ht"
+        )
+    },
+)
+"""
+Table containing transcripts with multiple breaks. 
+
+"""
+          
 simul_break = VersionedTableResource(
     default_version=GNOMAD_VER,
     versions={
         GNOMAD_VER: TableResource(
             path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/simul_break.ht"
         )
-    },
+    }
 )
 """
 Table containing transcripts without two simultaneous breaks.
