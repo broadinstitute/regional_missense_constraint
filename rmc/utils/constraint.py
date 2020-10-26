@@ -112,7 +112,7 @@ def calculate_exp_per_base(
     logger.info("Aggregating proportion of expected variants per site and returning...")
     context_ht = context_ht.annotate(
         section_exp_keys=context_ht.all_exp.keys().filter(
-            lambda x: x.section == context_ht[search_field]
+            lambda x: x[search_field] == context_ht[search_field]
         )
     )
     context_ht = context_ht.annotate(
