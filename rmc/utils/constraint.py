@@ -45,7 +45,6 @@ def calculate_observed(ht: hl.Table) -> hl.Table:
         Assumes input HT has been filtered using `keep_criteria`.
 
     :param hl.Table ht: Input Table.
-    :param bool exac: Whether the input Table is ExAC data.
     :return: Table annotated with observed variant counts.
     :rtype: hl.Table
     """
@@ -509,11 +508,12 @@ def search_for_break(
     # Kaitlin stores all nulls/alts in section_null and section_alt and then multiplies
     # e.g., p1 = prod(section_null_ps)
     ht = ht.annotate(
-        null=get_section_expr(ht.section_nulls), alt=get_section_expr(ht.section_alts),
+        total_null=get_section_expr(ht.section_nulls),
+        total_alt=get_section_expr(ht.section_alts),
     )
 
     logger.info("Adding chisq value and getting max chisq...")
-    ht = ht.annotate(chisq=(2 * (hl.log(ht.alt) - hl.log(ht.null))))
+    ht = ht.annotate(chisq=(2 * (hl.log(ht.total_alt) - hl.log(ht.total_null))))
 
     # "The default chi-squared value for one break to be considered significant is
     # 10.8 (p ~ 10e-3) and is 13.8 (p ~ 10e-4) for two breaks. These currently cannot
