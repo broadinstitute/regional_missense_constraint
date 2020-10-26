@@ -130,7 +130,7 @@ def calculate_exp_per_section(
     locus_type: str,
     search_field: str,
     groupings: List[str] = GROUPINGS,
-) -> hl.expr.Float64Expression:
+) -> hl.Table:
     """
     Returns the total number of expected variants for input transcript.
 
@@ -145,8 +145,8 @@ def calculate_exp_per_section(
     :param str search_field: String representing section type. One of 'transcript' or 'section'. Context HT must be annotated with this field.
     :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate. 
         Table must be annotated with these fields.
-    :return: Total expected variants count for transcript of interest.
-    :rtype: hl.expr.Float64Expression
+    :return: Table grouped by search_field with expected counts per search field.
+    :rtype: hl.Table
     """
     all_groupings = groupings + [search_field]
     logger.info(f"Grouping by {all_groupings}...")
@@ -582,12 +582,16 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     Search for breaks within given sections of a transcript. 
 
     Expects that input Table has the following annotations:
+        - context
+        - ref
+        - alt
         - cpg
         - observed
         - mu_snp
         - coverage_correction
+        - methylation_level
         - section
-    Also assumes that Table's globals contain plateau models.
+    Also assumes that Table's globals contain plateau and coverage models.
 
     :param hl.Table ht: Input Table.
     :param float chisq_threshold: Chi-square significance threshold. 
@@ -598,16 +602,19 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     logger.info(
         "Getting total observed and expected counts for each transcript section..."
     )
-    ht = ht.annotate(plateau_model=get_plateau_model(ht.locus, ht.cpg, ht.globals))
-    section_group = ht.group_by(ht.section).aggregate(
-        obs=hl.agg.sum(ht.observed),
-        # TODO: FIXME!!!!!! update calc exp per transcript > calc exp per group
-        exp=(hl.agg.sum(ht.mu_snp) * ht.plateau_model[1] + ht.plateau_model[0])
-        * ht.coverage_correction,
+    locus = ht.head(1).take(1).locus
+    if locus.in_x_nonpar():
+        locus_type = "X"
+    elif locus.in_y_nonpar():
+        locus_type = "Y"
+    else:
+        locus_type = "autosomes"
+    section_exp = calculate_exp_per_section(
+        ht, locus_type=locus_type, search_field="section"
     )
+    section_obs = ht.group_by(ht.section).aggregate(obs=hl.agg.sum(ht.observed),)
     ht = ht.annotate(
-        break_obs=section_group[ht.section].obs,
-        break_exp=section_group[ht.section].exp,
+        break_obs=section_obs[ht.section].obs, break_exp=section_exp[ht.section].exp,
     )
 
     logger.info(
