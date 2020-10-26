@@ -36,17 +36,19 @@ Core fields to group by when calculating expected variants per base.
 """
 
 
-def calculate_observed(ht: hl.Table, exac: bool) -> hl.Table:
+def calculate_observed(ht: hl.Table) -> hl.Table:
     """
     Groups input Table by transcript, filters based on `keep_criteria`,
     and aggregates observed variants count per transcript.
+
+    .. note::
+        Assumes input HT has been filtered using `keep_criteria`.
 
     :param hl.Table ht: Input Table.
     :param bool exac: Whether the input Table is ExAC data.
     :return: Table annotated with observed variant counts.
     :rtype: hl.Table
     """
-    ht = ht.filter(keep_criteria(ht, exac))
     return ht.group_by(ht.transcript_consequences.transcript_id).aggregate(
         observed=hl.agg.count()
     )
