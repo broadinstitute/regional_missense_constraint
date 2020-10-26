@@ -8,7 +8,6 @@ from rmc.utils.generic import (
     get_coverage_correction_expr,
     get_exome_bases,
     get_plateau_model,
-    keep_criteria,
     process_vep,
 )
 from rmc.resources.resource_utils import MISSENSE
@@ -609,6 +608,13 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     ht = ht.annotate(
         break_obs=section_obs[ht.section].obs,
         break_exp=section_exp[ht.section].expected,
+    )
+    ht = ht.annotate(
+        overall_obs_exp=get_obs_exp_expr(
+            cond_expr=hl.is_defined(ht.section),
+            obs_expr=ht.break_obs,
+            exp_expr=ht.break_exp,
+        )
     )
 
     logger.info(
