@@ -267,10 +267,7 @@ def get_reverse_obs_exp_expr(
 
 
 def get_fwd_exprs(
-    ht: hl.Table,
-    search_field: str,
-    observed_expr: hl.expr.Int64Expression,
-    groupings: List[str] = GROUPINGS,
+    ht: hl.Table, search_field: str, observed_expr: hl.expr.Int64Expression,
 ) -> hl.Table:
     """
     Calls `get_cumulative_obs_expr`, `calculate_exp_per_base`, and `get_obs_exp_expr` to add the forward section cumulative observed, expected, and observed/expected values.
@@ -308,7 +305,7 @@ def get_fwd_exprs(
         ht = ht.annotate(cond_expr=hl.len(ht.cumulative_obs) != 0)
     else:
         ht = ht.annotate(cond_expr=hl.len(ht.cumulative_obs) > 1)
-        ht = calculate_exp_per_base(ht, groupings + search_field)
+        ht = calculate_exp_per_base(ht, search_field)
 
     return ht.annotate(
         forward_obs_exp=get_obs_exp_expr(
@@ -358,7 +355,7 @@ def get_reverse_exprs(
     # Set reverse o/e to missing if reverse expected value is 0 (to avoid NaNs)
     return ht.annotate(
         reverse_obs_exp=get_obs_exp_expr(
-            (ht.reverse_counts.exp != 0), ht.reverse.obs, ht.reverse.exp
+            (ht.reverse.exp != 0), ht.reverse.obs, ht.reverse.exp
         )
     )
 
@@ -602,19 +599,14 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     logger.info(
         "Getting total observed and expected counts for each transcript section..."
     )
-    locus = ht.head(1).take(1).locus
-    if locus.in_x_nonpar():
-        locus_type = "X"
-    elif locus.in_y_nonpar():
-        locus_type = "Y"
-    else:
-        locus_type = "autosomes"
+    # TODO: fix me, need to split HT into autosomes/X/Y prior to running this
     section_exp = calculate_exp_per_section(
-        ht, locus_type=locus_type, search_field="section"
+        ht, locus_type="autosomes", search_field="section"
     )
-    section_obs = ht.group_by(ht.section).aggregate(obs=hl.agg.sum(ht.observed),)
+    section_obs = ht.group_by(ht.section).aggregate(obs=hl.agg.sum(ht.observed))
     ht = ht.annotate(
-        break_obs=section_obs[ht.section].obs, break_exp=section_exp[ht.section].exp,
+        break_obs=section_obs[ht.section].obs,
+        break_exp=section_exp[ht.section].expected,
     )
 
     logger.info(
