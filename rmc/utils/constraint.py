@@ -680,16 +680,12 @@ def process_additional_breaks(
     )
     ht = ht.annotate(
         section=hl.if_else(
-            ~ht.is_break,
-            hl.if_else(
-                ht.locus.position > break_ht[ht.transcript].locus.position,
-                hl.format("%s_%s", ht.transcript, "post"),
-                hl.format("%s_%s", ht.transcript, "pre"),
-            ),
             # If position is breakpoint, add to second section ("post")
             # this is because the first position of a scan is always missing anyway
+            ht.locus.position >= break_ht[ht.transcript].locus.position,
             hl.format("%s_%s", ht.transcript, "post"),
-        )
+            hl.format("%s_%s", ht.transcript, "pre"),
+        ),
     )
     return process_sections(ht, chisq_threshold)
 
