@@ -53,17 +53,7 @@ def calculate_observed(ht: hl.Table, exac: bool) -> hl.Table:
 
 
 def calculate_exp_per_base(
-    context_ht: hl.Table,
-    groupings: List[str] = [
-        "context",
-        "ref",
-        "alt",
-        "cpg",
-        "methylation_level",
-        "mu_snp",
-        "transcript",
-        "exome_coverage",
-    ],
+    context_ht: hl.Table, search_field: str, groupings: List[str] = GROUPINGS,
 ) -> hl.Table:
     """
     Returns table with expected variant counts annotated per base. 
@@ -74,17 +64,19 @@ def calculate_exp_per_base(
         Expects:
         - context_ht is annotated with all of the fields in `groupings` and that the names match exactly.
             That means the HT should have context, ref, alt, CpG status, methylation level, mutation rate (`mu_snp`), 
-            transcript, and coverage (`exome_coverage`) if using the default value for `groupings`.
+            and coverage (`exome_coverage`) if using the default value for `groupings`.
         - context_ht contains coverage and plateau models in its global annotations (`coverage_model`, `plateau_models`).
 
     :param hl.Table context_ht: Context Table.
+    :param str search_field: String representing section type. One of 'transcript' or 'section'. Context HT must be annotated with this field.
     :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate. 
         Table must be annotated with these fields. Default fields are context, ref, alt, cpg, methylation level, mu_snp, transcript, and exome_coverage.
     :return: Table grouped by transcript with expected variant counts per transcript.
     :rtype: hl.Table
     """
-    logger.info(f"Annotating HT with groupings: {groupings}...")
-    context_ht = context_ht.annotate(variant=(context_ht.row.select(*groupings)))
+    all_groupings = groupings + [search_field]
+    logger.info(f"Annotating HT with groupings: {all_groupings}...")
+    context_ht = context_ht.annotate(variant=(context_ht.row.select(*all_groupings)))
 
     logger.info("Getting cumulative aggregated mutation rate per variant...")
     context_ht = context_ht.annotate(
@@ -117,20 +109,19 @@ def calculate_exp_per_base(
         ),
     )
 
-    # TODO: fix me
     logger.info("Aggregating proportion of expected variants per site and returning...")
     context_ht = context_ht.annotate(
-        transcript_exp_keys=context_ht.all_exp.keys().filter(
-            lambda x: x.transcript == context_ht.transcript
+        section_exp_keys=context_ht.all_exp.keys().filter(
+            lambda x: x.section == context_ht[search_field]
         )
     )
     context_ht = context_ht.annotate(
-        transcript_exp=hl.map(
-            lambda x: context_ht.all_exp.get(x), context_ht.transcript_exp_keys
+        section_exp=hl.map(
+            lambda x: context_ht.all_exp.get(x), context_ht.section_exp_keys
         )
     )
-    return context_ht.annotate(cumulative_exp=hl.sum(context_ht.transcript_exp)).drop(
-        "mu_agg", "transcript_exp_keys", "transcript_exp", "all_exp"
+    return context_ht.annotate(cumulative_exp=hl.sum(context_ht.section_exp)).drop(
+        "mu_agg", "section_exp_keys", "section_exp", "all_exp"
     )
 
 
@@ -317,7 +308,7 @@ def get_fwd_exprs(
         ht = ht.annotate(cond_expr=hl.len(ht.cumulative_obs) != 0)
     else:
         ht = ht.annotate(cond_expr=hl.len(ht.cumulative_obs) > 1)
-        ht = calculate_exp_per_base(ht, groupings + ["section"])
+        ht = calculate_exp_per_base(ht, groupings + search_field)
 
     return ht.annotate(
         forward_obs_exp=get_obs_exp_expr(
