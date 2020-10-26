@@ -259,7 +259,9 @@ def main(args):
                 # This technically should search for two additional breaks at a time:
                 # this calls `process_sections`, which checks each section of the transcript for a break
                 # sections are transcript section pre and post first breakpoint
-                break_ht = process_additional_breaks(break_ht, args.chisq_threshold)
+                break_ht = process_additional_breaks(
+                    break_ht, break_num, args.chisq_threshold
+                )
                 break_ht = break_ht.checkpoint(
                     f"{temp_path}/break_{break_num}.ht", overwrite=True
                 )
