@@ -25,7 +25,7 @@ from rmc.resources.resource_utils import MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     calculate_exp_per_base,
-    calculate_exp_per_transcript,
+    calculate_exp_per_section,
     calculate_observed,
     GROUPINGS,
     process_additional_breaks,
@@ -146,21 +146,30 @@ def main(args):
                 context_auto_ht = filter_to_region_type(context_ht, "autosomes")
 
                 logger.info("Calculating expected values per transcript...")
-                exp_ht = calculate_exp_per_transcript(
-                    context_auto_ht, locus_type="autosomes", groupings=groupings
+                exp_ht = calculate_exp_per_section(
+                    context_auto_ht,
+                    locus_type="autosomes",
+                    search_field="transcript",
+                    groupings=groupings,
                 )
-                exp_x_ht = calculate_exp_per_transcript(
-                    context_x_ht, locus_type="X", groupings=groupings
+                exp_x_ht = calculate_exp_per_section(
+                    context_x_ht,
+                    locus_type="X",
+                    search_field="transcript",
+                    groupings=groupings,
                 )
-                exp_y_ht = calculate_exp_per_transcript(
-                    context_y_ht, locus_type="Y", groupings=groupings
+                exp_y_ht = calculate_exp_per_section(
+                    context_y_ht,
+                    locus_type="Y",
+                    search_field="transcript",
+                    groupings=groupings,
                 )
                 exp_ht = exp_ht.union(exp_x_ht).union(exp_y_ht)
 
                 logger.info(
                     "Aggregating total observed variant counts per transcript..."
                 )
-                obs_ht = calculate_observed(exome_ht, exac)
+                obs_ht = calculate_observed(exome_ht)
 
                 logger.info(
                     "Annotating total observed and expected values and overall observed/expected value "
@@ -259,7 +268,9 @@ def main(args):
                 # This technically should search for two additional breaks at a time:
                 # this calls `process_sections`, which checks each section of the transcript for a break
                 # sections are transcript section pre and post first breakpoint
-                break_ht = process_additional_breaks(break_ht, args.chisq_threshold)
+                break_ht = process_additional_breaks(
+                    break_ht, break_num, args.chisq_threshold
+                )
                 break_ht = break_ht.checkpoint(
                     f"{temp_path}/break_{break_num}.ht", overwrite=True
                 )

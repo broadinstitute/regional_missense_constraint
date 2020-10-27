@@ -8,7 +8,6 @@ from rmc.utils.generic import (
     get_coverage_correction_expr,
     get_exome_bases,
     get_plateau_model,
-    keep_criteria,
     process_vep,
 )
 from rmc.resources.resource_utils import MISSENSE
@@ -36,34 +35,25 @@ Core fields to group by when calculating expected variants per base.
 """
 
 
-def calculate_observed(ht: hl.Table, exac: bool) -> hl.Table:
+def calculate_observed(ht: hl.Table) -> hl.Table:
     """
     Groups input Table by transcript, filters based on `keep_criteria`,
     and aggregates observed variants count per transcript.
 
+    .. note::
+        Assumes input HT has been filtered using `keep_criteria`.
+
     :param hl.Table ht: Input Table.
-    :param bool exac: Whether the input Table is ExAC data.
     :return: Table annotated with observed variant counts.
     :rtype: hl.Table
     """
-    ht = ht.filter(keep_criteria(ht, exac))
     return ht.group_by(ht.transcript_consequences.transcript_id).aggregate(
         observed=hl.agg.count()
     )
 
 
 def calculate_exp_per_base(
-    context_ht: hl.Table,
-    groupings: List[str] = [
-        "context",
-        "ref",
-        "alt",
-        "cpg",
-        "methylation_level",
-        "mu_snp",
-        "transcript",
-        "exome_coverage",
-    ],
+    context_ht: hl.Table, search_field: str, groupings: List[str] = GROUPINGS,
 ) -> hl.Table:
     """
     Returns table with expected variant counts annotated per base. 
@@ -74,17 +64,19 @@ def calculate_exp_per_base(
         Expects:
         - context_ht is annotated with all of the fields in `groupings` and that the names match exactly.
             That means the HT should have context, ref, alt, CpG status, methylation level, mutation rate (`mu_snp`), 
-            transcript, and coverage (`exome_coverage`) if using the default value for `groupings`.
+            and coverage (`exome_coverage`) if using the default value for `groupings`.
         - context_ht contains coverage and plateau models in its global annotations (`coverage_model`, `plateau_models`).
 
     :param hl.Table context_ht: Context Table.
+    :param str search_field: String representing section type. One of 'transcript' or 'section'. Context HT must be annotated with this field.
     :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate. 
         Table must be annotated with these fields. Default fields are context, ref, alt, cpg, methylation level, mu_snp, transcript, and exome_coverage.
     :return: Table grouped by transcript with expected variant counts per transcript.
     :rtype: hl.Table
     """
-    logger.info(f"Annotating HT with groupings: {groupings}...")
-    context_ht = context_ht.annotate(variant=(context_ht.row.select(*groupings)))
+    all_groupings = groupings + [search_field]
+    logger.info(f"Annotating HT with groupings: {all_groupings}...")
+    context_ht = context_ht.annotate(variant=(context_ht.row.select(*all_groupings)))
 
     logger.info("Getting cumulative aggregated mutation rate per variant...")
     context_ht = context_ht.annotate(
@@ -119,49 +111,50 @@ def calculate_exp_per_base(
 
     logger.info("Aggregating proportion of expected variants per site and returning...")
     context_ht = context_ht.annotate(
-        transcript_exp_keys=context_ht.all_exp.keys().filter(
-            lambda x: x.transcript == context_ht.transcript
+        section_exp_keys=context_ht.all_exp.keys().filter(
+            lambda x: x[search_field] == context_ht[search_field]
         )
     )
     context_ht = context_ht.annotate(
-        transcript_exp=hl.map(
-            lambda x: context_ht.all_exp.get(x), context_ht.transcript_exp_keys
+        section_exp=hl.map(
+            lambda x: context_ht.all_exp.get(x), context_ht.section_exp_keys
         )
     )
-    return context_ht.annotate(cumulative_exp=hl.sum(context_ht.transcript_exp)).drop(
-        "mu_agg", "transcript_exp_keys", "transcript_exp", "all_exp"
+    return context_ht.annotate(cumulative_exp=hl.sum(context_ht.section_exp)).drop(
+        "mu_agg", "section_exp_keys", "section_exp", "all_exp"
     )
 
 
-def calculate_exp_per_transcript(
+def calculate_exp_per_section(
     context_ht: hl.Table,
     locus_type: str,
-    groupings: List[str] = [
-        "context",
-        "ref",
-        "alt",
-        "cpg",
-        "methylation_level",
-        "mu_snp",
-        "transcript",
-        "exome_coverage",
-    ],
-) -> hl.expr.Float64Expression:
+    search_field: str,
+    groupings: List[str] = GROUPINGS,
+) -> hl.Table:
     """
     Returns the total number of expected variants for input transcript.
 
     .. note::
+        - Assumes that context_ht is annotated with all of the fields in `groupings` and that the names match exactly.
         - Assumes that input table is filtered to autosomes/PAR only, X nonPAR only, or Y nonPAR only.
         - Expects that input table contains coverage and plateau models in its global annotations (`coverage_model`, `plateau_models`).
 
     :param hl.Table context_ht: Context Table.
     :param str locus_type: Locus type of input table. One of "X", "Y", or "autosomes".
         NOTE: will treat any input other than "X" or "Y" as autosomes.
-    :return: Total expected variants count for transcript of interest.
-    :rtype: hl.expr.Float64Expression
+    :param str search_field: String representing section type. One of 'transcript' or 'section'. Context HT must be annotated with this field.
+    :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate. 
+        Table must be annotated with these fields.
+    :return: Table grouped by search_field with expected counts per search field.
+    :rtype: hl.Table
     """
-    logger.info(f"Grouping by {groupings}...")
-    group_ht = context_ht.group_by(*groupings).aggregate(
+    additional_groupings = [search_field]
+    if search_field != "transcript":
+        additional_groupings.append("transcript")
+
+    all_groupings = groupings + additional_groupings
+    logger.info(f"Grouping by {all_groupings}...")
+    group_ht = context_ht.group_by(*all_groupings).aggregate(
         mu_agg=hl.agg.sum(context_ht.mu_snp)
     )
 
@@ -188,12 +181,10 @@ def calculate_exp_per_transcript(
         mu=group_ht.mu_agg * group_ht.coverage_correction,
     )
 
-    # This also seems to be undercounting the number of expecteds
-    logger.info("Getting expected counts per transcript and returning...")
-    return group_ht.group_by("transcript").aggregate(
+    logger.info(f"Getting expected counts per {search_field} and returning...")
+    return group_ht.group_by(search_field).aggregate(
         expected=hl.agg.sum(group_ht._exp), mu_agg=hl.agg.sum(group_ht.mu)
     )
-    # return context_ht.filter(context_ht.transcript == transcript).tail(1).cumulative_exp
 
 
 def get_obs_exp_expr(
@@ -280,10 +271,7 @@ def get_reverse_obs_exp_expr(
 
 
 def get_fwd_exprs(
-    ht: hl.Table,
-    search_field: str,
-    observed_expr: hl.expr.Int64Expression,
-    groupings: List[str] = GROUPINGS,
+    ht: hl.Table, search_field: str, observed_expr: hl.expr.Int64Expression,
 ) -> hl.Table:
     """
     Calls `get_cumulative_obs_expr`, `calculate_exp_per_base`, and `get_obs_exp_expr` to add the forward section cumulative observed, expected, and observed/expected values.
@@ -321,13 +309,11 @@ def get_fwd_exprs(
         ht = ht.annotate(cond_expr=hl.len(ht.cumulative_obs) != 0)
     else:
         ht = ht.annotate(cond_expr=hl.len(ht.cumulative_obs) > 1)
-        ht = calculate_exp_per_base(ht, groupings + ["section"])
+        ht = calculate_exp_per_base(ht, search_field)
 
     return ht.annotate(
         forward_obs_exp=get_obs_exp_expr(
-            ht.cond_expr,
-            ht.cumulative_obs[ht[search_field]],
-            ht.cumulative_exp[ht[search_field]],
+            ht.cond_expr, ht.cumulative_obs[ht[search_field]], ht.cumulative_exp,
         )
     )
 
@@ -373,7 +359,7 @@ def get_reverse_exprs(
     # Set reverse o/e to missing if reverse expected value is 0 (to avoid NaNs)
     return ht.annotate(
         reverse_obs_exp=get_obs_exp_expr(
-            (ht.reverse_counts.exp != 0), ht.reverse.obs, ht.reverse.exp
+            (ht.reverse.exp != 0), ht.reverse.obs, ht.reverse.exp
         )
     )
 
@@ -489,10 +475,10 @@ def search_for_break(
             # Add forwards section null (going through positions from smaller to larger)
             # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
             get_dpois_expr(
-                cond_expr=hl.len(ht.scan_counts.cumulative_obs) != 0,
+                cond_expr=hl.len(ht.cumulative_obs) != 0,
                 section_oe_expr=ht.overall_obs_exp,
-                obs_expr=ht.scan_counts.cumulative_obs[ht[search_field]],
-                exp_expr=ht.scan_counts.cumulative_exp[ht[search_field]],
+                obs_expr=ht.cumulative_obs[ht[search_field]],
+                exp_expr=ht.cumulative_exp,
             ),
             # Add reverse section null (going through positions larger to smaller)
             get_dpois_expr(
@@ -506,10 +492,10 @@ def search_for_break(
             # Add forward section alt
             # section_alt = stats.dpois(section_obs, section_exp*section_obs_exp)[0]
             get_dpois_expr(
-                cond_expr=hl.len(ht.scan_counts.cumulative_obs) != 0,
+                cond_expr=hl.len(ht.cumulative_obs) != 0,
                 section_oe_expr=ht.forward_obs_exp,
-                obs_expr=ht.scan_counts.cumulative_obs[ht[search_field]],
-                exp_expr=ht.scan_counts.cumulative_exp[ht[search_field]],
+                obs_expr=ht.cumulative_obs[ht[search_field]],
+                exp_expr=ht.cumulative_exp,
             ),
             # Add reverse section alt
             get_dpois_expr(
@@ -525,11 +511,12 @@ def search_for_break(
     # Kaitlin stores all nulls/alts in section_null and section_alt and then multiplies
     # e.g., p1 = prod(section_null_ps)
     ht = ht.annotate(
-        null=get_section_expr(ht.section_nulls), alt=get_section_expr(ht.section_alts),
+        total_null=get_section_expr(ht.section_nulls),
+        total_alt=get_section_expr(ht.section_alts),
     )
 
     logger.info("Adding chisq value and getting max chisq...")
-    ht = ht.annotate(chisq=(2 * (hl.log(ht.alt) - hl.log(ht.null))))
+    ht = ht.annotate(chisq=(2 * (hl.log(ht.total_alt) - hl.log(ht.total_null))))
 
     # "The default chi-squared value for one break to be considered significant is
     # 10.8 (p ~ 10e-3) and is 13.8 (p ~ 10e-4) for two breaks. These currently cannot
@@ -573,7 +560,7 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
         "Annotating HT with cumulative observed and expected counts for each transcript...\n"
         "(transcript-level forwards (moving from smaller to larger positions) values)"
     )
-    ht = get_fwd_exprs(ht=ht, search_field="transcript", observed_expr=ht.observed,)
+    ht = get_fwd_exprs(ht=ht, search_field="transcript", observed_expr=ht.observed)
     logger.info(
         "Annotating HT with reverse observed and expected counts for each transcript...\n"
         "(transcript-level reverse (moving from larger to smaller positions) values)"
@@ -582,11 +569,11 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
     # of the first line will always be empty when using a scan
     ht = get_reverse_exprs(
         ht=ht,
-        cond_expr=hl.len(ht.scan_counts.cumulative_obs) != 0,
+        cond_expr=hl.len(ht.cumulative_obs) != 0,
         total_obs_expr=ht.total_obs,
         total_exp_expr=ht.total_exp,
-        scan_obs_expr=ht.scan_counts.cumulative_obs[ht.transcript],
-        scan_exp_expr=ht.scan_counts.cumulative_exp[ht.transcript],
+        scan_obs_expr=ht.cumulative_obs[ht.transcript],
+        scan_exp_expr=ht.cumulative_exp,
     )
 
     return search_for_break(ht, "transcript", chisq_threshold)
@@ -597,12 +584,16 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     Search for breaks within given sections of a transcript. 
 
     Expects that input Table has the following annotations:
+        - context
+        - ref
+        - alt
         - cpg
         - observed
         - mu_snp
         - coverage_correction
+        - methylation_level
         - section
-    Also assumes that Table's globals contain plateau models.
+    Also assumes that Table's globals contain plateau and coverage models.
 
     :param hl.Table ht: Input Table.
     :param float chisq_threshold: Chi-square significance threshold. 
@@ -613,15 +604,21 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     logger.info(
         "Getting total observed and expected counts for each transcript section..."
     )
-    ht = ht.annotate(plateau_model=get_plateau_model(ht.locus, ht.cpg, ht.globals))
-    section_group = ht.group_by(ht.section).aggregate(
-        obs=hl.agg.sum(ht.observed),
-        exp=(hl.agg.sum(ht.mu_snp) * ht.plateau_model[1] + ht.plateau_model[0])
-        * ht.coverage_correction,
+    # TODO: fix me, need to split HT into autosomes/X/Y prior to running this
+    section_exp = calculate_exp_per_section(
+        ht, locus_type="autosomes", search_field="section"
+    )
+    section_obs = ht.group_by(ht.section).aggregate(obs=hl.agg.sum(ht.observed))
+    ht = ht.annotate(
+        break_obs=section_obs[ht.section].obs,
+        break_exp=section_exp[ht.section].expected,
     )
     ht = ht.annotate(
-        break_obs=section_group[ht.section].obs,
-        break_exp=section_group[ht.section].exp,
+        overall_obs_exp=get_obs_exp_expr(
+            cond_expr=hl.is_defined(ht.section),
+            obs_expr=ht.break_obs,
+            exp_expr=ht.break_exp,
+        )
     )
 
     logger.info(
@@ -637,16 +634,18 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     ht = get_reverse_exprs(
         ht=ht,
         # This cond expression searches for the start of the second section
-        cond_expr=hl.len(ht.scan_counts.cumulative_obs) > 1,
+        cond_expr=hl.len(ht.cumulative_obs) > 1,
         total_obs_expr=ht.break_obs,
         total_exp_expr=ht.break_exp,
-        scan_obs_expr=ht.scan_counts.cumulative_obs[ht.section],
-        scan_exp_expr=ht.scan_counts.cumulative_exp[ht.section],
+        scan_obs_expr=ht.cumulative_obs[ht.section],
+        scan_exp_expr=ht.cumulative_exp,
     )
     return search_for_break(ht, "section", chisq_threshold)
 
 
-def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
+def process_additional_breaks(
+    ht: hl.Table, break_num: int, chisq_threshold: float
+) -> hl.Table:
     """
     Search for additional breaks in a transcript after finding one significant break.
     
@@ -660,6 +659,7 @@ def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
     Also assumes that Table's globals contain plateau models.
 
     :param hl.Table ht: Input Table.
+    :param int break_num: Number of additional break: 2 for second break, 3 for third, etc.
     :param float chisq_threshold: Chi-square significance threshold. 
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
     :return: Table annotated with whether position is a breakpoint. 
@@ -669,35 +669,33 @@ def process_additional_breaks(ht: hl.Table, chisq_threshold: float) -> hl.Table:
     logger.info(
         "Generating table keyed by transcripts (used to get breakpoint position later)..."
     )
-    first_break_ht = ht.select().key_by("transcript")
+    break_ht = ht.filter(ht.is_break).key_by("transcript")
 
     logger.info("Renaming scans fields to prepare to search for an additional break...")
     # Rename because these will be overwritten when searching for additional break
     ht = ht.rename(
         {
-            "scan_counts": "first_scan_counts",
-            "reverse": "first_reverse",
-            "forward_obs_exp": "first_forward_obs_exp",
-            "reverse_obs_exp": "first_reverse_obs_exp",
-            "is_break": "is_first_break",
+            "cumulative_obs": f"{break_num - 1}_cumulative_obs",
+            "cumulative_exp": f"{break_num - 1}_cumulative_exp",
+            "reverse": f"{break_num - 1}_reverse",
+            "forward_obs_exp": f"{break_num - 1}_forward_obs_exp",
+            "reverse_obs_exp": f"{break_num - 1}_reverse_obs_exp",
         }
     )
+    annot_expr = {f"is_break_{break_num - 1}": ht.is_break}
+    ht = ht.annotate(**annot_expr)
 
     logger.info(
         "Splitting each transcript into two sections: pre first break and post..."
     )
     ht = ht.annotate(
         section=hl.if_else(
-            ~ht.is_first_break,
-            hl.if_else(
-                ht.locus.position > first_break_ht[ht.transcript].locus.position,
-                hl.format("%s_%s", ht.transcript, "post"),
-                hl.format("%s_%s", ht.transcript, "pre"),
-            ),
             # If position is breakpoint, add to second section ("post")
             # this is because the first position of a scan is always missing anyway
+            ht.locus.position >= break_ht[ht.transcript].locus.position,
             hl.format("%s_%s", ht.transcript, "post"),
-        )
+            hl.format("%s_%s", ht.transcript, "pre"),
+        ),
     )
     return process_sections(ht, chisq_threshold)
 
