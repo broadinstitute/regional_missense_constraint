@@ -148,7 +148,12 @@ def calculate_exp_per_section(
     :return: Table grouped by search_field with expected counts per search field.
     :rtype: hl.Table
     """
-    all_groupings = groupings + [search_field]
+    if search_field == "transcript":
+        additional_groupings = [search_field]
+    else:
+        additional_groupings = ["transcript", search_field]
+
+    all_groupings = groupings + additional_groupings
     logger.info(f"Grouping by {all_groupings}...")
     group_ht = context_ht.group_by(*all_groupings).aggregate(
         mu_agg=hl.agg.sum(context_ht.mu_snp)
