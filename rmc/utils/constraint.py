@@ -7,7 +7,6 @@ from gnomad.utils.reference_genome import get_reference_genome
 from rmc.utils.generic import (
     get_coverage_correction_expr,
     get_exome_bases,
-    get_plateau_model,
     process_vep,
 )
 from rmc.resources.resource_utils import MISSENSE
@@ -53,75 +52,61 @@ def calculate_observed(ht: hl.Table) -> hl.Table:
 
 
 def calculate_exp_per_base(
-    context_ht: hl.Table, search_field: str, groupings: List[str] = GROUPINGS,
+    ht: hl.Table, exp_ht: hl.Table, search_field: str,
 ) -> hl.Table:
     """
     Returns table with expected variant counts annotated per base. 
 
-    Expected variants count is mutation rate per SNP adjusted by location in the genome/CpG status (plateau model) and coverage (coverage model).
+    Expected variants counts are produced per base by first calculating the fraction of probability of mutation per base,
+    then multiplying that fraction by the total expected variants count for the section of interest 
+    (either transcript or sub-section of a transcript).
+
+    The expected variants count for section of interest is mutation rate per SNP adjusted by location in the genome/CpG status 
+    (plateau model) and coverage (coverage model).
 
     .. note::
         Expects:
-        - context_ht is annotated with all of the fields in `groupings` and that the names match exactly.
-            That means the HT should have context, ref, alt, CpG status, methylation level, mutation rate (`mu_snp`), 
-            and coverage (`exome_coverage`) if using the default value for `groupings`.
-        - context_ht contains coverage and plateau models in its global annotations (`coverage_model`, `plateau_models`).
-
-    :param hl.Table context_ht: Context Table.
-    :param str search_field: String representing section type. One of 'transcript' or 'section'. Context HT must be annotated with this field.
-    :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate. 
-        Table must be annotated with these fields. Default fields are context, ref, alt, cpg, methylation level, mu_snp, transcript, and exome_coverage.
-    :return: Table grouped by transcript with expected variant counts per transcript.
+        - search_field is either 'transcript' or 'section'.
+        - exp_ht is keyed by search_field and annotated with the field `expected`, 
+            which is the total expected variant counts for the search_field (transcript or section).
+        - ht is annotated with mu_snp and search_field. 
+        
+    :param hl.Table ht: Input context Table.
+    :param hl.Table exp_ht: Input Table with total expected counts per `search_field`.
+    :param str search_field: String representing section type. One of 'transcript' or 'section'. 
+        Context HT must be annotated with this field.
+    :return: Table with expected variant counts annotated per base.
     :rtype: hl.Table
     """
-    all_groupings = groupings + [search_field]
-    logger.info(f"Annotating HT with groupings: {all_groupings}...")
-    context_ht = context_ht.annotate(variant=(context_ht.row.select(*all_groupings)))
+    logger.info(
+        "Getting sum of mutation rate probabilities and total expected counts for each transcript..."
+    )
+    total_mu_ht = ht.group_by(search_field).aggregate(total=hl.agg.sum(ht.mu_snp))
+    ht = ht.annotate(
+        total_mu=total_mu_ht[ht[search_field]].total,
+        total_exp=exp_ht[ht[search_field]].expected,
+    )
 
-    logger.info("Getting cumulative aggregated mutation rate per variant...")
-    context_ht = context_ht.annotate(
-        mu_agg=hl.scan.group_by(
-            context_ht.variant,
-            hl.struct(
-                # Use scan sum here because this annotation stores the cumulative mutation rate for
-                # each context/ref/alt/methylation level
-                mu_agg=hl.scan.sum(context_ht.variant.mu_snp),
-                # Need _prev_nonnull to get the correct cpg and exome coverage for each scanned variant
-                # Without this, the scan pulls the values from the current line, NOT the previous line
-                cpg=hl.scan._prev_nonnull(context_ht.variant.cpg),
-                coverage_correction=get_coverage_correction_expr(
-                    hl.scan._prev_nonnull(context_ht.variant.exome_coverage),
-                    context_ht.coverage_model,
-                ),
-            ),
+    logger.info("Getting cumulative mutation rate probabilities across transcripts...")
+    # Get scan of mu_snp across transcripts
+    ht = ht.annotate(_mu_scan=hl.scan.group_by(ht[search_field], hl.scan.sum(ht.mu_snp)))
+    ht = ht.transmute(
+        cumulative_mu=hl.if_else(
+            # Check if the current transcript/section exists in the _mu_scan dictionary
+            # If it doesn't exist, that means this is the first line in the HT for that particular transcript/section
+            # The first line of a scan is always missing, but we want it to exist
+            # Thus, set the cumulative_mu equal to the current mu_snp value
+            hl.is_missing(ht._mu_scan.get(ht[search_field])),
+            {ht.transcript: ht.mu_snp},
+            {ht.transcript: ht._mu_scan[ht[search_field]] + ht.mu_snp},
         )
     )
 
-    logger.info("Adjusting mutation rate using plateau and coverage models...")
-    model = get_plateau_model(
-        context_ht.locus, context_ht.cpg, context_ht.globals, include_cpg=True
+    logger.info(
+        "Translating cumulative mutation rate probabilities to cumulative expected counts..."
     )
-    context_ht = context_ht.annotate(
-        mu=context_ht.mu_agg.map_values(lambda x: (x.mu_agg) * x.coverage_correction),
-        all_exp=context_ht.mu_agg.map_values(
-            lambda x: (x.mu_agg * model[x.cpg][1] + model[x.cpg][0])
-            * x.coverage_correction
-        ),
-    )
-
-    logger.info("Aggregating proportion of expected variants per site and returning...")
-    context_ht = context_ht.annotate(
-        section_exp_keys=context_ht.all_exp.keys().filter(
-            lambda x: x[search_field] == context_ht[search_field]
-        )
-    )
-    context_ht = context_ht.annotate(
-        section_exp=hl.map(
-            lambda x: context_ht.all_exp.get(x), context_ht.section_exp_keys
-        )
-    )
-    return context_ht.annotate(cumulative_exp=hl.sum(context_ht.section_exp)).drop(
-        "mu_agg", "section_exp_keys", "section_exp", "all_exp"
+    return ht.annotate(
+        cumulative_exp=(ht.cumulative_mu[ht[search_field]] / ht.total_mu) * ht.total_exp
     )
 
 
