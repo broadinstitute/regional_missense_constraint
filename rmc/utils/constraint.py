@@ -69,7 +69,8 @@ def calculate_exp_per_base(
         - search_field is either 'transcript' or 'section'.
         - exp_ht is keyed by search_field and annotated with the field `expected`, 
             which is the total expected variant counts for the search_field (transcript or section).
-        - ht is annotated with mu_snp and search_field. 
+        - ht is annotated with mu_snp, search_field and coverage (`exome_coverage`). 
+        - ht contains `coverage_model` globals annotation.
         
     :param hl.Table ht: Input context Table.
     :param hl.Table exp_ht: Input Table with total expected counts per `search_field`.
@@ -78,6 +79,13 @@ def calculate_exp_per_base(
     :return: Table with cumulative expected variant counts annotated per base.
     :rtype: hl.Table
     """
+    logger.info("Adding coverage correction to mutation rate probabilities...")
+    ht = ht.transmute(
+        raw_mu_snp=ht.mu_snp,
+        mu_snp=ht.mu_snp
+        * get_coverage_correction_expr(ht.exome_coverage, ht.coverage_model),
+    )
+
     logger.info(
         "Getting sum of mutation rate probabilities and total expected counts for each transcript..."
     )
