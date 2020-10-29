@@ -804,3 +804,19 @@ def search_for_two_breaks(
     if best_chisq != 0:
         return breaks[best_chisq]
     return None
+
+
+def calculate_segment_chisq(
+    obs_expr: hl.expr.Int64Expression, exp_expr: hl.expr.Float64Expression,
+) -> hl.expr.Float64Expression:
+    """
+    Creates expression checking if transcript section is significantly different than the null model (no evidence of regional missense constraint).
+
+    Formula is: (section obs - section exp)^2 / section exp. Taken from ExAC RMC code.
+
+    :param hl.expr.Int64Expression obs_expr:
+    :param hl.expr.Float64Expression exp_expr:
+    :return: Transcript section chi-squared value.
+    :rtype: hl.expr.Float64Expression
+    """
+    return ((obs_expr - exp_expr) ** 2) / exp_expr
