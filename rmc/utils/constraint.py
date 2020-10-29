@@ -624,26 +624,39 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
         )
     )
 
-    logger.info(
-        "Annotating HT with cumulative observed and expected counts for each transcript section..."
-    )
-    ht = get_fwd_exprs(ht=ht, search_field="section", observed_expr=ht.observed)
+    logger.info("Splitting HT into pre and post breakpoint sections...")
+    pre_ht = ht.filter(ht.section.contains("pre"))
+    post_ht = ht.filter(ht.section.contains("post"))
 
     logger.info(
-        "Annotating HT with reverse observed and expected counts for each transcript section..."
+        "Annotating post breakpoint HT with cumulative observed and expected counts..."
     )
-    # cond_expr here skips the first line of the HT, as the cumulative values
-    # of the first line will always be empty when using a scan
-    ht = get_reverse_exprs(
-        ht=ht,
-        # This cond expression searches for the start of the second section
-        cond_expr=hl.len(ht.cumulative_obs) > 1,
-        total_obs_expr=ht.break_obs,
-        total_exp_expr=ht.break_exp,
-        scan_obs_expr=ht.cumulative_obs[ht.section],
-        scan_exp_expr=ht.cumulative_exp,
+    post_ht = get_fwd_exprs(
+        ht=post_ht, search_field="section", observed_expr=ht.observed
     )
-    return search_for_break(ht, "section", chisq_threshold)
+
+    logger.info(
+        "Annotating post breakpoint HT with reverse observed and expected counts..."
+    )
+    post_ht = get_reverse_exprs(
+        ht=post_ht,
+        # TODO: Remove cond_expr from this function and others after obs_exp_update PR is approved
+        # no longer necessary now that scans aren't shifted by one line
+        cond_expr=True,
+        total_obs_expr=post_ht.section_obs,
+        total_exp_expr=post_ht.section_exp,
+        scan_obs_expr=post_ht.cumulative_obs[post_ht.transcript],
+        scan_exp_expr=post_ht.cumulative_exp,
+    )
+
+    logger.info("Searching for a break in each section and returning...")
+    pre_ht = search_for_break(
+        pre_ht, search_field="section", chisq_threshold=chisq_threshold
+    )
+    post_ht = search_for_break(
+        post_ht, search_field="section", chisq_threshold=chisq_threshold
+    )
+    return pre_ht.union(post_ht)
 
 
 def process_additional_breaks(
@@ -668,7 +681,6 @@ def process_additional_breaks(
     :return: Table annotated with whether position is a breakpoint. 
     :rtype: hl.Table
     """
-    # TODO: generalize function so that it can search for more than one additional break
     logger.info(
         "Generating table keyed by transcripts (used to get breakpoint position later)..."
     )
