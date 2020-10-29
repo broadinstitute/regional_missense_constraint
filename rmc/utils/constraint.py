@@ -59,90 +59,79 @@ def calculate_observed(ht: hl.Table) -> hl.Table:
     )
 
 
-def prep_mu_snp():
+def get_cumulative_mu_expr(
+    transcript_expr: hl.expr.StringExpression, mu_expr: hl.expr.Float64Expression,
+) -> hl.expr.DictExpression:
     """
+    Returns annotation with the cumulative mutation rate probability, shifted by one.
+
+    Value is shifted by one due to the nature of `hl.scan` and needs to be corrected later.
+    This function can produce the scan when searching for the first break or when searching for additional break(s).
+
+    :param hl.expr.StringExpression transcript_expr: StringExpression containing transcript information.
+    :param hl.expr.Float64Expression mu_expr: FloatExpression containing mutation rate probability per variant.
+    :return: DictExpression containing scan expressions for cumulative mutation rate probability.
+    :rtype: hl.expr.DictExpression
     """
-    logger.info("Adding coverage correction to mutation rate probabilities...")
-    ht = ht.transmute(
-        raw_mu_snp=ht.mu_snp,
-        mu_snp=ht.mu_snp
-        * get_coverage_correction_expr(ht.exome_coverage, ht.coverage_model),
+    return hl.scan.group_by(transcript_expr, hl.scan.sum(mu_expr))
+
+
+def adjust_mu_expr(
+    cumulative_mu_expr: hl.expr.DictExpression,
+    mu_expr: hl.expr.Int32Expression,
+    transcript_expr: hl.expr.StringExpression,
+) -> hl.expr.DictExpression:
+    """
+    Adjusts the scan with the cumulative number mutation rate probability.
+
+    This adjustment is necessary because scans are always one line behind, and we want the values to match per line.
+    This function can correct the scan created when searching for the first break or when searching for additional break(s).
+    
+    :param hl.expr.DictExpression cumulative_mu_expr: DictExpression containing scan expressions for cumulative mutation rate probability.
+    :param hl.expr.Float64Expression mu_expr: FloatExpression containing mutation rate probability per variant.
+    :param hl.expr.StringExpression transcript_expr: StringExpression containing transcript information.
+    :return: Adjusted cumulative mutation rate expression.
+    :rtype: hl.expr.DictExpression
+    """
+    return hl.if_else(
+        # Check if the current transcript/section exists in the _mu_scan dictionary
+        # If it doesn't exist, that means this is the first line in the HT for that particular transcript/section
+        # The first line of a scan is always missing, but we want it to exist
+        # Thus, set the cumulative_mu equal to the current mu_snp value
+        hl.is_missing(cumulative_mu_expr.get(transcript_expr)),
+        {transcript_expr: mu_expr},
+        # Otherwise, add the current mu_snp to the scan to make sure the cumulative value isn't one line behind
+        {transcript_expr: cumulative_mu_expr[transcript_expr] + mu_expr},
     )
 
-    logger.info(
-        "Getting sum of mutation rate probabilities and total expected counts for each transcript..."
-    )
-    total_mu_ht = ht.group_by(search_field).aggregate(total=hl.agg.sum(ht.mu_snp))
-    return ht.annotate(
-        total_mu=total_mu_ht[ht[search_field]].total,
-        total_exp=exp_ht[ht[search_field]].expected,
-    )
 
-
-def get_cumulative_exp_expr():
+def translate_mu_to_exp_expr(
+    cumulative_mu_expr: hl.expr.DictExpression,
+    transcript_expr: hl.expr.StringExpression,
+    total_mu_expr: hl.expr.Int32Expression,
+    total_exp_expr: hl.expr.Int32Expression,
+) -> hl.expr.DictExpression:
     """
-    """
-    return hl.scan.group_by(ht[transcript_str], hl.scan.sum(ht.mu_snp))
-
-
-def calculate_exp_per_base(ht: hl.Table, transcript_str: str,) -> hl.Table:
-    """
-    Returns table with expected variant counts annotated per base. 
+    Translates cumulative mutation rate probability into cumulative expected count per base.
 
     Expected variants counts are produced per base by first calculating the fraction of probability of mutation per base,
-    then multiplying that fraction by the total expected variants count for the section of interest 
-    (either transcript or sub-section of a transcript).
+    then multiplying that fraction by the total expected variants count for a transcript or transcript sub-section.
 
     The expected variants count for section of interest is mutation rate per SNP adjusted by location in the genome/CpG status 
     (plateau model) and coverage (coverage model).
 
-    .. note::
-        Expects:
-        - search_field is either 'transcript' or 'section'.
-        - exp_ht is keyed by search_field and annotated with the field `expected`, 
-            which is the total expected variant counts for the search_field (transcript or section).
-        - ht is annotated with transcript information, mu_snp, total_mu, total_exp, exome_coverage. 
-        - ht contains `coverage_model` globals annotation.
-        
-    :param hl.Table ht: Input context Table.
-    :param hl.Table exp_ht: Input Table with total expected counts per `search_field`.
-    :param str transcript_str: String representing field containing transcript information.
-     String representing section type. One of 'transcript' or 'section'. 
-        Context HT must be annotated with this field.
-    :return: Table with cumulative expected variant counts annotated per base.
-    :rtype: hl.Table
+    :param hl.expr.DictExpression cumulative_mu_expr: DictExpression containing scan expressions for cumulative mutation rate probability.
+    :param hl.expr.StringExpression transcript_expr: StringExpression containing transcript information.
+    :param hl.expr.Float64Expression total_mu_expr: FloatExpression describing total sum of mutation rate probabilities per transcript.
+    :param hl.expr.Float64Expression total_exp_expr: FloatExpression describing total expected variant counts per transcript.
+    :return: Cumulative expected variants count expression.
+    :rtype: hl.expr.DictExpression
     """
-    logger.info("Getting cumulative mutation rate probabilities across transcripts...")
-    # Get scan of mu_snp across transcript/section
-    ht = ht.annotate(
-        _mu_scan=hl.scan.group_by(ht[transcript_str], hl.scan.sum(ht.mu_snp))
-    )
-    ht = ht.transmute(
-        cumulative_mu=hl.if_else(
-            # Check if the current transcript/section exists in the _mu_scan dictionary
-            # If it doesn't exist, that means this is the first line in the HT for that particular transcript/section
-            # The first line of a scan is always missing, but we want it to exist
-            # Thus, set the cumulative_mu equal to the current mu_snp value
-            hl.is_missing(ht._mu_scan.get(ht[transcript_str])),
-            {ht[transcript_str]: ht.mu_snp},
-            # Otherwise, add the current mu_snp to the scan to make sure the cumulative value isn't one line behind
-            {ht[transcript_str]: ht._mu_scan[ht[transcript_str]] + ht.mu_snp},
-        )
-    )
-
-    logger.info(
-        "Translating cumulative mutation rate probabilities to cumulative expected counts..."
-    )
-    return ht.annotate(
-        cumulative_exp=(ht.cumulative_mu[ht[search_field]] / ht.total_mu) * ht.total_exp
-    )
+    return (cumulative_mu_expr[transcript_expr] / total_mu_expr) * total_exp_expr
 
 
 def calculate_exp_per_transcript(
-    context_ht: hl.Table,
-    locus_type: str,
-    groupings: List[str] = GROUPINGS,
-    partition_hint: int = 2000,
+    context_ht: hl.Table, locus_type: str, groupings: List[str] = GROUPINGS,
 ) -> hl.Table:
     """
     Returns the total number of expected variants and aggregate mutation rate per transcript.
@@ -160,7 +149,6 @@ def calculate_exp_per_transcript(
     :return: Table grouped by transcript with expected counts per search field.
     :rtype: hl.Table
     """
-    all_groupings = groupings + additional_groupings
     logger.info(f"Grouping by {groupings}...")
     group_ht = context_ht.group_by(*groupings).aggregate(
         mu_agg=hl.agg.sum(context_ht.mu_snp)
@@ -194,7 +182,7 @@ def calculate_exp_per_transcript(
         mu=group_ht.mu_agg * group_ht.coverage_correction,
     )
 
-    logger.info(f"Getting expected counts per {search_field} and returning...")
+    logger.info(f"Getting expected counts per transcript and returning...")
     return group_ht.group_by("transcript").aggregate(
         expected=hl.agg.sum(group_ht._exp), mu_agg=hl.agg.sum(group_ht.mu)
     )
