@@ -298,31 +298,32 @@ def get_reverse_obs_exp_expr(
     )
 
 
-def get_fwd_exprs(ht: hl.Table, transcript_str: str, obs_str: str,) -> hl.Table:
+def get_fwd_exprs(
+    ht: hl.Table,
+    transcript_str: str,
+    obs_str: str,
+    mu_str: str,
+    total_mu_str: str,
+    total_exp_str: str,
+) -> hl.Table:
     """
-    Calls `get_cumulative_obs_expr`, `calculate_exp_per_base`, and `get_obs_exp_expr` to add the forward section cumulative observed, expected, and observed/expected values.
+    Annotates input Table with the forward section cumulative observed, expected, and observed/expected values.
 
     .. note::
         'Forward' refers to moving through the transcript from smaller to larger chromosomal positions.
         Expects:
-        - input HT is annotated with all of the fields in `groupings` and that the names match exactly.
-            That means the HT should have context, ref, alt, CpG status, methylation level, mutation rate (`mu_snp`), 
-            and coverage (`exome_coverage`) if using the default value for `groupings`.
-        - input HT is annotated with transcript or section.
-        - context_ht contains coverage and plateau models in its global annotations (`coverage_model`, `plateau_models`).
+        - Input HT is annotated with transcript, observed, mutation rate, total mutation rate (per section), 
+        and total expected counts (per section).
 
     :param hl.Table ht: Input Table.
+    :param str transcript_str: Name of field containing transcript information.
+    :param str obs_str: Name of field containing observed variants counts.
+    :param str mu_str: Name of field containing mutation rate probability per variant.
+    :param str total_mu_str: Name of field containing total mutation rate per section of interest (transcript or sub-section of transcript).
+    :param str total_exp_str: Name of field containing total expected variants count per section of interest (transcript or sub-section of transcript).
     :param str search_field: Name of field to group by prior to running scan. Should be 'transcript' if searching for the first break.
         Otherwise, should be transcript section if searching for additional breaks.
-    :param hl.expr.Int64Expression observed_expr: Expression containing number of observed variants per site.
-    :param hl.expr.Float64Expression mu_expr: Expression containing mutation rate probability of site.
-    :param hl.expr.LocusExpression locus_expr: Locus expression.
-    :param hl.expr.BooleanExpression cpg_expr: Expression showing whether site is a CpG site.
-    :param hl.expr.StructExpression globals_expr: Expression containing global annotations of context HT. Must contain plateau models as annotations.
-    :param hl.expr.Float64Expression coverage_correction_expr: Expression containing coverage correction necessary to adjust
-        expected variant counts at low coverage sites.
-    :param List[str] groupings: Core fields to group by when calculating expected variants per base. Default is GROUPINGS.
-    :return: Table with forward values annotated
+    :return: Table with forward values (cumulative obs, exp, and forward o/e) annotated. 
     :rtype: hl.Table
     """
     logger.info("Getting cumulative observed variant counts...")
@@ -340,13 +341,22 @@ def get_fwd_exprs(ht: hl.Table, transcript_str: str, obs_str: str,) -> hl.Table:
     )
 
     logger.info("Getting cumulative expected variant counts...")
-    # exp_ht =
-    ht = calculate_exp_per_base(ht, search_field)
+    # Get scan of mu_snp
+    ht = ht.annotate(_mu_scan=get_cumulative_mu_expr(ht[transcript_str], ht.mu_snp))
+    # Adjust scan of mu_snp
+    ht = ht.transmute(
+        _mu_scan=adjust_mu_expr(ht._mu_scan, ht[mu_str], ht[transcript_str])
+    )
+    ht = ht.annotate(
+        cumulative_exp=translate_mu_to_exp_expr(
+            ht._mu_scan, ht[transcript_str], ht[total_mu_str], ht[total_exp_str]
+        )
+    )
 
     logger.info("Getting forward observed/expected count and returning...")
     return ht.annotate(
         forward_oe=get_obs_exp_expr(
-            ht.cond_expr, ht.cumulative_obs[ht[search_field]], ht.cumulative_exp,
+            ht.cond_expr, ht.cumulative_obs[ht[transcript_str]], ht.cumulative_exp,
         )
     )
 
