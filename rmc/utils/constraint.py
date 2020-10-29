@@ -806,7 +806,7 @@ def search_for_two_breaks(
     return None
 
 
-def calculate_segment_chisq(
+def calculate_section_chisq(
     obs_expr: hl.expr.Int64Expression, exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
     """
