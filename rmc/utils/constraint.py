@@ -4,12 +4,17 @@ from typing import Dict, List, Union
 import hail as hl
 
 from gnomad.utils.reference_genome import get_reference_genome
+
+from gnomad_lof.constraint_utils.constraint_basics import annotate_with_mu
+from gnomad_lof.constraint_utils.generic import annotate_variant_types
+
+from rmc.resources.basics import mutation_rate
+from rmc.resources.resource_utils import MISSENSE
 from rmc.utils.generic import (
     get_coverage_correction_expr,
     get_exome_bases,
     process_vep,
 )
-from rmc.resources.resource_utils import MISSENSE
 
 
 logging.basicConfig(
@@ -24,13 +29,16 @@ GROUPINGS = [
     "context",
     "ref",
     "alt",
-    "cpg",
     "methylation_level",
-    "mu_snp",
+    "annotation",
+    "modifier",
+    "transcript",
+    "gene",
     "exome_coverage",
 ]
 """
-Core fields to group by when calculating expected variants per base.
+Core fields to group by when calculating expected variants per variant type.
+Fields taken from gnomAD LoF repo.
 """
 
 
@@ -51,9 +59,33 @@ def calculate_observed(ht: hl.Table) -> hl.Table:
     )
 
 
-def calculate_exp_per_base(
-    ht: hl.Table, exp_ht: hl.Table, search_field: str,
-) -> hl.Table:
+def prep_mu_snp():
+    """
+    """
+    logger.info("Adding coverage correction to mutation rate probabilities...")
+    ht = ht.transmute(
+        raw_mu_snp=ht.mu_snp,
+        mu_snp=ht.mu_snp
+        * get_coverage_correction_expr(ht.exome_coverage, ht.coverage_model),
+    )
+
+    logger.info(
+        "Getting sum of mutation rate probabilities and total expected counts for each transcript..."
+    )
+    total_mu_ht = ht.group_by(search_field).aggregate(total=hl.agg.sum(ht.mu_snp))
+    return ht.annotate(
+        total_mu=total_mu_ht[ht[search_field]].total,
+        total_exp=exp_ht[ht[search_field]].expected,
+    )
+
+
+def get_cumulative_exp_expr():
+    """
+    """
+    return hl.scan.group_by(ht[transcript_str], hl.scan.sum(ht.mu_snp))
+
+
+def calculate_exp_per_base(ht: hl.Table, transcript_str: str,) -> hl.Table:
     """
     Returns table with expected variant counts annotated per base. 
 
@@ -69,36 +101,21 @@ def calculate_exp_per_base(
         - search_field is either 'transcript' or 'section'.
         - exp_ht is keyed by search_field and annotated with the field `expected`, 
             which is the total expected variant counts for the search_field (transcript or section).
-        - ht is annotated with mu_snp, search_field and coverage (`exome_coverage`). 
+        - ht is annotated with transcript information, mu_snp, total_mu, total_exp, exome_coverage. 
         - ht contains `coverage_model` globals annotation.
         
     :param hl.Table ht: Input context Table.
     :param hl.Table exp_ht: Input Table with total expected counts per `search_field`.
-    :param str search_field: String representing section type. One of 'transcript' or 'section'. 
+    :param str transcript_str: String representing field containing transcript information.
+     String representing section type. One of 'transcript' or 'section'. 
         Context HT must be annotated with this field.
     :return: Table with cumulative expected variant counts annotated per base.
     :rtype: hl.Table
     """
-    logger.info("Adding coverage correction to mutation rate probabilities...")
-    ht = ht.transmute(
-        raw_mu_snp=ht.mu_snp,
-        mu_snp=ht.mu_snp
-        * get_coverage_correction_expr(ht.exome_coverage, ht.coverage_model),
-    )
-
-    logger.info(
-        "Getting sum of mutation rate probabilities and total expected counts for each transcript..."
-    )
-    total_mu_ht = ht.group_by(search_field).aggregate(total=hl.agg.sum(ht.mu_snp))
-    ht = ht.annotate(
-        total_mu=total_mu_ht[ht[search_field]].total,
-        total_exp=exp_ht[ht[search_field]].expected,
-    )
-
     logger.info("Getting cumulative mutation rate probabilities across transcripts...")
     # Get scan of mu_snp across transcript/section
     ht = ht.annotate(
-        _mu_scan=hl.scan.group_by(ht[search_field], hl.scan.sum(ht.mu_snp))
+        _mu_scan=hl.scan.group_by(ht[transcript_str], hl.scan.sum(ht.mu_snp))
     )
     ht = ht.transmute(
         cumulative_mu=hl.if_else(
@@ -106,10 +123,10 @@ def calculate_exp_per_base(
             # If it doesn't exist, that means this is the first line in the HT for that particular transcript/section
             # The first line of a scan is always missing, but we want it to exist
             # Thus, set the cumulative_mu equal to the current mu_snp value
-            hl.is_missing(ht._mu_scan.get(ht[search_field])),
-            {ht.transcript: ht.mu_snp},
+            hl.is_missing(ht._mu_scan.get(ht[transcript_str])),
+            {ht[transcript_str]: ht.mu_snp},
             # Otherwise, add the current mu_snp to the scan to make sure the cumulative value isn't one line behind
-            {ht.transcript: ht._mu_scan[ht[search_field]] + ht.mu_snp},
+            {ht[transcript_str]: ht._mu_scan[ht[transcript_str]] + ht.mu_snp},
         )
     )
 
@@ -121,14 +138,14 @@ def calculate_exp_per_base(
     )
 
 
-def calculate_exp_per_section(
+def calculate_exp_per_transcript(
     context_ht: hl.Table,
     locus_type: str,
-    search_field: str,
     groupings: List[str] = GROUPINGS,
+    partition_hint: int = 2000,
 ) -> hl.Table:
     """
-    Returns the total number of expected variants for input transcript.
+    Returns the total number of expected variants and aggregate mutation rate per transcript.
 
     .. note::
         - Assumes that context_ht is annotated with all of the fields in `groupings` and that the names match exactly.
@@ -138,21 +155,21 @@ def calculate_exp_per_section(
     :param hl.Table context_ht: Context Table.
     :param str locus_type: Locus type of input table. One of "X", "Y", or "autosomes".
         NOTE: will treat any input other than "X" or "Y" as autosomes.
-    :param str search_field: String representing section type. One of 'transcript' or 'section'. Context HT must be annotated with this field.
     :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate. 
-        Table must be annotated with these fields.
-    :return: Table grouped by search_field with expected counts per search field.
+        Table must be annotated with these fields. Default is GROUPINGS.
+    :return: Table grouped by transcript with expected counts per search field.
     :rtype: hl.Table
     """
-    additional_groupings = [search_field]
-    if search_field != "transcript":
-        additional_groupings.append("transcript")
-
     all_groupings = groupings + additional_groupings
-    logger.info(f"Grouping by {all_groupings}...")
-    group_ht = context_ht.group_by(*all_groupings).aggregate(
+    logger.info(f"Grouping by {groupings}...")
+    group_ht = context_ht.group_by(*groupings).aggregate(
         mu_agg=hl.agg.sum(context_ht.mu_snp)
     )
+
+    logger.info("Adding mutation rate and CpG annotations...")
+    mu_ht = mutation_rate.ht().select("mu_snp")
+    group_ht = annotate_with_mu(group_ht, mu_ht)
+    group_ht = annotate_variant_types(group_ht)
 
     logger.info("Adjusting aggregated mutation rate with plateau model...")
     if locus_type == "X":
@@ -178,7 +195,7 @@ def calculate_exp_per_section(
     )
 
     logger.info(f"Getting expected counts per {search_field} and returning...")
-    return group_ht.group_by(search_field).aggregate(
+    return group_ht.group_by("transcript").aggregate(
         expected=hl.agg.sum(group_ht._exp), mu_agg=hl.agg.sum(group_ht.mu)
     )
 
@@ -210,34 +227,27 @@ def get_obs_exp_expr(
 
 
 def get_cumulative_obs_expr(
-    search_expr: hl.expr.StringExpression, observed_expr: hl.expr.Int64Expression,
+    transcript_expr: hl.expr.StringExpression, observed_expr: hl.expr.Int64Expression,
 ) -> hl.expr.DictExpression:
     """
     Returns annotation with the cumulative number of observed variants, shifted by one.
 
     Value is shifted by one due to the nature of `hl.scan` and needs to be corrected later.
-
     This function can produce the scan when searching for the first break or when searching for additional break(s).
-        - When searching for the first break, this function should group by the transcript name (e.g., 'ENST00000255882').
-        - When searching for an additional break, this function should group by the section of the transcript 
-            (e.g., 'first' for before the first breakpoint or 'second' for after the first breakpoint).
 
-    :param hl.expr.StringExpression search_expr: Expression containing transcript if searching for first break.
-        Otherwise, expression containing transcript section if searching for second additional break.
+    :param hl.expr.StringExpression transcript_expr: StringExpression containing transcript information. 
     :param hl.expr.Int64Expression observed_expr: Observed variants expression.
     :return: Struct containing the cumulative number of observed and expected variants.
     :return: DictExpression containing scan expressions for cumulative observed variant counts for `search_expr`.
     :rtype: hl.expr.DictExpression
     """
-    return hl.scan.group_by(search_expr, hl.scan.sum(observed_expr))
+    return hl.scan.group_by(transcript_expr, hl.scan.sum(observed_expr))
 
 
 def adjust_obs_expr(
     cumulative_obs_expr: hl.expr.DictExpression,
-    obs_expr: hl.expr.Int32Expression,
+    obs_expr: hl.expr.Int64Expression,
     transcript_expr: hl.expr.StringExpression,
-    additional_break: bool = False,
-    section_expr: hl.expr.StringExpression = hl.null(hl.tstr),
 ) -> hl.expr.DictExpression:
     """
     Adjusts the scan with the cumulative number of observed variants.
@@ -247,42 +257,14 @@ def adjust_obs_expr(
     
     .. note::
         This function expects:
-            - cumulative_obs_expr is a DictExpression keyed by transcript when searching for the first break.
-            - cumulative_obs_expr is a DictExpression keyed by section when searching for additional break(s).
-            - Sections are named transcript_pre and transcript_post.
-        This function will always return a DictExpression keyed by transcript for consistency. The observed scan created when searching for the 
-        first break is keyed by transcript and can be used to determine the cumulative observed counts for the transcript section pre-breakpoint
-        when searching for additional break(s). Only the transcript section post-breakpoint needs adjustment. Therefore, this function
-        always returns a DictExpression keyed by transcript for compatibility with other functions.
+            - cumulative_obs_expr is a DictExpression keyed by transcript.
 
     :param hl.expr.DictExpression cumulative_obs_expr: DictExpression containing scan expression with cumulative observed counts per base.
     :param hl.expr.Int32Expression obs_expr: IntExpression with value of either 0 (no observed variant at site) or 1 (variant found in gnomAD).
     :param hl.expr.StringExpression transcript_expr: StringExpression containing transcript information.
-    :param bool additional_break: Whether this function should adjust scan created to search for additional break(s). Default is False.
-    :param hl.expr.StringExpression section_expr: StringExpression containing transcript section information.
-        Default is None, but must be specified if additional_break is True.
-    :return: Adjusted cumulative observed counts expression, always keyed by transcript_expr.
+    :return: Adjusted cumulative observed counts expression.
     :rtype: hl.expr.DictExpression
     """
-    # Check if adjusting obs expression when searching for additional breaks
-    # If true, then return adjusted scan ONLY for transcript section post-breakpoint
-    # (scan does not need to be adjusted for transcript section pre-breakpoint)
-    if additional_break:
-        return (
-            hl.case()
-            .when(
-                section_expr.contains("post")
-                & hl.is_defined(cumulative_obs_expr.get(section_expr)),
-                {transcript_expr: cumulative_obs_expr[section_expr] + obs_expr},
-            )
-            .when(
-                section_expr.contains("post")
-                & hl.is_missing(cumulative_obs_expr.get(section_expr)),
-                # Scan makes obs int64 -- cast obs into int64 to match (hail gets angry if there's a type mismatch)
-                {transcript_expr: hl.int64(obs_expr)},
-            )
-            .or_missing()
-        )
     return hl.if_else(
         # Check if the current transcript/section exists in the _obs_scan dictionary
         # If it doesn't exist, that means this is the first line in the HT for that particular transcript
@@ -328,9 +310,7 @@ def get_reverse_obs_exp_expr(
     )
 
 
-def get_fwd_exprs(
-    ht: hl.Table, search_field: str, observed_expr: hl.expr.Int64Expression,
-) -> hl.Table:
+def get_fwd_exprs(ht: hl.Table, transcript_str: str, obs_str: str,) -> hl.Table:
     """
     Calls `get_cumulative_obs_expr`, `calculate_exp_per_base`, and `get_obs_exp_expr` to add the forward section cumulative observed, expected, and observed/expected values.
 
@@ -357,20 +337,27 @@ def get_fwd_exprs(
     :return: Table with forward values annotated
     :rtype: hl.Table
     """
-
+    logger.info("Getting cumulative observed variant counts...")
     ht = ht.annotate(
-        cumulative_obs=get_cumulative_obs_expr(
-            search_expr=ht[search_field], observed_expr=observed_expr,
+        _obs_scan=get_cumulative_obs_expr(
+            transcript_expr=ht[transcript_str], observed_expr=ht[obs_str],
         )
     )
-    if search_field == "transcript":
-        ht = ht.annotate(cond_expr=hl.len(ht.cumulative_obs) != 0)
-    else:
-        ht = ht.annotate(cond_expr=hl.len(ht.cumulative_obs) > 1)
-        ht = calculate_exp_per_base(ht, search_field)
+    ht = ht.annotate(
+        cumulative_obs=adjust_obs_expr(
+            cumulative_obs_expr=ht._obs_scan,
+            obs_expr=ht[obs_str],
+            transcript_expr=ht[transcript_str],
+        )
+    )
 
+    logger.info("Getting cumulative expected variant counts...")
+    # exp_ht =
+    ht = calculate_exp_per_base(ht, search_field)
+
+    logger.info("Getting forward observed/expected count and returning...")
     return ht.annotate(
-        forward_obs_exp=get_obs_exp_expr(
+        forward_oe=get_obs_exp_expr(
             ht.cond_expr, ht.cumulative_obs[ht[search_field]], ht.cumulative_exp,
         )
     )
@@ -507,7 +494,7 @@ def search_for_break(
         - mu
         - scan_counts struct
         - overall_obs_exp
-        - forward_obs_exp
+        - forward_oe
         - reverse struct
         - reverse_obs_exp
     Also expects:
@@ -551,7 +538,7 @@ def search_for_break(
             # section_alt = stats.dpois(section_obs, section_exp*section_obs_exp)[0]
             get_dpois_expr(
                 cond_expr=hl.len(ht.cumulative_obs) != 0,
-                section_oe_expr=ht.forward_obs_exp,
+                section_oe_expr=ht.forward_oe,
                 obs_expr=ht.cumulative_obs[ht[search_field]],
                 exp_expr=ht.cumulative_exp,
             ),
@@ -736,7 +723,7 @@ def process_additional_breaks(
             "cumulative_obs": f"{break_num - 1}_cumulative_obs",
             "cumulative_exp": f"{break_num - 1}_cumulative_exp",
             "reverse": f"{break_num - 1}_reverse",
-            "forward_obs_exp": f"{break_num - 1}_forward_obs_exp",
+            "forward_oe": f"{break_num - 1}_forward_oe",
             "reverse_obs_exp": f"{break_num - 1}_reverse_obs_exp",
         }
     )
