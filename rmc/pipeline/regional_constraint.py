@@ -24,9 +24,9 @@ from rmc.resources.grch37.reference_data import processed_context
 from rmc.resources.resource_utils import MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
-    calculate_exp_per_base,
-    calculate_exp_per_section,
+    calculate_exp_per_transcript,
     calculate_observed,
+    get_fwd_exprs,
     GROUPINGS,
     process_additional_breaks,
     process_transcripts,
@@ -54,10 +54,6 @@ def main(args):
 
     hl.init(log="/RMC.log")
     exac = args.exac
-
-    # Add transcript to core grouping fields
-    groupings = GROUPINGS
-    groupings.append("transcript")
 
     try:
         if args.pre_process_data:
@@ -139,6 +135,17 @@ def main(args):
 
             if not args.skip_calc_oe:
                 logger.info(
+                    "Adding coverage correction to mutation rate probabilities..."
+                )
+                context_ht = context_ht.transmute(
+                    raw_mu_snp=context_ht.mu_snp,
+                    mu_snp=context_ht.mu_snp
+                    * get_coverage_correction_expr(
+                        context_ht.exome_coverage, context_ht.coverage_model
+                    ),
+                )
+
+                logger.info(
                     "Creating autosomes-only, chrX non-PAR-only, and chrY non-PAR-only HT versions..."
                 )
                 context_x_ht = filter_to_region_type(context_ht, "chrX")
@@ -146,23 +153,14 @@ def main(args):
                 context_auto_ht = filter_to_region_type(context_ht, "autosomes")
 
                 logger.info("Calculating expected values per transcript...")
-                exp_ht = calculate_exp_per_section(
-                    context_auto_ht,
-                    locus_type="autosomes",
-                    search_field="transcript",
-                    groupings=groupings,
+                exp_ht = calculate_exp_per_transcript(
+                    context_auto_ht, locus_type="autosomes", groupings=GROUPINGS,
                 )
-                exp_x_ht = calculate_exp_per_section(
-                    context_x_ht,
-                    locus_type="X",
-                    search_field="transcript",
-                    groupings=groupings,
+                exp_x_ht = calculate_exp_per_transcript(
+                    context_x_ht, locus_type="X", groupings=GROUPINGS,
                 )
-                exp_y_ht = calculate_exp_per_section(
-                    context_y_ht,
-                    locus_type="Y",
-                    search_field="transcript",
-                    groupings=groupings,
+                exp_y_ht = calculate_exp_per_transcript(
+                    context_y_ht, locus_type="Y", groupings=GROUPINGS,
                 )
                 exp_ht = exp_ht.union(exp_x_ht).union(exp_y_ht)
 
@@ -177,6 +175,7 @@ def main(args):
                 )
                 context_ht = context_ht.annotate(
                     total_exp=exp_ht[context_ht.transcript].expected,
+                    total_mu=exp_ht[context_ht.transcript].mu_agg,
                     total_obs=obs_ht[context_ht.transcript].observed,
                 )
                 context_ht = context_ht.annotate(
@@ -211,12 +210,20 @@ def main(args):
             logger.info(
                 "Annotating context HT with number of observed and expected variants per site..."
             )
+            # Add observed variants to context HT
             context_ht = context_ht.annotate(_obs=exome_ht.index(context_ht.key))
             context_ht = context_ht.transmute(
                 observed=hl.int(hl.is_defined(context_ht._obs))
             )
+            context_ht = get_fwd_exprs(
+                ht=context_ht,
+                transcript_str="transcript",
+                obs_str="observed",
+                mu_str="mu_snp",
+                total_mu_str="total_mu",
+                total_exp_str="total_exp",
+            )
 
-            context_ht = calculate_exp_per_base(context_ht, groupings)
             # NOTE: Used 40k here (10/22/20)
             context_ht = context_ht.repartition(args.n_partitions)
             context_ht = context_ht.write(
