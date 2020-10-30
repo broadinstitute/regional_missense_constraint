@@ -83,7 +83,8 @@ def main(args):
             context_ht = context_ht.filter(
                 hl.is_missing(exome_join) | keep_criteria(exome_join)
             )
-            # NOTE: should use ~30k-40k partitions here
+            # NOTE: need to repartition here to desired number of partitions!
+            # NOTE: should use ~30k-40k partitions
             context_ht = context_ht.repartition(args.n_partitions)
             context_ht.write(processed_context.path, overwrite=args.overwrite)
 
@@ -137,7 +138,7 @@ def main(args):
                 logger.info(
                     "Adding coverage correction to mutation rate probabilities..."
                 )
-                context_ht = context_ht.transmute(
+                context_ht = context_ht.annotate(
                     raw_mu_snp=context_ht.mu_snp,
                     mu_snp=context_ht.mu_snp
                     * get_coverage_correction_expr(
@@ -224,8 +225,6 @@ def main(args):
                 total_exp_str="total_exp",
             )
 
-            # NOTE: Used 40k here (10/22/20)
-            context_ht = context_ht.repartition(args.n_partitions)
             context_ht = context_ht.write(
                 constraint_prep.path, overwrite=args.overwrite
             )
