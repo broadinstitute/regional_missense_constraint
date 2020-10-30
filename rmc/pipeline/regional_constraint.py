@@ -282,12 +282,12 @@ def main(args):
                     f"{temp_path}/break_{break_num}.ht", overwrite=True
                 )
 
-                # Filter context HT to lines with break and check for transcripts with >1 break
+                # Filter context HT to lines with break and check for transcripts with at least one additional break
                 is_break_ht = is_break_ht.filter(is_break_ht.is_break)
                 group_ht = is_break_ht.group_by("transcript").aggregate(
                     n=hl.agg.count()
                 )
-                group_ht = group_ht.filter(group_ht.n > 1)
+                group_ht = group_ht.filter(group_ht.n >= 1)
 
                 # Exit loop if no additional breaks are found for any transcripts
                 if group_ht.count() == 0:
@@ -301,11 +301,10 @@ def main(args):
                 context_ht = context_ht.annotate_globals(**globals_annot_expr,)
                 annot_expr = {
                     f"break_{break_num}_chisq": break_ht[context_ht.key].chisq,
-                    f"is_{break_num}_break": break_ht[context_ht.key].is_break,
                     f"break_{break_num}_null": break_ht[context_ht.key].null,
                     f"break_{break_num}_alt": break_ht[context_ht.key].alt,
                 }
-                context_ht = context_ht.annotate(**annot_expr,)
+                context_ht = context_ht.annotate(**annot_expr)
 
                 break_ht = break_ht.filter(transcripts.contains(break_ht.transcript))
                 break_num += 1

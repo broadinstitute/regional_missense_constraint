@@ -647,43 +647,59 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     logger.info(
         "Getting total observed and expected counts for each transcript section..."
     )
-    # TODO: fix me, need to split HT into autosomes/X/Y prior to running this
-    section_exp = calculate_exp_per_section(
-        ht, locus_type="autosomes", search_field="section"
-    )
+    # Get total obs per section
     section_obs = ht.group_by(ht.section).aggregate(obs=hl.agg.sum(ht.observed))
+
+    # Get total mu per section -- translate this to total expected per section
+    section_mu = ht.group_by(ht.section).aggregate(total=hl.agg.sum(ht.mu_snp))
+    ht = ht.annotate(section_total_mu=section_mu[ht.section].total,)
     ht = ht.annotate(
-        break_obs=section_obs[ht.section].obs,
-        break_exp=section_exp[ht.section].expected,
+        section_exp=(ht.section_total_mu / ht.total_mu) * ht.total_exp,
+        section_obs=section_obs[ht.section].obs,
     )
+
+    logger.info("Getting observed/expected value for each transcript section...")
     ht = ht.annotate(
-        overall_obs_exp=get_obs_exp_expr(
+        break_oe=get_obs_exp_expr(
             cond_expr=hl.is_defined(ht.section),
-            obs_expr=ht.break_obs,
-            exp_expr=ht.break_exp,
+            obs_expr=ht.section_obs,
+            exp_expr=ht.section_exp,
         )
     )
 
-    logger.info(
-        "Annotating HT with cumulative observed and expected counts for each transcript section..."
-    )
-    ht = get_fwd_exprs(ht=ht, search_field="section", observed_expr=ht.observed)
+    logger.info("Splitting HT into pre and post breakpoint sections...")
+    pre_ht = ht.filter(ht.section.contains("pre"))
+    post_ht = ht.filter(ht.section.contains("post"))
 
     logger.info(
-        "Annotating HT with reverse observed and expected counts for each transcript section..."
+        "Annotating post breakpoint HT with cumulative observed and expected counts..."
     )
-    # cond_expr here skips the first line of the HT, as the cumulative values
-    # of the first line will always be empty when using a scan
-    ht = get_reverse_exprs(
-        ht=ht,
-        # This cond expression searches for the start of the second section
-        cond_expr=hl.len(ht.cumulative_obs) > 1,
-        total_obs_expr=ht.break_obs,
-        total_exp_expr=ht.break_exp,
-        scan_obs_expr=ht.cumulative_obs[ht.section],
-        scan_exp_expr=ht.cumulative_exp,
+    post_ht = get_fwd_exprs(
+        ht=post_ht, search_field="section", observed_expr=ht.observed
     )
-    return search_for_break(ht, "section", chisq_threshold)
+
+    logger.info(
+        "Annotating post breakpoint HT with reverse observed and expected counts..."
+    )
+    post_ht = get_reverse_exprs(
+        ht=post_ht,
+        # TODO: Remove cond_expr from this function and others after obs_exp_update PR is approved
+        # no longer necessary now that scans aren't shifted by one line
+        cond_expr=True,
+        total_obs_expr=post_ht.section_obs,
+        total_exp_expr=post_ht.section_exp,
+        scan_obs_expr=post_ht.cumulative_obs[post_ht.transcript],
+        scan_exp_expr=post_ht.cumulative_exp,
+    )
+
+    logger.info("Searching for a break in each section and returning...")
+    pre_ht = search_for_break(
+        pre_ht, search_field="section", chisq_threshold=chisq_threshold
+    )
+    post_ht = search_for_break(
+        post_ht, search_field="section", chisq_threshold=chisq_threshold
+    )
+    return pre_ht.union(post_ht)
 
 
 def process_additional_breaks(
@@ -708,33 +724,27 @@ def process_additional_breaks(
     :return: Table annotated with whether position is a breakpoint. 
     :rtype: hl.Table
     """
-    # TODO: generalize function so that it can search for more than one additional break
     logger.info(
         "Generating table keyed by transcripts (used to get breakpoint position later)..."
     )
     break_ht = ht.filter(ht.is_break).key_by("transcript")
 
-    logger.info("Renaming scans fields to prepare to search for an additional break...")
-    # Rename because these will be overwritten when searching for additional break
-    ht = ht.rename(
-        {
-            "cumulative_obs": f"{break_num - 1}_cumulative_obs",
-            "cumulative_exp": f"{break_num - 1}_cumulative_exp",
-            "reverse": f"{break_num - 1}_reverse",
-            "forward_oe": f"{break_num - 1}_forward_oe",
-            "reverse_obs_exp": f"{break_num - 1}_reverse_obs_exp",
-        }
+    logger.info(
+        "Renaming is_break field to prepare to search for an additional break..."
     )
+    # Rename because this will be overwritten when searching for additional break
     annot_expr = {f"is_break_{break_num - 1}": ht.is_break}
     ht = ht.annotate(**annot_expr)
 
     logger.info(
-        "Splitting each transcript into two sections: pre first break and post..."
+        "Splitting each transcript into two sections: pre-first breakpoint and post..."
     )
     ht = ht.annotate(
         section=hl.if_else(
-            # If position is breakpoint, add to second section ("post")
-            # this is because the first position of a scan is always missing anyway
+            # NOTE: Initially added breakpoint position to second section ("post") with logic that
+            # first position of scan is always missing
+            # Have fixed scans to not be one line behind -- should breakpoint pos still get added to
+            # second section?
             ht.locus.position >= break_ht[ht.transcript].locus.position,
             hl.format("%s_%s", ht.transcript, "post"),
             hl.format("%s_%s", ht.transcript, "pre"),
