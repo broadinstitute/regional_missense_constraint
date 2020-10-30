@@ -182,7 +182,7 @@ def calculate_exp_per_transcript(
         mu=group_ht.mu_agg * group_ht.coverage_correction,
     )
 
-    logger.info(f"Getting expected counts per transcript and returning...")
+    logger.info("Getting expected counts per transcript and returning...")
     return group_ht.group_by("transcript").aggregate(
         expected=hl.agg.sum(group_ht._exp), mu_agg=hl.agg.sum(group_ht.mu)
     )
@@ -266,11 +266,10 @@ def adjust_obs_expr(
 
 
 def get_reverse_obs_exp_expr(
-    cond_expr: hl.expr.BooleanExpression,
     total_obs_expr: hl.expr.Int64Expression,
     total_exp_expr: hl.expr.Float64Expression,
-    scan_obs_expr: Dict[hl.expr.StringExpression, hl.expr.Int64Expression],
-    scan_exp_expr: Dict[hl.expr.StringExpression, hl.expr.Float64Expression],
+    scan_obs_expr: hl.expr.DictExpression,
+    cumulative_exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.StructExpression:
     """
     Returns the "reverse" section observed and expected variant counts.
@@ -282,19 +281,15 @@ def get_reverse_obs_exp_expr(
     .. note::
         This function is designed to run on one transcript at a time.
 
-    :param hl.expr.BooleanExpression cond_expr: Conditional expression to check before calculating reverse observed or expected value.
-        Should be that the cumulative scan expression length isn't 0 when searching for the first break, or
-        that the length of the cumulative scan expression length is 2 when searching for an additional break.
     :param hl.expr.Int64Expression total_obs_expr: Expression containing total number of observed variants for transcript.
     :param hl.expr.Float64Expression total_exp_expr: Expression containing total number of expected variants for transcript.
-    :param Dict[hl.expr.StringExpression, hl.expr.Int64Expression] scan_obs_expr: Expression containing cumulative number of observed variants for transcript.
-    :param Dict[hl.expr.StringExpression, hl.expr.Float64Expression] scan_expr_expr: Expression containing cumulative number of expected variants for transcript.
+    :param hl.expr.DictExpression scan_obs_expr: Expression containing cumulative number of observed variants for transcript.
+    :param hl.expr.Float64Expression cumulative_exp_expr: Expression containing cumulative number of expected variants for transcript.
     :return: Struct with reverse observed and expected variant counts.
     :rtype: hl.expr.StructExpression
     """
     return hl.struct(
-        obs=hl.or_missing(cond_expr, total_obs_expr - scan_obs_expr),
-        exp=hl.or_missing(cond_expr, total_exp_expr - scan_exp_expr),
+        obs=total_obs_expr - scan_obs_expr, exp=total_exp_expr - cumulative_exp_expr,
     )
 
 
@@ -363,7 +358,6 @@ def get_fwd_exprs(
 
 def get_reverse_exprs(
     ht: hl.Table,
-    cond_expr: hl.expr.BooleanExpression,
     total_obs_expr: hl.expr.Int64Expression,
     total_exp_expr: hl.expr.Float64Expression,
     scan_obs_expr: Dict[hl.expr.StringExpression, hl.expr.Int64Expression],
@@ -376,7 +370,6 @@ def get_reverse_exprs(
         'Reverse' refers to moving through the transcript from larger to smaller chromosomal positions.
 
     :param hl.Table ht: Input Table.
-    :param hl.expr.BooleanExpression cond_expr: Condition to check before calculating reverse values.
     :param hl.expr.Int64Expression total_obs_expr: Expression containing total number of observed variants per transcript (if searching for first break)
         or per section (if searching for additional breaks).
     :param hl.expr.Float64Expression total_exp_expr: Expression containing total number of expected variants per transcript (if searching for first break)
@@ -391,11 +384,10 @@ def get_reverse_exprs(
     # reverse value = total value - cumulative value
     ht = ht.annotate(
         reverse=get_reverse_obs_exp_expr(
-            cond_expr=cond_expr,
             total_obs_expr=total_obs_expr,
             total_exp_expr=total_exp_expr,
             scan_obs_expr=scan_obs_expr,
-            scan_exp_expr=scan_exp_expr,
+            cumulative_exp_expr=scan_exp_expr,
         )
     )
 
@@ -603,7 +595,14 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
         "Annotating HT with cumulative observed and expected counts for each transcript...\n"
         "(transcript-level forwards (moving from smaller to larger positions) values)"
     )
-    ht = get_fwd_exprs(ht=ht, search_field="transcript", observed_expr=ht.observed)
+    ht = get_fwd_exprs(
+        ht=ht,
+        transcript_str="transcript",
+        obs_str="observed",
+        mu_str="mu_snp",
+        total_mu_str="total_mu",
+        total_exp_str="total_exp",
+    )
     logger.info(
         "Annotating HT with reverse observed and expected counts for each transcript...\n"
         "(transcript-level reverse (moving from larger to smaller positions) values)"
@@ -612,7 +611,6 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
     # of the first line will always be empty when using a scan
     ht = get_reverse_exprs(
         ht=ht,
-        cond_expr=hl.len(ht.cumulative_obs) != 0,
         total_obs_expr=ht.total_obs,
         total_exp_expr=ht.total_exp,
         scan_obs_expr=ht.cumulative_obs[ht.transcript],
@@ -675,7 +673,12 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
         "Annotating post breakpoint HT with cumulative observed and expected counts..."
     )
     post_ht = get_fwd_exprs(
-        ht=post_ht, search_field="section", observed_expr=ht.observed
+        ht=post_ht,
+        transcript_str="transcript",
+        obs_str="observed",
+        mu_str="mu_snp",
+        total_mu_str="total_mu",
+        total_exp_str="total_exp",
     )
 
     logger.info(
@@ -683,9 +686,6 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     )
     post_ht = get_reverse_exprs(
         ht=post_ht,
-        # TODO: Remove cond_expr from this function and others after obs_exp_update PR is approved
-        # no longer necessary now that scans aren't shifted by one line
-        cond_expr=True,
         total_obs_expr=post_ht.section_obs,
         total_exp_expr=post_ht.section_exp,
         scan_obs_expr=post_ht.cumulative_obs[post_ht.transcript],
