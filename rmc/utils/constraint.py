@@ -337,9 +337,9 @@ def get_fwd_exprs(
 
     logger.info("Getting cumulative expected variant counts...")
     # Get scan of mu_snp
-    ht = ht.annotate(_mu_scan=get_cumulative_mu_expr(ht[transcript_str], ht.mu_snp))
+    ht = ht.annotate(_mu_scan=get_cumulative_mu_expr(ht[transcript_str], ht[mu_str]))
     # Adjust scan of mu_snp
-    ht = ht.transmute(
+    ht = ht.annotate(
         _mu_scan=adjust_mu_expr(ht._mu_scan, ht[mu_str], ht[transcript_str])
     )
     ht = ht.annotate(
@@ -349,11 +349,15 @@ def get_fwd_exprs(
     )
 
     logger.info("Getting forward observed/expected count and returning...")
-    return ht.annotate(
+    # NOTE: adding cond_expr here because get_obs_exp_expr expects it
+    # cond_expr is necessary for reverse obs/exp, which is why the function has it
+    ht = ht.annotate(cond_expr=True)
+    ht = ht.annotate(
         forward_oe=get_obs_exp_expr(
             ht.cond_expr, ht.cumulative_obs[ht[transcript_str]], ht.cumulative_exp,
         )
     )
+    return ht.drop("cond_expr")
 
 
 def get_reverse_exprs(
@@ -607,8 +611,6 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
         "Annotating HT with reverse observed and expected counts for each transcript...\n"
         "(transcript-level reverse (moving from larger to smaller positions) values)"
     )
-    # cond_expr here skips the first line of the HT, as the cumulative values
-    # of the first line will always be empty when using a scan
     ht = get_reverse_exprs(
         ht=ht,
         total_obs_expr=ht.total_obs,
