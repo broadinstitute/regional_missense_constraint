@@ -237,10 +237,11 @@ def main(args):
                 f"{temp_path}/first_break.ht", overwrite=True
             )
 
-            # Filter HT to transcripts with one significant break and write out
-            # Try 20k partitions for both of these HTs?
+            logger.info(
+                "Filtering HT to transcripts with one significant break and writing..."
+            )
             is_break_ht = context_ht.filter(context_ht.is_break)
-            transcripts = one_break_ht.aggregate(
+            transcripts = is_break_ht.aggregate(
                 hl.agg.collect_as_set(is_break_ht.transcript), _localize=False
             )
             one_break_ht = context_ht.filter(
@@ -249,13 +250,15 @@ def main(args):
             one_break_ht = one_break_ht.annotate_globals(
                 break_1_transcripts=transcripts
             )
-            one_break_ht.naive_coalesce(args.n_partitions).write(
+            one_break_ht.repartition(args.n_partitions).write(
                 one_break.path, overwrite=args.overwrite
             )
 
-            # Filter context HT to transcripts without a single significant break and write out
+            logger.info(
+                "Filtering HT to transcripts without a significant break and writing..."
+            )
             not_one_break_ht = context_ht.anti_join(one_break_ht)
-            not_one_break_ht.naive_coalesce(args.n_partitions).write(
+            not_one_break_ht.repartition(args.n_partitions).write(
                 not_one_break.path, overwrite=args.overwrite
             )
 
