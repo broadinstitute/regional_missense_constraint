@@ -584,6 +584,9 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
         - expected
         - coverage_correction
         - cpg
+        - cumulative_obs
+        - cumulative_exp
+        - forward_oe
     Also expects:
         - multiallelic variants in context HT have been split.
         - Global annotations contains plateau models.
@@ -595,18 +598,6 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
         Table also annotated with boolean for whether each position is a breakpoint.
     :rtype: hl.Table
     """
-    logger.info(
-        "Annotating HT with cumulative observed and expected counts for each transcript...\n"
-        "(transcript-level forwards (moving from smaller to larger positions) values)"
-    )
-    ht = get_fwd_exprs(
-        ht=ht,
-        transcript_str="transcript",
-        obs_str="observed",
-        mu_str="mu_snp",
-        total_mu_str="total_mu",
-        total_exp_str="total_exp",
-    )
     logger.info(
         "Annotating HT with reverse observed and expected counts for each transcript...\n"
         "(transcript-level reverse (moving from larger to smaller positions) values)"
