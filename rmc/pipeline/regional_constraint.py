@@ -24,9 +24,9 @@ from rmc.resources.grch37.reference_data import processed_context
 from rmc.resources.resource_utils import MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
-    calculate_exp_per_base,
-    calculate_exp_per_section,
+    calculate_exp_per_transcript,
     calculate_observed,
+    get_fwd_exprs,
     GROUPINGS,
     process_additional_breaks,
     process_transcripts,
@@ -54,10 +54,6 @@ def main(args):
 
     hl.init(log="/RMC.log")
     exac = args.exac
-
-    # Add transcript to core grouping fields
-    groupings = GROUPINGS
-    groupings.append("transcript")
 
     try:
         if args.pre_process_data:
@@ -87,7 +83,8 @@ def main(args):
             context_ht = context_ht.filter(
                 hl.is_missing(exome_join) | keep_criteria(exome_join)
             )
-            # NOTE: should use ~30k-40k partitions here
+            # NOTE: need to repartition here to desired number of partitions!
+            # NOTE: should use ~30k-40k partitions
             context_ht = context_ht.repartition(args.n_partitions)
             context_ht.write(processed_context.path, overwrite=args.overwrite)
 
@@ -139,6 +136,17 @@ def main(args):
 
             if not args.skip_calc_oe:
                 logger.info(
+                    "Adding coverage correction to mutation rate probabilities..."
+                )
+                context_ht = context_ht.annotate(
+                    raw_mu_snp=context_ht.mu_snp,
+                    mu_snp=context_ht.mu_snp
+                    * get_coverage_correction_expr(
+                        context_ht.exome_coverage, context_ht.coverage_model
+                    ),
+                )
+
+                logger.info(
                     "Creating autosomes-only, chrX non-PAR-only, and chrY non-PAR-only HT versions..."
                 )
                 context_x_ht = filter_to_region_type(context_ht, "chrX")
@@ -146,23 +154,14 @@ def main(args):
                 context_auto_ht = filter_to_region_type(context_ht, "autosomes")
 
                 logger.info("Calculating expected values per transcript...")
-                exp_ht = calculate_exp_per_section(
-                    context_auto_ht,
-                    locus_type="autosomes",
-                    search_field="transcript",
-                    groupings=groupings,
+                exp_ht = calculate_exp_per_transcript(
+                    context_auto_ht, locus_type="autosomes", groupings=GROUPINGS,
                 )
-                exp_x_ht = calculate_exp_per_section(
-                    context_x_ht,
-                    locus_type="X",
-                    search_field="transcript",
-                    groupings=groupings,
+                exp_x_ht = calculate_exp_per_transcript(
+                    context_x_ht, locus_type="X", groupings=GROUPINGS,
                 )
-                exp_y_ht = calculate_exp_per_section(
-                    context_y_ht,
-                    locus_type="Y",
-                    search_field="transcript",
-                    groupings=groupings,
+                exp_y_ht = calculate_exp_per_transcript(
+                    context_y_ht, locus_type="Y", groupings=GROUPINGS,
                 )
                 exp_ht = exp_ht.union(exp_x_ht).union(exp_y_ht)
 
@@ -177,6 +176,7 @@ def main(args):
                 )
                 context_ht = context_ht.annotate(
                     total_exp=exp_ht[context_ht.transcript].expected,
+                    total_mu=exp_ht[context_ht.transcript].mu_agg,
                     total_obs=obs_ht[context_ht.transcript].observed,
                 )
                 context_ht = context_ht.annotate(
@@ -211,14 +211,20 @@ def main(args):
             logger.info(
                 "Annotating context HT with number of observed and expected variants per site..."
             )
+            # Add observed variants to context HT
             context_ht = context_ht.annotate(_obs=exome_ht.index(context_ht.key))
             context_ht = context_ht.transmute(
                 observed=hl.int(hl.is_defined(context_ht._obs))
             )
+            context_ht = get_fwd_exprs(
+                ht=context_ht,
+                transcript_str="transcript",
+                obs_str="observed",
+                mu_str="mu_snp",
+                total_mu_str="total_mu",
+                total_exp_str="total_exp",
+            )
 
-            context_ht = calculate_exp_per_base(context_ht, groupings)
-            # NOTE: Used 40k here (10/22/20)
-            context_ht = context_ht.repartition(args.n_partitions)
             context_ht = context_ht.write(
                 constraint_prep.path, overwrite=args.overwrite
             )
@@ -231,10 +237,11 @@ def main(args):
                 f"{temp_path}/first_break.ht", overwrite=True
             )
 
-            # Filter HT to transcripts with one significant break and write out
-            # Try 20k partitions for both of these HTs?
+            logger.info(
+                "Filtering HT to transcripts with one significant break and writing..."
+            )
             is_break_ht = context_ht.filter(context_ht.is_break)
-            transcripts = one_break_ht.aggregate(
+            transcripts = is_break_ht.aggregate(
                 hl.agg.collect_as_set(is_break_ht.transcript), _localize=False
             )
             one_break_ht = context_ht.filter(
@@ -243,13 +250,15 @@ def main(args):
             one_break_ht = one_break_ht.annotate_globals(
                 break_1_transcripts=transcripts
             )
-            one_break_ht.naive_coalesce(args.n_partitions).write(
+            one_break_ht.repartition(args.n_partitions).write(
                 one_break.path, overwrite=args.overwrite
             )
 
-            # Filter context HT to transcripts without a single significant break and write out
+            logger.info(
+                "Filtering HT to transcripts without a significant break and writing..."
+            )
             not_one_break_ht = context_ht.anti_join(one_break_ht)
-            not_one_break_ht.naive_coalesce(args.n_partitions).write(
+            not_one_break_ht.repartition(args.n_partitions).write(
                 not_one_break.path, overwrite=args.overwrite
             )
 
@@ -275,12 +284,12 @@ def main(args):
                     f"{temp_path}/break_{break_num}.ht", overwrite=True
                 )
 
-                # Filter context HT to lines with break and check for transcripts with >1 break
+                # Filter context HT to lines with break and check for transcripts with at least one additional break
                 is_break_ht = is_break_ht.filter(is_break_ht.is_break)
                 group_ht = is_break_ht.group_by("transcript").aggregate(
                     n=hl.agg.count()
                 )
-                group_ht = group_ht.filter(group_ht.n > 1)
+                group_ht = group_ht.filter(group_ht.n >= 1)
 
                 # Exit loop if no additional breaks are found for any transcripts
                 if group_ht.count() == 0:
@@ -294,11 +303,10 @@ def main(args):
                 context_ht = context_ht.annotate_globals(**globals_annot_expr,)
                 annot_expr = {
                     f"break_{break_num}_chisq": break_ht[context_ht.key].chisq,
-                    f"is_{break_num}_break": break_ht[context_ht.key].is_break,
                     f"break_{break_num}_null": break_ht[context_ht.key].null,
                     f"break_{break_num}_alt": break_ht[context_ht.key].alt,
                 }
-                context_ht = context_ht.annotate(**annot_expr,)
+                context_ht = context_ht.annotate(**annot_expr)
 
                 break_ht = break_ht.filter(transcripts.contains(break_ht.transcript))
                 break_num += 1
