@@ -5,10 +5,8 @@ import hail as hl
 
 from gnomad.utils.reference_genome import get_reference_genome
 
-from gnomad_lof.constraint_utils.constraint_basics import annotate_with_mu
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
-from rmc.resources.basics import mutation_rate
 from rmc.resources.resource_utils import MISSENSE
 from rmc.utils.generic import (
     get_coverage_correction_expr,
@@ -140,6 +138,9 @@ def calculate_exp_per_transcript(
         - Assumes that context_ht is annotated with all of the fields in `groupings` and that the names match exactly.
         - Assumes that input table is filtered to autosomes/PAR only, X nonPAR only, or Y nonPAR only.
         - Expects that input table contains coverage and plateau models in its global annotations (`coverage_model`, `plateau_models`).
+        - Expects that input table has multiple fields for mutation rate probabilities:
+            `mu_snp` for mutation rate probability adjusted by coverage, and
+            `raw_mu_snp` for raw mutation rate probability.
 
     :param hl.Table context_ht: Context Table.
     :param str locus_type: Locus type of input table. One of "X", "Y", or "autosomes".
@@ -151,12 +152,10 @@ def calculate_exp_per_transcript(
     """
     logger.info(f"Grouping by {groupings}...")
     group_ht = context_ht.group_by(*groupings).aggregate(
-        mu_agg=hl.agg.sum(context_ht.mu_snp)
+        mu_agg=hl.agg.sum(context_ht.raw_mu_snp)
     )
 
-    logger.info("Adding mutation rate and CpG annotations...")
-    mu_ht = mutation_rate.ht().select("mu_snp")
-    group_ht = annotate_with_mu(group_ht, mu_ht)
+    logger.info("Adding CpG annotations...")
     group_ht = annotate_variant_types(group_ht)
 
     logger.info("Adjusting aggregated mutation rate with plateau model...")
