@@ -288,7 +288,12 @@ def get_reverse_obs_exp_expr(
     :rtype: hl.expr.StructExpression
     """
     return hl.struct(
-        obs=total_obs_expr - scan_obs_expr, exp=total_exp_expr - cumulative_exp_expr,
+        # NOTE: Adding hl.max to exp expression to make sure reverse exp is never negative
+        # Without this, ran into errors where reverse exp was -5e-14
+        # Picked 1e-09 here as tiny number that is not 0
+        # ExAC code also did not allow reverse exp to be zero, as this breaks the likelihood ratio tests
+        obs=total_obs_expr - scan_obs_expr,
+        exp=hl.max(total_exp_expr - cumulative_exp_expr, 1e-09),
     )
 
 
