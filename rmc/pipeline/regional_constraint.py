@@ -180,9 +180,7 @@ def main(args):
                     total_obs=obs_ht[context_ht.transcript].observed,
                 )
                 context_ht = context_ht.annotate(
-                    overall_obs_exp=hl.min(
-                        context_ht.total_obs / context_ht.total_exp, 1
-                    )
+                    overall_oe=hl.min(context_ht.total_obs / context_ht.total_exp, 1)
                 )
 
             else:
@@ -202,7 +200,7 @@ def main(args):
                 gnomad_constraint_ht = gnomad_constraint_ht.transmute(
                     total_obs=gnomad_constraint_ht.obs_mis,
                     total_exp=gnomad_constraint_ht.exp_mis,
-                    overall_obs_exp=gnomad_constraint_ht.oe_mis,
+                    overall_oe=gnomad_constraint_ht.oe_mis,
                 )
                 context_ht = context_ht.annotate(
                     **gnomad_constraint_ht[context_ht.transcript]

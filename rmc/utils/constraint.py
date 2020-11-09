@@ -491,7 +491,7 @@ def search_for_break(
         - coverage (median)
         - mu
         - scan_counts struct
-        - overall_obs_exp
+        - overall_oe
         - forward_oe
         - reverse struct
         - reverse_obs_exp
@@ -519,14 +519,14 @@ def search_for_break(
             # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
             get_dpois_expr(
                 cond_expr=hl.len(ht.cumulative_obs) != 0,
-                section_oe_expr=ht.overall_obs_exp,
+                section_oe_expr=ht.overall_oe,
                 obs_expr=ht.cumulative_obs[ht[search_field]],
                 exp_expr=ht.cumulative_exp,
             ),
             # Add reverse section null (going through positions larger to smaller)
             get_dpois_expr(
                 cond_expr=hl.is_defined(ht.reverse.obs),
-                section_oe_expr=ht.overall_obs_exp,
+                section_oe_expr=ht.overall_oe,
                 obs_expr=ht.reverse.obs,
                 exp_expr=ht.reverse.exp,
             ),
