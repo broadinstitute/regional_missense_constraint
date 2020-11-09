@@ -745,11 +745,7 @@ def process_additional_breaks(
     )
     ht = ht.annotate(
         section=hl.if_else(
-            # NOTE: Initially added breakpoint position to second section ("post") with logic that
-            # first position of scan is always missing
-            # Have fixed scans to not be one line behind -- should breakpoint pos still get added to
-            # second section?
-            ht.locus.position >= break_ht[ht.transcript].locus.position,
+            ht.locus.position > break_ht[ht.transcript].locus.position,
             hl.format("%s_%s", ht.transcript, "post"),
             hl.format("%s_%s", ht.transcript, "pre"),
         ),
