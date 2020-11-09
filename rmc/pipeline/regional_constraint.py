@@ -213,8 +213,6 @@ def main(args):
                 observed=hl.sum(context_ht.values.observed),
                 # Take just the first coverage value, since the locus should have the same coverage across the possible variants
                 coverage=context_ht.values.exome_coverage[0],
-                # Also take just the first transcript since there should not be overlapping transcripts
-                transcript=context_ht.values.transcript[0],
             )
 
             logger.info(
