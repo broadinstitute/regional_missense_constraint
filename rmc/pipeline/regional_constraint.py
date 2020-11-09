@@ -170,41 +170,24 @@ def main(args):
                 )
                 obs_ht = calculate_observed(exome_ht)
 
-                logger.info(
-                    "Annotating total observed and expected values and overall observed/expected value "
-                    "(capped at 1) per transcript..."
-                )
-                context_ht = context_ht.annotate(
-                    total_exp=exp_ht[context_ht.transcript].expected,
-                    total_mu=exp_ht[context_ht.transcript].mu_agg,
-                    total_obs=obs_ht[context_ht.transcript].observed,
-                )
-                context_ht = context_ht.annotate(
-                    overall_oe=hl.min(context_ht.total_obs / context_ht.total_exp, 1)
-                )
-
             else:
                 logger.warning(
                     "Using observed and expected values calculated on gnomAD v2.1.1 exomes..."
                 )
-                gnomad_constraint_ht = (
+                exp_ht = (
                     constraint_ht.ht()
                     .key_by("transcript")
                     .select("obs_mis", "exp_mis", "oe_mis")
                 )
 
                 # Filter to canonical transcripts only and rename fields
-                gnomad_constraint_ht = gnomad_constraint_ht.filter(
-                    gnomad_constraint_ht.canonical
+                exp_ht = exp_ht.filter(exp_ht.canonical)
+                exp_ht = exp_ht.transmute(
+                    observed=exp_ht.obs_mis,
+                    expected=exp_ht.exp_mis,
+                    mu_agg=exp_ht.mu_mis,
                 )
-                gnomad_constraint_ht = gnomad_constraint_ht.transmute(
-                    total_obs=gnomad_constraint_ht.obs_mis,
-                    total_exp=gnomad_constraint_ht.exp_mis,
-                    overall_oe=gnomad_constraint_ht.oe_mis,
-                )
-                context_ht = context_ht.annotate(
-                    **gnomad_constraint_ht[context_ht.transcript]
-                )
+                obs_ht = exp_ht
 
             logger.info(
                 "Annotating context HT with number of observed and expected variants per site..."
@@ -214,6 +197,39 @@ def main(args):
             context_ht = context_ht.transmute(
                 observed=hl.int(hl.is_defined(context_ht._obs))
             )
+
+            logger.info(
+                "Collecting by key to run constraint per base and not per base-allele..."
+            )
+            # Context HT is keyed by locus and allele, which means there is one row for every possible missense variant
+            # This means that any locus could be present up to three times (once for each possible missense)
+            # Collect by key here to ensure all loci are unique
+            context_ht = context_ht.key_by("locus").collect_by_key()
+            context_ht = context_ht.annotate(
+                # Collect the mutation rate probabilities at each locus
+                mu_snp=hl.sum(context_ht.values.mu_snp),
+                # Collect the observed counts for each locus
+                # (this includes counts for each possible missense at the locus)
+                observed=hl.sum(context_ht.values.observed),
+                # Take just the first coverage value, since the locus should have the same coverage across the possible variants
+                coverage=context_ht.values.exome_coverage[0],
+                # Also take just the first transcript since there should not be overlapping transcripts
+                transcript=context_ht.values.transcript[0],
+            )
+
+            logger.info(
+                "Annotating total observed and expected values and overall observed/expected value "
+                "(capped at 1) per transcript..."
+            )
+            context_ht = context_ht.annotate(
+                total_exp=exp_ht[context_ht.transcript].expected,
+                total_mu=exp_ht[context_ht.transcript].mu_agg,
+                total_obs=obs_ht[context_ht.transcript].observed,
+            )
+            context_ht = context_ht.annotate(
+                overall_oe=hl.min(context_ht.total_obs / context_ht.total_exp, 1)
+            )
+
             context_ht = get_fwd_exprs(
                 ht=context_ht,
                 transcript_str="transcript",
