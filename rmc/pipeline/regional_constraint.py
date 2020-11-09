@@ -204,7 +204,7 @@ def main(args):
             # Context HT is keyed by locus and allele, which means there is one row for every possible missense variant
             # This means that any locus could be present up to three times (once for each possible missense)
             # Collect by key here to ensure all loci are unique
-            context_ht = context_ht.key_by("locus").collect_by_key()
+            context_ht = context_ht.key_by("locus", "transcript").collect_by_key()
             context_ht = context_ht.annotate(
                 # Collect the mutation rate probabilities at each locus
                 mu_snp=hl.sum(context_ht.values.mu_snp),
