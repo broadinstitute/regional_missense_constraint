@@ -297,7 +297,7 @@ def main(args):
                 )
 
                 # Filter context HT to lines with break and check for transcripts with at least one additional break
-                is_break_ht = is_break_ht.filter(is_break_ht.is_break)
+                is_break_ht = break_ht.filter(break_ht.is_break)
                 group_ht = is_break_ht.group_by("transcript").aggregate(
                     n=hl.agg.count()
                 )
