@@ -698,10 +698,10 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
 
     logger.info("Searching for a break in each section and returning...")
     pre_ht = search_for_break(
-        pre_ht, search_field="section", chisq_threshold=chisq_threshold
+        pre_ht, search_field="transcript", chisq_threshold=chisq_threshold
     )
     post_ht = search_for_break(
-        post_ht, search_field="section", chisq_threshold=chisq_threshold
+        post_ht, search_field="transcript", chisq_threshold=chisq_threshold
     )
     return pre_ht.union(post_ht)
 
