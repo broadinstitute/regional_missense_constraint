@@ -665,7 +665,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     logger.info("Getting section chi-squared values...")
     ht = ht.annotate(
         section_chisq=calculate_section_chisq(
-            obs_expr=ht.break_obs, exp_expr=ht.break_exp,
+            obs_expr=ht.section_obs, exp_expr=ht.section_exp,
         )
     )
 
