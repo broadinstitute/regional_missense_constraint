@@ -738,7 +738,7 @@ def process_additional_breaks(
     )
     # Rename because this will be overwritten when searching for additional break
     annot_expr = {f"is_break_{break_num - 1}": ht.is_break}
-    ht = ht.annotate(**annot_expr)
+    ht = ht.rename(**annot_expr)
 
     logger.info(
         "Splitting each transcript into two sections: pre-first breakpoint and post..."
