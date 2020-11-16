@@ -737,7 +737,7 @@ def process_additional_breaks(
         "Renaming is_break field to prepare to search for an additional break..."
     )
     # Rename because this will be overwritten when searching for additional break
-    annot_expr = {f"is_break_{break_num - 1}": ht.is_break}
+    annot_expr = {"is_break": f"is_break_{break_num - 1}"}
     ht = ht.rename(**annot_expr)
 
     logger.info(
