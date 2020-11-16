@@ -321,6 +321,7 @@ def main(args):
                 context_ht = context_ht.annotate(**annot_expr)
 
                 break_ht = break_ht.filter(transcripts.contains(break_ht.transcript))
+                break_ht = break_ht.key_by("locus", "transcript")
                 break_num += 1
 
             context_ht.write(multiple_breaks.path, overwrite=args.overwrite)
