@@ -281,6 +281,9 @@ def main(args):
             context_ht = one_break.ht()
             break_ht = context_ht
 
+            # Add break_list annotation to context HT
+            context_ht = context_ht.annotate(break_list=[context_ht.is_break])
+            
             # Start break number counter at 2
             break_num = 2
 
