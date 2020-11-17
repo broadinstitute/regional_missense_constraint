@@ -665,7 +665,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     logger.info("Getting section chi-squared values...")
     ht = ht.annotate(
         section_chisq=calculate_section_chisq(
-            obs_expr=ht.break_obs, exp_expr=ht.break_exp,
+            obs_expr=ht.section_obs, exp_expr=ht.section_exp,
         )
     )
 
@@ -698,10 +698,15 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
 
     logger.info("Searching for a break in each section and returning...")
     pre_ht = search_for_break(
-        pre_ht, search_field="section", chisq_threshold=chisq_threshold
+        pre_ht, search_field="transcript", chisq_threshold=chisq_threshold
+    )
+    # Adjust is_break annotation in pre_ht
+    # to prevent this function from continually finding the first significant break
+    pre_ht = pre_ht.annotate(
+        is_break=hl.if_else(pre_ht.is_break_1, False, pre_ht.is_break)
     )
     post_ht = search_for_break(
-        post_ht, search_field="section", chisq_threshold=chisq_threshold
+        post_ht, search_field="transcript", chisq_threshold=chisq_threshold
     )
     return pre_ht.union(post_ht)
 
@@ -737,8 +742,8 @@ def process_additional_breaks(
         "Renaming is_break field to prepare to search for an additional break..."
     )
     # Rename because this will be overwritten when searching for additional break
-    annot_expr = {f"is_break_{break_num - 1}": ht.is_break}
-    ht = ht.annotate(**annot_expr)
+    annot_expr = {"is_break": f"is_break_{break_num - 1}"}
+    ht = ht.rename(annot_expr)
 
     logger.info(
         "Splitting each transcript into two sections: pre-first breakpoint and post..."

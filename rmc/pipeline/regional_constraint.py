@@ -297,7 +297,7 @@ def main(args):
                 )
 
                 # Filter context HT to lines with break and check for transcripts with at least one additional break
-                is_break_ht = is_break_ht.filter(is_break_ht.is_break)
+                is_break_ht = break_ht.filter(break_ht.is_break)
                 group_ht = is_break_ht.group_by("transcript").aggregate(
                     n=hl.agg.count()
                 )
@@ -308,15 +308,16 @@ def main(args):
                     break
 
                 # Otherwise, pull transcripts and annotate context ht
+                break_ht = break_ht.key_by("locus", "transcript")
                 transcripts = group_ht.aggregate(
                     hl.agg.collect_as_set(group_ht.transcript), _localize=False
                 )
                 globals_annot_expr = {f"break_{break_num}_transcripts": transcripts}
-                context_ht = context_ht.annotate_globals(**globals_annot_expr,)
+                context_ht = context_ht.annotate_globals(**globals_annot_expr)
                 annot_expr = {
                     f"break_{break_num}_chisq": break_ht[context_ht.key].chisq,
-                    f"break_{break_num}_null": break_ht[context_ht.key].null,
-                    f"break_{break_num}_alt": break_ht[context_ht.key].alt,
+                    f"break_{break_num}_null": break_ht[context_ht.key].total_null,
+                    f"break_{break_num}_alt": break_ht[context_ht.key].total_alt,
                 }
                 context_ht = context_ht.annotate(**annot_expr)
 
