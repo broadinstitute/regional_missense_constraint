@@ -308,11 +308,12 @@ def main(args):
                     break
 
                 # Otherwise, pull transcripts and annotate context ht
+                break_ht = break_ht.key_by("locus", "transcript")
                 transcripts = group_ht.aggregate(
                     hl.agg.collect_as_set(group_ht.transcript), _localize=False
                 )
                 globals_annot_expr = {f"break_{break_num}_transcripts": transcripts}
-                context_ht = context_ht.annotate_globals(**globals_annot_expr,)
+                context_ht = context_ht.annotate_globals(**globals_annot_expr)
                 annot_expr = {
                     f"break_{break_num}_chisq": break_ht[context_ht.key].chisq,
                     f"break_{break_num}_null": break_ht[context_ht.key].total_null,
@@ -321,7 +322,6 @@ def main(args):
                 context_ht = context_ht.annotate(**annot_expr)
 
                 break_ht = break_ht.filter(transcripts.contains(break_ht.transcript))
-                break_ht = break_ht.key_by("locus", "transcript")
                 break_num += 1
 
             context_ht.write(multiple_breaks.path, overwrite=args.overwrite)
