@@ -700,6 +700,11 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     pre_ht = search_for_break(
         pre_ht, search_field="transcript", chisq_threshold=chisq_threshold
     )
+    # Adjust is_break annotation in pre_ht
+    # to prevent this function from continually finding the first significant break
+    pre_ht = pre_ht.annotate(
+        is_break=hl.if_else(pre_ht.is_break_1, False, pre_ht.is_break)
+    )
     post_ht = search_for_break(
         post_ht, search_field="transcript", chisq_threshold=chisq_threshold
     )
