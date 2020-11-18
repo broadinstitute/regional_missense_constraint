@@ -295,6 +295,9 @@ def main(args):
                 break_ht = process_additional_breaks(
                     break_ht, break_num, args.chisq_threshold
                 )
+                break_ht = break_ht.annotate(
+                    break_list=break_ht.break_list.append(break_ht.is_break)
+                )
                 break_ht = break_ht.checkpoint(
                     f"{temp_path}/break_{break_num}.ht", overwrite=True
                 )
