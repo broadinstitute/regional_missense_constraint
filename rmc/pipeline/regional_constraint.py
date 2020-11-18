@@ -279,11 +279,11 @@ def main(args):
                 "Searching for additional breaks in transcripts with at least one significant break..."
             )
             context_ht = one_break.ht()
-            break_ht = context_ht
 
             # Add break_list annotation to context HT
             context_ht = context_ht.annotate(break_list=[context_ht.is_break])
-            
+            break_ht = context_ht
+
             # Start break number counter at 2
             break_num = 2
 
