@@ -816,8 +816,8 @@ def search_for_two_breaks(
 
     # I don't think there's any way to search for simultaneous breaks without a loop?
     ht = ht.filter(ht.transcript == transcript)
-    start_pos = ht.head(1).take(1).locus.position
-    end_pos = ht.tail(1).take(1).locus.position
+    start_pos = ht.head(1).locus.position.take(1)
+    end_pos = ht.tail(1).locus.position.take(1)
     best_chisq = 0
     breakpoints = ()
 
