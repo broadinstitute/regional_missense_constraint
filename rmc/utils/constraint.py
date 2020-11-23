@@ -615,6 +615,59 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
     return search_for_break(ht, "transcript", chisq_threshold)
 
 
+def get_subsection_exprs(
+    ht: hl.Table,
+    section_str: str = "section",
+    obs_str: str = "observed",
+    mu_str: str = "mu_snp",
+    total_mu_str: str = "total_mu",
+    total_exp_str: str = "total_exp",
+) -> hl.Table:
+    """
+    Annotates total observed, expected, and observed/expected (OE) counts for each section of a transcript.
+
+    .. note::
+        Assumes input Table is annotated with:
+            - section
+            - observed variants count per site
+            - mutation rate probability per site
+            - total mutation rate probability per transcript
+            - total expected variant counts per transcript
+        Names of annotations must match section_str, obs_str, mu_str, total_mu_str, and total_exp_str.
+
+    :param hl.Table ht: Input Table.
+    :param str section_str: Name of section annotation.
+    :param str obs_str: Name of observed variant counts annotation.
+    :param str mu_str: Name of mutation rate probability per site annotation.
+    :param str total_mu_str: Name of annotation containing sum of mutation rate probabilities per transcript.
+    :param str total_exp_str: Name of annotation containing total expected variant counts per transcript.
+    :return: Table annotated with section observed, expected, and OE counts.
+    :return: hl.Table
+    """
+    logger.info(
+        "Getting total observed and expected counts for each transcript section..."
+    )
+    # Get total obs per section
+    section_obs = ht.group_by(ht[section_str]).aggregate(obs=hl.agg.sum(ht[obs_str]))
+
+    # Get total mu per section -- translate this to total expected per section
+    section_mu = ht.group_by(ht[section_str]).aggregate(total=hl.agg.sum(ht[mu_str]))
+    ht = ht.annotate(section_total_mu=section_mu[ht[section_str]].total,)
+    ht = ht.annotate(
+        section_exp=(ht.section_total_mu / ht[total_mu_str]) * ht[total_exp_str],
+        section_obs=section_obs[ht[section_str]].obs,
+    )
+
+    logger.info("Getting observed/expected value for each transcript section...")
+    return ht.annotate(
+        break_oe=get_obs_exp_expr(
+            cond_expr=hl.is_defined(ht[section_str]),
+            obs_expr=ht.section_obs,
+            exp_expr=ht.section_exp,
+        )
+    )
+
+
 def process_sections(ht: hl.Table, chisq_threshold: float):
     """
     Search for breaks within given sections of a transcript. 
@@ -637,29 +690,9 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     :return: Table annotated with whether position is a breakpoint. 
     :rtype: hl.Table
     """
-    logger.info(
-        "Getting total observed and expected counts for each transcript section..."
-    )
-    # Get total obs per section
-    section_obs = ht.group_by(ht.section).aggregate(obs=hl.agg.sum(ht.observed))
+    ht = get_subsection_exprs(ht)
 
-    # Get total mu per section -- translate this to total expected per section
-    section_mu = ht.group_by(ht.section).aggregate(total=hl.agg.sum(ht.mu_snp))
-    ht = ht.annotate(section_total_mu=section_mu[ht.section].total,)
-    ht = ht.annotate(
-        section_exp=(ht.section_total_mu / ht.total_mu) * ht.total_exp,
-        section_obs=section_obs[ht.section].obs,
-    )
-
-    logger.info("Getting observed/expected value for each transcript section...")
-    ht = ht.annotate(
-        break_oe=get_obs_exp_expr(
-            cond_expr=hl.is_defined(ht.section),
-            obs_expr=ht.section_obs,
-            exp_expr=ht.section_exp,
-        )
-    )
-
+    # TODO: Move this calculation to release HT generation step
     logger.info("Getting section chi-squared values...")
     ht = ht.annotate(
         section_chisq=calculate_section_chisq(
@@ -839,7 +872,27 @@ def search_for_two_breaks(
             # Otherwise, pos is outside window and post breaks
             .default(hl.format("%s_%s", ht.transcript, "post"))
         )
-        new_ht = process_sections(ht, chisq_threshold)
+        ht = get_subsection_exprs(ht)
+
+        pre_ht = ht.filter(ht.section == "pre")
+        window_ht = ht.filter(ht.section == "window")
+        post_ht = ht.filter(ht.section == "post")
+
+        window_ht = get_fwd_exprs(
+            ht=window_ht,
+            transcript_str="transcript",
+            obs_str="observed",
+            mu_str="mu_snp",
+            total_mu_str="total_mu",
+            total_exp_str="total_exp",
+        )
+        window_ht = get_reverse_exprs(
+            ht=window_ht,
+            total_obs_expr=window_ht.section_obs,
+            total_exp_expr=window_ht.section_exp,
+            scan_obs_expr=window_ht.cumulative_obs[window_ht.transcript],
+            scan_exp_expr=window_ht.cumulative_exp,
+        )
 
         # Check if found break
         if new_ht.aggregate(hl.agg.counter(new_ht.is_break) > 0):
