@@ -7,11 +7,9 @@ from gnomad.utils.reference_genome import get_reference_genome
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
-from rmc.resources.resource_utils import MISSENSE
 from rmc.utils.generic import (
     get_coverage_correction_expr,
     get_exome_bases,
-    process_vep,
 )
 
 
@@ -703,9 +701,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     # Adjust is_break annotation in pre_ht
     # to prevent this function from continually finding previous significant breaks
     pre_ht = pre_ht.annotate(
-        is_break=hl.if_else(
-            pre_ht.break_list.any(lambda x: x), False, pre_ht.is_break,
-        )
+        is_break=hl.if_else(pre_ht.break_list.any(lambda x: x), False, pre_ht.is_break,)
     )
     post_ht = search_for_break(
         post_ht, search_field="transcript", chisq_threshold=chisq_threshold
@@ -760,7 +756,7 @@ def process_additional_breaks(
     return process_sections(ht, chisq_threshold)
 
 
-def get_avg_bases_between_mis(ht: hl.Table, missense: str = MISSENSE) -> int:
+def get_avg_bases_between_mis(ht: hl.Table) -> int:
     """
     Returns average number of bases between observed missense variation.
 
@@ -770,18 +766,17 @@ def get_avg_bases_between_mis(ht: hl.Table, missense: str = MISSENSE) -> int:
     This function is used to determine the minimum size window to check for significant missense depletion
     when searching for two simultaneous breaks.
 
-    :param hl.Table ht: Input gnomAD Table.
-    :param str missense: String representing missense variant VEP annotation. Default is MISSENSE.
+    .. note::
+        Assumes input Table has been filtered to missense variants in canonical protein-coding transcripts only.
+
+    :param hl.Table ht: Input gnomAD exomes Table. 
     :return: Average number of bases between observed missense variants, rounded to the nearest integer,
     :rtype: int
     """
     logger.info("Getting total number of bases in the exome (based on GENCODE)...")
     total_bases = get_exome_bases(build=get_reference_genome(ht.locus).name)
 
-    logger.info(
-        "Filtering to missense variants in canonical protein coding transcripts..."
-    )
-    ht = process_vep(ht, filter_csq=True, csq=missense)
+    logger.info("Getting average bases between missense variants and returning...")
     total_variants = ht.count()
     return round(total_bases / total_variants)
 
@@ -812,12 +807,7 @@ def search_for_two_breaks(
     :return: Tuple of largest chi-square value and breakpoint positions if significant break was found. Otherwise, None.
     :rtype: Union[hl.Table, None]
     """
-    break_size = (
-        get_avg_bases_between_mis(
-            exome_ht, get_reference_genome(exome_ht.head(1).locus).name
-        )
-        * num_obs_var
-    )
+    break_size = get_avg_bases_between_mis(exome_ht) * num_obs_var
     logger.info(
         f"Number of bases to search for constraint (size for simultaneous breaks): {break_size}"
     )
