@@ -775,9 +775,11 @@ def get_avg_bases_between_mis(ht: hl.Table) -> int:
     """
     logger.info("Getting total number of bases in the exome (based on GENCODE)...")
     total_bases = get_exome_bases(build=get_reference_genome(ht.locus).name)
+    total_variants = ht.count()
+    logger.info(f"Total number of bases in the exome: {total_bases}")
+    logger.info(f"Total number of missense variants in gnomAD exomes: {total_variants}")
 
     logger.info("Getting average bases between missense variants and returning...")
-    total_variants = ht.count()
     return round(total_bases / total_variants)
 
 
