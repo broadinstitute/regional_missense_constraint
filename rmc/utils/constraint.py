@@ -859,7 +859,7 @@ def search_for_two_breaks(
         ht = ht.annotate(
             section=hl.case()
             # Position is within window if pos is larger than start_pos and
-            # less than start_pos + window size, then pos is within window
+            # less than start_pos + window size
             .when(
                 (ht.locus.position >= start_pos)
                 & (ht.locus.position < (start_pos + break_size)),
@@ -874,35 +874,57 @@ def search_for_two_breaks(
         )
         ht = get_subsection_exprs(ht)
 
-        pre_ht = ht.filter(ht.section == "pre")
-        window_ht = ht.filter(ht.section == "window")
-        post_ht = ht.filter(ht.section == "post")
+        def _prepare_dpois_ht(ht: hl.Table, section_name: str) -> hl.Table:
+            """
+            Filters input Table to transcript section and annotates with section null and alt values.
 
-        window_ht = get_fwd_exprs(
-            ht=window_ht,
-            transcript_str="transcript",
-            obs_str="observed",
-            mu_str="mu_snp",
-            total_mu_str="total_mu",
-            total_exp_str="total_exp",
+            Assumes input Table is annotated with:
+                - overall_oe
+                - section_obs
+                - section_exp
+                - break_oe
+
+            :param hl.Table ht: Input Table.
+            :param str section_name: Name of transcript section.
+            :return: Table annotated with section null and alt values.
+            :rtype: hl.Table
+            """
+            ht = ht.filter(ht.section == section_name)
+            ht = ht.annotate(
+                null=get_dpois_expr(
+                    cond_expr=True,
+                    section_oe_expr=ht.overall_oe,
+                    obs_expr=ht.section_obs,
+                    exp_expr=ht.section_exp,
+                ),
+                alt=get_dpois_expr(
+                    cond_expr=True,
+                    section_oe_expr=ht.break_oe,
+                    obs_expr=ht.section_obs,
+                    exp_expr=ht.section_exp,
+                ),
+            )
+            return ht.key_by("transcript")
+
+        new_ht = (
+            _prepare_dpois_ht(ht, "pre")
+            .join(_prepare_dpois_ht(ht, "window"))
+            .join(_prepare_dpois_ht(ht, "post"))
         )
-        window_ht = get_reverse_exprs(
-            ht=window_ht,
-            total_obs_expr=window_ht.section_obs,
-            total_exp_expr=window_ht.section_exp,
-            scan_obs_expr=window_ht.cumulative_obs[window_ht.transcript],
-            scan_exp_expr=window_ht.cumulative_exp,
+        new_ht = new_ht.annotate(
+            null=new_ht.null * new_ht.null_1 * new_ht.null_2,
+            alt=new_ht.alt * new_ht.alt_1 * new_ht.alt_2,
         )
+        new_ht = new_ht.annotate(chisq=2 * (hl.log(ht.alt) - hl.log(ht.null)))
 
         # Check if found break
-        if new_ht.aggregate(hl.agg.counter(new_ht.is_break) > 0):
-            max_chisq = new_ht.aggregate(hl.agg.max(new_ht.max_chisq))
-            if (max_chisq > best_chisq) and (max_chisq >= chisq_threshold):
-                breakpoints = (start_pos, (start_pos + break_size) - 1)
-                best_chisq = max_chisq
-                annot_expr = {f"{transcript}_breakpoints": breakpoints}
-                new_ht = new_ht.annotate_globals(**annot_expr)
-                breaks[max_chisq] = [new_ht]
+        max_chisq = new_ht.aggregate(hl.agg.max(new_ht.chisq))
+        if max_chisq >= chisq_threshold:
+            breakpoints = (start_pos, (start_pos + break_size) - 1)
+            best_chisq = max_chisq
+            annot_expr = {f"{transcript}_breakpoints": breakpoints}
+            new_ht = new_ht.annotate_globals(**annot_expr)
+            breaks[max_chisq] = [new_ht]
 
         start_pos += 1
 
