@@ -181,7 +181,9 @@ def get_exome_bases(build: str) -> int:
 
     logger.info("Summing total bases in exome...")
     # GENCODE is 1-based
-    ht = ht.annotate(cds_len=(ht.interval.end - ht.interval.start) + 1)
+    ht = ht.annotate(
+        cds_len=(ht.interval.end.position - ht.interval.start.position) + 1
+    )
     return ht.aggregate(hl.agg.sum(ht.cds_len))
 
 
