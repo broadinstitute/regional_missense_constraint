@@ -177,11 +177,16 @@ def get_exome_bases(build: str) -> int:
         ht = grch38.gencode.ht()
 
     logger.info("Filtering gencode gtf to feature type == CDS...")
-    ht = ht.filter((ht.feature == "CDS"))
+    # NOTE: using 'contains' here since gtf didn't seem to have imported correctly on 11/23/20
+    # gencode.aggregate(hl.agg.counter(gencode.level)) shows:
+    # {'3;': 538, '1': 129952, '2': 1955837, '1;': 1, '3': 316504}
+    ht = ht.filter((ht.feature == "CDS") & ~(ht.level.contains("3")))
 
     logger.info("Summing total bases in exome...")
     # GENCODE is 1-based
-    ht = ht.annotate(cds_len=(ht.interval.end - ht.interval.start) + 1)
+    ht = ht.annotate(
+        cds_len=(ht.interval.end.position - ht.interval.start.position) + 1
+    )
     return ht.aggregate(hl.agg.sum(ht.cds_len))
 
 

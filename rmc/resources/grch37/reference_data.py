@@ -34,7 +34,7 @@ gencode = VersionedTableResource(
             path=f"{RESOURCE_PREFIX}/GRCh37/reference_data/ht/gencode.v19.annotation.ht",
             import_func=import_gencode,
             import_args={
-                "path": f"{RESOURCE_PREFIX}/gencode.v19.annotation.gtf",
+                "path": f"{RESOURCE_PREFIX}/GRCh37/gencode.v19_no_header.gtf",
                 "reference_genome": "GRCh37",
                 "skip_invalid_contigs": True,
                 "min_partitions": 500,

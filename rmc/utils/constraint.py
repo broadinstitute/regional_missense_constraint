@@ -7,11 +7,9 @@ from gnomad.utils.reference_genome import get_reference_genome
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
-from rmc.resources.resource_utils import MISSENSE
 from rmc.utils.generic import (
     get_coverage_correction_expr,
     get_exome_bases,
-    process_vep,
 )
 
 
@@ -617,6 +615,60 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
     return search_for_break(ht, "transcript", chisq_threshold)
 
 
+def get_subsection_exprs(
+    ht: hl.Table,
+    section_str: str = "section",
+    obs_str: str = "observed",
+    mu_str: str = "mu_snp",
+    total_mu_str: str = "total_mu",
+    total_exp_str: str = "total_exp",
+) -> hl.Table:
+    """
+    Annotates total observed, expected, and observed/expected (OE) counts for each section of a transcript.
+
+    .. note::
+        Assumes input Table is annotated with:
+            - section
+            - observed variants count per site
+            - mutation rate probability per site
+            - total mutation rate probability per transcript
+            - total expected variant counts per transcript
+        Names of annotations must match section_str, obs_str, mu_str, total_mu_str, and total_exp_str.
+
+    :param hl.Table ht: Input Table.
+    :param str section_str: Name of section annotation.
+    :param str obs_str: Name of observed variant counts annotation.
+    :param str mu_str: Name of mutation rate probability per site annotation.
+    :param str total_mu_str: Name of annotation containing sum of mutation rate probabilities per transcript.
+    :param str total_exp_str: Name of annotation containing total expected variant counts per transcript.
+    :return: Table annotated with section observed, expected, and OE counts.
+    :return: hl.Table
+    """
+    logger.info(
+        "Getting total observed and expected counts for each transcript section..."
+    )
+    # Get total obs and mu per section
+    section_counts = ht.group_by(ht[section_str]).aggregate(
+        obs=hl.agg.sum(ht[obs_str]), mu=hl.agg.sum(ht[mu_str]),
+    )
+
+    # Translate total mu to total expected per section
+    ht = ht.annotate(
+        section_exp=(section_counts[ht[section_str]].mu / ht[total_mu_str])
+        * ht[total_exp_str],
+        section_obs=section_counts[ht[section_str]].obs,
+    )
+
+    logger.info("Getting observed/expected value for each transcript section...")
+    return ht.annotate(
+        break_oe=get_obs_exp_expr(
+            cond_expr=hl.is_defined(ht[section_str]),
+            obs_expr=ht.section_obs,
+            exp_expr=ht.section_exp,
+        )
+    )
+
+
 def process_sections(ht: hl.Table, chisq_threshold: float):
     """
     Search for breaks within given sections of a transcript. 
@@ -639,29 +691,9 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     :return: Table annotated with whether position is a breakpoint. 
     :rtype: hl.Table
     """
-    logger.info(
-        "Getting total observed and expected counts for each transcript section..."
-    )
-    # Get total obs per section
-    section_obs = ht.group_by(ht.section).aggregate(obs=hl.agg.sum(ht.observed))
+    ht = get_subsection_exprs(ht)
 
-    # Get total mu per section -- translate this to total expected per section
-    section_mu = ht.group_by(ht.section).aggregate(total=hl.agg.sum(ht.mu_snp))
-    ht = ht.annotate(section_total_mu=section_mu[ht.section].total,)
-    ht = ht.annotate(
-        section_exp=(ht.section_total_mu / ht.total_mu) * ht.total_exp,
-        section_obs=section_obs[ht.section].obs,
-    )
-
-    logger.info("Getting observed/expected value for each transcript section...")
-    ht = ht.annotate(
-        break_oe=get_obs_exp_expr(
-            cond_expr=hl.is_defined(ht.section),
-            obs_expr=ht.section_obs,
-            exp_expr=ht.section_exp,
-        )
-    )
-
+    # TODO: Move this calculation to release HT generation step
     logger.info("Getting section chi-squared values...")
     ht = ht.annotate(
         section_chisq=calculate_section_chisq(
@@ -703,9 +735,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     # Adjust is_break annotation in pre_ht
     # to prevent this function from continually finding previous significant breaks
     pre_ht = pre_ht.annotate(
-        is_break=hl.if_else(
-            pre_ht.break_list.any(lambda x: x), False, pre_ht.is_break,
-        )
+        is_break=hl.if_else(pre_ht.break_list.any(lambda x: x), False, pre_ht.is_break)
     )
     post_ht = search_for_break(
         post_ht, search_field="transcript", chisq_threshold=chisq_threshold
@@ -760,7 +790,7 @@ def process_additional_breaks(
     return process_sections(ht, chisq_threshold)
 
 
-def get_avg_bases_between_mis(ht: hl.Table, missense: str = MISSENSE) -> int:
+def get_avg_bases_between_mis(ht: hl.Table) -> int:
     """
     Returns average number of bases between observed missense variation.
 
@@ -770,19 +800,20 @@ def get_avg_bases_between_mis(ht: hl.Table, missense: str = MISSENSE) -> int:
     This function is used to determine the minimum size window to check for significant missense depletion
     when searching for two simultaneous breaks.
 
-    :param hl.Table ht: Input gnomAD Table.
-    :param str missense: String representing missense variant VEP annotation. Default is MISSENSE.
+    .. note::
+        Assumes input Table has been filtered to missense variants in canonical protein-coding transcripts only.
+
+    :param hl.Table ht: Input gnomAD exomes Table. 
     :return: Average number of bases between observed missense variants, rounded to the nearest integer,
     :rtype: int
     """
     logger.info("Getting total number of bases in the exome (based on GENCODE)...")
     total_bases = get_exome_bases(build=get_reference_genome(ht.locus).name)
-
-    logger.info(
-        "Filtering to missense variants in canonical protein coding transcripts..."
-    )
-    ht = process_vep(ht, filter_csq=True, csq=missense)
     total_variants = ht.count()
+    logger.info(f"Total number of bases in the exome: {total_bases}")
+    logger.info(f"Total number of missense variants in gnomAD exomes: {total_variants}")
+
+    logger.info("Getting average bases between missense variants and returning...")
     return round(total_bases / total_variants)
 
 
@@ -812,20 +843,15 @@ def search_for_two_breaks(
     :return: Tuple of largest chi-square value and breakpoint positions if significant break was found. Otherwise, None.
     :rtype: Union[hl.Table, None]
     """
-    break_size = (
-        get_avg_bases_between_mis(
-            exome_ht, get_reference_genome(exome_ht.head(1).locus).name
-        )
-        * num_obs_var
-    )
+    break_size = get_avg_bases_between_mis(exome_ht) * num_obs_var
     logger.info(
         f"Number of bases to search for constraint (size for simultaneous breaks): {break_size}"
     )
 
     # I don't think there's any way to search for simultaneous breaks without a loop?
     ht = ht.filter(ht.transcript == transcript)
-    start_pos = ht.head(1).take(1).locus.position
-    end_pos = ht.tail(1).take(1).locus.position
+    start_pos = ht.head(1).locus.position.take(1)
+    end_pos = ht.tail(1).locus.position.take(1)
     best_chisq = 0
     breakpoints = ()
 
@@ -834,7 +860,7 @@ def search_for_two_breaks(
         ht = ht.annotate(
             section=hl.case()
             # Position is within window if pos is larger than start_pos and
-            # less than start_pos + window size, then pos is within window
+            # less than start_pos + window size
             .when(
                 (ht.locus.position >= start_pos)
                 & (ht.locus.position < (start_pos + break_size)),
@@ -847,17 +873,59 @@ def search_for_two_breaks(
             # Otherwise, pos is outside window and post breaks
             .default(hl.format("%s_%s", ht.transcript, "post"))
         )
-        new_ht = process_sections(ht, chisq_threshold)
+        ht = get_subsection_exprs(ht)
+
+        def _prepare_dpois_ht(ht: hl.Table, section_name: str) -> hl.Table:
+            """
+            Filters input Table to transcript section and annotates with section null and alt values.
+
+            Assumes input Table is annotated with:
+                - overall_oe
+                - section_obs
+                - section_exp
+                - break_oe
+
+            :param hl.Table ht: Input Table.
+            :param str section_name: Name of transcript section.
+            :return: Table annotated with section null and alt values.
+            :rtype: hl.Table
+            """
+            ht = ht.filter(ht.section == section_name)
+            ht = ht.annotate(
+                null=get_dpois_expr(
+                    cond_expr=True,
+                    section_oe_expr=ht.overall_oe,
+                    obs_expr=ht.section_obs,
+                    exp_expr=ht.section_exp,
+                ),
+                alt=get_dpois_expr(
+                    cond_expr=True,
+                    section_oe_expr=ht.break_oe,
+                    obs_expr=ht.section_obs,
+                    exp_expr=ht.section_exp,
+                ),
+            )
+            return ht.key_by("transcript")
+
+        new_ht = (
+            _prepare_dpois_ht(ht, "pre")
+            .join(_prepare_dpois_ht(ht, "window"))
+            .join(_prepare_dpois_ht(ht, "post"))
+        )
+        new_ht = new_ht.annotate(
+            null=new_ht.null * new_ht.null_1 * new_ht.null_2,
+            alt=new_ht.alt * new_ht.alt_1 * new_ht.alt_2,
+        )
+        new_ht = new_ht.annotate(chisq=2 * (hl.log(ht.alt) - hl.log(ht.null)))
 
         # Check if found break
-        if new_ht.aggregate(hl.agg.counter(new_ht.is_break) > 0):
-            max_chisq = new_ht.aggregate(hl.agg.max(new_ht.max_chisq))
-            if (max_chisq > best_chisq) and (max_chisq >= chisq_threshold):
-                breakpoints = (start_pos, (start_pos + break_size) - 1)
-                best_chisq = max_chisq
-                annot_expr = {f"{transcript}_breakpoints": breakpoints}
-                new_ht = new_ht.annotate_globals(**annot_expr)
-                breaks[max_chisq] = [new_ht]
+        max_chisq = new_ht.aggregate(hl.agg.max(new_ht.chisq))
+        if max_chisq >= chisq_threshold:
+            breakpoints = (start_pos, (start_pos + break_size) - 1)
+            best_chisq = max_chisq
+            annot_expr = {f"{transcript}_breakpoints": breakpoints}
+            new_ht = new_ht.annotate_globals(**annot_expr)
+            breaks[max_chisq] = [new_ht]
 
         start_pos += 1
 

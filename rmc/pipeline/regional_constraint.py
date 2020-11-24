@@ -340,7 +340,7 @@ def main(args):
             context_ht = not_one_break.ht()
             exome_ht = filtered_exomes.ht()
             transcripts = context_ht.aggregate(
-                hl.agg.collect_as_set(context_ht.transcript), _localize=False
+                hl.agg.collect_as_set(context_ht.transcript)
             )
 
             two_breaks = {}
