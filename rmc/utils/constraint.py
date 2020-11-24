@@ -647,15 +647,16 @@ def get_subsection_exprs(
     logger.info(
         "Getting total observed and expected counts for each transcript section..."
     )
-    # Get total obs per section
-    section_obs = ht.group_by(ht[section_str]).aggregate(obs=hl.agg.sum(ht[obs_str]))
+    # Get total obs and mu per section
+    section_counts = ht.group_by(ht[section_str]).aggregate(
+        obs=hl.agg.sum(ht[obs_str]), mu=hl.agg.sum(ht[mu_str]),
+    )
 
-    # Get total mu per section -- translate this to total expected per section
-    section_mu = ht.group_by(ht[section_str]).aggregate(total=hl.agg.sum(ht[mu_str]))
-    ht = ht.annotate(section_total_mu=section_mu[ht[section_str]].total,)
+    # Translate total mu to total expected per section
     ht = ht.annotate(
-        section_exp=(ht.section_total_mu / ht[total_mu_str]) * ht[total_exp_str],
-        section_obs=section_obs[ht[section_str]].obs,
+        section_exp=(section_counts[ht[section_str]].mu / ht[total_mu_str])
+        * ht[total_exp_str],
+        section_obs=section_counts[ht[section_str]].obs,
     )
 
     logger.info("Getting observed/expected value for each transcript section...")
