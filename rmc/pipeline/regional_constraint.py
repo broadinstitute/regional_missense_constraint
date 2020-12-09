@@ -57,6 +57,7 @@ def main(args):
 
     try:
         if args.pre_process_data:
+            # TODO: Add code to create annotations necessary for constraint_flag_expr and filter transcripts prior to running constraint
             logger.warning("Code currently only processes b37 data!")
             logger.info(
                 "Filtering gnomAD exomes HT to missense variants in canonical transcripts only..."
