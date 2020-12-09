@@ -948,3 +948,48 @@ def calculate_section_chisq(
     :rtype: hl.expr.Float64Expression
     """
     return ((obs_expr - exp_expr) ** 2) / exp_expr
+
+
+def constraint_flag_expr(
+    obs_syn_expr: hl.expr.Int64Expression,
+    obs_mis_expr: hl.expr.Int64Expression,
+    obs_lof_expr: hl.expr.Int64Expression,
+    exp_syn_expr: hl.expr.Float64Expression,
+    exp_mis_expr: hl.expr.Float64Expression,
+    exp_lof_expr: hl.expr.Float64Expression,
+    raw_syn_z_expr: hl.expr.Float64Expression,
+    raw_mis_z_expr: hl.expr.Float64Expression,
+    raw_lof_z_expr: hl.expr.Float64Expression,
+) -> hl.expr.StructExpression:
+    """
+    Returns struct with constraint flags.
+
+    Flags are designed to mark outlier transcripts, and explanation of constraint flags is in the gnomAD browser FAQ:
+    https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
+
+    :param hl.expr.Int64Expression obs_syn_expr: Expression containing number of observed synonymous variants in gnomAD.
+    :param hl.expr.Int64Expression obs_mis_expr: Expression containing number of observed missense variants in gnomAD.
+    :param hl.expr.Int64Expression obs_lof_expr: Expression containing number of observed loss-of-function (LoF) variants in gnomAD.
+    :param hl.expr.Float64Expression exp_syn_expr: Expression containing number of expected synonymous variants.
+    :param hl.expr.Float64Expression exp_mis_expr: Expression containing number of expected missense variants.
+    :param hl.expr.Float64Expression exp_lof_expr: Expression containing number of expected LoF variants.
+    :param hl.expr.Float64Expression raw_syn_z_expr: Expression containing number of Z score for synonymous variants.
+    :param hl.expr.Float64Expression raw_mis_z_expr: Expression containing number of Z score for missense variants.
+    :param hl.expr.Float64Expression raw_lof_z_expr: Expression containing number of Z score for LoF variants.
+    :return: StructExpression containing constraint flags.
+    :rtype: hl.expr.StructExpression
+    """
+    return hl.struct(
+        no_variants=(
+            hl.or_else(obs_syn_expr, 0)
+            + hl.or_else(obs_mis_expr, 0)
+            + hl.or_else(obs_lof_expr, 0)
+        )
+        == 0,
+        no_exp_syn=exp_syn_expr == 0,
+        no_exp_mis=exp_mis_expr == 0,
+        no_exp_lof=exp_lof_expr == 0,
+        syn_outlier=hl.abs(raw_syn_z_expr) > 5,
+        mis_too_many=raw_mis_z_expr < -5,
+        lof_too_many=raw_lof_z_expr < -5,
+    )
