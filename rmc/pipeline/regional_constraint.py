@@ -340,11 +340,21 @@ def main(args):
             )
             context_ht = not_one_break.ht()
             exome_ht = filtered_exomes.ht()
-            transcripts = context_ht.aggregate(
-                hl.agg.collect_as_set(context_ht.transcript)
+
+            logger.info("Getting start and end positions for each transcript...")
+            transcript_ht = context_ht.group_by(context_ht.transcript).aggregate(
+                end_pos=hl.agg.max(context_ht.locus.position),
+                start_pos=hl.agg.min(context_ht.locus.position),
+            )
+            ht = ht.annotate(
+                end_pos=transcript_ht[context_ht.transcript].end_pos,
+                transcript_len=(transcript_ht.end_pos - transcript_ht.start_pos) + 1,
             )
 
             two_breaks = {}
+            transcripts = context_ht.aggregate(
+                hl.agg.collect_as_set(context_ht.transcript)
+            )
             for transcript in transcripts:
                 break_info = search_for_two_breaks(
                     ht=context_ht,
