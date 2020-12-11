@@ -856,9 +856,9 @@ def search_for_two_breaks(
             f"{transcript} has length {transcript_len}; cannot search for simultaneous breaks!"
         )
         return None
-        
+
     start_pos = ht.head(1).start_pos.take(1)
-    end_pos = ht.tail(1).end_pos.take(1)
+    end_pos = ht.head(1).end_pos.take(1)
     best_chisq = 0
     breakpoints = ()
     breaks = {}
