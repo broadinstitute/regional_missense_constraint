@@ -821,7 +821,7 @@ def search_for_two_breaks(
     ht: hl.Table,
     exome_ht: hl.Table,
     transcript: str,
-    chisq_threshold: float,
+    chisq_threshold: float = 13.8,
     num_obs_var: int = 10,
 ) -> Union[hl.Table, None]:
     """
@@ -848,14 +848,21 @@ def search_for_two_breaks(
         f"Number of bases to search for constraint (size for simultaneous breaks): {break_size}"
     )
 
-    # I don't think there's any way to search for simultaneous breaks without a loop?
+    # Check if transcript is smaller than break_size
     ht = ht.filter(ht.transcript == transcript)
-    start_pos = ht.head(1).locus.position.take(1)
-    end_pos = ht.tail(1).locus.position.take(1)
+    transcript_len = ht.head(1).transcript_len.take(1)
+    if transcript_len <= break_size:
+        logger.error(
+            f"{transcript} has length {transcript_len}; cannot search for simultaneous breaks!"
+        )
+        return None
+        
+    start_pos = ht.head(1).start_pos.take(1)
+    end_pos = ht.tail(1).end_pos.take(1)
     best_chisq = 0
     breakpoints = ()
-
     breaks = {}
+
     while start_pos < end_pos:
         ht = ht.annotate(
             section=hl.case()

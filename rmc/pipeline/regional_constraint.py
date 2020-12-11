@@ -347,6 +347,7 @@ def main(args):
                 start_pos=hl.agg.min(context_ht.locus.position),
             )
             ht = ht.annotate(
+                start_pos=transcript_ht[context_ht.transcript].start_pos,
                 end_pos=transcript_ht[context_ht.transcript].end_pos,
                 transcript_len=(transcript_ht.end_pos - transcript_ht.start_pos) + 1,
             )
