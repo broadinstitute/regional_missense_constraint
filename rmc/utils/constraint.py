@@ -898,7 +898,7 @@ def search_for_two_breaks(
     exome_ht: hl.Table,
     chisq_threshold: float = 13.8,
     num_obs_var: int = 10,
-) -> Union[hl.Table, None]:
+) -> hl.Table:
     """
     Searches for evidence of constraint within a set window size/number of base pairs.
 
@@ -914,12 +914,29 @@ def search_for_two_breaks(
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
     :param int num_obs_var: Number of observed variants. Used when determining the window size for simultaneous breaks. 
         Default is 10, meaning that the window size for simultaneous breaks is the average number of base pairs required to see 10 observed variants.
-    :return: Tuple of largest chi-square value and breakpoint positions if significant break was found. Otherwise, None.
-    :rtype: Union[hl.Table, None]
+    :return: Table annotated with is_break at the *end* position of a simultaneous break window.
+    :rtype: hl.Table
     """
     break_size = get_avg_bases_between_mis(exome_ht) * num_obs_var
     logger.info(
         f"Number of bases to search for constraint (size for simultaneous breaks): {break_size}"
+    )
+
+    logger.info(
+        "Annotating each row with previous row's forward observed, expected, and OE values..."
+    )
+    # Previous row's forward obs, exp, OE values reflect the previous transcript section's total obs, exp, OE values
+    ht = ht.annotate(position=hl.format("%s_%s", ht.transcript, ht.locus.position))
+    ht = ht.annotate(
+        prev_values=hl.scan.group_by(
+            ht.position,
+            hl.struct(
+                prev_obs=hl.scan._prev_nonnull(ht.cumulative_obs[ht.transcript]),
+                prev_exp=hl.scan._prev_nonnull(ht.cumulative_exp),
+                prev_oe=hl.scan._prev_nonnull(ht.forward_oe),
+                prev_pos=hl.scan._prev_nonnull(ht.locus.position),
+            ),
+        )
     )
 
     logger.info(
@@ -935,28 +952,48 @@ def search_for_two_breaks(
             ht.locus.position - (break_size - 1),
         )
     )
-    # Annotate HT with position directly before window start
+
+    # This step is probably really slow, but not sure how to fix yet
+    # Update window start, as start position isn't necessarily present in context HT
+    # (context HT filtered to loci with possible missense variants only)
+    # Get list of all positions
+    all_pos = ht.aggregate(hl.agg.collect_as_set(ht.locus.position))
+    # Get list of all window starts
+    all_windows = ht.aggregate(hl.agg.collect(ht.window_start))
+
+    def _get_closest_pos(all_windows, all_pos) -> List[int]:
+        """
+        Checks list of all window start positions and finds closest position in HT for each window start.
+
+        :param List[int] all_windows: List of all window start positions.
+        :param List[int] all_pos: List of all positions present in HT.
+        :return: List of closest position actually present in HT for each window start.
+        :rtype: List[int]
+        """
+        close_list = []
+        for num in all_windows:
+            close_list.append(min(all_pos, key=lambda x: abs(x - num)))
+        return close_list
+
+    # Annotate HT with position closest to each window's start
+    ht = ht.add_index()
+    ht = ht.annotate(close_list=_get_closest_pos(all_windows, all_pos))
+
+    # Add closest window start position annotation
+    ht = ht.annotate(window_start_close=ht.window_start_new[hl.int(ht.idx)])
+
+    # Use closest window start position to get first position pre-window
     ht = ht.annotate(
-        pre_window_pos=hl.or_missing(
-            hl.is_defined(ht.window_start), ht.window_start - 1,
+        pre_window_pos=hl.if_else(
+            # Closest start position is already outside window is it's < position - (break_size - 1)
+            ht.window_start_close < ht.locus.position - (break_size - 1),
+            ht.window_start_close,
+            ht.prev_values[
+                hl.format("%s_%s", ht.transcript, ht.window_start_close)
+            ].prev_pos,
         )
     )
 
-    logger.info(
-        "Annotating each row with previous row's forward observed, expected, and OE values..."
-    )
-    # Previous row's forward obs, exp, OE values reflect the previous transcript section's total obs, exp, OE values
-    ht = ht.annotate(position=hl.format("%s_%s", ht.transcript, ht.locus.position))
-    ht = ht.annotate(
-        prev_values=hl.scan.group_by(
-            ht.position,
-            hl.struct(
-                prev_obs=hl.scan._prev_nonnull(ht.cumulative_obs[ht.transcript]),
-                prev_exp=hl.scan._prev_nonnull(ht.cumulative_exp),
-                prev_oe=hl.scan._prev_nonnull(ht.forward_oe),
-            ),
-        )
-    )
     return search_for_break(
         ht, "transcript", simul_break=True, chisq_threshold=chisq_threshold
     )
