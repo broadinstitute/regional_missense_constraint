@@ -351,34 +351,27 @@ def main(args):
                 end_pos=transcript_ht[context_ht.transcript].end_pos,
             )
 
-            two_breaks = {}
-            transcripts = context_ht.aggregate(
-                hl.agg.collect_as_set(context_ht.transcript)
+            logger.info("Searching for transcripts with simultaneous breaks...")
+            all_transcripts = context_ht.aggregate(
+                hl.agg.collect_as_set(context_ht.transcripts), _localize=False
             )
-            for transcript in transcripts:
-                break_info = search_for_two_breaks(
-                    ht=context_ht,
-                    exome_ht=exome_ht,
-                    transcript=transcript,
-                    chisq_threshold=args.chisq_threshold,
-                    num_obs_var=args.num_obs_var,
-                )
+            ht = search_for_two_breaks(
+                ht=context_ht,
+                exome_ht=exome_ht,
+                chisq_threshold=args.chisq_threshold,
+                num_obs_var=args.num_obs_var,
+            )
+            is_break_ht = ht.filter(ht.is_break)
+            transcripts = is_break_ht.aggregate(
+                hl.agg.collect_as_set(is_break_ht.transcript), _localize=False
+            )
 
-                # If search_for_two_breaks doesn't return None, store the return value (HT)
-                if break_info:
-                    two_breaks[transcript] = break_info
-
-            # Join all small tables and return
-            two_breaks = hl.literal(two_breaks)
-            no_break_transcripts = transcripts.difference(two_breaks.key_set())
-            simul_break_ht = hl.fold(
-                lambda i, j: i.union(j), hl.utils.range_table(0), two_breaks.values()
+            logger.info("Annotating globals and writing...")
+            ht = ht.annotate_globals(
+                no_break_transcripts=all_transcripts.difference(transcripts),
+                simul_break_transcripts=transcripts,
             )
-            simul_break_ht = simul_break_ht.annotate_globals(
-                no_break_transcripts=no_break_transcripts,
-                two_break_transcripts=two_breaks.key_set(),
-            )
-            simul_break_ht.repartition(args.n_partitions).write(simul_break.path)
+            ht.repartition(args.n_partitions).write(simul_break.path)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
