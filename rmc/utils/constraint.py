@@ -958,39 +958,38 @@ def search_for_two_breaks(
     # (context HT filtered to loci with possible missense variants only)
     # Get list of all positions
     all_pos = ht.aggregate(hl.agg.collect_as_set(ht.locus.position))
-    # Get list of all window starts
-    all_windows = ht.aggregate(
-        hl.agg.filter(hl.is_defined(ht.window_start), hl.agg.collect(ht.window_start)),
-    )
 
-    def _get_closest_pos(all_windows, all_pos) -> List[int]:
+    def _get_closest_pos(pos: hl.expr.Int64Expression, all_pos: List[int]) -> int:
         """
         Checks list of all window start positions and finds closest position in HT for each window start.
 
-        :param List[int] all_windows: List of all window start positions.
+        :param hl.expr.Int64Expression all_windows: List of all window start positions.
         :param List[int] all_pos: List of all positions present in HT.
         :return: List of closest position actually present in HT for each window start.
         :rtype: List[int]
         """
-        close_list = []
-        for num in all_windows:
-            close_list.append(min(all_pos, key=lambda x: abs(x - num)))
-        return close_list
+        pos = pos.take(1)[0]
+        return min(all_pos, key=lambda x: abs(x - pos))
 
     logger.info("Annotating HT with position closest to each window start...")
-    ht = ht.add_index()
-    ht = ht.annotate(window_start_new=_get_closest_pos(all_windows, all_pos))
-    ht = ht.annotate(window_start_close=ht.window_start_new[hl.int(ht.idx)])
+    ht = ht.annotate(
+        window_start_close=hl.or_missing(
+            hl.is_defined(ht.window_start), _get_closest_pos(ht.locus.position, all_pos)
+        )
+    )
 
     # Use closest window start position to get first position pre-window
     ht = ht.annotate(
-        pre_window_pos=hl.if_else(
-            # Closest start position is already outside window is it's < position - (break_size - 1)
-            ht.window_start_close < ht.locus.position - (break_size - 1),
-            ht.window_start_close,
-            ht.prev_values[
-                hl.format("%s_%s", ht.transcript, ht.window_start_close)
-            ].prev_pos,
+        pre_window_pos=hl.or_missing(
+            hl.is_defined(ht.window_start_close),
+            hl.if_else(
+                # Closest start position is already outside window is it's < position - (break_size - 1)
+                ht.window_start_close < ht.locus.position - (break_size - 1),
+                ht.window_start_close,
+                ht.prev_values[
+                    hl.format("%s_%s", ht.transcript, ht.window_start_close)
+                ].prev_pos,
+            ),
         )
     )
 
