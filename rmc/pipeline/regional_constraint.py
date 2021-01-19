@@ -353,7 +353,7 @@ def main(args):
 
             logger.info("Searching for transcripts with simultaneous breaks...")
             all_transcripts = context_ht.aggregate(
-                hl.agg.collect_as_set(context_ht.transcripts), _localize=False
+                hl.agg.collect_as_set(context_ht.transcript), _localize=False
             )
             ht = search_for_two_breaks(
                 ht=context_ht,
