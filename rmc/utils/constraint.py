@@ -977,11 +977,9 @@ def search_for_two_breaks(
             close_list.append(min(all_pos, key=lambda x: abs(x - num)))
         return close_list
 
-    # Annotate HT with position closest to each window's start
+    logger.info("Annotating HT with position closest to each window start...")
     ht = ht.add_index()
     ht = ht.annotate(window_start_new=_get_closest_pos(all_windows, all_pos))
-
-    # Add closest window start position annotation
     ht = ht.annotate(window_start_close=ht.window_start_new[hl.int(ht.idx)])
 
     # Use closest window start position to get first position pre-window
