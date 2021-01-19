@@ -963,7 +963,7 @@ def search_for_two_breaks(
         """
         Checks list of all window start positions and finds closest position in HT for each window start.
 
-        :param hl.expr.Int64Expression all_windows: List of all window start positions.
+        :param hl.expr.Int64Expression pos: Input window start position.
         :param List[int] all_pos: List of all positions present in HT.
         :return: List of closest position actually present in HT for each window start.
         :rtype: List[int]
