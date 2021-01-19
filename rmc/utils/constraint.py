@@ -959,7 +959,9 @@ def search_for_two_breaks(
     # Get list of all positions
     all_pos = ht.aggregate(hl.agg.collect_as_set(ht.locus.position))
     # Get list of all window starts
-    all_windows = ht.aggregate(hl.agg.collect(ht.window_start))
+    all_windows = ht.aggregate(
+        hl.agg.filter(hl.is_defined(ht.window_start), hl.agg.collect(ht.window_start)),
+    )
 
     def _get_closest_pos(all_windows, all_pos) -> List[int]:
         """
