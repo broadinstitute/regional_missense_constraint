@@ -953,23 +953,50 @@ def search_for_two_breaks(
         )
     )
 
-    # This step is probably really slow, but not sure how to fix yet
     # Update window start, as start position isn't necessarily present in context HT
     # (context HT filtered to loci with possible missense variants only)
     # Get list of all positions
-    all_pos = ht.aggregate(hl.agg.collect_as_set(ht.locus.position))
+    all_pos = ht.aggregate(hl.agg.collect(ht.locus.position), _localize=False)
 
-    def _get_closest_pos(pos: hl.expr.Int64Expression, all_pos: List[int]) -> int:
+    def _get_closest_pos(
+        pos: hl.expr.Int64Expression, all_pos: hl.expr.ArrayExpression
+    ) -> int:
         """
         Checks list of all window start positions and finds closest position in HT for each window start.
 
-        :param hl.expr.Int64Expression pos: Input window start position.
-        :param List[int] all_pos: List of all positions present in HT.
-        :return: List of closest position actually present in HT for each window start.
-        :rtype: List[int]
+        This function assumes all_pos is sorted 
+        (and all_pos should be sorted, if it is created from a table keyed by locus and alleles).
+        
+        In the event of a tie, this function will return the *smallest* position that is 
+        closest to the position of interest.
+        For example, if the position of interest is 4, and the list of positions is [1, 7, 10, 14],
+        the closest positions are either 1 or 7. This function will return 1.
+
+        :param hl.expr.Int64Expression pos: Position of interest.
+        :param hl.expr.ArrayExpression all_pos: ArrayExpression containing list of all positions.      
         """
-        pos = pos.take(1)[0]
-        return min(all_pos, key=lambda x: abs(x - pos))
+
+        def _return_closest(
+            l: hl.expr.Int64Expression, r: hl.expr.Int64Expression
+        ) -> hl.expr.Int64Expression:
+            """
+            Function to return whether left number (l) or right number (r) is closer to input position.
+
+            `l` and `r` are both numbers from an ArrayExpression. 
+            `l` is the number with the smaller index (on the left).
+            `r` is the number with the larger index (on the right).
+
+            :param hl.expr.Int64Expression l: Left number.
+            :param hl.expr.Int64Expression r: Right number.
+            :return: `l` or `r`, whichever is closest to the input position `pos`.
+            :rtype: hl.expr.Int64Expression
+            """
+            # NOTE: this has to be less than or equal to to return the *smaller* position in the event of a tie
+            # Just less than will return the *larger* number
+            # Solution adapted from https://discuss.hail.is/t/find-value-closest-to-input-in-list/1903
+            return hl.if_else(hl.abs(l - pos) <= hl.abs(r - pos), l, r)
+
+        return hl.fold(_return_closest, all_pos[0], all_pos[1:])
 
     logger.info("Annotating HT with position closest to each window start...")
     ht = ht.annotate(
