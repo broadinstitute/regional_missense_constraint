@@ -8,6 +8,7 @@ from rmc.resources.basics import (
     constraint_prep,
     LOGGING_PATH,
     multiple_breaks,
+    no_breaks,
     not_one_break,
     one_break,
     simul_break,
@@ -361,17 +362,19 @@ def main(args):
                 chisq_threshold=args.chisq_threshold,
                 num_obs_var=args.num_obs_var,
             )
+            logger.info("Writing out simultaneous breaks HT...")
             is_break_ht = ht.filter(ht.is_break)
+            is_break_ht = is_break_ht.checkpoint(
+                simul_break.path, overwrite=args.overwrite
+            )
             transcripts = is_break_ht.aggregate(
                 hl.agg.collect_as_set(is_break_ht.transcript), _localize=False
             )
 
-            logger.info("Annotating globals and writing...")
-            ht = ht.annotate_globals(
-                no_break_transcripts=all_transcripts.difference(transcripts),
-                simul_break_transcripts=transcripts,
-            )
-            ht.repartition(args.n_partitions).write(simul_break.path)
+            logger.info("Writing out transcripts with no breaks...")
+            no_break_transcripts = all_transcripts.difference(transcripts)
+            ht = ht.filter(no_break_transcripts.contains(ht.transcript))
+            ht.write(no_breaks.path, overwrite=args.overwrite)
 
     finally:
         logger.info("Copying hail log to logging bucket...")

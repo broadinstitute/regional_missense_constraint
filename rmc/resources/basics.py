@@ -126,15 +126,25 @@ multiple_breaks = VersionedTableResource(
 Table containing transcripts with multiple breaks. 
 
 """
-          
+
 simul_break = VersionedTableResource(
     default_version=GNOMAD_VER,
     versions={
         GNOMAD_VER: TableResource(
             path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/simul_break.ht"
         )
-    }
+    },
 )
 """
-Table containing transcripts without two simultaneous breaks.
+Table containing transcripts with two simultaneous breaks.
+"""
+
+no_breaks = VersionedTableResource(
+    default_version=GNOMAD_VER,
+    versions={
+        GNOMAD_VER: TableResource(path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/no_breaks.ht")
+    },
+)
+"""
+Table containing transcripts with no significant breaks.
 """

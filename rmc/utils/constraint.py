@@ -7,6 +7,7 @@ from gnomad.utils.reference_genome import get_reference_genome
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
+from rmc.resources.basics import temp_path
 from rmc.utils.generic import (
     get_coverage_correction_expr,
     get_exome_bases,
@@ -1019,6 +1020,7 @@ def search_for_two_breaks(
             ),
         )
     )
+    ht = ht.checkpoint(f"{temp_path}/simul_break_prep.ht", overwrite=True)
 
     return search_for_break(
         ht, "transcript", simul_break=True, chisq_threshold=chisq_threshold
