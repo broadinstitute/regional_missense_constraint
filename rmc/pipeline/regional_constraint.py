@@ -353,9 +353,6 @@ def main(args):
             )
 
             logger.info("Searching for transcripts with simultaneous breaks...")
-            all_transcripts = context_ht.aggregate(
-                hl.agg.collect_as_set(context_ht.transcript), _localize=False
-            )
             ht = search_for_two_breaks(
                 ht=context_ht,
                 exome_ht=exome_ht,
@@ -372,8 +369,7 @@ def main(args):
             )
 
             logger.info("Writing out transcripts with no breaks...")
-            no_break_transcripts = all_transcripts.difference(transcripts)
-            ht = ht.filter(no_break_transcripts.contains(ht.transcript))
+            ht = ht.filter(~transcripts.contains(ht.transcript))
             ht.write(no_breaks.path, overwrite=args.overwrite)
 
     finally:
