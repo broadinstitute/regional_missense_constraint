@@ -481,6 +481,7 @@ def search_for_break(
     ht: hl.Table,
     search_field: hl.str,
     simul_break=False,
+    prev: bool = False,
     chisq_threshold: float = 10.8,
 ) -> hl.Table:
     """
@@ -498,8 +499,10 @@ def search_for_break(
         - reverse struct
         - reverse_obs_exp
     If searching for simultaneous breaks, expects HT to have the following fields:
-        - pre_window_pos
-        - prev_values
+        If prev is True:
+            - pre_window_pos and prev_values
+        Otherwise:
+            - post_window_pos and next_values
     Also expects:
         - multiallelic variants in input HT have been split.
         - Input HT is autosomes/PAR only, X non-PAR only, or Y non-PAR only.
@@ -509,6 +512,7 @@ def search_for_break(
     :param hl.Table ht: Input context Table.
     :param hl.expr.StringExpression search_field: Field of table to search. Value should be either 'transcript' or 'section'. 
     :param bool simul_break: Whether this function is searching for simultaneous breaks. Default is False.
+    :param bool prev: Whether simultaneous breaks were calculated with code that uses prev_nonnull. Default if False.
     :param float chisq_threshold: Chi-square significance threshold. 
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
         Default is 10.8.
@@ -522,63 +526,148 @@ def search_for_break(
 
     # Split transcript into three sections if searching for simultaneous breaks
     if simul_break:
-        pre_window_expr = hl.format("%s_%s", ht.transcript, ht.pre_window_pos)
-        ht = ht.annotate(
-            section_null=[
-                # Get null expression for section of transcript pre-window
-                get_dpois_expr(
-                    cond_expr=True,
-                    section_oe_expr=ht.overall_oe,
-                    obs_expr=ht.prev_values[pre_window_expr].prev_obs,
-                    exp_expr=ht.prev_values[pre_window_expr].prev_oe,
-                ),
-                # Get null expression for window of constraint
-                get_dpois_expr(
-                    cond_expr=True,
-                    section_oe_expr=ht.overall_oe,
-                    obs_expr=ht.cumulative_obs[ht.transcript],
-                    exp_expr=ht.cumulative_exp,
-                ),
-                # Get null expression for section of transcript post-window
-                get_dpois_expr(
-                    cond_expr=True,
-                    section_oe_expr=ht.overall_oe,
-                    obs_expr=ht.reverse.obs,
-                    exp_expr=ht.reverse.exp,
-                ),
-            ]
-        )
-        ht = ht.annotate(
-            section_alt=[
-                # Get alt expression for section of transcript pre-window
-                get_dpois_expr(
-                    cond_expr=True,
-                    section_oe_expr=ht.prev_values[pre_window_expr].prev_oe,
-                    obs_expr=ht.prev_values[pre_window_expr].prev_obs,
-                    exp_expr=ht.prev_values[pre_window_expr].prev_oe,
-                ),
-                # Get alt expression for window of constraint
-                get_dpois_expr(
-                    cond_expr=True,
-                    section_oe_expr=get_obs_exp_expr(
+        if prev:
+            pre_window_expr = hl.format("%s_%s", ht.transcript, ht.pre_window_pos)
+            ht = ht.annotate(
+                section_null=[
+                    # Get null expression for section of transcript pre-window
+                    get_dpois_expr(
                         cond_expr=True,
+                        section_oe_expr=ht.overall_oe,
+                        obs_expr=ht.prev_values[pre_window_expr].prev_obs,
+                        exp_expr=ht.prev_values[pre_window_expr].prev_exp,
+                    ),
+                    # Get null expression for window of constraint
+                    get_dpois_expr(
+                        cond_expr=True,
+                        section_oe_expr=ht.overall_oe,
                         obs_expr=ht.cumulative_obs[ht.transcript],
                         exp_expr=ht.cumulative_exp,
                     ),
-                    obs_expr=ht.cumulative_obs[ht.transcript],
-                    exp_expr=ht.cumulative_exp,
-                ),
-                # Get alt expression for section of transcript post-window
-                get_dpois_expr(
-                    cond_expr=True,
-                    section_oe_expr=get_obs_exp_expr(
-                        cond_expr=True, obs_expr=ht.reverse.obs, exp_expr=ht.reverse.exp
+                    # Get null expression for section of transcript post-window
+                    get_dpois_expr(
+                        cond_expr=True,
+                        section_oe_expr=ht.overall_oe,
+                        obs_expr=ht.reverse.obs,
+                        exp_expr=ht.reverse.exp,
                     ),
-                    obs_expr=ht.reverse.obs,
-                    exp_expr=ht.reverse.exp,
-                ),
-            ]
-        )
+                ]
+            )
+            ht = ht.annotate(
+                section_alt=[
+                    # Get alt expression for section of transcript pre-window
+                    get_dpois_expr(
+                        cond_expr=True,
+                        section_oe_expr=ht.prev_values[pre_window_expr].prev_oe,
+                        obs_expr=ht.prev_values[pre_window_expr].prev_obs,
+                        exp_expr=ht.prev_values[pre_window_expr].prev_exp,
+                    ),
+                    # Get alt expression for window of constraint
+                    get_dpois_expr(
+                        cond_expr=True,
+                        section_oe_expr=get_obs_exp_expr(
+                            cond_expr=True,
+                            obs_expr=ht.cumulative_obs[ht.transcript],
+                            exp_expr=ht.cumulative_exp,
+                        ),
+                        obs_expr=ht.cumulative_obs[ht.transcript],
+                        exp_expr=ht.cumulative_exp,
+                    ),
+                    # Get alt expression for section of transcript post-window
+                    get_dpois_expr(
+                        cond_expr=True,
+                        section_oe_expr=get_obs_exp_expr(
+                            cond_expr=True,
+                            obs_expr=ht.reverse.obs,
+                            exp_expr=ht.reverse.exp,
+                        ),
+                        obs_expr=ht.reverse.obs,
+                        exp_expr=ht.reverse.exp,
+                    ),
+                ]
+            )
+        else:
+            ht = ht.annotate(
+                section_null=[
+                    # Get null expression for section of transcript pre-window
+                    # These values are the current cumulative values minus the value for the site
+                    get_dpois_expr(
+                        cond_expr=True,
+                        section_oe_expr=ht.overall_oe,
+                        obs_expr=ht.cumulative_obs[ht.transcript] - ht.observed,
+                        exp_expr=ht.cumulative_exp
+                        - translate_mu_to_exp_expr(
+                            (ht._mu_scan - ht.mu_snp),
+                            ht.position,
+                            ht.total_mu,
+                            ht.total_exp,
+                        ),
+                    ),
+                    # Get null expression for window of constraint
+                    get_dpois_expr(
+                        cond_expr=True,
+                        section_oe_expr=ht.overall_oe,
+                        obs_expr=ht.cumulative_obs[ht.transcript],
+                        exp_expr=ht.cumulative_exp,
+                    ),
+                    # Get null expression for section of transcript post-window
+                    get_dpois_expr(
+                        cond_expr=True,
+                        section_oe_expr=ht.overall_oe,
+                        obs_expr=ht.total_obs - ht.next_values.obs,
+                        exp_expr=ht.total_exp - ht.next_values.exp,
+                    ),
+                ]
+            )
+            ht = ht.annotate(
+                section_alt=[
+                    # Get alt expression for section of transcript pre-window
+                    get_dpois_expr(
+                        cond_expr=True,
+                        section_oe_expr=get_obs_exp_expr(
+                            cond_expr=True,
+                            obs_expr=ht.cumulative_obs[ht.transcript] - ht.observed,
+                            exp_expr=ht.cumulative_exp
+                            - translate_mu_to_exp_expr(
+                                (ht._mu_scan - ht.mu_snp),
+                                ht.position,
+                                ht.total_mu,
+                                ht.total_exp,
+                            ),
+                        ),
+                        obs_expr=ht.cumulative_obs[ht.transcript] - ht.observed,
+                        exp_expr=ht.cumulative_exp
+                        - translate_mu_to_exp_expr(
+                            (ht._mu_scan - ht.mu_snp),
+                            ht.position,
+                            ht.total_mu,
+                            ht.total_exp,
+                        ),
+                    ),
+                    # Get alt expression for window of constraint
+                    get_dpois_expr(
+                        cond_expr=True,
+                        section_oe_expr=get_obs_exp_expr(
+                            cond_expr=True,
+                            obs_expr=ht.cumulative_obs[ht.transcript],
+                            exp_expr=ht.cumulative_exp,
+                        ),
+                        obs_expr=ht.cumulative_obs[ht.transcript],
+                        exp_expr=ht.cumulative_exp,
+                    ),
+                    # Get alt expression for section of transcript post-window
+                    get_dpois_expr(
+                        cond_expr=True,
+                        section_oe_expr=get_obs_exp_expr(
+                            cond_expr=True,
+                            obs_expr=ht.total_obs - ht.next_values.obs,
+                            exp_expr=ht.total_exp - ht.next_values.exp,
+                        ),
+                        obs_expr=ht.total_obs - ht.next_values.obs,
+                        exp_expr=ht.total_exp - ht.next_values.exp,
+                    ),
+                ]
+            )
 
     # Otherwise, split transcript only into two sections (when searching for first/additional breaks)
     else:
@@ -894,7 +983,8 @@ def get_avg_bases_between_mis(ht: hl.Table) -> int:
     return round(total_bases / total_variants)
 
 
-def search_for_two_breaks(
+# NOTE: renaming this function because don't want to delete yet
+def search_for_two_breaks_prev(
     ht: hl.Table,
     exome_ht: hl.Table,
     chisq_threshold: float = 13.8,
@@ -1001,27 +1091,125 @@ def search_for_two_breaks(
 
     logger.info("Annotating HT with position closest to each window start...")
     ht = ht.annotate(
-        window_start_close=hl.or_missing(
+        pre_window_pos=hl.or_missing(
             hl.is_defined(ht.window_start), _get_closest_pos(ht.locus.position, all_pos)
         )
     )
-
-    # Use closest window start position to get first position pre-window
-    ht = ht.annotate(
-        pre_window_pos=hl.or_missing(
-            hl.is_defined(ht.window_start_close),
-            hl.if_else(
-                # Closest start position is already outside window is it's < position - (break_size - 1)
-                ht.window_start_close < ht.locus.position - (break_size - 1),
-                ht.window_start_close,
-                ht.prev_values[
-                    hl.format("%s_%s", ht.transcript, ht.window_start_close)
-                ].prev_pos,
-            ),
+    # Check if pre window pos is ever larger than window_start
+    check_start = ht.aggregate(hl.agg.count_where(ht.pre_window_pos > ht.window_start))
+    if check_start > 0:
+        raise DataException(
+            f"Position closest to window start for HT is larger than window start position in {check_start} cases!"
         )
-    )
     ht = ht.checkpoint(f"{temp_path}/simul_break_prep.ht", overwrite=True)
 
+    return search_for_break(
+        ht, "transcript", simul_break=True, chisq_threshold=chisq_threshold
+    )
+
+
+# Test adding a ton of scans instead of using prev_nonnull
+def search_for_two_breaks_test(
+    ht: hl.Table,
+    exome_ht: hl.Table,
+    chisq_threshold: float = 13.8,
+    num_obs_var: int = 10,
+) -> hl.Table:
+    """
+    Searches for evidence of constraint within a set window size/number of base pairs.
+
+    Function is designed to search in transcripts that didn't have one single significant break.
+    Currently designed to one run one transcript at a time.
+
+    Assumes that:
+        - Input Table has a field named 'transcript'.
+
+    :param hl.Table ht: Input Table.
+    :param hl.Table exome_ht: Table containing variants from gnomAD exomes.
+    :param float chisq_threshold: Chi-square significance threshold. 
+        Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
+    :param int num_obs_var: Number of observed variants. Used when determining the window size for simultaneous breaks. 
+        Default is 10, meaning that the window size for simultaneous breaks is the average number of base pairs required to see 10 observed variants.
+    :return: Table annotated with is_break at the *end* position of a simultaneous break window.
+    :rtype: hl.Table
+    """
+    break_size = get_avg_bases_between_mis(exome_ht) * num_obs_var
+    logger.info(
+        f"Number of bases to search for constraint (size for simultaneous breaks): {break_size}"
+    )
+
+    logger.info(
+        "Re-starting scan at every position to calculate cumulative observed, expected, and OE values ..."
+    )
+    ht = ht.annotate(position=hl.format("%s_%s", ht.transcript, ht.locus.position))
+    # Overwrite current _obs_scan and _mu_scan expressions
+    ht = ht.annotate(
+        _obs_scan=(get_cumulative_obs_expr(ht.position, ht[obs_str])),
+        _mu_scan=(get_cumulative_mu_expr(ht.position, ht[mu_str])),
+    )
+    ht = ht.annotate(
+        cum_obs_restart=adjust_obs_expr(ht._obs_scan, ht[obs_str], ht.position),
+        _mu_scan=adjust_mu_expr(ht._mu_scan, ht[mu_str], ht.position),
+    )
+    ht = ht.annotate(
+        cum_exp_restart=translate_mu_to_exp_expr(
+            ht._mu_scan, ht.position, ht[total_mu_str], ht[total_exp_str]
+        )
+    )
+    logger.info(
+        "Annotating each row with previous row's forward observed, expected, and OE values..."
+    )
+
+    logger.info(
+        f"Annotating each position with end position for window \
+        if position + {break_size - 1} bases is less than or equal to the transcript stop pos..."
+    )
+    ht = ht.annotate(
+        window_end=hl.or_missing(
+            # Window start is defined only if position + (break_size - 1) is less than or
+            # equal to the transcript end position
+            # e.g., if position is 8, break size is 3, and end position is 12, then window_end is 8 + (3-1) = 10
+            (ht.locus.position + (break_size - 1) <= ht.end_pos),
+            ht.locus.position + (break_size - 1),
+        )
+    )
+
+    logger.info("Annotating HT with position closest to each window end...")
+    all_pos = ht.aggregate(hl.agg.collect(ht.locus.position), _localize=False)
+    ht = ht.annotate(
+        post_window_pos=hl.or_missing(
+            hl.is_defined(ht.window_end),
+            all_pos[hl.binary_search(all_pos, ht.window_end)],
+        ),
+    )
+    ht = ht.checkpoint(f"{temp_path}/simul_break_prep.ht", overwrite=True)
+    # Check if post window pos is ever smaller than window_end
+    check_end = ht.aggregate(hl.agg.count_where(ht.window_end > ht.post_window_pos))
+    if check_end > 0:
+        raise DataException(
+            f"Position closest to window end for HT is smaller than window end position in {check_end} cases!"
+        )
+
+    # Create new HT with obs, exp, and OE values for post-window positions
+    # This is to get the values for the section of the transcript after the window
+    next_ht = ht.select("post_window_pos",)
+    # Add new_locus annotation to pull obs, exp, OE values for post window position
+    next_ht = next_ht.annotate(
+        new_locus=hl.locus(next_ht.locus.contig, next_ht.post_window_pos)
+    )
+    next_ht = next_ht.key_by("new_locus", "transcript")
+    next_ht = next_ht.annotate(
+        next_values=hl.struct(
+            obs=ht[next_ht.key].cumulative_obs[next_ht.transcript],
+            exp=ht[next_ht.key].cumulative_exp,
+            oe=ht[next_ht.key].forward_oe,
+        )
+    )
+    # Re-key by locus and transcript to join back onto to original HT
+    next_ht = next_ht.key_by("locus", "transcript")
+    ht = ht.annotate(next_values=next_ht[ht.key].next_values)
+
+    logger.info("Searching for two breaks...")
     return search_for_break(
         ht, "transcript", simul_break=True, chisq_threshold=chisq_threshold
     )
