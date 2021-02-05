@@ -3,6 +3,7 @@ from typing import Dict, List, Union
 
 import hail as hl
 
+from gnomad.resources.resource_utils import DataException
 from gnomad.utils.reference_genome import get_reference_genome
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
@@ -492,12 +493,14 @@ def search_for_break(
         - alleles
         - transcript or section
         - coverage (median)
-        - mu
+        - mu_snp
         - scan_counts struct
         - overall_oe
         - forward_oe
         - reverse struct
         - reverse_obs_exp
+        - total_obs
+        - total_exp
     If searching for simultaneous breaks, expects HT to have the following fields:
         If prev is True:
             - pre_window_pos and prev_values
@@ -1112,6 +1115,10 @@ def search_for_two_breaks_prev(
 def search_for_two_breaks_test(
     ht: hl.Table,
     exome_ht: hl.Table,
+    obs_str: str = "observed",
+    mu_str: str = "mu_snp",
+    total_mu_str: str = "total_mu",
+    total_exp_str: str = "total_exp",
     chisq_threshold: float = 13.8,
     num_obs_var: int = 10,
 ) -> hl.Table:
@@ -1126,6 +1133,10 @@ def search_for_two_breaks_test(
 
     :param hl.Table ht: Input Table.
     :param hl.Table exome_ht: Table containing variants from gnomAD exomes.
+    :param str obs_str: Name of observed variant counts annotation. Default is 'observed'.
+    :param str mu_str: Name of mutation rate probability per site annotation. Default is 'mu_snp'.
+    :param str total_mu_str: Name of annotation containing sum of mutation rate probabilities per transcript. Default is 'total_mu'.
+    :param str total_exp_str: Name of annotation containing total expected variant counts per transcript. Default is 'total_exp'.
     :param float chisq_threshold: Chi-square significance threshold. 
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
     :param int num_obs_var: Number of observed variants. Used when determining the window size for simultaneous breaks. 
@@ -1192,21 +1203,20 @@ def search_for_two_breaks_test(
 
     # Create new HT with obs, exp, and OE values for post-window positions
     # This is to get the values for the section of the transcript after the window
-    next_ht = ht.select("post_window_pos",)
+    next_ht = ht.select("post_window_pos")
     # Add new_locus annotation to pull obs, exp, OE values for post window position
     next_ht = next_ht.annotate(
         new_locus=hl.locus(next_ht.locus.contig, next_ht.post_window_pos)
     )
-    next_ht = next_ht.key_by("new_locus", "transcript")
     next_ht = next_ht.annotate(
         next_values=hl.struct(
-            obs=ht[next_ht.key].cumulative_obs[next_ht.transcript],
-            exp=ht[next_ht.key].cumulative_exp,
-            oe=ht[next_ht.key].forward_oe,
+            obs=ht[next_ht.new_locus, next_ht.transcript].cumulative_obs[
+                next_ht.transcript
+            ],
+            exp=ht[next_ht.new_locus, next_ht.transcript].cumulative_exp,
+            oe=ht[next_ht.new_locus, next_ht.transcript].forward_oe,
         )
     )
-    # Re-key by locus and transcript to join back onto to original HT
-    next_ht = next_ht.key_by("locus", "transcript")
     ht = ht.annotate(next_values=next_ht[ht.key].next_values)
 
     logger.info("Searching for two breaks...")
