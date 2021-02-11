@@ -607,18 +607,31 @@ def search_for_break(
                         ),
                     ),
                     # Get null expression for window of constraint
+                    # These values are the cumulative values at the first position post-window minus
+                    # the cumulative values at the current window
+                    # Also minus the value of the observed or expected variants at the first position post-window
+                    # This subtraction is for both obs and exp in case the first position post window has an observed variant
+                    # (otherwise you'd overcount the number of obs within the window)
                     get_dpois_expr(
                         cond_expr=True,
                         section_oe_expr=ht.overall_oe,
-                        obs_expr=ht.cumulative_obs[ht.transcript],
-                        exp_expr=ht.cumulative_exp,
+                        obs_expr=(
+                            ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript]
+                        )
+                        - ht.next_values.obs,
+                        exp_expr=(ht.next_values.exp - ht.cumulative_exp)
+                        - ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
                     ),
                     # Get null expression for section of transcript post-window
+                    # These values are the reverse values at the first position post-window plus
+                    # the observed and expected values at that first position post-window
+                    # (need to add here, otherwise would undercount the number post-window)
                     get_dpois_expr(
                         cond_expr=True,
                         section_oe_expr=ht.overall_oe,
-                        obs_expr=ht.total_obs - ht.next_values.obs,
-                        exp_expr=ht.total_exp - ht.next_values.exp,
+                        obs_expr=ht.next_values.reverse_obs + ht.next_values.obs,
+                        exp_expr=ht.next_values.reverse_exp
+                        + ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
                     ),
                 ]
             )
@@ -652,22 +665,33 @@ def search_for_break(
                         cond_expr=True,
                         section_oe_expr=get_obs_exp_expr(
                             cond_expr=True,
-                            obs_expr=ht.cumulative_obs[ht.transcript],
-                            exp_expr=ht.cumulative_exp,
+                            obs_expr=(
+                                ht.next_values.cum_obs
+                                - ht.cumulative_obs[ht.transcript]
+                            )
+                            - ht.next_values.obs,
+                            exp_expr=(ht.next_values.exp - ht.cumulative_exp)
+                            - ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
                         ),
-                        obs_expr=ht.cumulative_obs[ht.transcript],
-                        exp_expr=ht.cumulative_exp,
+                        obs_expr=(
+                            ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript]
+                        )
+                        - ht.next_values.obs,
+                        exp_expr=(ht.next_values.exp - ht.cumulative_exp)
+                        - ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
                     ),
                     # Get alt expression for section of transcript post-window
                     get_dpois_expr(
                         cond_expr=True,
                         section_oe_expr=get_obs_exp_expr(
                             cond_expr=True,
-                            obs_expr=ht.total_obs - ht.next_values.obs,
-                            exp_expr=ht.total_exp - ht.next_values.exp,
+                            obs_expr=ht.next_values.reverse_obs + ht.next_values.obs,
+                            exp_expr=ht.next_values.reverse_exp
+                            + ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
                         ),
-                        obs_expr=ht.total_obs - ht.next_values.obs,
-                        exp_expr=ht.total_exp - ht.next_values.exp,
+                        obs_expr=ht.next_values.reverse_obs + ht.next_values.obs,
+                        exp_expr=ht.next_values.reverse_exp
+                        + ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
                     ),
                 ]
             )
@@ -997,7 +1021,6 @@ def search_for_two_breaks_prev(
     Searches for evidence of constraint within a set window size/number of base pairs.
 
     Function is designed to search in transcripts that didn't have one single significant break.
-    Currently designed to one run one transcript at a time.
 
     Assumes that:
         - Input Table has a field named 'transcript'.
@@ -1111,8 +1134,7 @@ def search_for_two_breaks_prev(
     )
 
 
-# Test adding a ton of scans instead of using prev_nonnull
-def search_for_two_breaks_test(
+def search_for_two_breaks(
     ht: hl.Table,
     exome_ht: hl.Table,
     obs_str: str = "observed",
@@ -1126,7 +1148,6 @@ def search_for_two_breaks_test(
     Searches for evidence of constraint within a set window size/number of base pairs.
 
     Function is designed to search in transcripts that didn't have one single significant break.
-    Currently designed to one run one transcript at a time.
 
     Assumes that:
         - Input Table has a field named 'transcript'.
@@ -1147,28 +1168,6 @@ def search_for_two_breaks_test(
     break_size = get_avg_bases_between_mis(exome_ht) * num_obs_var
     logger.info(
         f"Number of bases to search for constraint (size for simultaneous breaks): {break_size}"
-    )
-
-    logger.info(
-        "Re-starting scan at every position to calculate cumulative observed, expected, and OE values ..."
-    )
-    ht = ht.annotate(position=hl.format("%s_%s", ht.transcript, ht.locus.position))
-    # Overwrite current _obs_scan and _mu_scan expressions
-    ht = ht.annotate(
-        _obs_scan=(get_cumulative_obs_expr(ht.position, ht[obs_str])),
-        _mu_scan=(get_cumulative_mu_expr(ht.position, ht[mu_str])),
-    )
-    ht = ht.annotate(
-        cum_obs_restart=adjust_obs_expr(ht._obs_scan, ht[obs_str], ht.position),
-        _mu_scan=adjust_mu_expr(ht._mu_scan, ht[mu_str], ht.position),
-    )
-    ht = ht.annotate(
-        cum_exp_restart=translate_mu_to_exp_expr(
-            ht._mu_scan, ht.position, ht[total_mu_str], ht[total_exp_str]
-        )
-    )
-    logger.info(
-        "Annotating each row with previous row's forward observed, expected, and OE values..."
     )
 
     logger.info(
@@ -1210,11 +1209,15 @@ def search_for_two_breaks_test(
     )
     next_ht = next_ht.annotate(
         next_values=hl.struct(
-            obs=ht[next_ht.new_locus, next_ht.transcript].cumulative_obs[
+            cum_obs=ht[next_ht.new_locus, next_ht.transcript].cumulative_obs[
                 next_ht.transcript
             ],
+            obs=ht[next_ht.new_locus, next_ht.transcript].observed,
             exp=ht[next_ht.new_locus, next_ht.transcript].cumulative_exp,
+            mu_snp=ht[next_ht.new_locus, next_ht.transcript].mu_snp,
             oe=ht[next_ht.new_locus, next_ht.transcript].forward_oe,
+            reverse_obs=ht[next_ht.new_locus, next_ht.transcript].reverse.obs,
+            reverse_exp=ht[next_ht.new_locus, next_ht.transcript].reverse_exp,
         )
     )
     ht = ht.annotate(next_values=next_ht[ht.key].next_values)
