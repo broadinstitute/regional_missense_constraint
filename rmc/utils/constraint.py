@@ -1203,6 +1203,8 @@ def search_for_two_breaks(
     # Check if post window pos is ever smaller than window_end
     check_end = ht.aggregate(hl.agg.count_where(ht.window_end > ht.post_window_pos))
     if check_end > 0:
+        ht = ht.filter(ht.window_end > ht.post_window_pos)
+        ht.show()
         raise DataException(
             f"Position closest to window end for HT is smaller than window end position in {check_end} cases!"
         )
