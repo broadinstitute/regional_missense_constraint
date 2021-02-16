@@ -1191,7 +1191,7 @@ def search_for_two_breaks(
         post_window_pos=hl.if_else(
             hl.is_defined(ht.post_window_pos) & (ht.post_window_pos == hl.len(all_pos)),
             ht.post_window_pos - 1,
-            ht.pos_window_pos,
+            ht.post_window_pos,
         )
     )
 
