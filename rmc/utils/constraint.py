@@ -1193,7 +1193,7 @@ def search_for_two_breaks(
             hl.if_else(
                 ht.post_window_index == hl.len(all_pos),
                 all_pos[ht.post_window_index - 1],
-                all_pos[ht.post_window_pos],
+                all_pos[ht.post_window_index],
             ).or_missing(),
         )
     )
