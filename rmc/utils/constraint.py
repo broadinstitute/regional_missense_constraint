@@ -1137,10 +1137,6 @@ def search_for_two_breaks_prev(
 def search_for_two_breaks(
     ht: hl.Table,
     exome_ht: hl.Table,
-    obs_str: str = "observed",
-    mu_str: str = "mu_snp",
-    total_mu_str: str = "total_mu",
-    total_exp_str: str = "total_exp",
     chisq_threshold: float = 13.8,
     num_obs_var: int = 10,
 ) -> hl.Table:
@@ -1154,10 +1150,6 @@ def search_for_two_breaks(
 
     :param hl.Table ht: Input Table.
     :param hl.Table exome_ht: Table containing variants from gnomAD exomes.
-    :param str obs_str: Name of observed variant counts annotation. Default is 'observed'.
-    :param str mu_str: Name of mutation rate probability per site annotation. Default is 'mu_snp'.
-    :param str total_mu_str: Name of annotation containing sum of mutation rate probabilities per transcript. Default is 'total_mu'.
-    :param str total_exp_str: Name of annotation containing total expected variant counts per transcript. Default is 'total_exp'.
     :param float chisq_threshold: Chi-square significance threshold. 
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
     :param int num_obs_var: Number of observed variants. Used when determining the window size for simultaneous breaks. 
@@ -1192,6 +1184,18 @@ def search_for_two_breaks(
             all_pos[hl.binary_search(all_pos, ht.window_end)],
         ),
     )
+
+    # Correct post window pos: binary search will return length of all_pos array
+    # if position is the largest position
+    ht = ht.annotate(
+        post_window_pos=hl.if_else(
+            hl.is_defined(ht.post_window_pos)
+            & (ht.post_window_pos == hl.len(ht.all_pos)),
+            ht.post_window_pos - 1,
+            ht.pos_window_pos,
+        )
+    )
+
     ht = ht.checkpoint(f"{temp_path}/simul_break_prep.ht", overwrite=True)
     # Check if post window pos is ever smaller than window_end
     check_end = ht.aggregate(hl.agg.count_where(ht.window_end > ht.post_window_pos))
