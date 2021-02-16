@@ -1180,8 +1180,7 @@ def search_for_two_breaks(
     all_pos = ht.aggregate(hl.agg.collect(ht.locus.position), _localize=False)
     ht = ht.annotate(
         post_window_index=hl.or_missing(
-            hl.is_defined(ht.window_end),
-            all_pos[hl.binary_search(all_pos, ht.window_end)],
+            hl.is_defined(ht.window_end), hl.binary_search(all_pos, ht.window_end),
         ),
     )
 
