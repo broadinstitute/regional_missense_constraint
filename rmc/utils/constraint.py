@@ -1188,13 +1188,17 @@ def search_for_two_breaks(
     # Correct post window pos: binary search will return length of all_pos array
     # if position is the largest position
     ht = ht.transmute(
-        post_window_pos=hl.case().when(
-            hl.is_defined(ht.post_window_index),
-            hl.if_else(
-                ht.post_window_index == hl.len(all_pos),
-                all_pos[ht.post_window_index - 1],
-                all_pos[ht.post_window_index],
-            ).or_missing(),
+        post_window_pos=(
+            hl.case()
+            .when(
+                hl.is_defined(ht.post_window_index),
+                hl.if_else(
+                    ht.post_window_index == hl.len(all_pos),
+                    all_pos[ht.post_window_index - 1],
+                    all_pos[ht.post_window_index],
+                ),
+            )
+            .or_missing(),
         )
     )
 
