@@ -1179,7 +1179,7 @@ def search_for_two_breaks(
     logger.info("Annotating HT with position closest to each window end...")
     all_pos = ht.aggregate(hl.agg.collect(ht.locus.position), _localize=False)
     ht = ht.annotate(
-        post_window_pos=hl.or_missing(
+        post_window_index=hl.or_missing(
             hl.is_defined(ht.window_end),
             all_pos[hl.binary_search(all_pos, ht.window_end)],
         ),
@@ -1187,11 +1187,14 @@ def search_for_two_breaks(
 
     # Correct post window pos: binary search will return length of all_pos array
     # if position is the largest position
-    ht = ht.annotate(
-        post_window_pos=hl.if_else(
-            hl.is_defined(ht.post_window_pos) & (ht.post_window_pos == hl.len(all_pos)),
-            ht.post_window_pos - 1,
-            ht.post_window_pos,
+    ht = ht.transmute(
+        post_window_pos=hl.case().when(
+            hl.is_defined(ht.post_window_index),
+            hl.if_else(
+                ht.post_window_index == hl.len(all_pos),
+                all_pos[ht.post_window_index - 1],
+                all_pos[ht.post_window_pos],
+            ).or_missing(),
         )
     )
 
