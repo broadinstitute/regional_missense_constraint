@@ -1177,29 +1177,31 @@ def search_for_two_breaks(
     )
 
     logger.info("Annotating HT with position closest to each window end...")
-    all_pos = ht.aggregate(hl.agg.collect(ht.locus.position), _localize=False)
-    ht = ht.annotate(
-        # binary_search automatically returns missing if either input array or element is missing
-        post_window_index=hl.binary_search(all_pos, ht.window_end),
+    # Generate HT grouped by contig that contains a list of all positions for each contig
+    locus_ht = ht.group_by(contig=ht.locus.contig).aggregate(
+        positions=hl.agg.collect(ht.locus.position)
     )
+    ht = ht.annotate(pos_per_contig=locus_ht[ht.locus.contig].positions)
 
-    # Correct post window position:
-    # binary_search will return length of all_pos array if position is the largest position
-    ht = ht.transmute(
+    # binary_search automatically returns missing if either parameter (array or element) is missing
+    ht = ht.annotate(
+        post_window_index=hl.binary_search(ht.pos_per_contig, ht.window_end)
+    )
+    ht = ht.annotate(
         post_window_pos=hl.case()
         .when(
             hl.is_defined(ht.post_window_index),
             hl.if_else(
-                ht.post_window_index == hl.len(all_pos),
-                all_pos[-1],
-                all_pos[ht.post_window_index],
+                ht.post_window_index == hl.len(ht.pos_per_contig),
+                ht.pos_per_contig[-1],
+                ht.pos_per_contig[ht.post_window_index],
             ),
         )
-        .or_missing(),
+        .or_missing()
     )
 
-    ht.describe()
     ht = ht.checkpoint(f"{temp_path}/simul_break_prep.ht", overwrite=True)
+    logger.info(f"HT count: {ht.count()}")
 
     # Check if post window pos is ever smaller than window_end
     check_end = ht.aggregate(hl.agg.count_where(ht.window_end > ht.post_window_pos))
