@@ -1177,29 +1177,31 @@ def search_for_two_breaks(
     )
 
     logger.info("Annotating HT with position closest to each window end...")
-    # Generate HT grouped by contig that contains a list of all positions for each contig
-    locus_ht = ht.group_by(contig=ht.locus.contig).aggregate(
+    # Generate HT grouped by contig that contains a list of all positions for each transcript
+    pos_ht = ht.group_by(transcript=ht.transcript).aggregate(
         positions=hl.agg.collect(ht.locus.position)
     )
-    ht = ht.annotate(pos_per_contig=locus_ht[ht.locus.contig].positions)
+    pos_ht = pos_ht.checkpoint(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
+    ht = ht.annotate(pos_per_transcript=pos_ht[ht.transcript].positions)
 
     # binary_search automatically returns missing if either parameter (array or element) is missing
     ht = ht.annotate(
-        post_window_index=hl.binary_search(ht.pos_per_contig, ht.window_end)
+        post_window_index=hl.binary_search(ht.pos_per_transcript, ht.window_end)
     )
     ht = ht.annotate(
         post_window_pos=hl.case()
         .when(
             hl.is_defined(ht.post_window_index),
             hl.if_else(
-                ht.post_window_index == hl.len(ht.pos_per_contig),
-                ht.pos_per_contig[-1],
-                ht.pos_per_contig[ht.post_window_index],
+                ht.post_window_index == hl.len(ht.pos_per_transcript),
+                ht.pos_per_transcript[-1],
+                ht.pos_per_transcript[ht.post_window_index],
             ),
         )
         .or_missing()
     )
 
+    ht = ht.drop("pos_per_transcript")
     ht = ht.checkpoint(f"{temp_path}/simul_break_prep.ht", overwrite=True)
     logger.info(f"HT count: {ht.count()}")
 
