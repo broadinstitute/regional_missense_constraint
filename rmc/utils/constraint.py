@@ -1231,7 +1231,7 @@ def search_for_two_breaks(
             mu_snp=ht[next_ht.new_locus, next_ht.transcript].mu_snp,
             oe=ht[next_ht.new_locus, next_ht.transcript].forward_oe,
             reverse_obs=ht[next_ht.new_locus, next_ht.transcript].reverse.obs,
-            reverse_exp=ht[next_ht.new_locus, next_ht.transcript].reverse_exp,
+            reverse_exp=ht[next_ht.new_locus, next_ht.transcript].reverse.exp,
         )
     )
     ht = ht.annotate(next_values=next_ht[ht.key].next_values)
