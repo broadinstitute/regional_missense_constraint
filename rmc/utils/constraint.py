@@ -604,7 +604,7 @@ def search_for_break(
                 )
             )
             # Fix previous section OE if NaN (otherwise chisq calculations won't work)
-            ht = ht.annotate(pre_oe=hl.if_else(~hl.is_nan(ht.pre_oe), ht.pre_oe, 0))
+            ht = ht.annotate(pre_oe=hl.if_else(~hl.is_nan(ht.pre_oe), ht.pre_oe, 1e-09))
             ht = ht.annotate(
                 section_nulls=[
                     # Get null expression for section of transcript pre-window
