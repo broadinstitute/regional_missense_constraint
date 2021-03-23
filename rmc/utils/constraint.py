@@ -1202,7 +1202,7 @@ def search_for_two_breaks(
         "reverse",
         "forward_oe",
     )
-    ht = ht.select("window_end")
+    ht = ht.select("window_end", "end_pos")
 
     logger.info(
         "Checkpointing HT with sites that have their window ends defined in the HT..."
