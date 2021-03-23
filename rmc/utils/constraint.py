@@ -106,8 +106,8 @@ def adjust_mu_expr(
 def translate_mu_to_exp_expr(
     cumulative_mu_expr: hl.expr.DictExpression,
     transcript_expr: hl.expr.StringExpression,
-    total_mu_expr: hl.expr.Int32Expression,
-    total_exp_expr: hl.expr.Int32Expression,
+    total_mu_expr: hl.expr.Float64Expression,
+    total_exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.DictExpression:
     """
     Translates cumulative mutation rate probability into cumulative expected count per base.
@@ -590,21 +590,41 @@ def search_for_break(
                 ]
             )
         else:
+            # Annotate expected variant count at current position
             ht = ht.annotate(
-                section_null=[
+                # Translate mu_snp at site to expected at window start site
+                # can't use translate_mu_to_exp_expr because that is expecting
+                # cumulative mu, and we want to use the value for this site only
+                exp_at_site=(ht.mu_snp / ht.total_mu)
+                * ht.total_exp,
+            )
+            # Annotate observed and expected counts for section of transcript pre-window
+            ht = ht.annotate(
+                # Annotate observed count for section of transcript pre-window
+                # = current cumulative obs minus the obs at position
+                # Use hl.max to keep this value positive
+                prev_obs=hl.max(ht.cumulative_obs[ht.transcript] - ht.observed, 0),
+                prev_exp=hl.max(ht.cumulative_exp - ht.exp_at_site, 0),
+            )
+            # Make sure prev exp value isn't 0
+            # Otherwise, the chisq calculation will return NaN
+            ht = ht.annotate(prev_exp=hl.if_else(ht.prev_exp > 0, ht.prev_exp, 1e-09))
+            # Annotate OE value for section of transcript pre-window
+            ht = ht.annotate(
+                pre_oe=get_obs_exp_expr(
+                    cond_expr=True, obs_expr=ht.prev_obs, exp_expr=ht.prev_exp,
+                )
+            )
+
+            ht = ht.annotate(
+                section_nulls=[
                     # Get null expression for section of transcript pre-window
                     # These values are the current cumulative values minus the value for the site
                     get_dpois_expr(
                         cond_expr=True,
                         section_oe_expr=ht.overall_oe,
-                        obs_expr=ht.cumulative_obs[ht.transcript] - ht.observed,
-                        exp_expr=ht.cumulative_exp
-                        - translate_mu_to_exp_expr(
-                            (ht._mu_scan - ht.mu_snp),
-                            ht.position,
-                            ht.total_mu,
-                            ht.total_exp,
-                        ),
+                        obs_expr=ht.prev_obs,
+                        exp_expr=ht.prev_exp,
                     ),
                     # Get null expression for window of constraint
                     # These values are the cumulative values at the first position post-window minus
@@ -636,29 +656,13 @@ def search_for_break(
                 ]
             )
             ht = ht.annotate(
-                section_alt=[
+                section_alts=[
                     # Get alt expression for section of transcript pre-window
                     get_dpois_expr(
                         cond_expr=True,
-                        section_oe_expr=get_obs_exp_expr(
-                            cond_expr=True,
-                            obs_expr=ht.cumulative_obs[ht.transcript] - ht.observed,
-                            exp_expr=ht.cumulative_exp
-                            - translate_mu_to_exp_expr(
-                                (ht._mu_scan - ht.mu_snp),
-                                ht.position,
-                                ht.total_mu,
-                                ht.total_exp,
-                            ),
-                        ),
-                        obs_expr=ht.cumulative_obs[ht.transcript] - ht.observed,
-                        exp_expr=ht.cumulative_exp
-                        - translate_mu_to_exp_expr(
-                            (ht._mu_scan - ht.mu_snp),
-                            ht.position,
-                            ht.total_mu,
-                            ht.total_exp,
-                        ),
+                        section_oe_expr=ht.pre_oe,
+                        obs_expr=ht.prev_obs,
+                        exp_expr=ht.prev_exp,
                     ),
                     # Get alt expression for window of constraint
                     get_dpois_expr(
@@ -1231,7 +1235,7 @@ def search_for_two_breaks(
             mu_snp=ht[next_ht.new_locus, next_ht.transcript].mu_snp,
             oe=ht[next_ht.new_locus, next_ht.transcript].forward_oe,
             reverse_obs=ht[next_ht.new_locus, next_ht.transcript].reverse.obs,
-            reverse_exp=ht[next_ht.new_locus, next_ht.transcript].reverse_exp,
+            reverse_exp=ht[next_ht.new_locus, next_ht.transcript].reverse.exp,
         )
     )
     ht = ht.annotate(next_values=next_ht[ht.key].next_values)
