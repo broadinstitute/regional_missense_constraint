@@ -1201,6 +1201,7 @@ def search_for_two_breaks(
         "total_obs",
         "reverse",
         "forward_oe",
+        "overall_oe",
     )
     ht = ht.select("window_end", "end_pos")
 
