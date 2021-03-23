@@ -1187,6 +1187,7 @@ def search_for_two_breaks(
     # and will be missing positions if no missense variant was possible at that position
     # Duplicate HT to check window ends
     window_ht = ht.select()
+    window_ht = window_ht.key_by("locus")
 
     # Keep version of HT with all relevant annotations and strip HT of all annotations
     annotation_ht = ht.select(
