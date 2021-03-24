@@ -1180,32 +1180,96 @@ def search_for_two_breaks(
         )
     )
 
-    logger.info("Annotating HT with position closest to each window end...")
-    # Generate HT grouped by contig that contains a list of all positions for each transcript
-    pos_ht = ht.group_by(transcript=ht.transcript).aggregate(
-        positions=hl.agg.collect(ht.locus.position)
+    logger.info(
+        "Checking how many window end positions are actually defined in the input HT..."
+    )
+    # The input HT contains every possible missense variant
+    # and will be missing positions if no missense variant was possible at that position
+    # Duplicate HT to check window ends
+    window_ht = ht.select()
+    window_ht = window_ht.key_by("locus")
+
+    # Keep version of HT with all relevant annotations and strip HT of all annotations
+    annotation_ht = ht.select(
+        "mu_snp",
+        "total_exp",
+        "_mu_scan",
+        "total_mu",
+        "cumulative_obs",
+        "observed",
+        "cumulative_exp",
+        "total_obs",
+        "reverse",
+        "forward_oe",
+        "overall_oe",
+    )
+    ht = ht.select("window_end", "end_pos")
+
+    logger.info(
+        "Checkpointing HT with sites that have their window ends defined in the HT..."
+    )
+    end_ht = ht.filter(
+        hl.is_defined(window_ht[hl.locus(ht.locus.contig, ht.window_end)])
+    )
+    end_ht = end_ht.annotate(post_window_pos=end_ht.window_end)
+    end_ht = end_ht.checkpoint(
+        f"{temp_path}/simul_break_prep_end_def.ht", overwrite=True
+    )
+    logger.info(f"Sites with defined window ends: {end_ht.count()}")
+
+    logger.info("Working on sites that don't have their window ends defined in the HT")
+    no_end_ht = ht.filter(
+        hl.is_missing(window_ht[hl.locus(ht.locus.contig, ht.window_end)])
+    )
+    no_end_ht = no_end_ht.checkpoint(
+        f"{temp_path}/simul_break_prep_no_end.ht", overwrite=True
+    )
+    no_end_transcripts = no_end_ht.aggregate(
+        hl.agg.collect_as_set(no_end_ht.transcript), _localize=False
+    )
+    logger.info(f"Sites without defined window ends: {no_end_ht.count()}")
+
+    logger.info("Gathering all positions in each transcript...")
+    pos_ht = window_ht.filter(no_end_transcripts.contains(window_ht.transcript))
+    pos_ht = pos_ht.group_by(transcript=pos_ht.transcript).aggregate(
+        positions=hl.agg.collect(pos_ht.locus.position)
     )
     pos_ht = pos_ht.checkpoint(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
-    ht = ht.annotate(pos_per_transcript=pos_ht[ht.transcript].positions)
 
-    # binary_search automatically returns missing if either parameter (array or element) is missing
-    ht = ht.annotate(
-        post_window_index=hl.binary_search(ht.pos_per_transcript, ht.window_end)
+    # Annotate positions per transcript back onto no end HT
+    no_end_ht = no_end_ht.annotate(
+        pos_per_transcript=pos_ht[no_end_ht.transcript].positions
     )
-    ht = ht.annotate(
+    no_end_ht = no_end_ht.annotate(
+        post_window_index=hl.binary_search(
+            no_end_ht.pos_per_transcript, no_end_ht.window_end
+        ),
+        n_pos_per_transcript=hl.len(no_end_ht.pos_per_transcript),
+    )
+    no_end_ht = no_end_ht.annotate(
         post_window_pos=hl.case()
         .when(
-            hl.is_defined(ht.post_window_index),
+            hl.is_defined(no_end_ht.post_window_index),
             hl.if_else(
-                ht.post_window_index == hl.len(ht.pos_per_transcript),
-                ht.pos_per_transcript[-1],
-                ht.pos_per_transcript[ht.post_window_index],
+                no_end_ht.post_window_index == no_end_ht.n_pos_per_transcript,
+                no_end_ht.end_pos,
+                no_end_ht.pos_per_transcript[no_end_ht.post_window_index],
             ),
         )
         .or_missing()
     )
+    no_end_ht = no_end_ht.checkpoint(
+        f"{temp_path}/simul_break_prep_no_end_ready.ht", overwrite=True
+    )
 
-    ht = ht.drop("pos_per_transcript")
+    logger.info("Joining no end HT with end HT...")
+    ht = end_ht.join(no_end_ht, how="outer")
+    ht = ht.annotate(
+        post_window_pos=hl.if_else(
+            hl.is_defined(ht.post_window_pos), ht.post_window_pos, ht.post_window_pos_1,
+        ),
+        **annotation_ht[ht.key],
+    )
     ht = ht.checkpoint(f"{temp_path}/simul_break_prep.ht", overwrite=True)
     logger.info(f"HT count: {ht.count()}")
 
