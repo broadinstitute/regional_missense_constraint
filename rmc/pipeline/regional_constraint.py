@@ -381,6 +381,12 @@ def main(args):
             logger.info("Reading in context HT...")
             context_ht = processed_context.ht()
 
+            logger.info("Adding models from constraint prep HT...")
+            constraint_pre_ht = constraint_prep.ht().select()
+            context_ht = context_ht.annotate_globals(
+                **constraint_prep_ht.index_globals()
+            )
+
             logger.info("Adding coverage correction to mutation rate probabilities...")
             context_ht = context_ht.annotate(
                 raw_mu_snp=context_ht.mu_snp,
