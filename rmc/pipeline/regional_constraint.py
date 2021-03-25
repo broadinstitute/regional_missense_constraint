@@ -381,6 +381,15 @@ def main(args):
             logger.info("Reading in context HT...")
             context_ht = processed_context.ht()
 
+            logger.info("Adding coverage correction to mutation rate probabilities...")
+            context_ht = context_ht.annotate(
+                raw_mu_snp=context_ht.mu_snp,
+                mu_snp=context_ht.mu_snp
+                * get_coverage_correction_expr(
+                    context_ht.exome_coverage, context_ht.coverage_model
+                ),
+            )
+
             logger.info(
                 "Fixing XG (gene that spans PAR and non-PAR regions on chrX)..."
             )
