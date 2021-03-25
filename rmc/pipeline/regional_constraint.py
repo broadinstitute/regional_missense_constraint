@@ -27,10 +27,12 @@ from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
+    fix_xg,
     get_fwd_exprs,
     GROUPINGS,
     process_additional_breaks,
     process_transcripts,
+    search_for_break,
     search_for_two_breaks,
 )
 from rmc.utils.generic import (
@@ -372,6 +374,41 @@ def main(args):
             ht = ht.filter(~transcripts.contains(ht.transcript))
             ht.write(no_breaks.path, overwrite=args.overwrite)
 
+        if args.fix_xg:
+            logger.info("Reading in exome HT...")
+            exome_ht = filtered_exomes.ht()
+
+            logger.info("Reading in context HT...")
+            context_ht = processed_context.ht()
+
+            logger.info(
+                "Fixing XG (gene that spans PAR and non-PAR regions on chrX)..."
+            )
+            xg = fix_xg(context_ht, exome_ht, args.xg_transcript)
+
+            logger.info("Searching for a break in XG...")
+            xg = search_for_break(xg, search_field="transcript", simul_break=False)
+
+            logger.info("Checking whether there was one break...")
+            is_break_ht = xg.filter(xg.is_break)
+            if is_break_ht.count() == 0:
+                logger.info("Searching for simultaneous breaks...")
+                xg = search_for_two_breaks(xg, exome_ht)
+                is_break_ht = ht.filter(ht.is_break)
+                if is_break_ht.count() == 0:
+                    logger.info("XG has no breaks!")
+                else:
+                    is_break_ht.write(
+                        f"{temp_path}/XG_simul_break.ht", overwrite=args.overwrite
+                    )
+            else:
+                logger.info("XG has at least one break!")
+                is_break_ht = is_break_ht.checkpoint(
+                    f"{temp_path}/XG_one_break.ht", overwrite=args.overwrite
+                )
+                # xg = xg.annotate(is_break=is_break_ht[ht.key].is_break)
+                # xg = xg.annotate(break_list=[xg.is_break])
+
     finally:
         logger.info("Copying hail log to logging bucket...")
         hl.copy_log(LOGGING_PATH)
@@ -438,6 +475,14 @@ if __name__ == "__main__":
         "--search_for_simul_breaks",
         help="Search for two simultaneous breaks in transcripts without a single significant break",
         action="store_true",
+    )
+    parser.add_argument(
+        "--fix_xg",
+        help="Fix XG (gene that spans PAR and non-PAR regions on chrX)",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--xg_transcript", help="Transcript ID for XG", default="ENST00000419513",
     )
     parser.add_argument(
         "--overwrite", help="Overwrite existing data", action="store_true"

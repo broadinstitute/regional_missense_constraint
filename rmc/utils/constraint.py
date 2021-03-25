@@ -481,7 +481,7 @@ def get_section_expr(dpois_expr: hl.expr.ArrayExpression,) -> hl.expr.Float64Exp
 def search_for_break(
     ht: hl.Table,
     search_field: hl.str,
-    simul_break=False,
+    simul_break: bool = False,
     prev: bool = False,
     chisq_threshold: float = 10.8,
 ) -> hl.Table:
@@ -1369,3 +1369,107 @@ def constraint_flag_expr(
         mis_too_many=raw_mis_z_expr < -5,
         lof_too_many=raw_lof_z_expr < -5,
     )
+
+
+def fix_xg(
+    context_ht: hl.Table,
+    exome_ht: hl.Table,
+    xg_transcript: str = "ENST00000419513",
+    groupings: List[str] = GROUPINGS,
+) -> hl.Table:
+    """
+    Fixes observed and expected counts for XG (gene that spans PAR and non-PAR regions on chrX).
+
+    Expects that context HT is annotated with all of the fields in `groupings`.
+
+    :param hl.Table context_ht: Context Table.
+    :param hl.Table exome_ht: Table containing variants from gnomAD exomes.
+    :param str xg_transcript: XG transcript string. Default is 'ENST00000419513'.
+    :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate. 
+        Default is GROUPINGS.
+    :return: Table filtered to XG and annotated with RMC annotations (forward scans, total obs/exp/mu, overall OE).
+    :rtype: hl.Table
+    """
+
+    def _fix_xg_exp(
+        xg: hl.Table, groupings: List[str] = groupings,
+    ) -> hl.expr.StructExpression:
+        """
+        Fixes total expected and total mu counts for XG.
+
+        :param hl.Table xg: Context Table filtered to XG.
+        :param str xg_transcript: XG transcript string. Default is 'ENST00000419513'.
+        :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate. 
+            Default is GROUPINGS.
+        :return: StructExpression with total mu and total expected values.
+        :rtype: hl.expr.StructExpression
+        """
+        xg = xg.annotate(par=xg.locus.in_x_par())
+        par = xg.filter(xg.par)
+        nonpar = xg.filter(~xg.par)
+        par = calculate_exp_per_transcript(
+            par, locus_type="autosomes", groupings=groupings
+        )
+        nonpar = calculate_exp_per_transcript(par, locus_type="X", groupings=groupings)
+        exp_ht = par.union(nonpar)
+        return exp_ht.aggregate(
+            hl.struct(
+                total_exp=hl.agg.sum(exp_ht.expected),
+                total_mu=hl.agg.sum(exp_ht.mu_agg),
+            )
+        )
+
+    def _fix_xg_obs(xg: hl.Table, exome_ht: hl.Table):
+        """
+        Fixes total observed counts for XG.
+
+        :param hl.Table xg: Context Table filtered to XG.
+        :param hl.Table exome_ht: Table containing variants from gnomAD exomes.
+        :return: Context Table filtered to XG, annotated with total observed and observed per position values.
+        :rtype: hl.Table
+        """
+        exome_ht = exome_ht.filter(exome_ht.transcript == xg_transcript)
+        obs_ht = calculate_observed(exome_ht)
+        xg = xg.annotate(_obs=exome_ht.index(xg.key))
+        xg = xg.transmute(observed=hl.int(hl.is_defined(xg._obs)))
+        return xg.annotate(total_obs=obs_ht[xg.transcript].observed)
+
+    logger.info(f"Filtering context HT to XG (transcript: {xg_transcript})...")
+    xg = context_ht.filter(context_ht.transcript == xg_transcript)
+
+    logger.info("Fixing expected counts for XG...")
+    exp_struct = _fix_xg_exp(xg, groupings)
+
+    logger.info("Fixing observed counts for XG...")
+    xg = _fix_xg_obs(xg, exome_ht)
+
+    logger.info("Collecting by key...")
+    # Context HT is keyed by locus and allele, which means there is one row for every possible missense variant
+    # This means that any locus could be present up to three times (once for each possible missense)
+    # Collect by key here to ensure all loci are unique
+    xg = xg.key_by("locus", "transcript").collect_by_key()
+    xg = xg.annotate(
+        # Collect the mutation rate probabilities at each locus
+        mu_snp=hl.sum(xg.values.mu_snp),
+        # Collect the observed counts for each locus
+        # (this includes counts for each possible missense at the locus)
+        observed=hl.sum(xg.values.observed),
+        # Take just the first coverage value, since the locus should have the same coverage across the possible variants
+        coverage=xg.values.exome_coverage[0],
+    )
+
+    logger.info(
+        "Annotating overall observed/expected value (capped at 1) and forward scans..."
+    )
+    xg = xg.annotate(total_exp=exp_struct.total_exp, total_mu=exp_struct.total_mu)
+    xg = xg.annotate(overall_oe=hl.min(xg.total_obs / xg.total_exp, 1))
+    xg = get_fwd_exprs(
+        ht=xg,
+        transcript_str="transcript",
+        obs_str="observed",
+        mu_str="mu_snp",
+        total_mu_str="total_mu",
+        total_exp_str="total_exp",
+    )
+    xg = xg.checkpoint(f"{temp_path}/XG.ht", overwrite=True)
+    return xg
