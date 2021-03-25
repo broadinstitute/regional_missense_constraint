@@ -382,7 +382,7 @@ def main(args):
             context_ht = processed_context.ht()
 
             logger.info("Adding models from constraint prep HT...")
-            constraint_pre_ht = constraint_prep.ht().select()
+            constraint_prep_ht = constraint_prep.ht().select()
             context_ht = context_ht.annotate_globals(
                 **constraint_prep_ht.index_globals()
             )
