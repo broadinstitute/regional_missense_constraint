@@ -1410,7 +1410,9 @@ def fix_xg(
         par = calculate_exp_per_transcript(
             par, locus_type="autosomes", groupings=groupings
         )
-        nonpar = calculate_exp_per_transcript(par, locus_type="X", groupings=groupings)
+        nonpar = calculate_exp_per_transcript(
+            nonpar, locus_type="X", groupings=groupings
+        )
         exp_ht = par.union(nonpar)
         return exp_ht.aggregate(
             hl.struct(
