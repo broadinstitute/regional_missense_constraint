@@ -1421,7 +1421,7 @@ def fix_xg(
             )
         )
 
-    def _fix_xg_obs(xg: hl.Table, exome_ht: hl.Table):
+    def _fix_xg_obs(xg: hl.Table, exome_ht: hl.Table) -> hl.Table:
         """
         Fixes total observed counts for XG.
 
@@ -1430,8 +1430,6 @@ def fix_xg(
         :return: Context Table filtered to XG, annotated with total observed and observed per position values.
         :rtype: hl.Table
         """
-        exome_ht = exome_ht.filter(exome_ht.transcript == xg_transcript)
-        obs_ht = calculate_observed(exome_ht)
         xg = xg.annotate(_obs=exome_ht.index(xg.key))
         xg = xg.transmute(observed=hl.int(hl.is_defined(xg._obs)))
         return xg.annotate(total_obs=obs_ht[xg.transcript].observed)
@@ -1443,6 +1441,10 @@ def fix_xg(
     exp_struct = _fix_xg_exp(xg, groupings)
 
     logger.info("Fixing observed counts for XG...")
+    exome_ht = exome_ht.filter(
+        exome_ht.transcript_consequences.transcript_id == xg_transcript
+    )
+    obs_ht = calculate_observed(exome_ht)
     xg = _fix_xg_obs(xg, exome_ht)
 
     logger.info("Collecting by key...")
@@ -1463,7 +1465,12 @@ def fix_xg(
     logger.info(
         "Annotating overall observed/expected value (capped at 1) and forward scans..."
     )
-    xg = xg.annotate(total_exp=exp_struct.total_exp, total_mu=exp_struct.total_mu)
+    xg = xg.annotate(
+        total_exp=exp_struct.total_exp,
+        total_mu=exp_struct.total_mu,
+        total_obs=obs_ht[xg.transcript].observed,
+    )
+    xg.describe()
     xg = xg.annotate(overall_oe=hl.min(xg.total_obs / xg.total_exp, 1))
     xg = get_fwd_exprs(
         ht=xg,
