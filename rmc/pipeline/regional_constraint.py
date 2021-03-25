@@ -398,10 +398,9 @@ def main(args):
             logger.info(
                 "Fixing XG (gene that spans PAR and non-PAR regions on chrX)..."
             )
-            # xg = fix_xg(context_ht, exome_ht, args.xg_transcript)
+            xg = fix_xg(context_ht, exome_ht, args.xg_transcript)
 
             logger.info("Searching for a break in XG...")
-            xg = hl.read_table("gs://regional_missense_constraint/temp/XG.ht")
             xg = process_transcripts(xg, chisq_threshold=args.chisq_threshold)
 
             logger.info("Checking whether there was one break...")
