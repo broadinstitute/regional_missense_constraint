@@ -32,7 +32,6 @@ from rmc.utils.constraint import (
     GROUPINGS,
     process_additional_breaks,
     process_transcripts,
-    search_for_break,
     search_for_two_breaks,
 )
 from rmc.utils.generic import (
@@ -399,17 +398,28 @@ def main(args):
             logger.info(
                 "Fixing XG (gene that spans PAR and non-PAR regions on chrX)..."
             )
-            xg = fix_xg(context_ht, exome_ht, args.xg_transcript)
+            # xg = fix_xg(context_ht, exome_ht, args.xg_transcript)
 
             logger.info("Searching for a break in XG...")
-            xg = search_for_break(xg, search_field="transcript", simul_break=False)
+            xg = hl.read_table("gs://regional_missense_constraint/temp/XG.ht")
+            xg = process_transcripts(xg, chisq_threshold=args.chisq_threshold)
 
             logger.info("Checking whether there was one break...")
             is_break_ht = xg.filter(xg.is_break)
             if is_break_ht.count() == 0:
+                logger.info("XG didn't have one single significant break...")
+                transcript_ht = xg.group_by(xg.transcript).aggregate(
+                    end_pos=hl.agg.max(xg.locus.position),
+                    start_pos=hl.agg.min(xg.locus.position),
+                )
+                xg = xg.annotate(
+                    start_pos=transcript_ht[xg.transcript].start_pos,
+                    end_pos=transcript_ht[xg.transcript].end_pos,
+                )
+
                 logger.info("Searching for simultaneous breaks...")
                 xg = search_for_two_breaks(xg, exome_ht)
-                is_break_ht = ht.filter(ht.is_break)
+                is_break_ht = xg.filter(xg.is_break)
                 if is_break_ht.count() == 0:
                     logger.info("XG has no breaks!")
                 else:
