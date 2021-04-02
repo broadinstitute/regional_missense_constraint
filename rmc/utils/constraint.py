@@ -1398,7 +1398,6 @@ def fix_xg(
         Fixes total expected and total mu counts for XG.
 
         :param hl.Table xg: Context Table filtered to XG.
-        :param str xg_transcript: XG transcript string. Default is 'ENST00000419513'.
         :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate. 
             Default is GROUPINGS.
         :return: StructExpression with total mu and total expected values.
