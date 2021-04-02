@@ -27,6 +27,7 @@ from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
+    fix_xg,
     get_fwd_exprs,
     GROUPINGS,
     process_additional_breaks,
@@ -168,6 +169,16 @@ def main(args):
                 exp_ht = exp_ht.union(exp_x_ht).union(exp_y_ht)
 
                 logger.info(
+                    "Fixing expected values for genes that span PAR and nonPAR regions..."
+                )
+                # Adding a sum here to make sure that genes like XG that span PAR/nonPAR regions
+                # have correct total expected values
+                exp_ht = exp_ht.group_by(transcript=exp_ht.transcript).aggregate(
+                    total_exp=hl.agg.sum(exp_ht.expected),
+                    total_mu=hl.agg.sum(exp_ht.mu_agg),
+                )
+
+                logger.info(
                     "Aggregating total observed variant counts per transcript..."
                 )
                 obs_ht = calculate_observed(exome_ht)
@@ -222,8 +233,8 @@ def main(args):
                 "(capped at 1) per transcript..."
             )
             context_ht = context_ht.annotate(
-                total_exp=exp_ht[context_ht.transcript].expected,
-                total_mu=exp_ht[context_ht.transcript].mu_agg,
+                total_exp=exp_ht[context_ht.transcript].total_exp,
+                total_mu=exp_ht[context_ht.transcript].total_mu,
                 total_obs=obs_ht[context_ht.transcript].observed,
             )
             context_ht = context_ht.annotate(
@@ -372,6 +383,69 @@ def main(args):
             ht = ht.filter(~transcripts.contains(ht.transcript))
             ht.write(no_breaks.path, overwrite=args.overwrite)
 
+        # NOTE: This is only necessary for gnomAD v2
+        # Fixed expected counts for any genes that span PAR and non-PAR regions
+        # after running on gnomAD v2
+        if args.fix_xg:
+            logger.info("Reading in exome HT...")
+            exome_ht = filtered_exomes.ht()
+
+            logger.info("Reading in context HT...")
+            context_ht = processed_context.ht()
+
+            logger.info("Adding models from constraint prep HT...")
+            constraint_prep_ht = constraint_prep.ht().select()
+            context_ht = context_ht.annotate_globals(
+                **constraint_prep_ht.index_globals()
+            )
+
+            logger.info("Adding coverage correction to mutation rate probabilities...")
+            context_ht = context_ht.annotate(
+                raw_mu_snp=context_ht.mu_snp,
+                mu_snp=context_ht.mu_snp
+                * get_coverage_correction_expr(
+                    context_ht.exome_coverage, context_ht.coverage_model
+                ),
+            )
+
+            logger.info(
+                "Fixing XG (gene that spans PAR and non-PAR regions on chrX)..."
+            )
+            xg = fix_xg(context_ht, exome_ht, args.xg_transcript)
+
+            logger.info("Searching for a break in XG...")
+            xg = process_transcripts(xg, chisq_threshold=args.chisq_threshold)
+
+            logger.info("Checking whether there was one break...")
+            is_break_ht = xg.filter(xg.is_break)
+            if is_break_ht.count() == 0:
+                logger.info("XG didn't have one single significant break...")
+                transcript_ht = xg.group_by(xg.transcript).aggregate(
+                    end_pos=hl.agg.max(xg.locus.position),
+                    start_pos=hl.agg.min(xg.locus.position),
+                )
+                xg = xg.annotate(
+                    start_pos=transcript_ht[xg.transcript].start_pos,
+                    end_pos=transcript_ht[xg.transcript].end_pos,
+                )
+
+                logger.info("Searching for simultaneous breaks...")
+                xg = search_for_two_breaks(xg, exome_ht)
+                is_break_ht = xg.filter(xg.is_break)
+                if is_break_ht.count() == 0:
+                    logger.info("XG has no breaks!")
+                else:
+                    is_break_ht.write(
+                        f"{temp_path}/XG_simul_break.ht", overwrite=args.overwrite
+                    )
+            else:
+                logger.info("XG has at least one break!")
+                is_break_ht = is_break_ht.checkpoint(
+                    f"{temp_path}/XG_one_break.ht", overwrite=args.overwrite
+                )
+                # xg = xg.annotate(is_break=is_break_ht[ht.key].is_break)
+                # xg = xg.annotate(break_list=[xg.is_break])
+
     finally:
         logger.info("Copying hail log to logging bucket...")
         hl.copy_log(LOGGING_PATH)
@@ -438,6 +512,14 @@ if __name__ == "__main__":
         "--search_for_simul_breaks",
         help="Search for two simultaneous breaks in transcripts without a single significant break",
         action="store_true",
+    )
+    parser.add_argument(
+        "--fix_xg",
+        help="Fix XG (gene that spans PAR and non-PAR regions on chrX)",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--xg_transcript", help="Transcript ID for XG", default="ENST00000419513",
     )
     parser.add_argument(
         "--overwrite", help="Overwrite existing data", action="store_true"
