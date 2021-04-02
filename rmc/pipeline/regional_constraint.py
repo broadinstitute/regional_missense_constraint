@@ -169,6 +169,16 @@ def main(args):
                 exp_ht = exp_ht.union(exp_x_ht).union(exp_y_ht)
 
                 logger.info(
+                    "Fixing expected values for genes that span PAR and nonPAR regions..."
+                )
+                # Adding a sum here to make sure that genes like XG that span PAR/nonPAR regions
+                # have correct total expected values
+                exp_ht = exp_ht.group_by(transcript=exp_ht.transcript).aggregate(
+                    total_exp=hl.agg.sum(exp_ht.expected),
+                    total_mu=hl.agg.sum(exp_ht.mu_agg),
+                )
+
+                logger.info(
                     "Aggregating total observed variant counts per transcript..."
                 )
                 obs_ht = calculate_observed(exome_ht)
@@ -223,8 +233,8 @@ def main(args):
                 "(capped at 1) per transcript..."
             )
             context_ht = context_ht.annotate(
-                total_exp=exp_ht[context_ht.transcript].expected,
-                total_mu=exp_ht[context_ht.transcript].mu_agg,
+                total_exp=exp_ht[context_ht.transcript].total_exp,
+                total_mu=exp_ht[context_ht.transcript].total_mu,
                 total_obs=obs_ht[context_ht.transcript].observed,
             )
             context_ht = context_ht.annotate(
@@ -373,6 +383,9 @@ def main(args):
             ht = ht.filter(~transcripts.contains(ht.transcript))
             ht.write(no_breaks.path, overwrite=args.overwrite)
 
+        # NOTE: This is only necessary for gnomAD v2
+        # Fixed expected counts for any genes that span PAR and non-PAR regions
+        # after running on gnomAD v2
         if args.fix_xg:
             logger.info("Reading in exome HT...")
             exome_ht = filtered_exomes.ht()
