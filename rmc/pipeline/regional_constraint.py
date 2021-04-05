@@ -3,7 +3,10 @@ import logging
 
 import hail as hl
 
+from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
+
 from rmc.resources.basics import (
     constraint_prep,
     LOGGING_PATH,
@@ -22,7 +25,7 @@ from rmc.resources.grch37.gnomad import (
     prop_obs_coverage,
 )
 from rmc.resources.grch37.reference_data import processed_context
-from rmc.resources.resource_utils import MISSENSE
+from rmc.resources.resource_utils import GNOMAD_VER, MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     calculate_exp_per_transcript,
@@ -443,8 +446,72 @@ def main(args):
                 is_break_ht = is_break_ht.checkpoint(
                     f"{temp_path}/XG_one_break.ht", overwrite=args.overwrite
                 )
+                # NOTE: Did not need to check for additional breaks in XG
+                # XG did not have a single significant break in gnomAD v2
                 # xg = xg.annotate(is_break=is_break_ht[ht.key].is_break)
                 # xg = xg.annotate(break_list=[xg.is_break])
+
+        if args.finalize:
+            logger.info("Reading in results HTs...")
+            context_ht = processed_context.ht()
+            one_break_ht = one_break.ht()
+            multiple_breaks_ht = multiple_breaks.ht()
+            simul_breaks_ht = simul_break.ht()
+            no_breaks_ht = no_breaks.ht()
+
+            if GNOMAD_VER == "2.1.1":
+                logger.info(
+                    "Filtering context HT to simultaneous breaks transcripts..."
+                )
+                # Simultaneous breaks HT in 2.1.1 only wrote out lines that were breakpoints
+                # (didn't write out the rest of the transcripts)
+                simul_break = simul_breaks_ht
+                simul_break_transcripts = simul_breaks_ht.aggregate(
+                    hl.agg.collect_as_set(simul_breaks_ht.transcript), _localize=False
+                )
+                simul_breaks_ht = context_ht.filter(
+                    simul_break_transcripts.contains(context_ht.transcript)
+                )
+                simul_breaks_ht = simul_breaks_ht.annotate(**simul_break[ht.key])
+
+                logger.info("Reading in XG HT (one-off fix in v2.1.1)...")
+                xg_ht = hl.read_table(f"{temp_path}/XG.ht").select(
+                    "total_mu", "total_exp", "total_obs"
+                )
+                no_breaks_ht = no_breaks_ht.annotate(**xg_ht[no_breaks_ht.key])
+
+            breaks_ht = (one_break_ht.union(multiple_breaks_ht)).union(simul_breaks_ht)
+
+            if (breaks_ht.count() + no_breaks_ht.count()) != context_ht.count():
+                raise DataException(
+                    "Row counts for breaks HT (one break, multiple breaks, simul breaks) and no breaks HT doesn't match context HT row count!"
+                )
+
+            if args.remove_outlier_transcripts:
+                logger.info("Reading in LoF constraint HT...")
+                logger.warning(
+                    "Assumes LoF constraint has been separately calculated and that constraint HT exists..."
+                )
+                if not file_exists(constraint_ht.path):
+                    raise DataException("Constraint HT not found!")
+
+                constraint_ht = constraint_ht.ht().key_by("transcript")
+                constraint_ht = constraint_ht.filter(constraint_ht.canonical).select(
+                    "constraint_flag"
+                )
+
+                breaks_ht = breaks_ht.filter(
+                    hl.len(constraint_ht[breaks_ht.key].constraint_flag) == 0
+                )
+                no_breaks_ht = no_breaks_ht.filter(
+                    hl.len(constraint_ht[no_breaks_ht.key].constraint_flag) == 0
+                )
+
+            logger.info("Checkpointing HTs...")
+            breaks_ht = breaks_ht.checkpoint(f"{temp_path}/breaks.ht", overwrite=True)
+            no_breaks_ht = no_breaks_ht.checkpoint(
+                f"{temp_path}/no_breaks.ht", overwrite=True
+            )
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -515,11 +582,21 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--fix_xg",
-        help="Fix XG (gene that spans PAR and non-PAR regions on chrX)",
+        help="Fix XG (gene that spans PAR and non-PAR regions on chrX). Required only for gnomAD v2",
         action="store_true",
     )
     parser.add_argument(
         "--xg_transcript", help="Transcript ID for XG", default="ENST00000419513",
+    )
+    parser.add_argument(
+        "--finalize",
+        help="Combine and reformat (finalize) RMC output",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--remove_outlier_transcripts",
+        help="Remove outlier transcripts (transcripts with too many/few LoF, synonymous, or missense variants)",
+        action="store_true",
     )
     parser.add_argument(
         "--overwrite", help="Overwrite existing data", action="store_true"
