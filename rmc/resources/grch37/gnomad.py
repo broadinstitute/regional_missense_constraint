@@ -1,6 +1,6 @@
-from gnomad.resources.resource_utils import TableResource
+from gnomad.resources.resource_utils import TableResource, VersionedTableResource
 
-from rmc.resources.resource_utils import FLAGSHIP_LOF, RESOURCE_PREFIX
+from rmc.resources.resource_utils import FLAGSHIP_LOF, GNOMAD_VER, RESOURCE_PREFIX
 
 
 ## Konrad's resources
@@ -53,7 +53,14 @@ Contains multiple mutation rate annotations:
 	- mu: `mu_agg` multipled by coverage correction.
 """
 
-constraint_ht = TableResource(path=f"{FLAGSHIP_LOF}/standard/constraint_standard.ht")
+constraint_ht = VersionedTableResource(
+    default_version=GNOMAD_VER,
+    versions={
+        GNOMAD_VER: TableResource(
+            path=f"{FLAGSHIP_LOF}/standard/constraint_standard.ht"
+        )
+    },
+)
 """
 Table with total observed and expected variant counts per transcript.
 
