@@ -454,7 +454,6 @@ def main(args):
         if args.finalize:
             logger.info("Reading in results HTs...")
             context_ht = processed_context.ht()
-            one_break_ht = one_break.ht()
             multiple_breaks_ht = multiple_breaks.ht()
             simul_breaks_ht = simul_break.ht()
             no_breaks_ht = no_breaks.ht()
@@ -480,7 +479,8 @@ def main(args):
                 )
                 no_breaks_ht = no_breaks_ht.annotate(**xg_ht[no_breaks_ht.key])
 
-            breaks_ht = (one_break_ht.union(multiple_breaks_ht)).union(simul_breaks_ht)
+            # TODO: Add section chisq calculation here
+            breaks_ht = multiple_breaks_ht.union(simul_breaks_ht)
 
             if (breaks_ht.count() + no_breaks_ht.count()) != context_ht.count():
                 raise DataException(
