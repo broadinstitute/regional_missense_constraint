@@ -452,41 +452,6 @@ def main(args):
                 # xg = xg.annotate(break_list=[xg.is_break])
 
         if args.finalize:
-            logger.info("Reading in results HTs...")
-            context_ht = processed_context.ht()
-            multiple_breaks_ht = multiple_breaks.ht()
-            simul_breaks_ht = simul_break.ht()
-            no_breaks_ht = no_breaks.ht()
-
-            if GNOMAD_VER == "2.1.1":
-                logger.info(
-                    "Filtering context HT to simultaneous breaks transcripts..."
-                )
-                # Simultaneous breaks HT in 2.1.1 only wrote out lines that were breakpoints
-                # (didn't write out the rest of the transcripts)
-                simul_break = simul_breaks_ht
-                simul_break_transcripts = simul_breaks_ht.aggregate(
-                    hl.agg.collect_as_set(simul_breaks_ht.transcript), _localize=False
-                )
-                simul_breaks_ht = context_ht.filter(
-                    simul_break_transcripts.contains(context_ht.transcript)
-                )
-                simul_breaks_ht = simul_breaks_ht.annotate(**simul_break[ht.key])
-
-                logger.info("Reading in XG HT (one-off fix in v2.1.1)...")
-                xg_ht = hl.read_table(f"{temp_path}/XG.ht").select(
-                    "total_mu", "total_exp", "total_obs"
-                )
-                no_breaks_ht = no_breaks_ht.annotate(**xg_ht[no_breaks_ht.key])
-
-            # TODO: Add section chisq calculation here
-            breaks_ht = multiple_breaks_ht.union(simul_breaks_ht)
-
-            if (breaks_ht.count() + no_breaks_ht.count()) != context_ht.count():
-                raise DataException(
-                    "Row counts for breaks HT (one break, multiple breaks, simul breaks) and no breaks HT doesn't match context HT row count!"
-                )
-
             if args.remove_outlier_transcripts:
                 logger.info("Reading in LoF constraint HT...")
                 logger.warning(
@@ -499,12 +464,148 @@ def main(args):
                 constraint_ht = constraint_ht.filter(constraint_ht.canonical).select(
                     "constraint_flag"
                 )
-
-                breaks_ht = breaks_ht.filter(
-                    hl.len(constraint_ht[breaks_ht.key].constraint_flag) == 0
+                constraint_ht = constraint_ht.filter(
+                    hl.len(constraint_ht.constraint_flag) > 0
                 )
-                no_breaks_ht = no_breaks_ht.filter(
-                    hl.len(constraint_ht[no_breaks_ht.key].constraint_flag) == 0
+                outlier_transcripts = constraint_ht.aggregate(
+                    hl.agg.collect_as_set(constraint_ht.transcript), _localize=False
+                )
+
+            logger.info("Reading in context HT...")
+            # Drop extra annotations from context HT
+            context_ht = processed_context.ht().drop(
+                "_obs_scan", "_mu_scan", "forward_oe", "values"
+            )
+            context_ht = context_ht.filter(
+                ~outlier_transcripts.contains(context_ht.transcript)
+            )
+
+            logger.info("Reading in results HTs...")
+            multiple_breaks_ht = multiple_breaks.ht()
+            multiple_breaks_ht = multiple_breaks_ht.filter(
+                ~outlier_transcripts.contains(multiple_breaks_ht.transcript)
+            )
+            simul_breaks_ht = simul_break.ht()
+            simul_breaks_ht = simul_breaks_ht.filter(
+                ~outlier_transcripts.contains(simul_breaks_ht.transcript)
+            )
+
+            logger.info("Getting simultaneous breaks transcripts...")
+            simul_break_transcripts = simul_breaks_ht.aggregate(
+                hl.agg.collect_as_set(simul_breaks_ht.transcript), _localize=False
+            )
+            rmc_transcripts = simul_break_transcripts
+
+            logger.info("Getting transcript information for breaks HT...")
+            global_fields = multiple_breaks_ht.globals
+            n_breaks = [
+                int(x.split("_")[1]) for x in global_fields if "break" in x
+            ].sort()
+            rmc_transcripts = []
+            for break_num in n_breaks:
+                ht = hl.read_table(f"{temp_path}/break_{break_num}.ht")
+                ht = ht.filter(ht.is_break)
+                rmc_transcripts.append(
+                    ht.aggregate(hl.agg.collect_as_set(ht.transcript), _localize=False)
+                )
+
+            filtered_transcripts = {}
+            for index, transcripts in enumerate(rmc_transcripts):
+                temp_transcripts = transcripts
+                for t in rmc_transcripts[index + 1 :]:
+                    temp_transcripts = temp_transcripts.difference(t)
+                if index == 0:
+                    one_break_transcripts = temp_transcripts
+                    rmc_transcripts = rmc_transcripts.union(one_break_transcripts)
+                else:
+                    filtered_transcripts[
+                        f"break_{index + 1}_transcripts"
+                    ] = temp_transcripts
+                    rmc_transcripts = rmc_transcripts.union(temp_transcripts)
+            logger.info(
+                f"Number of transcripts with evidence of RMC: {hl.eval(hl.len(rmc_transcripts))}"
+            )
+
+            logger.info("Creating breaks HT...")
+            breaks_ht = context_ht.filter(
+                rmc_transcripts.contains(context_ht.transcript)
+            )
+
+            logger.info("Adding simultaneous breaks information to breaks HT...")
+            breaks_ht = breaks_ht.annotate(
+                simul_break_info=hl.struct(
+                    is_break=simul_breaks_ht[breaks_ht.key].is_break,
+                    window_end=simul_breaks_ht[breaks_ht.key].window_end,
+                    post_window_pos=simul_breaks_ht[breaks_ht.key].post_window_pos,
+                )
+            )
+            logger.info("Adding transcript information to breaks HT globals...")
+            breaks_ht = breaks_ht.annotate_globals(
+                single_break=hl.struct(transcripts=one_break_transcripts),
+                multiple_breaks=hl.struct(**filtered_transcripts),
+                simul_breaks=hl.struct(transcripts=simul_break_transcripts),
+            )
+
+            logger.info("Creating no breaks HT...")
+            no_breaks_ht = context_ht.filter(
+                ~rmc_transcripts.contains(context_ht.transcript)
+            )
+
+            if GNOMAD_VER == "2.1.1":
+                logger.info("Reading in XG HT (one-off fix in v2.1.1)...")
+                xg_ht = hl.read_table(f"{temp_path}/XG.ht").select(
+                    "total_mu",
+                    "total_exp",
+                    "total_obs",
+                    "cumulative_exp",
+                    "cumulative_obs",
+                    "overall_oe",
+                )
+                no_breaks_ht = no_breaks_ht.annotate(
+                    xg_total_mu=xg_ht[no_breaks_ht.key].total_mu,
+                    xg_total_exp=xg_ht[no_breaks_ht.key].total_exp,
+                    xg_total_obs=xg_ht[no_breaks_ht.key].total_obs,
+                    xg_cum_exp=xg_ht[no_breaks_ht.key].cumulative_exp,
+                    xg_cum_obs=xg_ht[no_breaks_ht.key].cumulative_obs,
+                    xg_oe=xg_ht[no_breaks_ht.key].overall_oe,
+                )
+                no_breaks_ht = no_breaks_ht.transmute(
+                    total_mu=hl.if_else(
+                        hl.is_defined(no_breaks_ht.xg_total_mu),
+                        no_breaks_ht.xg_total_mu,
+                        no_breaks_ht.total_mu,
+                    ),
+                    total_exp=hl.if_else(
+                        hl.is_defined(no_breaks_ht.xg_total_exp),
+                        no_breaks_ht.xg_total_exp,
+                        no_breaks_ht.total_exp,
+                    ),
+                    total_obs=hl.if_else(
+                        hl.is_defined(no_breaks_ht.xg_total_obs),
+                        no_breaks_ht.xg_total_obs,
+                        no_breaks_ht.total_obs,
+                    ),
+                    cumulative_exp=hl.if_else(
+                        hl.is_defined(no_breaks_ht.xg_cum_exp),
+                        no_breaks_ht.xg_cum_exp,
+                        no_breaks_ht.cumulative_exp,
+                    ),
+                    cumulative_obs=hl.if_else(
+                        hl.is_defined(no_breaks_ht.xg_cum_obs),
+                        no_breaks_ht.xg_cum_obs,
+                        no_breaks_ht.cumulative_obs,
+                    ),
+                    overall_oe=hl.if_else(
+                        hl.is_defined(no_breaks_ht.xg_oe),
+                        no_breaks_ht.xg_oe,
+                        no_breaks_ht.overall_oe,
+                    ),
+                )
+
+            # TODO: Add section chisq calculation here
+            if (breaks_ht.count() + no_breaks_ht.count()) != context_ht.count():
+                raise DataException(
+                    "Row counts for breaks HT (one break, multiple breaks, simul breaks) and no breaks HT doesn't match context HT row count!"
                 )
 
             logger.info("Checkpointing HTs...")
