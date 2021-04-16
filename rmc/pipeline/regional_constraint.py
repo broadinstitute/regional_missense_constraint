@@ -460,15 +460,16 @@ def main(args):
                 if not file_exists(constraint_ht.path):
                     raise DataException("Constraint HT not found!")
 
-                constraint_ht = constraint_ht.ht().key_by("transcript")
-                constraint_ht = constraint_ht.filter(constraint_ht.canonical).select(
-                    "constraint_flag"
+                constraint_transcript_ht = constraint_ht.ht().key_by("transcript")
+                constraint_transcript_ht = constraint_transcript_ht.filter(
+                    constraint_transcript_ht.canonical
+                ).select("constraint_flag")
+                constraint_transcript_ht = constraint_transcript_ht.filter(
+                    hl.len(constraint_transcript_ht.constraint_flag) > 0
                 )
-                constraint_ht = constraint_ht.filter(
-                    hl.len(constraint_ht.constraint_flag) > 0
-                )
-                outlier_transcripts = constraint_ht.aggregate(
-                    hl.agg.collect_as_set(constraint_ht.transcript), _localize=False
+                outlier_transcripts = constraint_transcript_ht.aggregate(
+                    hl.agg.collect_as_set(constraint_transcript_ht.transcript),
+                    _localize=False,
                 )
 
             logger.info("Reading in context HT...")
