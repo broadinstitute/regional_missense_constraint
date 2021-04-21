@@ -510,26 +510,41 @@ def main(args):
                     ht.aggregate(hl.agg.collect_as_set(ht.transcript), _localize=False)
                 )
 
+            logger.info("Removing overlapping transcript information...")
+            # Extracting the unique set of transcripts for each break number
+            # e.g., keeping only transcripts with a single break
+            # and not transcripts also that had additional breaks in "break_1_transcripts"
             filtered_transcripts = {}
-            for index, transcripts in enumerate(rmc_transcripts):
-                temp_transcripts = transcripts
-                for t in rmc_transcripts[index + 1 :]:
-                    temp_transcripts = temp_transcripts.difference(t)
-                if index == 0:
-                    one_break_transcripts = temp_transcripts
-                    rmc_transcripts = rmc_transcripts.union(one_break_transcripts)
-                else:
-                    filtered_transcripts[
-                        f"break_{index + 1}_transcripts"
-                    ] = temp_transcripts
-                    rmc_transcripts = rmc_transcripts.union(temp_transcripts)
+
             logger.info(
-                f"Number of transcripts with evidence of RMC: {hl.eval(hl.len(rmc_transcripts))}"
+                "Cycling through each set of transcripts with break information..."
+            )
+            for index, transcripts in enumerate(rmc_transcripts):
+                # Cycle through the sets of transcripts for every number of breaks larger than current number of breaks
+                for t in rmc_transcripts[index + 1 :]:
+                    transcripts = transcripts.difference(t)
+
+                # Separate transcripts with a single break from transcripts with multiple breaks
+                # This is because transcripts with a single break are annotated into a separate struct
+                # in the release HT globals
+                if index == 0:
+                    one_break_transcripts = transcripts
+                else:
+                    filtered_transcripts[f"break_{index + 1}_transcripts"] = transcripts
+
+            # Getting total number of transcripts with evidence of rmc
+            total_rmc_transcripts = simul_break_transcripts
+            for break_num in filtered_transcripts:
+                total_rmc_transcripts = total_rmc_transcripts.union(
+                    filtered_transcripts[break_num]
+                )
+            logger.info(
+                f"Number of transcripts with evidence of RMC: {hl.eval(hl.len(total_rmc_transcripts))}"
             )
 
             logger.info("Creating breaks HT...")
             breaks_ht = context_ht.filter(
-                rmc_transcripts.contains(context_ht.transcript)
+                total_rmc_transcripts.contains(context_ht.transcript)
             )
 
             logger.info("Adding simultaneous breaks information to breaks HT...")
@@ -549,7 +564,7 @@ def main(args):
 
             logger.info("Creating no breaks HT...")
             no_breaks_ht = context_ht.filter(
-                ~rmc_transcripts.contains(context_ht.transcript)
+                ~total_rmc_transcripts.contains(context_ht.transcript)
             )
 
             if GNOMAD_VER == "2.1.1":
