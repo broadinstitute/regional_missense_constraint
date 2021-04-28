@@ -278,17 +278,13 @@ def main(args):
             one_break_ht = one_break_ht.annotate_globals(
                 break_1_transcripts=transcripts
             )
-            one_break_ht.repartition(args.n_partitions).write(
-                one_break.path, overwrite=args.overwrite
-            )
+            one_break_ht.write(one_break.path, overwrite=args.overwrite)
 
             logger.info(
                 "Filtering HT to transcripts without a significant break and writing..."
             )
             not_one_break_ht = context_ht.anti_join(one_break_ht)
-            not_one_break_ht.repartition(args.n_partitions).write(
-                not_one_break.path, overwrite=args.overwrite
-            )
+            not_one_break_ht.write(not_one_break.path, overwrite=args.overwrite)
 
         if args.search_for_additional_breaks:
             logger.info(
