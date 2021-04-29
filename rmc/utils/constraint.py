@@ -748,7 +748,7 @@ def search_for_break(
     )
 
     logger.info("Adding chisq value and getting max chisq...")
-    ht = ht.annotate(chisq=(2 * (hl.log(ht.total_alt) - hl.log(ht.total_null))))
+    ht = ht.annotate(chisq=(2 * (hl.log10(ht.total_alt) - hl.log10(ht.total_null))))
 
     # "The default chi-squared value for one break to be considered significant is
     # 10.8 (p ~ 10e-3) and is 13.8 (p ~ 10e-4) for two breaks. These currently cannot
