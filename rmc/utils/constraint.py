@@ -1246,7 +1246,7 @@ def search_for_two_breaks(
                 # hl.binary_search(pos_per_transcript, 10) will return 3
                 # post-window positions should never be larger than the largest position of a transcript
                 # (so this should never happen)
-                .when(ht.post_window_index + 1 == ht.n_pos_per_transcript, ht.end_pos,)
+                .when(ht.post_window_index + 1 == ht.n_pos_per_transcript, ht.end_pos)
                 .or_missing()
             )
         return ht.annotate(
@@ -1255,7 +1255,7 @@ def search_for_two_breaks(
                 ht.post_window_index < ht.n_pos_per_transcript,
                 ht.pos_per_transcript[ht.post_window_index],
             )
-            .when(ht.post_window_index + 1 == ht.n_pos_per_transcript, ht.end_pos,)
+            .when(ht.post_window_index == ht.n_pos_per_transcript, ht.end_pos)
             .or_missing(),
         )
 
@@ -1332,8 +1332,12 @@ def search_for_two_breaks(
     )
 
     logger.info("Joining no end HT with end HT...")
-    end_ht = end_ht.drop("pos_per_transcript", "post_window_index", "n_pos_per_transcript")
-    no_end_ht = no_end_ht.drop("pos_per_transcript", "post_window_index", "n_pos_per_transcript")
+    end_ht = end_ht.drop(
+        "pos_per_transcript", "post_window_index", "n_pos_per_transcript"
+    )
+    no_end_ht = no_end_ht.drop(
+        "pos_per_transcript", "post_window_index", "n_pos_per_transcript"
+    )
     ht = end_ht.join(no_end_ht, how="outer")
     ht = ht.annotate(
         post_window_pos=hl.coalesce(ht.post_window_pos, ht.post_window_pos_1),
