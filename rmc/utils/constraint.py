@@ -1332,6 +1332,8 @@ def search_for_two_breaks(
     )
 
     logger.info("Joining no end HT with end HT...")
+    end_ht = end_ht.drop("pos_per_transcript", "post_window_index", "n_pos_per_transcript")
+    no_end_ht = no_end_ht.drop("pos_per_transcript", "post_window_index", "n_pos_per_transcript")
     ht = end_ht.join(no_end_ht, how="outer")
     ht = ht.annotate(
         post_window_pos=hl.coalesce(ht.post_window_pos, ht.post_window_pos_1),
