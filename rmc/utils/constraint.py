@@ -1197,7 +1197,7 @@ def search_for_two_breaks(
         logger.info("Gathering all positions in each transcript...")
         pos_ht = ht.filter(transcripts.contains(ht.transcript))
         pos_ht = pos_ht.group_by(transcript=pos_ht.transcript).aggregate(
-            positions=hl.agg.collect(pos_ht.locus.position)
+            positions=hl.sorted(hl.agg.collect(pos_ht.locus.position))
         )
         pos_ht = pos_ht.checkpoint(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
         return pos_ht
