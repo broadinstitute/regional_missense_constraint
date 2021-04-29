@@ -1182,7 +1182,7 @@ def search_for_two_breaks(
 
     def _get_pos_per_transcript(
         ht: hl.Table, transcripts: hl.expr.SetExpression
-    ) -> hl.GroupedTable:
+    ) -> hl.Table:
         """
         Filter input HT to input transcripts and gather all positions per transcript.
 
@@ -1192,7 +1192,7 @@ def search_for_two_breaks(
         :param hl.Table ht: Input HT.
         :param hl.expr.SetExpression transcripts: SetExpression of transcripts to extract.
         :return: Table grouped by transcript with list of positions per transcript.
-        :rtype: hl.GroupedTable
+        :rtype: hl.Table
         """
         logger.info("Gathering all positions in each transcript...")
         pos_ht = ht.filter(transcripts.contains(ht.transcript))
@@ -1203,7 +1203,7 @@ def search_for_two_breaks(
         return pos_ht
 
     def _get_post_window_pos(
-        ht: hl.Table, pos_ht: hl.GroupedTable, has_end: bool = False
+        ht: hl.Table, pos_ht: hl.Table, has_end: bool = False
     ) -> hl.Table:
         """
         Get first position of transcript outside of window of constraint.
@@ -1211,7 +1211,7 @@ def search_for_two_breaks(
         Run `hl.binary_search` to find index of first post-window position.
 
         :param hl.Table ht: Input Table.
-        :param hl.GroupedTable pos_ht: Input GroupedTable grouped by transcript with list of all positions per transcript.
+        :param hl.Table pos_ht: Input GroupedTable grouped by transcript with list of all positions per transcript.
         :param bool has_end: Whether the input HT has window ends defined in the HT. Default is False.
         :return: Table annotated with post-window position.
         :rtype: hl.Table
