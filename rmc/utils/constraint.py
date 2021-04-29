@@ -1292,7 +1292,6 @@ def search_for_two_breaks(
     end_ht = ht.filter(
         hl.is_defined(window_ht[hl.locus(ht.locus.contig, ht.window_end)])
     )
-    # end_ht = end_ht.annotate(post_window_pos=end_ht.window_end)
     end_ht = end_ht.checkpoint(
         f"{temp_path}/simul_break_prep_end_def.ht", overwrite=True
     )
