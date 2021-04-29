@@ -336,6 +336,7 @@ def main(args):
                     f"break_{break_num}_chisq": break_ht[context_ht.key].chisq,
                     f"break_{break_num}_null": break_ht[context_ht.key].total_null,
                     f"break_{break_num}_alt": break_ht[context_ht.key].total_alt,
+                    "break_list": break_ht[context_ht.key].break_list,
                 }
                 context_ht = context_ht.annotate(**annot_expr)
 
