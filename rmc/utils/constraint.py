@@ -1235,26 +1235,28 @@ def search_for_two_breaks(
         )
         if has_end:
             return ht.annotate(
-                post_window_pos=hl.or_missing(
-                    hl.is_defined(ht.post_window_index),
-                    hl.case()
-                    .when(
-                        ht.post_window_index + 1 < ht.n_pos_per_transcript,
-                        ht.pos_per_transcript[ht.post_window_index + 1],
-                    )
-                    .default(ht.end_pos),
+                post_window_pos=hl.case()
+                .when(
+                    ht.post_window_index + 1 < ht.n_pos_per_transcript,
+                    ht.pos_per_transcript[ht.post_window_index + 1],
                 )
+                # hl.binary_search will only return an index larger than the length of a list
+                # if that position is larger than the largest element in the list
+                # e.g., pos_per_transcript = [1, 4, 8]
+                # hl.binary_search(pos_per_transcript, 10) will return 3
+                # post-window positions should never be larger than the largest position of a transcript
+                # (so this should never happen)
+                .when(ht.post_window_index + 1 == ht.n_pos_per_transcript, ht.end_pos,)
+                .or_missing()
             )
         return ht.annotate(
-            post_window_pos=hl.or_missing(
-                hl.is_defined(ht.post_window_index),
-                hl.case()
-                .when(
-                    ht.post_window_index < ht.n_pos_per_transcript,
-                    ht.pos_per_transcript[ht.post_window_index],
-                )
-                .default(ht.end_pos),
+            post_window_pos=hl.case()
+            .when(
+                ht.post_window_index < ht.n_pos_per_transcript,
+                ht.pos_per_transcript[ht.post_window_index],
             )
+            .when(ht.post_window_index + 1 == ht.n_pos_per_transcript, ht.end_pos,)
+            .or_missing(),
         )
 
     logger.info(
