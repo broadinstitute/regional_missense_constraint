@@ -4,14 +4,14 @@ from typing import Dict, List, Union
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.reference_genome import get_reference_genome
+#from gnomad.utils.reference_genome import get_reference_genome
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
 from rmc.resources.basics import temp_path
 from rmc.utils.generic import (
     get_coverage_correction_expr,
-    get_exome_bases,
+#    get_exome_bases,
 )
 
 
@@ -1004,8 +1004,10 @@ def get_avg_bases_between_mis(ht: hl.Table) -> int:
     :return: Average number of bases between observed missense variants, rounded to the nearest integer,
     :rtype: int
     """
-    logger.info("Getting total number of bases in the exome (based on GENCODE)...")
-    total_bases = get_exome_bases(build=get_reference_genome(ht.locus).name)
+    # logger.info("Getting total number of bases in the exome (based on GENCODE)...")
+    # total_bases = get_exome_bases(build=get_reference_genome(ht.locus).name)
+    # NOTE: using heuristic here because I realized `get_exome_bases` is overcounting the total number of bases
+    total_bases = 30000000
     total_variants = ht.count()
     logger.info(f"Total number of bases in the exome: {total_bases}")
     logger.info(f"Total number of missense variants in gnomAD exomes: {total_variants}")
