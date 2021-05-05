@@ -4,7 +4,6 @@ import logging
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
@@ -41,6 +40,7 @@ from rmc.utils.generic import (
     filter_to_region_type,
     generate_models,
     get_coverage_correction_expr,
+    get_outlier_transcripts,
     keep_criteria,
     process_context_ht,
     process_vep,
@@ -450,24 +450,7 @@ def main(args):
 
         if args.finalize:
             if args.remove_outlier_transcripts:
-                logger.info("Reading in LoF constraint HT...")
-                logger.warning(
-                    "Assumes LoF constraint has been separately calculated and that constraint HT exists..."
-                )
-                if not file_exists(constraint_ht.path):
-                    raise DataException("Constraint HT not found!")
-
-                constraint_transcript_ht = constraint_ht.ht().key_by("transcript")
-                constraint_transcript_ht = constraint_transcript_ht.filter(
-                    constraint_transcript_ht.canonical
-                ).select("constraint_flag")
-                constraint_transcript_ht = constraint_transcript_ht.filter(
-                    hl.len(constraint_transcript_ht.constraint_flag) > 0
-                )
-                outlier_transcripts = constraint_transcript_ht.aggregate(
-                    hl.agg.collect_as_set(constraint_transcript_ht.transcript),
-                    _localize=False,
-                )
+                outlier_transcripts = get_outlier_transcripts()
 
             logger.info("Reading in context HT...")
             # Drop extra annotations from context HT
