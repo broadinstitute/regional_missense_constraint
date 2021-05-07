@@ -4,6 +4,7 @@ from typing import Dict, List, Union
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
+
 from gnomad.utils.reference_genome import get_reference_genome
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
@@ -1004,8 +1005,10 @@ def get_avg_bases_between_mis(ht: hl.Table) -> int:
     :return: Average number of bases between observed missense variants, rounded to the nearest integer,
     :rtype: int
     """
-    logger.info("Getting total number of bases in the exome (based on GENCODE)...")
+    logger.info("Getting total number of bases in the exome from full context HT...")
     total_bases = get_exome_bases(build=get_reference_genome(ht.locus).name)
+
+    logger.info("Getting total number of missense variants in gnomAD...")
     total_variants = ht.count()
     logger.info(f"Total number of bases in the exome: {total_bases}")
     logger.info(f"Total number of missense variants in gnomAD exomes: {total_variants}")
@@ -1180,6 +1183,87 @@ def search_for_two_breaks(
         )
     )
 
+    def _get_pos_per_transcript(
+        ht: hl.Table, transcripts: hl.expr.SetExpression
+    ) -> hl.Table:
+        """
+        Filter input HT to input transcripts and gather all positions per transcript.
+
+        Input HT is HT containing all transcripts without a single significant break and stripped of all annotations 
+        aside from locus and transcript.
+
+        :param hl.Table ht: Input HT.
+        :param hl.expr.SetExpression transcripts: SetExpression of transcripts to extract.
+        :return: Table grouped by transcript with list of positions per transcript.
+        :rtype: hl.Table
+        """
+        logger.info("Gathering all positions in each transcript...")
+        pos_ht = ht.filter(transcripts.contains(ht.transcript))
+        pos_ht = pos_ht.group_by(transcript=pos_ht.transcript).aggregate(
+            positions=hl.sorted(hl.agg.collect(pos_ht.locus.position))
+        )
+        pos_ht = pos_ht.checkpoint(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
+        return pos_ht
+
+    def _get_post_window_pos(
+        ht: hl.Table, pos_ht: hl.Table, has_end: bool = False
+    ) -> hl.Table:
+        """
+        Get first position of transcript outside of window of constraint.
+
+        Run `hl.binary_search` to find index of first post-window position.
+
+        :param hl.Table ht: Input Table.
+        :param hl.Table pos_ht: Input GroupedTable grouped by transcript with list of all positions per transcript.
+        :param bool has_end: Whether the input HT has window ends defined in the HT. Default is False.
+        :return: Table annotated with post-window position.
+        :rtype: hl.Table
+        """
+        logger.info("Annotating the positions per transcript back onto the input HT...")
+        # This is to run `hl.binary_search` using the window end position as input
+        ht = ht.annotate(pos_per_transcript=pos_ht[ht.transcript].positions)
+
+        logger.info(
+            "Running hl.binary_search to find the index of the first position post-window..."
+        )
+        # hl.binary search will return the index of the position that is closest to the search element (window_end)
+        # If window_end exists in the HT, hl.binary_search will return the index of the window_end
+        # If window_end does not exist in the HT, hl.binary_search will return the index of the next largest position
+        # e.g., pos_per_transcript = [1, 4, 8]
+        # hl.binary_search(pos_per_transcript, 4) will return 1
+        # hl.binary_search(pos_per_transcript, 5) will return 2
+        ht = ht.annotate(
+            post_window_index=hl.binary_search(ht.pos_per_transcript, ht.window_end),
+            n_pos_per_transcript=hl.len(ht.pos_per_transcript),
+        )
+        if has_end:
+            return ht.annotate(
+                post_window_pos=hl.case()
+                .when(
+                    ht.post_window_index + 1 < ht.n_pos_per_transcript - 1,
+                    ht.pos_per_transcript[ht.post_window_index + 1],
+                )
+                # hl.binary_search will only return an index larger than the length of a list
+                # if that position is larger than the largest element in the list
+                # e.g., pos_per_transcript = [1, 4, 8]
+                # hl.binary_search(pos_per_transcript, 10) will return 3
+                # post-window positions should never be larger than the largest position of a transcript
+                # (so this should never happen)
+                .when(
+                    ht.post_window_index + 1 == ht.n_pos_per_transcript - 1, ht.end_pos
+                )
+                .or_missing()
+            )
+        return ht.annotate(
+            post_window_pos=hl.case()
+            .when(
+                ht.post_window_index < ht.n_pos_per_transcript - 1,
+                ht.pos_per_transcript[ht.post_window_index],
+            )
+            .when(ht.post_window_index == ht.n_pos_per_transcript - 1, ht.end_pos)
+            .or_missing(),
+        )
+
     logger.info(
         "Checking how many window end positions are actually defined in the input HT..."
     )
@@ -1211,11 +1295,24 @@ def search_for_two_breaks(
     end_ht = ht.filter(
         hl.is_defined(window_ht[hl.locus(ht.locus.contig, ht.window_end)])
     )
-    end_ht = end_ht.annotate(post_window_pos=end_ht.window_end)
     end_ht = end_ht.checkpoint(
         f"{temp_path}/simul_break_prep_end_def.ht", overwrite=True
     )
+    end_transcripts = end_ht.aggregate(
+        hl.agg.collect_as_set(end_ht.transcript), _localize=False
+    )
     logger.info(f"Sites with defined window ends: {end_ht.count()}")
+
+    logger.info(
+        "Adding post-window position for sites that have their window ends defined..."
+    )
+    # NOTE: The annotation post_window_pos must actually be outside the window of constraint
+    # Otherwise, `search_for_break` will undercount the obs/exp variant counts within the window of constraint
+    pos_ht = _get_pos_per_transcript(window_ht, end_transcripts)
+    end_ht = _get_post_window_pos(end_ht, pos_ht, has_end=True)
+    end_ht = end_ht.checkpoint(
+        f"{temp_path}/simul_break_prep_end_def_ready.ht", overwrite=True
+    )
 
     logger.info("Working on sites that don't have their window ends defined in the HT")
     no_end_ht = ht.filter(
@@ -1229,45 +1326,25 @@ def search_for_two_breaks(
     )
     logger.info(f"Sites without defined window ends: {no_end_ht.count()}")
 
-    logger.info("Gathering all positions in each transcript...")
-    pos_ht = window_ht.filter(no_end_transcripts.contains(window_ht.transcript))
-    pos_ht = pos_ht.group_by(transcript=pos_ht.transcript).aggregate(
-        positions=hl.agg.collect(pos_ht.locus.position)
+    logger.info(
+        "Adding post-window position for sites that don't have defined window ends..."
     )
-    pos_ht = pos_ht.checkpoint(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
-
-    # Annotate positions per transcript back onto no end HT
-    no_end_ht = no_end_ht.annotate(
-        pos_per_transcript=pos_ht[no_end_ht.transcript].positions
-    )
-    no_end_ht = no_end_ht.annotate(
-        post_window_index=hl.binary_search(
-            no_end_ht.pos_per_transcript, no_end_ht.window_end
-        ),
-        n_pos_per_transcript=hl.len(no_end_ht.pos_per_transcript),
-    )
-    no_end_ht = no_end_ht.annotate(
-        post_window_pos=hl.case()
-        .when(
-            hl.is_defined(no_end_ht.post_window_index),
-            hl.if_else(
-                no_end_ht.post_window_index == no_end_ht.n_pos_per_transcript,
-                no_end_ht.end_pos,
-                no_end_ht.pos_per_transcript[no_end_ht.post_window_index],
-            ),
-        )
-        .or_missing()
-    )
+    pos_ht = _get_pos_per_transcript(window_ht, no_end_transcripts)
+    no_end_ht = _get_post_window_pos(no_end_ht, pos_ht)
     no_end_ht = no_end_ht.checkpoint(
         f"{temp_path}/simul_break_prep_no_end_ready.ht", overwrite=True
     )
 
     logger.info("Joining no end HT with end HT...")
+    end_ht = end_ht.drop(
+        "pos_per_transcript", "post_window_index", "n_pos_per_transcript"
+    )
+    no_end_ht = no_end_ht.drop(
+        "pos_per_transcript", "post_window_index", "n_pos_per_transcript"
+    )
     ht = end_ht.join(no_end_ht, how="outer")
     ht = ht.annotate(
-        post_window_pos=hl.if_else(
-            hl.is_defined(ht.post_window_pos), ht.post_window_pos, ht.post_window_pos_1,
-        ),
+        post_window_pos=hl.coalesce(ht.post_window_pos, ht.post_window_pos_1),
         **annotation_ht[ht.key],
     )
     ht = ht.checkpoint(f"{temp_path}/simul_break_prep.ht", overwrite=True)

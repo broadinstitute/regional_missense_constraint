@@ -4,6 +4,8 @@ from typing import Dict, Tuple
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import file_exists
+
 from gnomad_lof.constraint_utils.constraint_basics import (
     add_most_severe_csq_to_tc_within_ht,
     annotate_constraint_groupings,
@@ -12,6 +14,7 @@ from gnomad_lof.constraint_utils.constraint_basics import (
     prepare_ht,
 )
 from gnomad_lof.constraint_utils.generic import fast_filter_vep
+
 from rmc.resources.basics import (
     ACID_NAMES_PATH,
     CODON_TABLE_PATH,
@@ -19,6 +22,7 @@ from rmc.resources.basics import (
     mutation_rate,
     MUTATION_RATE_TABLE_PATH,
 )
+from rmc.resources.grch37.gnomad import constraint_ht
 import rmc.resources.grch37.reference_data as grch37
 import rmc.resources.grch38.reference_data as grch38
 from rmc.resources.resource_utils import BUILDS, MISSENSE
@@ -125,7 +129,6 @@ def process_context_ht(
         raise DataException(f"Build must be one of {BUILDS}.")
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
-
     if build == "GRCh37":
         ht = grch37.full_context.ht()
     else:
@@ -169,25 +172,25 @@ def get_exome_bases(build: str) -> int:
     if build not in BUILDS:
         raise DataException(f"Build must be one of {BUILDS}.")
 
-    logger.info("Reading in gencode gtf")
+    logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     if build == "GRCh37":
-        ht = grch37.gencode.ht()
-
+        ht = grch37.full_context.ht()
     else:
-        ht = grch38.gencode.ht()
+        ht = grch38.full_context.ht()
 
-    logger.info("Filtering gencode gtf to feature type == CDS...")
-    # NOTE: using 'contains' here since gtf didn't seem to have imported correctly on 11/23/20
-    # gencode.aggregate(hl.agg.counter(gencode.level)) shows:
-    # {'3;': 538, '1': 129952, '2': 1955837, '1;': 1, '3': 316504}
-    ht = ht.filter((ht.feature == "CDS") & ~(ht.level.contains("3")))
-
-    logger.info("Summing total bases in exome...")
-    # GENCODE is 1-based
-    ht = ht.annotate(
-        cds_len=(ht.interval.end.position - ht.interval.start.position) + 1
+    logger.info("Filtering to canonical transcripts...")
+    ht = fast_filter_vep(
+        ht, vep_root="vep", syn=False, canonical=True, filter_empty=True
     )
-    return ht.aggregate(hl.agg.sum(ht.cds_len))
+
+    logger.info("Removing outlier transcripts...")
+    outlier_transcripts = get_outlier_transcripts()
+    ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
+    ht = ht.explode(ht.transcript_consequences)
+    ht = ht.filter(
+        ~outlier_transcripts.contains(ht.transcript_consequences.transcript_id)
+    )
+    return ht.count()
 
 
 def keep_criteria(ht: hl.Table, exac: bool = False) -> hl.expr.BooleanExpression:
@@ -362,4 +365,33 @@ def get_plateau_model(
         .when(locus_expr.in_x_nonpar(), globals_expr.plateau_x_models.total[cpg_expr])
         .when(locus_expr.in_y_nonpar(), globals_expr.plateau_y_models.total[cpg_expr])
         .default(globals_expr.plateau_models.total[cpg_expr])
+    )
+
+
+## Outlier transcript util
+def get_outlier_transcripts() -> hl.expr.SetExpression:
+    """
+    Read in LoF constraint HT results to get set of outlier transcripts.
+
+    Transcripts are removed for the reasons detailed here: 
+    https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
+
+    :return: Set of outlier transcripts.
+    :rtype: hl.expr.SetExpression
+    """
+    logger.warning(
+        "Assumes LoF constraint has been separately calculated and that constraint HT exists..."
+    )
+    if not file_exists(constraint_ht.path):
+        raise DataException("Constraint HT not found!")
+
+    constraint_transcript_ht = constraint_ht.ht().key_by("transcript")
+    constraint_transcript_ht = constraint_transcript_ht.filter(
+        constraint_transcript_ht.canonical
+    ).select("constraint_flag")
+    constraint_transcript_ht = constraint_transcript_ht.filter(
+        hl.len(constraint_transcript_ht.constraint_flag) > 0
+    )
+    return constraint_transcript_ht.aggregate(
+        hl.agg.collect_as_set(constraint_transcript_ht.transcript), _localize=False,
     )
