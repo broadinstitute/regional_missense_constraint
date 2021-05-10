@@ -10,6 +10,15 @@ UKBB_FREEZE = 5
 UKBB_FREEZES = [5]
 
 
+DATA_SOURCE = "broad"
+"""
+Source of UKBB sequencing data.
+
+Original options were 'regeneron' or 'broad', but the data source will always be 'broad' for 
+anything larger than the 100K callset.
+"""
+
+
 MISSENSE = "missense_variant"
 """
 String representing missense variant VEP annotation.
