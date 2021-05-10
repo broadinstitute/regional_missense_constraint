@@ -7,6 +7,7 @@ from rmc.resources.resource_utils import (
     GNOMAD_VER,
     RESOURCE_PREFIX,
     RMC_PREFIX,
+    UKBB_VER,
 )
 
 
@@ -76,7 +77,10 @@ constraint_prep = VersionedTableResource(
     versions={
         GNOMAD_VER: TableResource(
             path=f"{MODEL_PREFIX}/{GNOMAD_VER}/context_obs_exp_annot.ht"
-        )
+        ),
+        UKBB_VER: TableResource(
+            path=f"{MODEL_PREFIX}/ukbb_freeze{UKBB_VER}/context_obs_exp_annot.ht"
+        ),
     },
 )
 """
@@ -91,7 +95,12 @@ CONSTRAINT_PREFIX = f"{RMC_PREFIX}/constraint"
 one_break = VersionedTableResource(
     default_version=GNOMAD_VER,
     versions={
-        GNOMAD_VER: TableResource(path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/one_break.ht")
+        GNOMAD_VER: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/one_break.ht"
+        ),
+        UKBB_VER: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/ukbb_freeze{UKBB_VER}/one_break.ht"
+        ),
     },
 )
 """
@@ -105,7 +114,10 @@ not_one_break = VersionedTableResource(
     versions={
         GNOMAD_VER: TableResource(
             path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/not_one_break.ht"
-        )
+        ),
+        UKBB_VER: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/ukbb_{UKBB_VER}/not_one_break.ht"
+        ),
     },
 )
 """
@@ -119,7 +131,10 @@ multiple_breaks = VersionedTableResource(
     versions={
         GNOMAD_VER: TableResource(
             path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/multiple_breaks.ht"
-        )
+        ),
+        UKBB_VER: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/ukbb_freeze{UKBB_VER}/multiple_breaks.ht"
+        ),
     },
 )
 """
@@ -131,7 +146,10 @@ simul_break = VersionedTableResource(
     versions={
         GNOMAD_VER: TableResource(
             path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/simul_break.ht"
-        )
+        ),
+        UKBB_VER: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/ukbb_freeze{UKBB_VER}/simul_break.ht"
+        ),
     },
 )
 """
@@ -141,7 +159,10 @@ Table containing transcripts with two simultaneous breaks.
 breaks = VersionedTableResource(
     default_version=GNOMAD_VER,
     versions={
-        GNOMAD_VER: TableResource(path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/breaks.ht")
+        GNOMAD_VER: TableResource(path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/breaks.ht"),
+        UKBB_VER: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/ukbb_freeze{UKBB_VER}/breaks.ht"
+        ),
     },
 )
 """
@@ -151,7 +172,12 @@ Table containing transcripts with any evidence of RMC (one break, multiple break
 no_breaks = VersionedTableResource(
     default_version=GNOMAD_VER,
     versions={
-        GNOMAD_VER: TableResource(path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/no_breaks.ht")
+        GNOMAD_VER: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/no_breaks.ht"
+        ),
+        UKBB_VER: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/ukbb_freeze{UKBB_VER}/no_breaks.ht"
+        ),
     },
 )
 """
