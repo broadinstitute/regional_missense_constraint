@@ -1,5 +1,6 @@
 import hail as hl
 
+from gnomad.resources.grch38.reference_data import vep_context
 from gnomad.resources.resource_utils import (
     TableResource,
     VersionedTableResource,
@@ -7,6 +8,19 @@ from gnomad.resources.resource_utils import (
 
 from rmc.resources.resource_utils import import_gencode, RESOURCE_PREFIX
 
+## Reference genome related resources
+full_context = VersionedTableResource(
+    default_version="101", versions={vep_context["101"]},
+)
+
+processed_context = VersionedTableResource(
+    default_version="101",
+    versions={
+        "101": TableResource(
+            path=f"{RESOURCE_PREFIX}/GRCh38/reference_data/ht/context_fasta_snps_only.v101.ht",
+        )
+    },
+)
 
 ## Exon/transcript related resources
 gencode = VersionedTableResource(
