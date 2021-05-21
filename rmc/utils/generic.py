@@ -190,6 +190,16 @@ def get_exome_bases(build: str) -> int:
     ht = ht.filter(
         ~outlier_transcripts.contains(ht.transcript_consequences.transcript_id)
     )
+
+    logger.info(
+        "Collecting context HT by key (to make sure each locus only gets counted once)..."
+    )
+    ht = ht.key_by("locus").collect_by_key()
+
+    logger.info("Filtering positions with median coverage < 5...")
+    # Taking just the first value since the coverage should be the same for all entries at a locus
+    ht = ht.filter(ht.values[0].coverage.exomes.median >= 5)
+    ht = ht.select()
     return ht.count()
 
 

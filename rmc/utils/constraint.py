@@ -804,7 +804,7 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
         scan_exp_expr=ht.cumulative_exp,
     )
 
-    return search_for_break(ht, "transcript", False, chisq_threshold)
+    return search_for_break(ht, "transcript", False, False, chisq_threshold)
 
 
 def get_subsection_exprs(
