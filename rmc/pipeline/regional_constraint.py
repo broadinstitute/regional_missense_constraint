@@ -412,25 +412,36 @@ def main(args):
                 logger.info("Checkpointing HT...")
                 is_break_ht = ht.filter(ht.is_break)
                 is_break_ht = is_break_ht.checkpoint(
-                    # simul_break.path, overwrite=args.overwrite
-                    f"{temp_path}/simul_break_{num}_obs_mis.ht",
-                    overwrite=True,
+                    f"{temp_path}/simul_break_{num}_obs_mis.ht", overwrite=True,
                 )
 
                 transcripts_per_window[num] = is_break_ht.aggregate(
                     hl.agg.collect_as_set(is_break_ht.transcript), _localize=False
                 )
 
+            logger.info("Writing out transcripts with simultaneous breaks...")
+            for index, num in enumerate(num_obs_var):
+                if index == 0:
+                    ht = hl.read_table(f"{temp_path}/simul_break_{num}_obs_mis.ht")
+                else:
+                    new_ht = hl.read_table(f"{temp_path}/simul_break_{num}_obs_mis.ht")
+                    ht = ht.union(new_ht)
+            ht = ht.annotate_globals(transcripts_per_window=transcripts_per_window)
+            ht.write(simul_break.path, overwrite=args.overwrite)
+
             logger.info("Writing out transcripts with no breaks...")
             # Get all transcripts with simultaneous breaks
             transcripts = hl.empty_set(hl.tstr)
             for num in transcripts_per_window:
                 transcripts.union(transcripts_per_window[num])
-            ht = ht.filter(~transcripts.contains(ht.transcript))
-            ht.write(no_breaks.path, overwrite=args.overwrite)
+            context_ht = context_ht.filter(~transcripts.contains(context_ht.transcript))
+            context_ht.write(no_breaks.path, overwrite=args.overwrite)
 
         if args.expand_simul_break_window:
-            pass
+            logger.info("Reading in HT with breakpoints for simultaneous breaks...")
+            is_break_ht = simul_break.ht()
+
+            logger.info("Annotating each transcript with max window size...")
 
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions
@@ -729,6 +740,12 @@ if __name__ == "__main__":
         "--expand_simul_break_window",
         help="Expand the window of constraint in transcripts with two simultaneous breaks",
         action="store_true",
+    )
+    parser.add_argument(
+        "--transcript_percentage",
+        help="Maximum percentage of the transcript that can be included within a window of constraint. Used for transcripts with simultaneous breaks. Default is 90%",
+        type=float,
+        default=0.9,
     )
     parser.add_argument(
         "--fix_xg",
