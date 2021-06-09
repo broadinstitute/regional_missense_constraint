@@ -429,6 +429,9 @@ def main(args):
             ht = ht.filter(~transcripts.contains(ht.transcript))
             ht.write(no_breaks.path, overwrite=args.overwrite)
 
+        if args.expand_simul_break_window:
+            pass
+
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions
         # after running on gnomAD v2
@@ -720,6 +723,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--search_for_simul_breaks",
         help="Search for two simultaneous breaks in transcripts without a single significant break",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--expand_simul_break_window",
+        help="Expand the window of constraint in transcripts with two simultaneous breaks",
         action="store_true",
     )
     parser.add_argument(
