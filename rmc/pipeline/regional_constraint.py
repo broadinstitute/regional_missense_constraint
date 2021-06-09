@@ -363,23 +363,48 @@ def main(args):
                 end_pos=transcript_ht[context_ht.transcript].end_pos,
             )
 
+            logger.info(
+                "Getting number of observed variants (these numbers are used to determine window size)..."
+            )
+            num_obs_var = list(map(int, args.num_obs_var.split(",")))
+
+            if len(num_obs_var) == 1:
+                raise DataException(
+                    "num_obs_var should contain at least two integers (e.g., '10,20')"
+                )
+
             logger.info("Searching for transcripts with simultaneous breaks...")
-            ht = search_for_two_breaks(
-                ht=context_ht,
-                exome_ht=exome_ht,
-                chisq_threshold=args.chisq_threshold,
-                num_obs_var=args.num_obs_var,
-            )
-            logger.info("Writing out simultaneous breaks HT...")
-            is_break_ht = ht.filter(ht.is_break)
-            is_break_ht = is_break_ht.checkpoint(
-                simul_break.path, overwrite=args.overwrite
-            )
-            transcripts = is_break_ht.aggregate(
-                hl.agg.collect_as_set(is_break_ht.transcript), _localize=False
-            )
+            transcripts_per_window = {}
+            for num in num_obs_var:
+
+                logger.info(
+                    "Searching for window size needed to observe %i missense variants (on average)",
+                    num,
+                )
+                ht = search_for_two_breaks(
+                    ht=context_ht,
+                    exome_ht=exome_ht,
+                    chisq_threshold=args.chisq_threshold,
+                    num_obs_var=num,
+                )
+
+                logger.info("Checkpointing HT...")
+                is_break_ht = ht.filter(ht.is_break)
+                is_break_ht = is_break_ht.checkpoint(
+                    # simul_break.path, overwrite=args.overwrite
+                    f"{temp_path}/simul_break_{num}_obs_mis.ht",
+                    overwrite=True,
+                )
+
+                transcripts_per_window[num] = is_break_ht.aggregate(
+                    hl.agg.collect_as_set(is_break_ht.transcript), _localize=False
+                )
 
             logger.info("Writing out transcripts with no breaks...")
+            # Get all transcripts with simultaneous breaks
+            transcripts = hl.empty_set(hl.tstr)
+            for num in transcripts_per_window:
+                transcripts.union(transcripts_per_window[num])
             ht = ht.filter(~transcripts.contains(ht.transcript))
             ht.write(no_breaks.path, overwrite=args.overwrite)
 
@@ -645,9 +670,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--num_obs_var",
-        help="Number of observed variants. Used when determining the window size for simultaneous breaks.",
-        type=int,
-        default=10,
+        help="Comma delimited string with number of observed variants. Used when determining the window sizes for simultaneous breaks.",
+        default="10,20,50",
     )
     parser.add_argument(
         "--pre_process_data", help="Pre-process data", action="store_true"
