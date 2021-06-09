@@ -23,7 +23,7 @@ from rmc.resources.grch37.gnomad import (
     processed_exomes,
     prop_obs_coverage,
 )
-from rmc.resources.grch37.reference_data import processed_context
+from rmc.resources.grch37.reference_data import full_context, processed_context
 from rmc.resources.resource_utils import GNOMAD_VER, MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
@@ -353,14 +353,27 @@ def main(args):
             context_ht = not_one_break.ht()
             exome_ht = filtered_exomes.ht()
 
-            logger.info("Getting start and end positions for each transcript...")
-            transcript_ht = context_ht.group_by(context_ht.transcript).aggregate(
-                end_pos=hl.agg.max(context_ht.locus.position),
-                start_pos=hl.agg.min(context_ht.locus.position),
+            logger.info(
+                "Getting start and end positions and total size for each transcript..."
+            )
+            # Read in full context HT (not filtered to missense variants)
+            # Also filter full context HT to canonical transcripts only
+            full_context_ht = full_context.ht()
+            full_context_ht = process_vep(full_context_ht)
+            transcript_ht = full_context_ht.group_by(
+                full_context_ht.transcript
+            ).aggregate(
+                end_pos=hl.agg.max(full_context_ht.locus.position),
+                start_pos=hl.agg.min(full_context_ht.locus.position),
             )
             context_ht = context_ht.annotate(
                 start_pos=transcript_ht[context_ht.transcript].start_pos,
                 end_pos=transcript_ht[context_ht.transcript].end_pos,
+                transcript_size=(
+                    transcript_ht[context_ht.transcript].end_pos
+                    - transcript_ht[context_ht.transcript].start_pos
+                )
+                + 1,
             )
 
             logger.info(
