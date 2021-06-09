@@ -366,6 +366,14 @@ def main(args):
                 end_pos=hl.agg.max(full_context_ht.locus.position),
                 start_pos=hl.agg.min(full_context_ht.locus.position),
             )
+
+            logger.info(
+                "Checkpointing transcript HT to avoid redundant calculations..."
+            )
+            transcript_ht = transcript_ht.checkpoint(
+                f"{temp_path}/transcript.ht", overwrite=True
+            )
+
             context_ht = context_ht.annotate(
                 start_pos=transcript_ht[context_ht.transcript].start_pos,
                 end_pos=transcript_ht[context_ht.transcript].end_pos,
