@@ -426,7 +426,14 @@ def main(args):
                 else:
                     new_ht = hl.read_table(f"{temp_path}/simul_break_{num}_obs_mis.ht")
                     ht = ht.union(new_ht)
-            ht = ht.annotate_globals(transcripts_per_window=transcripts_per_window)
+
+            # Get all transcripts with simultaneous breaks
+            transcripts = hl.empty_set(hl.tstr)
+            for num in transcripts_per_window:
+                transcripts.union(transcripts_per_window[num])
+                annot_dict = {f"{num}_obs_mis": transcripts_per_window[num]}
+                ht = ht.annotate_globals(**annot_dict)
+            ht = ht.annotate_globals(all_simul_transcripts=transcripts)
             ht.write(simul_break.path, overwrite=args.overwrite)
 
             logger.info("Writing out transcripts with no breaks...")
@@ -441,7 +448,16 @@ def main(args):
             logger.info("Reading in HT with breakpoints for simultaneous breaks...")
             is_break_ht = simul_break.ht()
 
+            logger.info(
+                "Reading in context HT and filtering to transcripts with simultaneous breaks..."
+            )
+            ht = not_one_break.ht().select()
+            ht = ht.annotate_globals(**is_break_ht.index_globals())
+            ht = ht.filter(ht.transcripts.contains(ht.transcript))
+            ht = ht.annotate(**is_break_ht[ht.key])
+
             logger.info("Annotating each transcript with max window size...")
+            ht = ht.annotate(max_window_size=ht.transcript_size * args.transcript_percentage)
 
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions
