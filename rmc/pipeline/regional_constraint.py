@@ -30,6 +30,7 @@ from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
     fix_xg,
+    get_avg_bases_between_mis,
     get_fwd_exprs,
     GROUPINGS,
     process_additional_breaks,
@@ -402,11 +403,17 @@ def main(args):
                     "Searching for window size needed to observe %i missense variants (on average)",
                     num,
                 )
+                # Get number of base pairs needed to observe `num` number of missense variants (on average)
+                # This number is used to determine the window size to search for constraint with simultaneous breaks
+                break_size = get_avg_bases_between_mis(exome_ht) * num
+                logger.info(
+                    "Number of bases to search for constraint (size for simultaneous breaks): %i",
+                    break_size,
+                )
                 ht = search_for_two_breaks(
                     ht=context_ht,
-                    exome_ht=exome_ht,
+                    break_size=break_size,
                     chisq_threshold=args.chisq_threshold,
-                    num_obs_var=num,
                 )
 
                 logger.info("Checkpointing HT...")
@@ -457,7 +464,15 @@ def main(args):
             ht = ht.annotate(**is_break_ht[ht.key])
 
             logger.info("Annotating each transcript with max window size...")
-            ht = ht.annotate(max_window_size=ht.transcript_size * args.transcript_percentage)
+            ht = ht.annotate(
+                max_window_size=ht.transcript_size * args.transcript_percentage
+            )
+
+            # Checked all window sizes for all transcripts without one significant break, which means
+            # can update max window size for some transcripts (we already know the upper bound of the window size)
+            # i.e., transcripts that only had breaks at 10 obs mis window size
+            # have a max window size of < 20 obs mis window size. Likewise, transcripts with breakpoints at
+            # only 10 obs mis and 20 obs mis window sizes have a max window size of < 50 obs mis window size
 
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions
@@ -506,7 +521,7 @@ def main(args):
                 )
 
                 logger.info("Searching for simultaneous breaks...")
-                xg = search_for_two_breaks(xg, exome_ht)
+                xg = search_for_two_breaks(xg)
                 is_break_ht = xg.filter(xg.is_break)
                 if is_break_ht.count() == 0:
                     logger.info("XG has no breaks!")

@@ -948,10 +948,7 @@ def get_avg_bases_between_mis(ht: hl.Table) -> int:
 
 
 def search_for_two_breaks(
-    ht: hl.Table,
-    exome_ht: hl.Table,
-    chisq_threshold: float = 13.8,
-    num_obs_var: int = 10,
+    ht: hl.Table, break_size: int, chisq_threshold: float = 13.8,
 ) -> hl.Table:
     """
     Searches for evidence of constraint within a set window size/number of base pairs.
@@ -962,19 +959,12 @@ def search_for_two_breaks(
         - Input Table has a field named 'transcript'.
 
     :param hl.Table ht: Input Table.
-    :param hl.Table exome_ht: Table containing variants from gnomAD exomes.
+    :param int break_size: Number of bases to search for constraint (window size for simultaneous breaks).
     :param float chisq_threshold: Chi-square significance threshold. 
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
-    :param int num_obs_var: Number of observed variants. Used when determining the window size for simultaneous breaks. 
-        Default is 10, meaning that the window size for simultaneous breaks is the average number of base pairs required to see 10 observed variants.
     :return: Table annotated with is_break at the *end* position of a simultaneous break window.
     :rtype: hl.Table
     """
-    break_size = get_avg_bases_between_mis(exome_ht) * num_obs_var
-    logger.info(
-        f"Number of bases to search for constraint (size for simultaneous breaks): {break_size}"
-    )
-
     logger.info(
         f"Annotating each position with end position for window \
         if position + {break_size - 1} bases is less than or equal to the transcript stop pos..."
