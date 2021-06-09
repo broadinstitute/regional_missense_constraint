@@ -397,6 +397,7 @@ def main(args):
 
             logger.info("Searching for transcripts with simultaneous breaks...")
             transcripts_per_window = {}
+            window_sizes = {}
             for num in num_obs_var:
 
                 logger.info(
@@ -406,6 +407,7 @@ def main(args):
                 # Get number of base pairs needed to observe `num` number of missense variants (on average)
                 # This number is used to determine the window size to search for constraint with simultaneous breaks
                 break_size = get_avg_bases_between_mis(exome_ht) * num
+                window_sizes[num] = break_size
                 logger.info(
                     "Number of bases to search for constraint (size for simultaneous breaks): %i",
                     break_size,
@@ -438,7 +440,10 @@ def main(args):
             transcripts = hl.empty_set(hl.tstr)
             for num in transcripts_per_window:
                 transcripts.union(transcripts_per_window[num])
-                annot_dict = {f"{num}_obs_mis": transcripts_per_window[num]}
+                annot_dict = {
+                    f"{num}_obs_mis": transcripts_per_window[num],
+                    f"{num}_obs_mis_window_size": window_sizes[num],
+                }
                 ht = ht.annotate_globals(**annot_dict)
             ht = ht.annotate_globals(all_simul_transcripts=transcripts)
             ht.write(simul_break.path, overwrite=args.overwrite)
