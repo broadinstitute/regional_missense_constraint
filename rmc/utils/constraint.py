@@ -1222,8 +1222,20 @@ def search_for_two_breaks(
 
 def expand_two_break_window(
     ht: hl.Table, transcript_percentage: float, chisq_threshold: float = 13.8,
-):
+) -> hl.Table:
     """
+    Search for larger windows of constraint in transcripts with simultaneous breaks.
+
+    This function searches for breaks for break sizes of `min_window_size` to `max_window_size`,
+    where `min_window_size` is the number of base pairs needed, on average, to see 10 missense variants, and
+    `max_window_size` is the number of base pairs equal to `transcript_percentage` of the largest transcript size.
+    For example, for gnomAD v2.1, `min_window_size` is 100bp, and `max_window_size` is 90% of the largest transcript.
+
+    :param hl.Table ht: Input Table filtered to contain only transcripts with simultaneous breaks. 
+    :param float transcript_percentage: Maximum percentage of the transcript that can be included within a window of constraint. 
+    :param float chisq_threshold:  Chi-square significance threshold. Default is 13.8.
+    :return: Table with largest simultaneous break window size annotated per transcript.
+    :rtype: hl.Table
     """
     # Get smallest possible window size
     # NOTE: Hardcoding 10 here as smallest number of obs mis, not sure if this will change in the future
@@ -1258,7 +1270,9 @@ def expand_two_break_window(
             .when(ht.obs_mis_20.contains(ht.transcript), [ht.obs_mis_20_window_size])
             .default([ht.obs_mis_10_window_size])
         ),
-        break_chisq=[ht.max_chisq],
+        break_chisqs=[ht.max_chisq],
+        window_ends=[ht.window_end],
+        post_window_pos=[ht.post_window_pos],
     )
 
     logger.info("Expanding window sizes...")
@@ -1272,13 +1286,18 @@ def expand_two_break_window(
         )
         break_ht = break_ht.select(
             break_sizes=break_ht.break_sizes.append(window_size),
-            break_chisq=break_ht.break_chisq.append(ht.max_chisq),
+            break_chisqs=break_ht.break_chisqs.append(ht.max_chisq),
+            window_ends=break_ht.window_ends.append(ht.window_end),
+            post_window_pos=break_ht.post_window_pos.append(ht.post_window_pos),
         )
         # This method will checkpoint a LOT of temporary tables...not sure if there is a better way
         break_ht = break_ht.checkpoint(
             f"{temp_path}/simul_break_{window_size}_window.ht", overwrite=True
         )
         ht = ht.annotate(**break_ht[ht.key])
+
+    logger.info("Getting maximum window sizes and returning...")
+    # add code here
 
     return ht
 
