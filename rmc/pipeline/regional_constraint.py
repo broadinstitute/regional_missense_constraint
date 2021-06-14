@@ -441,8 +441,8 @@ def main(args):
             for num in transcripts_per_window:
                 transcripts.union(transcripts_per_window[num])
                 annot_dict = {
-                    f"{num}_obs_mis": transcripts_per_window[num],
-                    f"{num}_obs_mis_window_size": window_sizes[num],
+                    f"obs_mis_{num}": transcripts_per_window[num],
+                    f"obs_mis_{num}_window_size": window_sizes[num],
                 }
                 ht = ht.annotate_globals(**annot_dict)
             ht = ht.annotate_globals(all_simul_transcripts=transcripts)
@@ -476,8 +476,17 @@ def main(args):
             # Checked all window sizes for all transcripts without one significant break, which means
             # can update max window size for some transcripts (we already know the upper bound of the window size)
             # i.e., transcripts that only had breaks at 10 obs mis window size
-            # have a max window size of < 20 obs mis window size. Likewise, transcripts with breakpoints at
-            # only 10 obs mis and 20 obs mis window sizes have a max window size of < 50 obs mis window size
+            # have a max window size of 20 obs mis window size. Likewise, transcripts with breakpoints at
+            # only 20 obs mis window sizes have a max window size of 50 obs mis window size
+            max_50 = ht.obs_mis_20.difference(ht.obs_mis_50)
+            max_20 = ht.obs_mis_10.difference(ht.obs_mis_20)
+            ht = ht.annotate(
+                max_window_size=hl.case()
+                .when(max_50.contains(ht.trasncript), ht.obs_mis_50_window_size)
+                .when(max_20.contains(ht.transcript), ht.obs_mis_20_window_size)
+                .default(ht.max_window_size)
+            )
+
 
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions
