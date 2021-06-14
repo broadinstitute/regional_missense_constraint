@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Union
 
 import hail as hl
 
@@ -903,10 +903,7 @@ def get_avg_bases_between_mis(ht: hl.Table) -> int:
 
 
 def search_for_two_breaks(
-    ht: hl.Table,
-    break_size: int,
-    max_break_size: Optional[int] = None,
-    chisq_threshold: float = 13.8,
+    ht: hl.Table, break_size: int, chisq_threshold: float = 13.8,
 ) -> hl.Table:
     """
     Searches for evidence of constraint within a set window size/number of base pairs.
@@ -919,23 +916,11 @@ def search_for_two_breaks(
 
     :param hl.Table ht: Input Table.
     :param int break_size: Number of bases to search for constraint (window size for simultaneous breaks).
-    :param int max_break_size: Maximum window size to search for constraint. Only used when expanding 
-        boundaries of simultaneous breaks windows. Default is None.
     :param float chisq_threshold: Chi-square significance threshold. 
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
     :return: Table annotated with is_break at the *end* position of a simultaneous break window.
     :rtype: hl.Table
     """
-    if max_break_size:
-        # Double check input HT has max_window_size annotation if max_break_size is set
-        if "max_window_size" not in ht.info:
-            raise DataException(
-                "HT must be annotated with max_window_size if max_break_size arg is set!"
-            )
-
-        # Remove transcripts that no longer need to be searched (break_size is larger than max_window_size)
-        ht = ht.filter(ht.max_window_size >= break_size)
-
     logger.info(
         f"Annotating each position with end position for window \
         if position + {break_size - 1} bases is less than or equal to the transcript stop pos..."
