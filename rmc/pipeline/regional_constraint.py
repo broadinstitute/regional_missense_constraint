@@ -29,6 +29,7 @@ from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
+    expand_two_break_window,
     fix_xg,
     get_avg_bases_between_mis,
     get_fwd_exprs,
@@ -446,7 +447,7 @@ def main(args):
                 }
                 ht = ht.annotate_globals(**annot_dict)
             ht = ht.annotate_globals(all_simul_transcripts=transcripts)
-            ht.write(simul_break.path, overwrite=args.overwrite)
+            ht.write(f"{temp_path}/simul_breaks.ht", overwrite=args.overwrite)
 
             logger.info("Writing out transcripts with no breaks...")
             # Get all transcripts with simultaneous breaks
@@ -458,7 +459,7 @@ def main(args):
 
         if args.expand_simul_break_window:
             logger.info("Reading in HT with breakpoints for simultaneous breaks...")
-            is_break_ht = simul_break.ht()
+            is_break_ht = hl.read_table(f"{temp_path}/simul_breaks.ht")
 
             logger.info(
                 "Reading in context HT and filtering to transcripts with simultaneous breaks..."
@@ -467,6 +468,12 @@ def main(args):
             ht = ht.annotate_globals(**is_break_ht.index_globals())
             ht = ht.filter(ht.transcripts.contains(ht.transcript))
             ht = ht.annotate(**is_break_ht[ht.key])
+
+            logger.info("Expanding simultaneous break windows...")
+            ht = expand_two_break_window(
+                ht, args.transcript_percentage, args.chisq_threshold
+            )
+            ht.write(simul_break.path, overwrite=args.overwrite)
 
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions
