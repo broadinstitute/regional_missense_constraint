@@ -534,58 +534,86 @@ def search_for_break(
             exp_at_site=(ht.mu_snp / ht.total_mu)
             * ht.total_exp,
         )
+
         # Annotate observed and expected counts for section of transcript pre-window
+        # These values are the current cumulative values minus the value for the site
         ht = ht.annotate(
             # Annotate observed count for section of transcript pre-window
             # = current cumulative obs minus the obs at position
             # Use hl.max to keep this value positive
-            prev_obs=hl.max(ht.cumulative_obs[ht.transcript] - ht.observed, 0),
-            prev_exp=hl.max(ht.cumulative_exp - ht.exp_at_site, 0),
+            pre_obs=hl.max(ht.cumulative_obs[ht.transcript] - ht.observed, 0),
+            pre_exp=hl.max(ht.cumulative_exp - ht.exp_at_site, 0),
         )
         # Make sure prev exp value isn't 0
         # Otherwise, the chisq calculation will return NaN
-        ht = ht.annotate(prev_exp=hl.if_else(ht.prev_exp > 0, ht.prev_exp, 1e-09))
+        ht = ht.annotate(pre_exp=hl.if_else(ht.pre_exp > 0, ht.pre_exp, 1e-09))
+
         # Annotate OE value for section of transcript pre-window
         ht = ht.annotate(
             pre_oe=get_obs_exp_expr(
-                cond_expr=True, obs_expr=ht.prev_obs, exp_expr=ht.prev_exp,
+                cond_expr=True, obs_expr=ht.pre_obs, exp_expr=ht.pre_exp,
+            )
+        )
+
+        # Annotate obsered and expected counts for window of constraint
+        # These values are the cumulative values at the first position post-window minus
+        # the cumulative values at the current window
+        # Also minus the value of the observed or expected variants at the first position post-window
+        # This subtraction is for both obs and exp in case the first position post window has an observed variant
+        # (otherwise you'd overcount the number of obs within the window)
+        ht = ht.annotate(
+            window_obs=(ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript])
+            - ht.next_values.obs,
+            window_exp=(ht.next_values.exp - ht.cumulative_exp)
+            - ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
+        )
+
+        # Annotate OE value for section of transcript within window
+        ht = ht.annotate(
+            window_oe=get_obs_exp_expr(
+                cond_expr=True, obs_expr=ht.window_obs, exp_expr=ht.window_exp,
+            )
+        )
+
+        # Annotate observed and expected counts for section of transcript post-window
+        # These values are the reverse values at the first position post-window plus
+        # the observed and expected values at that first position post-window
+        # (need to add here, otherwise would undercount the number post-window)
+        ht = ht.annotate(
+            post_obs=ht.next_values.reverse_obs + ht.next_values.obs,
+            post_exp=ht.next_values.reverse_exp
+            + ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
+        )
+
+        # Annotate OE value for section of transcript post-window
+        ht = ht.annotate(
+            post_oe=get_obs_exp_expr(
+                cond_expr=True, obs_expr=ht.post_obs, exp_expr=ht.post_exp,
             )
         )
 
         ht = ht.annotate(
             section_nulls=[
                 # Get null expression for section of transcript pre-window
-                # These values are the current cumulative values minus the value for the site
                 get_dpois_expr(
                     cond_expr=True,
                     section_oe_expr=ht.overall_oe,
-                    obs_expr=ht.prev_obs,
-                    exp_expr=ht.prev_exp,
+                    obs_expr=ht.pre_obs,
+                    exp_expr=ht.pre_exp,
                 ),
                 # Get null expression for window of constraint
-                # These values are the cumulative values at the first position post-window minus
-                # the cumulative values at the current window
-                # Also minus the value of the observed or expected variants at the first position post-window
-                # This subtraction is for both obs and exp in case the first position post window has an observed variant
-                # (otherwise you'd overcount the number of obs within the window)
                 get_dpois_expr(
                     cond_expr=True,
                     section_oe_expr=ht.overall_oe,
-                    obs_expr=(ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript])
-                    - ht.next_values.obs,
-                    exp_expr=(ht.next_values.exp - ht.cumulative_exp)
-                    - ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
+                    obs_expr=ht.window_obs,
+                    exp_expr=ht.window_exp,
                 ),
                 # Get null expression for section of transcript post-window
-                # These values are the reverse values at the first position post-window plus
-                # the observed and expected values at that first position post-window
-                # (need to add here, otherwise would undercount the number post-window)
                 get_dpois_expr(
                     cond_expr=True,
                     section_oe_expr=ht.overall_oe,
-                    obs_expr=ht.next_values.reverse_obs + ht.next_values.obs,
-                    exp_expr=ht.next_values.reverse_exp
-                    + ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
+                    obs_expr=ht.post_obs,
+                    exp_expr=ht.post_exp,
                 ),
             ]
         )
@@ -601,32 +629,16 @@ def search_for_break(
                 # Get alt expression for window of constraint
                 get_dpois_expr(
                     cond_expr=True,
-                    section_oe_expr=get_obs_exp_expr(
-                        cond_expr=True,
-                        obs_expr=(
-                            ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript]
-                        )
-                        - ht.next_values.obs,
-                        exp_expr=(ht.next_values.exp - ht.cumulative_exp)
-                        - ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
-                    ),
-                    obs_expr=(ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript])
-                    - ht.next_values.obs,
-                    exp_expr=(ht.next_values.exp - ht.cumulative_exp)
-                    - ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
+                    section_oe_expr=ht.window_oe,
+                    obs_expr=ht.window_obs,
+                    exp_expr=ht.window_exp,
                 ),
                 # Get alt expression for section of transcript post-window
                 get_dpois_expr(
                     cond_expr=True,
-                    section_oe_expr=get_obs_exp_expr(
-                        cond_expr=True,
-                        obs_expr=ht.next_values.reverse_obs + ht.next_values.obs,
-                        exp_expr=ht.next_values.reverse_exp
-                        + ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
-                    ),
-                    obs_expr=ht.next_values.reverse_obs + ht.next_values.obs,
-                    exp_expr=ht.next_values.reverse_exp
-                    + ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
+                    section_oe_expr=ht.post_oe,
+                    obs_expr=ht.post_obs,
+                    exp_expr=ht.next_values.reverse_exp,
                 ),
             ]
         )
