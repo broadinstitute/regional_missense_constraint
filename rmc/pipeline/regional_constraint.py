@@ -467,28 +467,6 @@ def main(args):
             ht = ht.annotate_globals(**is_break_ht.index_globals())
             ht = ht.filter(ht.transcripts.contains(ht.transcript))
             ht = ht.annotate(**is_break_ht[ht.key])
-            # NOTE: hardcoding 10 obs mis as smallest window, not sure if this will change in the future?
-            min_window_size = hl.eval(ht.obs_mis_10_window_size)
-            logger.info("Minimum window size: %i", min_window_size)
-
-            logger.info("Annotating each transcript with max window size...")
-            ht = ht.annotate(
-                max_window_size=ht.transcript_size * args.transcript_percentage
-            )
-
-            # Checked all window sizes for all transcripts without one significant break, which means
-            # can update max window size for some transcripts (we already know the upper bound of the window size)
-            # i.e., transcripts that only had breaks at 10 obs mis window size
-            # have a max window size of 20 obs mis window size. Likewise, transcripts with breakpoints at
-            # only 20 obs mis window sizes have a max window size of 50 obs mis window size
-            max_50 = ht.obs_mis_20.difference(ht.obs_mis_50)
-            max_20 = ht.obs_mis_10.difference(ht.obs_mis_20)
-            ht = ht.annotate(
-                max_window_size=hl.case()
-                .when(max_50.contains(ht.transcript), ht.obs_mis_50_window_size)
-                .when(max_20.contains(ht.transcript), ht.obs_mis_20_window_size)
-                .default(ht.max_window_size)
-            )
 
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions

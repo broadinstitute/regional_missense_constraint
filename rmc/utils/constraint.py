@@ -1220,6 +1220,45 @@ def search_for_two_breaks(
     )
 
 
+def expand_two_break_window(
+    ht: hl.Table, transcript_percentage: float,
+):
+    """
+    """
+    # Get smallest possible window size
+    # NOTE: Hardcoding 10 here as smallest number of obs mis, not sure if this will change in the future
+    min_window_size = hl.eval(ht.obs_mis_10_window_size)
+    logger.info("Minimum window size: %i", min_window_size)
+
+    logger.info("Annotating each transcript with max window size...")
+    ht = ht.annotate(max_window_size=ht.transcript_size * transcript_percentage)
+    max_window_size = round(ht.aggregate(hl.agg.max(ht.max_window_size)))
+    logger.info("Maximum window size: %i", max_window_size)
+
+    # NOTE: hardcoding these numbers(10, 20, 50) here
+    # Checked all window sizes for all transcripts without one significant break, which means
+    # can update max window size for some transcripts (we already know the upper bound of the window size)
+    # i.e., transcripts that only had breaks at 10 obs mis window size
+    # have a max window size of 20 obs mis window size. Likewise, transcripts with breakpoints at
+    # only 20 obs mis window sizes have a max window size of 50 obs mis window size
+    max_50 = ht.obs_mis_20.difference(ht.obs_mis_50)
+    max_20 = ht.obs_mis_10.difference(ht.obs_mis_20)
+    ht = ht.annotate(
+        max_window_size=hl.case()
+        .when(max_50.contains(ht.transcript), ht.obs_mis_50_window_size)
+        .when(max_20.contains(ht.transcript), ht.obs_mis_20_window_size)
+        .default(ht.max_window_size)
+    )
+
+    logger.info("Annotating each transcript with current window size...")
+    ht = ht.annotate(
+        break_sizes=hl.case()
+        .when(ht.obs_mis_50.contains(ht.transcript), [ht.obs_mis_50_window_size])
+        .when(ht.obs_mis_20.contains(ht.transcript), [ht.obs_mis_20_window_size])
+        .default([ht.obs_mis_10_window_size])
+    )
+
+
 def calculate_section_chisq(
     obs_expr: hl.expr.Int64Expression, exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
