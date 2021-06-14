@@ -487,7 +487,6 @@ def main(args):
                 .default(ht.max_window_size)
             )
 
-
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions
         # after running on gnomAD v2
