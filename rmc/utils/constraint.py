@@ -501,8 +501,17 @@ def search_for_break(
         - reverse_obs_exp
         - total_obs
         - total_exp
+
     If searching for simultaneous breaks, expects HT to have the following fields:
-        - post_window_pos and next_values
+        - pre_obs
+        - pre_exp
+        - pre_oe
+        - window_obs
+        - window_exp
+        - window_oe
+        - post_obs
+        - post_exp
+        - post_oe
 
     Also expects:
         - multiallelic variants in input HT have been split.
@@ -526,72 +535,6 @@ def search_for_break(
 
     # Split transcript into three sections if searching for simultaneous breaks
     if simul_break:
-        # Annotate expected variant count at current position
-        ht = ht.annotate(
-            # Translate mu_snp at site to expected at window start site
-            # can't use translate_mu_to_exp_expr because that is expecting
-            # cumulative mu, and we want to use the value for this site only
-            exp_at_site=(ht.mu_snp / ht.total_mu)
-            * ht.total_exp,
-        )
-
-        # Annotate observed and expected counts for section of transcript pre-window
-        # These values are the current cumulative values minus the value for the site
-        ht = ht.annotate(
-            # Annotate observed count for section of transcript pre-window
-            # = current cumulative obs minus the obs at position
-            # Use hl.max to keep this value positive
-            pre_obs=hl.max(ht.cumulative_obs[ht.transcript] - ht.observed, 0),
-            pre_exp=hl.max(ht.cumulative_exp - ht.exp_at_site, 0),
-        )
-        # Make sure prev exp value isn't 0
-        # Otherwise, the chisq calculation will return NaN
-        ht = ht.annotate(pre_exp=hl.if_else(ht.pre_exp > 0, ht.pre_exp, 1e-09))
-
-        # Annotate OE value for section of transcript pre-window
-        ht = ht.annotate(
-            pre_oe=get_obs_exp_expr(
-                cond_expr=True, obs_expr=ht.pre_obs, exp_expr=ht.pre_exp,
-            )
-        )
-
-        # Annotate obsered and expected counts for window of constraint
-        # These values are the cumulative values at the first position post-window minus
-        # the cumulative values at the current window
-        # Also minus the value of the observed or expected variants at the first position post-window
-        # This subtraction is for both obs and exp in case the first position post window has an observed variant
-        # (otherwise you'd overcount the number of obs within the window)
-        ht = ht.annotate(
-            window_obs=(ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript])
-            - ht.next_values.obs,
-            window_exp=(ht.next_values.exp - ht.cumulative_exp)
-            - ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
-        )
-
-        # Annotate OE value for section of transcript within window
-        ht = ht.annotate(
-            window_oe=get_obs_exp_expr(
-                cond_expr=True, obs_expr=ht.window_obs, exp_expr=ht.window_exp,
-            )
-        )
-
-        # Annotate observed and expected counts for section of transcript post-window
-        # These values are the reverse values at the first position post-window plus
-        # the observed and expected values at that first position post-window
-        # (need to add here, otherwise would undercount the number post-window)
-        ht = ht.annotate(
-            post_obs=ht.next_values.reverse_obs + ht.next_values.obs,
-            post_exp=ht.next_values.reverse_exp
-            + ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
-        )
-
-        # Annotate OE value for section of transcript post-window
-        ht = ht.annotate(
-            post_oe=get_obs_exp_expr(
-                cond_expr=True, obs_expr=ht.post_obs, exp_expr=ht.post_exp,
-            )
-        )
-
         ht = ht.annotate(
             section_nulls=[
                 # Get null expression for section of transcript pre-window
@@ -1204,6 +1147,72 @@ def search_for_two_breaks(
         )
     )
     ht = ht.annotate(next_values=next_ht[ht.key].next_values)
+
+    # Annotate expected variant count at current position
+    ht = ht.annotate(
+        # Translate mu_snp at site to expected at window start site
+        # can't use translate_mu_to_exp_expr because that is expecting
+        # cumulative mu, and we want to use the value for this site only
+        exp_at_site=(ht.mu_snp / ht.total_mu)
+        * ht.total_exp,
+    )
+
+    # Annotate observed and expected counts for section of transcript pre-window
+    # These values are the current cumulative values minus the value for the site
+    ht = ht.annotate(
+        # Annotate observed count for section of transcript pre-window
+        # = current cumulative obs minus the obs at position
+        # Use hl.max to keep this value positive
+        pre_obs=hl.max(ht.cumulative_obs[ht.transcript] - ht.observed, 0),
+        pre_exp=hl.max(ht.cumulative_exp - ht.exp_at_site, 0),
+    )
+    # Make sure prev exp value isn't 0
+    # Otherwise, the chisq calculation will return NaN
+    ht = ht.annotate(pre_exp=hl.if_else(ht.pre_exp > 0, ht.pre_exp, 1e-09))
+
+    # Annotate OE value for section of transcript pre-window
+    ht = ht.annotate(
+        pre_oe=get_obs_exp_expr(
+            cond_expr=True, obs_expr=ht.pre_obs, exp_expr=ht.pre_exp,
+        )
+    )
+
+    # Annotate obsered and expected counts for window of constraint
+    # These values are the cumulative values at the first position post-window minus
+    # the cumulative values at the current window
+    # Also minus the value of the observed or expected variants at the first position post-window
+    # This subtraction is for both obs and exp in case the first position post window has an observed variant
+    # (otherwise you'd overcount the number of obs within the window)
+    ht = ht.annotate(
+        window_obs=(ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript])
+        - ht.next_values.obs,
+        window_exp=(ht.next_values.exp - ht.cumulative_exp)
+        - ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
+    )
+
+    # Annotate OE value for section of transcript within window
+    ht = ht.annotate(
+        window_oe=get_obs_exp_expr(
+            cond_expr=True, obs_expr=ht.window_obs, exp_expr=ht.window_exp,
+        )
+    )
+
+    # Annotate observed and expected counts for section of transcript post-window
+    # These values are the reverse values at the first position post-window plus
+    # the observed and expected values at that first position post-window
+    # (need to add here, otherwise would undercount the number post-window)
+    ht = ht.annotate(
+        post_obs=ht.next_values.reverse_obs + ht.next_values.obs,
+        post_exp=ht.next_values.reverse_exp
+        + ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
+    )
+
+    # Annotate OE value for section of transcript post-window
+    ht = ht.annotate(
+        post_oe=get_obs_exp_expr(
+            cond_expr=True, obs_expr=ht.post_obs, exp_expr=ht.post_exp,
+        )
+    )
 
     logger.info("Searching for two breaks...")
     return search_for_break(
