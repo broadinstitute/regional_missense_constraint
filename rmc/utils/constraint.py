@@ -1221,7 +1221,7 @@ def search_for_two_breaks(
 
 
 def expand_two_break_window(
-    ht: hl.Table, transcript_percentage: float,
+    ht: hl.Table, transcript_percentage: float, chisq_threshold: float = 13.8,
 ):
     """
     """
@@ -1252,11 +1252,35 @@ def expand_two_break_window(
 
     logger.info("Annotating each transcript with current window size...")
     ht = ht.annotate(
-        break_sizes=hl.case()
-        .when(ht.obs_mis_50.contains(ht.transcript), [ht.obs_mis_50_window_size])
-        .when(ht.obs_mis_20.contains(ht.transcript), [ht.obs_mis_20_window_size])
-        .default([ht.obs_mis_10_window_size])
+        break_sizes=(
+            hl.case()
+            .when(ht.obs_mis_50.contains(ht.transcript), [ht.obs_mis_50_window_size])
+            .when(ht.obs_mis_20.contains(ht.transcript), [ht.obs_mis_20_window_size])
+            .default([ht.obs_mis_10_window_size])
+        ),
+        break_chisq=[ht.max_chisq],
     )
+
+    logger.info("Expanding window sizes...")
+    window_size = min_window_size
+    while window_size <= max_window_size:
+        break_ht = search_for_two_breaks(
+            ht=ht,
+            break_size=window_size,
+            max_break_size=max_window_size,
+            chisq_threshold=chisq_threshold,
+        )
+        break_ht = break_ht.select(
+            break_sizes=break_ht.break_sizes.append(window_size),
+            break_chisq=break_ht.break_chisq.append(ht.max_chisq),
+        )
+        # This method will checkpoint a LOT of temporary tables...not sure if there is a better way
+        break_ht = break_ht.checkpoint(
+            f"{temp_path}/simul_break_{window_size}_window.ht", overwrite=True
+        )
+        ht = ht.annotate(**break_ht[ht.key])
+
+    return ht
 
 
 def calculate_section_chisq(
