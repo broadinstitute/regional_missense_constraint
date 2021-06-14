@@ -467,6 +467,9 @@ def main(args):
             ht = ht.annotate_globals(**is_break_ht.index_globals())
             ht = ht.filter(ht.transcripts.contains(ht.transcript))
             ht = ht.annotate(**is_break_ht[ht.key])
+            # NOTE: hardcoding 10 obs mis as smallest window, not sure if this will change in the future?
+            min_window_size = hl.eval(ht.obs_mis_10_window_size)
+            logger.info("Minimum window size: %i", min_window_size)
 
             logger.info("Annotating each transcript with max window size...")
             ht = ht.annotate(
@@ -482,7 +485,7 @@ def main(args):
             max_20 = ht.obs_mis_10.difference(ht.obs_mis_20)
             ht = ht.annotate(
                 max_window_size=hl.case()
-                .when(max_50.contains(ht.trasncript), ht.obs_mis_50_window_size)
+                .when(max_50.contains(ht.transcript), ht.obs_mis_50_window_size)
                 .when(max_20.contains(ht.transcript), ht.obs_mis_20_window_size)
                 .default(ht.max_window_size)
             )
