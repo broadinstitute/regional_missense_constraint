@@ -1296,10 +1296,14 @@ def expand_two_break_window(
         )
         ht = ht.annotate(**break_ht[ht.key])
 
-    logger.info("Getting maximum window sizes and returning...")
-    # add code here
-
-    return ht
+    logger.info("Getting best window sizes for each transcript and returning...")
+    # Extract max chi square value
+    ht = ht.annotate(max_chisq=hl.sorted(ht.break_chisqs, reverse=True)[0])
+    # Get index associated with max chi square
+    ht = ht.annotate(chisq_index=ht.break_chisqs.index(ht.max_chisq))
+    return ht.annotate(best_window_size=ht.break_sizes[ht.chisq_index]).drop(
+        "chisq_index"
+    )
 
 
 def calculate_section_chisq(
