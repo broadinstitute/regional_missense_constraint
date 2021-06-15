@@ -933,9 +933,6 @@ def search_for_two_breaks(
                 "HT must be annotated with max_window_size if max_break_size arg is set!"
             )
 
-        # Remove transcripts that no longer need to be searched (break_size is larger than max_window_size)
-        ht = ht.filter(ht.max_window_size >= break_size)
-
     logger.info(
         f"Annotating each position with end position for window \
         if position + {break_size - 1} bases is less than or equal to the transcript stop pos..."
@@ -1246,21 +1243,6 @@ def expand_two_break_window(
     ht = ht.annotate(max_window_size=ht.transcript_size * transcript_percentage)
     max_window_size = round(ht.aggregate(hl.agg.max(ht.max_window_size)))
     logger.info("Maximum window size: %i", max_window_size)
-
-    # NOTE: hardcoding these numbers(10, 20, 50) here
-    # Checked all window sizes for all transcripts without one significant break, which means
-    # can update max window size for some transcripts (we already know the upper bound of the window size)
-    # i.e., transcripts that only had breaks at 10 obs mis window size
-    # have a max window size of 20 obs mis window size. Likewise, transcripts with breakpoints at
-    # only 20 obs mis window sizes have a max window size of 50 obs mis window size
-    max_50 = ht.obs_mis_20.difference(ht.obs_mis_50)
-    max_20 = ht.obs_mis_10.difference(ht.obs_mis_20)
-    ht = ht.annotate(
-        max_window_size=hl.case()
-        .when(max_50.contains(ht.transcript), ht.obs_mis_50_window_size)
-        .when(max_20.contains(ht.transcript), ht.obs_mis_20_window_size)
-        .default(ht.max_window_size)
-    )
 
     logger.info("Annotating each transcript with current window size...")
     ht = ht.annotate(
