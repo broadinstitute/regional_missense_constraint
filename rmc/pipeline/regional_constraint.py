@@ -430,12 +430,11 @@ def main(args):
                 )
 
             logger.info("Writing out transcripts with simultaneous breaks...")
-            for index, num in enumerate(num_obs_var):
-                if index == 0:
-                    ht = hl.read_table(f"{temp_path}/simul_break_{num}_obs_mis.ht")
-                else:
-                    new_ht = hl.read_table(f"{temp_path}/simul_break_{num}_obs_mis.ht")
-                    ht = ht.union(new_ht)
+            hts = [
+                hl.read_table(f"{temp_path}/simul_break_{num}_obs_mis.ht")
+                for num in num_obs_var
+            ]
+            ht = hts[0].union(*hts[1:])
 
             # Get all transcripts with simultaneous breaks
             transcripts = hl.empty_set(hl.tstr)
