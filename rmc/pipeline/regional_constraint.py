@@ -29,7 +29,9 @@ from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
+    expand_two_break_window,
     fix_xg,
+    get_avg_bases_between_mis,
     get_fwd_exprs,
     GROUPINGS,
     process_additional_breaks,
@@ -396,38 +398,81 @@ def main(args):
 
             logger.info("Searching for transcripts with simultaneous breaks...")
             transcripts_per_window = {}
+            window_sizes = {}
             for num in num_obs_var:
 
                 logger.info(
                     "Searching for window size needed to observe %i missense variants (on average)",
                     num,
                 )
+                # Get number of base pairs needed to observe `num` number of missense variants (on average)
+                # This number is used to determine the window size to search for constraint with simultaneous breaks
+                break_size = get_avg_bases_between_mis(exome_ht) * num
+                window_sizes[num] = break_size
+                logger.info(
+                    "Number of bases to search for constraint (size for simultaneous breaks): %i",
+                    break_size,
+                )
                 ht = search_for_two_breaks(
                     ht=context_ht,
-                    exome_ht=exome_ht,
+                    break_size=break_size,
                     chisq_threshold=args.chisq_threshold,
-                    num_obs_var=num,
                 )
 
                 logger.info("Checkpointing HT...")
                 is_break_ht = ht.filter(ht.is_break)
                 is_break_ht = is_break_ht.checkpoint(
-                    # simul_break.path, overwrite=args.overwrite
-                    f"{temp_path}/simul_break_{num}_obs_mis.ht",
-                    overwrite=True,
+                    f"{temp_path}/simul_break_{num}_obs_mis.ht", overwrite=True,
                 )
 
                 transcripts_per_window[num] = is_break_ht.aggregate(
                     hl.agg.collect_as_set(is_break_ht.transcript), _localize=False
                 )
 
+            logger.info("Writing out transcripts with simultaneous breaks...")
+            hts = [
+                hl.read_table(f"{temp_path}/simul_break_{num}_obs_mis.ht")
+                for num in num_obs_var
+            ]
+            ht = hts[0].union(*hts[1:])
+
+            # Get all transcripts with simultaneous breaks
+            transcripts = hl.empty_set(hl.tstr)
+            for num in transcripts_per_window:
+                transcripts.union(transcripts_per_window[num])
+                annot_dict = {
+                    f"obs_mis_{num}": transcripts_per_window[num],
+                    f"obs_mis_{num}_window_size": window_sizes[num],
+                }
+                ht = ht.annotate_globals(**annot_dict)
+            ht = ht.annotate_globals(all_simul_transcripts=transcripts)
+            ht.write(f"{temp_path}/simul_breaks.ht", overwrite=args.overwrite)
+
             logger.info("Writing out transcripts with no breaks...")
             # Get all transcripts with simultaneous breaks
             transcripts = hl.empty_set(hl.tstr)
             for num in transcripts_per_window:
                 transcripts.union(transcripts_per_window[num])
-            ht = ht.filter(~transcripts.contains(ht.transcript))
-            ht.write(no_breaks.path, overwrite=args.overwrite)
+            context_ht = context_ht.filter(~transcripts.contains(context_ht.transcript))
+            context_ht.write(no_breaks.path, overwrite=args.overwrite)
+
+        if args.expand_simul_break_window:
+            logger.info("Reading in HT with breakpoints for simultaneous breaks...")
+            is_break_ht = hl.read_table(f"{temp_path}/simul_breaks.ht")
+
+            logger.info(
+                "Reading in context HT and filtering to transcripts with simultaneous breaks..."
+            )
+            ht = not_one_break.ht().select()
+            ht = ht.annotate_globals(**is_break_ht.index_globals())
+            ht = ht.filter(ht.transcripts.contains(ht.transcript))
+            ht = ht.annotate(**is_break_ht[ht.key])
+
+            logger.info("Expanding simultaneous break windows...")
+            ht = expand_two_break_window(
+                ht, args.transcript_percentage, args.chisq_threshold
+            )
+            ht.write(simul_break.path, overwrite=args.overwrite)
 
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions
@@ -476,7 +521,7 @@ def main(args):
                 )
 
                 logger.info("Searching for simultaneous breaks...")
-                xg = search_for_two_breaks(xg, exome_ht)
+                xg = search_for_two_breaks(xg)
                 is_break_ht = xg.filter(xg.is_break)
                 if is_break_ht.count() == 0:
                     logger.info("XG has no breaks!")
@@ -721,6 +766,17 @@ if __name__ == "__main__":
         "--search_for_simul_breaks",
         help="Search for two simultaneous breaks in transcripts without a single significant break",
         action="store_true",
+    )
+    parser.add_argument(
+        "--expand_simul_break_window",
+        help="Expand the window of constraint in transcripts with two simultaneous breaks",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--transcript_percentage",
+        help="Maximum percentage of the transcript that can be included within a window of constraint. Used for transcripts with simultaneous breaks. Default is 90%",
+        type=float,
+        default=0.9,
     )
     parser.add_argument(
         "--fix_xg",
