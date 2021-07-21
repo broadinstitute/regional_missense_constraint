@@ -362,6 +362,9 @@ def main(args):
             # Also filter full context HT to canonical transcripts only
             full_context_ht = full_context.ht()
             full_context_ht = process_vep(full_context_ht)
+            full_context_ht = full_context_ht.annotate(
+                transcript=full_context_ht.transcript_consequences.transcript_id
+            )
             transcript_ht = full_context_ht.group_by(
                 full_context_ht.transcript
             ).aggregate(
@@ -375,7 +378,6 @@ def main(args):
             transcript_ht = transcript_ht.checkpoint(
                 f"{temp_path}/transcript.ht", overwrite=True
             )
-
             context_ht = context_ht.annotate(
                 start_pos=transcript_ht[context_ht.transcript].start_pos,
                 end_pos=transcript_ht[context_ht.transcript].end_pos,
@@ -465,7 +467,7 @@ def main(args):
             )
             ht = not_one_break.ht().select()
             ht = ht.annotate_globals(**is_break_ht.index_globals())
-            ht = ht.filter(ht.transcripts.contains(ht.transcript))
+            ht = ht.filter(ht.transcript.contains(ht.transcript))
             ht = ht.annotate(**is_break_ht[ht.key])
 
             logger.info("Expanding simultaneous break windows...")
