@@ -997,7 +997,9 @@ def search_for_two_breaks(
         # hl.binary_search(pos_per_transcript, 4) will return 1
         # hl.binary_search(pos_per_transcript, 5) will return 2
         ht = ht.annotate(
-            post_window_index=hl.binary_search(ht.pos_per_transcript, ht.window_end),
+            post_window_index=hl.binary_search(
+                ht.pos_per_transcript, ht.window_end.position
+            ),
             n_pos_per_transcript=hl.len(ht.pos_per_transcript),
         )
         if has_end:
@@ -1275,6 +1277,7 @@ def expand_two_break_window(
     )
     ht.describe()
     ht = ht.checkpoint(f"{temp_path}/simul_break_expand_ready.ht", overwrite=True)
+    # ht = hl.read_table(f"{temp_path}/simul_break_expand_ready.ht", _n_partitions=10000)
 
     logger.info("Expanding window sizes...")
     window_size = min_window_size
