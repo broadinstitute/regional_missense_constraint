@@ -1034,7 +1034,7 @@ def search_for_two_breaks(
     # The input HT contains every possible missense variant
     # and will be missing positions if no missense variant was possible at that position
     # Duplicate HT to check window ends
-    window_ht = ht.select()
+    window_ht = ht.select().select_globals()
     window_ht = window_ht.key_by("locus")
 
     # Keep version of HT with all relevant annotations and strip HT of all annotations
@@ -1051,14 +1051,15 @@ def search_for_two_breaks(
         "forward_oe",
         "overall_oe",
     )
-    ht = ht.select("window_end", "start_pos", "end_pos", "transcript_size")
+    ht = ht.select(
+        "window_end", "start_pos", "end_pos", "transcript_size"
+    ).select_globals()
+    ht = ht.annotate(window_end=hl.locus(ht.locus.contig, ht.window_end))
 
     logger.info(
         "Checkpointing HT with sites that have their window ends defined in the HT..."
     )
-    end_ht = ht.filter(
-        hl.is_defined(window_ht[hl.locus(ht.locus.contig, ht.window_end)])
-    )
+    end_ht = ht.key_by("window_end").join(window_ht, how="inner")
     end_ht = end_ht.checkpoint(
         f"{temp_path}/simul_break_prep_end_def.ht", overwrite=True
     )
@@ -1078,10 +1079,10 @@ def search_for_two_breaks(
         f"{temp_path}/simul_break_prep_end_def_ready.ht", overwrite=True
     )
 
-    logger.info("Working on sites that don't have their window ends defined in the HT")
-    no_end_ht = ht.filter(
-        hl.is_missing(window_ht[hl.locus(ht.locus.contig, ht.window_end)])
+    logger.info(
+        "Working on sites that don't have their window ends defined in the HT..."
     )
+    no_end_ht = ht.key_by("window_end").anti_join(end_ht)
     no_end_ht = no_end_ht.checkpoint(
         f"{temp_path}/simul_break_prep_no_end.ht", overwrite=True
     )
