@@ -566,8 +566,8 @@ def search_for_break(
                 get_dpois_expr(
                     cond_expr=True,
                     section_oe_expr=ht.pre_oe,
-                    obs_expr=ht.prev_obs,
-                    exp_expr=ht.prev_exp,
+                    obs_expr=ht.pre_obs,
+                    exp_expr=ht.pre_exp,
                 ),
                 # Get alt expression for window of constraint
                 get_dpois_expr(
@@ -928,7 +928,7 @@ def search_for_two_breaks(
     """
     if max_break_size:
         # Double check input HT has max_window_size annotation if max_break_size is set
-        if "max_window_size" not in ht.info:
+        if "max_window_size" not in ht.row:
             raise DataException(
                 "HT must be annotated with max_window_size if max_break_size arg is set!"
             )
@@ -1245,7 +1245,22 @@ def expand_two_break_window(
     logger.info("Maximum window size: %i", max_window_size)
 
     logger.info("Annotating each transcript with current window size...")
-    ht = ht.annotate(
+    # Also drop any unnecessary annotations
+    ht = ht.select(
+        "mu_snp",
+        "total_exp",
+        "_mu_scan",
+        "total_mu",
+        "cumulative_obs",
+        "observed",
+        "cumulative_exp",
+        "total_obs",
+        "reverse",
+        "forward_oe",
+        "overall_oe",
+        "start_pos",
+        "end_pos",
+        "transcript_size",
         break_sizes=(
             hl.case()
             .when(ht.obs_mis_50.contains(ht.transcript), [ht.obs_mis_50_window_size])
@@ -1256,6 +1271,7 @@ def expand_two_break_window(
         window_ends=[ht.window_end],
         post_window_pos=[ht.post_window_pos],
     )
+    ht.describe()
 
     logger.info("Expanding window sizes...")
     window_size = min_window_size
