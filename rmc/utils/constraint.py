@@ -1261,6 +1261,7 @@ def expand_two_break_window(
         "start_pos",
         "end_pos",
         "transcript_size",
+        "max_window_size",
         break_sizes=(
             hl.case()
             .when(ht.obs_mis_50.contains(ht.transcript), [ht.obs_mis_50_window_size])
