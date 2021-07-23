@@ -1085,8 +1085,12 @@ def search_for_two_breaks(
         "Working on sites that don't have their window ends defined in the HT..."
     )
     no_end_ht = ht.key_by("window_end").anti_join(end_ht)
-    no_end_ht = no_end_ht.checkpoint(
-        f"{temp_path}/simul_break_prep_no_end.ht", overwrite=True
+    # no_end_ht = no_end_ht.checkpoint(
+    #    f"{temp_path}/simul_break_prep_no_end.ht", overwrite=True
+    # )
+    no_end_ht.write(f"{temp_path}/simul_break_prep_no_end.ht", overwrite=True)
+    no_end_ht = hl.read_table(
+        f"{temp_path}/simul_break_prep_no_end.ht", _n_partitions=5000
     )
     no_end_transcripts = no_end_ht.aggregate(
         hl.agg.collect_as_set(no_end_ht.transcript), _localize=False
@@ -1098,8 +1102,12 @@ def search_for_two_breaks(
     )
     pos_ht = _get_pos_per_transcript(window_ht, no_end_transcripts)
     no_end_ht = _get_post_window_pos(no_end_ht, pos_ht)
-    no_end_ht = no_end_ht.checkpoint(
-        f"{temp_path}/simul_break_prep_no_end_ready.ht", overwrite=True
+    # no_end_ht = no_end_ht.checkpoint(
+    #    f"{temp_path}/simul_break_prep_no_end_ready.ht", overwrite=True
+    # )
+    no_end_ht.write(f"{temp_path}/simul_break_prep_no_end_ready.ht", overwrite=True)
+    no_end_ht = hl.read_table(
+        f"{temp_path}/simul_break_prep_no_end_ready.ht", _n_partitions=5000
     )
 
     logger.info("Joining no end HT with end HT...")
@@ -1247,7 +1255,7 @@ def expand_two_break_window(
     max_window_size = round(ht.aggregate(hl.agg.max(ht.max_window_size)))
     logger.info("Maximum window size: %i", max_window_size)
 
-    logger.info("Annotating each transcript with current window size...")
+    """logger.info("Annotating each transcript with current window size...")
     # Also drop any unnecessary annotations
     ht = ht.select(
         "mu_snp",
@@ -1276,7 +1284,8 @@ def expand_two_break_window(
         post_window_pos=[ht.post_window_pos],
     )
     ht.describe()
-    ht = ht.checkpoint(f"{temp_path}/simul_break_expand_ready.ht", overwrite=True)
+    ht = ht.checkpoint(f"{temp_path}/simul_break_expand_ready.ht", overwrite=True)"""
+    ht = hl.read_table(f"{temp_path}/simul_break_expand_ready.ht")
 
     logger.info("Expanding window sizes...")
     window_size = min_window_size
