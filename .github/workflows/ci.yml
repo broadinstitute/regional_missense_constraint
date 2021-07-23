@@ -33,5 +33,3 @@ jobs:
         run: pydocstyle **/*.py
       - name: Run Pylint
         run: pylint **/*.py
-      - name: Run tests
-        run: python -m pytest
