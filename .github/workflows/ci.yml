@@ -28,9 +28,9 @@ jobs:
           pip install -r requirements.txt
           pip install -r requirements-dev.txt
       - name: Check formatting
-        run: black --check gnomad tests
+        run: black --check rmc tests
       - name: Check docstrings
-        run: pydocstyle gnomad tests
+        run: pydocstyle rmc tests
       - name: Run Pylint
         run: ./lint
       - name: Run tests
