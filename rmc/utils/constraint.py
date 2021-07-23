@@ -1277,7 +1277,6 @@ def expand_two_break_window(
     )
     ht.describe()
     ht = ht.checkpoint(f"{temp_path}/simul_break_expand_ready.ht", overwrite=True)
-    # ht = hl.read_table(f"{temp_path}/simul_break_expand_ready.ht", _n_partitions=10000)
 
     logger.info("Expanding window sizes...")
     window_size = min_window_size
