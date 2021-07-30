@@ -2,6 +2,7 @@
 convention = pep257
 match = .*\.py
 add-ignore =
+  D100, # Ignore missing docstring in public module.
   D104, # Ignore missing docstring in public package (was throwing errors for empty __init__).
   D105, # Ignore missing docstring for magic methods.
   D107 # Ignore missing docstring for __init__ method. Parameters are documented in the class docstring.
