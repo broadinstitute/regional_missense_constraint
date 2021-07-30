@@ -37,15 +37,15 @@ logger.setLevel(logging.INFO)
 
 
 ## Resources from Kaitlin
-def get_codon_lookup() -> Dict:
+def get_codon_lookup() -> Dict[str, str]:
     """
-    Reads in codon lookup table and returns as dictionary (key: codon, value: amino acid)
+    Read in codon lookup table and return as dictionary (key: codon, value: amino acid).
 
-    .. note:: 
+    .. note::
         This is only necessary for testing on ExAC and should be replaced with VEP annotations.
 
-    :return: Dictionary of codon translation
-    :rtype: dict
+    :return: Dictionary of codon translation.
+    :rtype: Dict[str, str]
     """
     codon_lookup = {}
     with hl.hadoop_open(CODON_TABLE_PATH) as c:
@@ -56,12 +56,12 @@ def get_codon_lookup() -> Dict:
     return codon_lookup
 
 
-def get_acid_names() -> Dict:
+def get_acid_names() -> Dict[str, str]:
     """
-    Reads in amino acid table and stores as dict (key: 3 letter name, value: (long name, one letter name)
+    Read in amino acid table and stores as dict (key: 3 letter name, value: (long name, one letter name).
 
-    :return: Dictionary of amino acid names
-    :rtype: dict
+    :return: Dictionary of amino acid names.
+    :rtype: Dict[str, str]
     """
     acid_map = {}
     with hl.hadoop_open(ACID_NAMES_PATH) as a:
@@ -72,12 +72,12 @@ def get_acid_names() -> Dict:
     return acid_map
 
 
-def get_mutation_rate() -> Dict:
+def get_mutation_rate() -> Dict[str, Tuple[str, float]]:
     """
-    Reads in mutation rate table and stores as dict
+    Read in mutation rate table and store as dict.
 
-    :return: Dictionary of mutation rate information (key: context, value: (alt, mu_snp))
-    :rtype: dict
+    :return: Dictionary of mutation rate information (key: context, value: (alt, mu_snp)).
+    :rtype: Dict[str, Tuple[str, float]].
     """
     mu = {}
     # from    n_kmer  p_any_snp_given_kmer    mu_kmer to      count_snp       p_snp_given_kmer        mu_snp
@@ -88,12 +88,12 @@ def get_mutation_rate() -> Dict:
     return mu
 
 
-def get_divergence_scores() -> Dict:
+def get_divergence_scores() -> Dict[str, float]:
     """
-    Reads in divergence score file and stores as dict (key: transcript, value: score)
+    Read in divergence score file and store as dict (key: transcript, value: score).
 
-    :return: Divergence score dict
-    :rtype: dict
+    :return: Divergence score dict.
+    :rtype: Dict[str, float]
     """
     div_scores = {}
     with hl.hadoop_open(DIVERGENCE_SCORES_TSV_PATH) as d:
@@ -112,10 +112,10 @@ def process_context_ht(
     build: str, trimers: bool = True, missense_str: str = MISSENSE,
 ) -> hl.Table:
     """
-    Prepares context HT (SNPs only, annotated with VEP) for regional missense constraint calculations.
+    Prepare context HT (SNPs only, annotated with VEP) for regional missense constraint calculations.
 
-    Filters to missense variants in canonical protein coding transcripts. 
-    Also annotates with probability of mutation for each variant, CpG status, and methylation level.
+    Filter to missense variants in canonical protein coding transcripts.
+    Also annotate with probability of mutation for each variant, CpG status, and methylation level.
 
     .. note::
         `trimers` needs to be True for gnomAD v2.
@@ -163,7 +163,9 @@ def process_context_ht(
 ## Functions for obs/exp related resources
 def get_exome_bases(build: str) -> int:
     """
-    Imports gencode gtf into a hail Table, filters to coding regions, and sums all positions to get the number of bases in the exome.
+    Get number of bases in the exome.
+
+    Read in context HT (containing all coding bases in the genome), remove outlier transcripts, and filter to median coverage >= 5.
 
     :param str build: Reference genome build; must be one of BUILDS.
     :return: Number of bases in the exome.
@@ -205,7 +207,7 @@ def get_exome_bases(build: str) -> int:
 
 def keep_criteria(ht: hl.Table, exac: bool = False) -> hl.expr.BooleanExpression:
     """
-    Returns Boolean expression to filter variants in input Table.
+    Return Boolean expression to filter variants in input Table.
 
     :param hl.Table ht: Input Table.
     :param bool exac: Whether input Table is ExAC data. Default is False.
@@ -228,7 +230,7 @@ def keep_criteria(ht: hl.Table, exac: bool = False) -> hl.expr.BooleanExpression
 
 def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.Table:
     """
-    Filters input Table to canonical transcripts only.
+    Filter input Table to canonical transcripts only.
 
     Option to filter Table to specific variant consequence (csq).
 
@@ -261,7 +263,7 @@ def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.T
 
 def filter_to_region_type(ht: hl.Table, region: str) -> hl.Table:
     """
-    Filters input Table to autosomes + chrX PAR, chrX non-PAR, or chrY non-PAR. 
+    Filter input Table to autosomes + chrX PAR, chrX non-PAR, or chrY non-PAR.
 
     :param hl.Table ht: Input Table to be filtered.
     :param str region: Desired region type. One of 'autosomes', 'chrX', or 'chrY'.
@@ -290,14 +292,14 @@ def generate_models(
     hl.expr.DictExpression,
 ]:
     """
-    Calls `build_models` from gnomAD LoF repo to generate models used to adjust expected variants count.
+    Call `build_models` from gnomAD LoF repo to generate models used to adjust expected variants count.
 
     :param hl.Table coverage_ht: Table with proportion of variants observed by coverage (autosomes/PAR only).
     :param hl.Table coverage_x_ht: Table with proportion of variants observed by coverage (chrX only).
     :param hl.Table coverage_y_ht: Table with proportion of variants observed by coverage (chrY only).
     :param bool trimers: Whether to use trimers instead of heptamers.
     :param bool weighted: Whether to use weighted least squares when building models. Default is True.
-    :return: Coverage model, plateau models for autosomes, plateau models for chrX, plateau models for chrY. 
+    :return: Coverage model, plateau models for autosomes, plateau models for chrX, plateau models for chrY.
     :rtype: Tuple[Tuple[float, float], hl.expr.DictExpression, hl.expr.DictExpression, hl.expr.DictExpression]
     """
     logger.info("Building autosomes/PAR plateau model and coverage model...")
@@ -323,15 +325,15 @@ def get_coverage_correction_expr(
     high_cov_cutoff: int = 40,
 ) -> hl.expr.Float64Expression:
     """
-    Gets coverage correction for expected variants count.
+    Get coverage correction for expected variants count.
 
-    .. note:: 
+    .. note::
         Default high coverage cutoff taken from gnomAD LoF repo.
 
     :param hl.expr.Float64Expression ht: Input coverage expression. Should be median coverage at position.
     :param Tuple[float, float] coverage_model: Model to determine coverage correction factor necessary
          for calculating expected variants at low coverage sites.
-    :param int high_cov_cutoff: Cutoff for high coverage. Default is 40. 
+    :param int high_cov_cutoff: Cutoff for high coverage. Default is 40.
     :return: Coverage correction expression.
     :rtype: hl.expr.Float64Expression
     """
@@ -350,7 +352,7 @@ def get_plateau_model(
     include_cpg: bool = False,
 ) -> hl.expr.Float64Expression:
     """
-    Gets model to determine adjustment to mutation rate based on locus type and CpG status.
+    Get model to determine adjustment to mutation rate based on locus type and CpG status.
 
     .. note::
         This function expects that the context Table has each plateau model (autosome, X, Y) added as global annotations.
@@ -383,7 +385,7 @@ def get_outlier_transcripts() -> hl.expr.SetExpression:
     """
     Read in LoF constraint HT results to get set of outlier transcripts.
 
-    Transcripts are removed for the reasons detailed here: 
+    Transcripts are removed for the reasons detailed here:
     https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
 
     :return: Set of outlier transcripts.
