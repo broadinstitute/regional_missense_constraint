@@ -43,8 +43,7 @@ Fields taken from gnomAD LoF repo.
 
 def calculate_observed(ht: hl.Table) -> hl.Table:
     """
-    Groups input Table by transcript, filters based on `keep_criteria`,
-    and aggregates observed variants count per transcript.
+    Group input Table by transcript, filter based on `keep_criteria`, and aggregate observed variants count per transcript.
 
     .. note::
         Assumes input HT has been filtered using `keep_criteria`.
@@ -62,7 +61,7 @@ def get_cumulative_mu_expr(
     transcript_expr: hl.expr.StringExpression, mu_expr: hl.expr.Float64Expression,
 ) -> hl.expr.DictExpression:
     """
-    Returns annotation with the cumulative mutation rate probability, shifted by one.
+    Return annotation with the cumulative mutation rate probability, shifted by one.
 
     Value is shifted by one due to the nature of `hl.scan` and needs to be corrected later.
     This function can produce the scan when searching for the first break or when searching for additional break(s).
@@ -81,7 +80,7 @@ def adjust_mu_expr(
     transcript_expr: hl.expr.StringExpression,
 ) -> hl.expr.DictExpression:
     """
-    Adjusts the scan with the cumulative number mutation rate probability.
+    Adjust the scan with the cumulative number mutation rate probability.
 
     This adjustment is necessary because scans are always one line behind, and we want the values to match per line.
     This function can correct the scan created when searching for the first break or when searching for additional break(s).
@@ -111,7 +110,7 @@ def translate_mu_to_exp_expr(
     total_exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.DictExpression:
     """
-    Translates cumulative mutation rate probability into cumulative expected count per base.
+    Translate cumulative mutation rate probability into cumulative expected count per base.
 
     Expected variants counts are produced per base by first calculating the fraction of probability of mutation per base,
     then multiplying that fraction by the total expected variants count for a transcript or transcript sub-section.
@@ -133,7 +132,7 @@ def calculate_exp_per_transcript(
     context_ht: hl.Table, locus_type: str, groupings: List[str] = GROUPINGS,
 ) -> hl.Table:
     """
-    Returns the total number of expected variants and aggregate mutation rate per transcript.
+    Return the total number of expected variants and aggregate mutation rate per transcript.
 
     .. note::
         - Assumes that context_ht is annotated with all of the fields in `groupings` and that the names match exactly.
@@ -194,9 +193,9 @@ def get_obs_exp_expr(
     exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
     """
-    Returns observed/expected annotation based on inputs.
+    Return observed/expected annotation based on inputs.
 
-    Caps observed/expected value at 1.
+    Cap observed/expected value at 1.
 
     Function can generate observed/expected values across the entire transcript or section of a transcript depending on inputs.
     Function can also generate 'forward' (moving from smaller to larger positions") or 'reverse' (moving from larger to smaller positions)
@@ -218,7 +217,7 @@ def get_cumulative_obs_expr(
     transcript_expr: hl.expr.StringExpression, observed_expr: hl.expr.Int64Expression,
 ) -> hl.expr.DictExpression:
     """
-    Returns annotation with the cumulative number of observed variants, shifted by one.
+    Return annotation with the cumulative number of observed variants, shifted by one.
 
     Value is shifted by one due to the nature of `hl.scan` and needs to be corrected later.
     This function can produce the scan when searching for the first break or when searching for additional break(s).
@@ -238,7 +237,7 @@ def adjust_obs_expr(
     transcript_expr: hl.expr.StringExpression,
 ) -> hl.expr.DictExpression:
     """
-    Adjusts the scan with the cumulative number of observed variants.
+    Adjust the scan with the cumulative number of observed variants.
 
     This adjustment is necessary because scans are always one line behind, and we want the values to match per line.
     This function can correct the scan created when searching for the first break or when searching for additional break(s).
@@ -272,7 +271,7 @@ def get_reverse_obs_exp_expr(
     cumulative_exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.StructExpression:
     """
-    Returns the "reverse" section observed and expected variant counts.
+    Return the "reverse" section observed and expected variant counts.
 
     The reverse counts are the counts moving from larger to smaller positions
     (backwards from the end of the transcript back to the beginning of the transcript).
@@ -307,7 +306,7 @@ def get_fwd_exprs(
     total_exp_str: str,
 ) -> hl.Table:
     """
-    Annotates input Table with the forward section cumulative observed, expected, and observed/expected values.
+    Annotate input Table with the forward section cumulative observed, expected, and observed/expected values.
 
     .. note::
         'Forward' refers to moving through the transcript from smaller to larger chromosomal positions.
@@ -373,7 +372,7 @@ def get_reverse_exprs(
     scan_exp_expr: Dict[hl.expr.StringExpression, hl.expr.Float64Expression],
 ) -> hl.Table:
     """
-    Calls `get_reverse_obs_exp_expr` and `get_obs_exp_expr` to add the reverse section cumulative observed, expected, and observed/expected values.
+    Call `get_reverse_obs_exp_expr` and `get_obs_exp_expr` to add the reverse section cumulative observed, expected, and observed/expected values.
 
     .. note::
         'Reverse' refers to moving through the transcript from larger to smaller chromosomal positions.
@@ -420,7 +419,7 @@ def get_dpois_expr(
     ],
 ) -> hl.expr.StructExpression:
     """
-    Calculates null and alt values in preparation for chi-squared test to find significant breaks.
+    Calculate null and alt values in preparation for chi-squared test to find significant breaks.
 
     All parameter values depend on the direction of calculation (forward/reverse) and
     number of breaks (searching for first break or searching for additional break).
@@ -465,7 +464,7 @@ def get_dpois_expr(
 
 def get_section_expr(dpois_expr: hl.expr.ArrayExpression,) -> hl.expr.Float64Expression:
     """
-    Builds null or alt model by multiplying all section null or alt distributions.
+    Build null or alt model by multiplying all section null or alt distributions.
 
     For example, when checking for the first break in a transcript, the transcript is broken into two sections:
     pre-breakpoint and post-breakpoint. Each section's null and alt distributions must be multiplied
@@ -486,7 +485,7 @@ def search_for_break(
     chisq_threshold: float = 10.8,
 ) -> hl.Table:
     """
-    Searches for breakpoints in a transcript or within a transcript subsection.
+    Search for breakpoints in a transcript or within a transcript subsection.
 
     Expects input context HT to contain the following fields:
         - locus
@@ -648,9 +647,9 @@ def search_for_break(
 
 def process_transcripts(ht: hl.Table, chisq_threshold: float):
     """
-    Annotates each position in Table with whether that position is a significant breakpoint.
+    Annotate each position in Table with whether that position is a significant breakpoint.
 
-    Also annotates input Table with cumulative observed, expected, and observed/expected values
+    Also annotate input Table with cumulative observed, expected, and observed/expected values
     for both forward (moving from smaller to larger positions) and reverse (moving from larger to
     smaller positions) directions.
 
@@ -701,7 +700,7 @@ def get_subsection_exprs(
     total_exp_str: str = "total_exp",
 ) -> hl.Table:
     """
-    Annotates total observed, expected, and observed/expected (OE) counts for each section of a transcript.
+    Annotate total observed, expected, and observed/expected (OE) counts for each section of a transcript.
 
     .. note::
         Assumes input Table is annotated with:
@@ -875,7 +874,7 @@ def process_additional_breaks(
 
 def get_avg_bases_between_mis(ht: hl.Table) -> int:
     """
-    Returns average number of bases between observed missense variation.
+    Return average number of bases between observed missense variation.
 
     For example, if the total number of bases is 30, and the total number of missense variants is 10,
     this function will return 3.
@@ -909,7 +908,7 @@ def search_for_two_breaks(
     chisq_threshold: float = 13.8,
 ) -> hl.Table:
     """
-    Searches for evidence of constraint within a set window size/number of base pairs.
+    Search for evidence of constraint within a set window size/number of base pairs.
 
     Function is designed to search in transcripts that didn't have one single significant break.
 
@@ -1327,7 +1326,7 @@ def calculate_section_chisq(
     obs_expr: hl.expr.Int64Expression, exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
     """
-    Creates expression checking if transcript section is significantly different than the null model (no evidence of regional missense constraint).
+    Create expression checking if transcript section is significantly different than the null model (no evidence of regional missense constraint).
 
     Formula is: (section obs - section exp)^2 / section exp. Taken from ExAC RMC code.
 
@@ -1351,7 +1350,7 @@ def constraint_flag_expr(
     raw_lof_z_expr: hl.expr.Float64Expression,
 ) -> hl.expr.StructExpression:
     """
-    Returns struct with constraint flags.
+    Return struct with constraint flags.
 
     Flags are designed to mark outlier transcripts, and explanation of constraint flags is in the gnomAD browser FAQ:
     https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
@@ -1391,7 +1390,7 @@ def fix_xg(
     groupings: List[str] = GROUPINGS,
 ) -> hl.Table:
     """
-    Fixes observed and expected counts for XG (gene that spans PAR and non-PAR regions on chrX).
+    Fix observed and expected counts for XG (gene that spans PAR and non-PAR regions on chrX).
 
     Expects that context HT is annotated with all of the fields in `groupings`.
 
@@ -1408,7 +1407,7 @@ def fix_xg(
         xg: hl.Table, groupings: List[str] = groupings,
     ) -> hl.expr.StructExpression:
         """
-        Fixes total expected and total mu counts for XG.
+        Fix total expected and total mu counts for XG.
 
         :param hl.Table xg: Context Table filtered to XG.
         :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate.
@@ -1435,7 +1434,7 @@ def fix_xg(
 
     def _fix_xg_obs(xg: hl.Table, exome_ht: hl.Table) -> hl.Table:
         """
-        Fixes total observed counts for XG.
+        Fix total observed counts for XG.
 
         :param hl.Table xg: Context Table filtered to XG.
         :param hl.Table exome_ht: Table containing variants from gnomAD exomes.
