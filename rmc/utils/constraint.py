@@ -1286,7 +1286,8 @@ def expand_two_break_window(
     ht = ht.checkpoint(f"{temp_path}/simul_break_expand_ready.ht", overwrite=True)
 
     logger.info("Expanding window sizes...")
-    window_size = min_window_size
+    # Start at one size larger than min window size because min window size has already been searched
+    window_size = min_window_size + 1
     while window_size <= max_window_size:
         break_ht = search_for_two_breaks(
             ht=ht,
