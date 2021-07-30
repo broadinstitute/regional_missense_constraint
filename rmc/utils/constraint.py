@@ -4,7 +4,7 @@ from typing import Dict, List, Optional, Union
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
-
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.reference_genome import get_reference_genome
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
@@ -946,27 +946,20 @@ def search_for_two_breaks(
         )
     )
 
-    def _get_pos_per_transcript(
-        ht: hl.Table, transcripts: hl.expr.SetExpression
-    ) -> hl.Table:
-        """
-        Filter input HT to input transcripts and gather all positions per transcript.
-
-        Input HT is HT containing all transcripts without a single significant break and stripped of all annotations
-        aside from locus and transcript.
-
-        :param hl.Table ht: Input HT.
-        :param hl.expr.SetExpression transcripts: SetExpression of transcripts to extract.
-        :return: Table grouped by transcript with list of positions per transcript.
-        :rtype: hl.Table
-        """
-        logger.info("Gathering all positions in each transcript...")
-        pos_ht = ht.filter(transcripts.contains(ht.transcript))
-        pos_ht = pos_ht.group_by(transcript=pos_ht.transcript).aggregate(
-            positions=hl.sorted(hl.agg.collect(pos_ht.locus.position))
+    logger.info("Gathering all positions in each transcript...")
+    pos_ht = ht.key_by("locus", "transcript").select()
+    # Check if pos per transcript HT already exists
+    if file_exists(f"{temp_path}/pos_per_transcript.ht"):
+        logger.warning(
+            "HT with all positions per transcripts exists and will not be overwritten!"
         )
-        pos_ht = pos_ht.checkpoint(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
-        return pos_ht
+    else:
+        # This collect assumes that the positions are in order from smallest to largest
+        # (they should be, since the table is keyed by locus and transcript)
+        pos_ht = ht.group_by("transcript").aggregate(
+            positions=hl.agg.collect(ht.locus.position), _localize=False,
+        )
+        pos_ht = pos_ht.checkpoint(f"{temp_path}/pos_per_transcript.ht")
 
     def _get_post_window_pos(
         ht: hl.Table, pos_ht: hl.Table, has_end: bool = False
@@ -1075,7 +1068,6 @@ def search_for_two_breaks(
     )
     # NOTE: The annotation post_window_pos must actually be outside the window of constraint
     # Otherwise, `search_for_break` will undercount the obs/exp variant counts within the window of constraint
-    pos_ht = _get_pos_per_transcript(window_ht, end_transcripts)
     end_ht = _get_post_window_pos(end_ht, pos_ht, has_end=True)
     end_ht = end_ht.checkpoint(
         f"{temp_path}/simul_break_prep_end_def_ready.ht", overwrite=True
@@ -1097,7 +1089,6 @@ def search_for_two_breaks(
     logger.info(
         "Adding post-window position for sites that don't have defined window ends..."
     )
-    pos_ht = _get_pos_per_transcript(window_ht, no_end_transcripts)
     no_end_ht = _get_post_window_pos(no_end_ht, pos_ht)
     no_end_ht.write(f"{temp_path}/simul_break_prep_no_end_ready.ht", overwrite=True)
     no_end_ht = hl.read_table(
