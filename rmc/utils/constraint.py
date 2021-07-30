@@ -1152,6 +1152,7 @@ def search_for_two_breaks(
             reverse_exp=ht[next_ht.new_locus, next_ht.transcript].reverse.exp,
         )
     )
+    next_ht = next_ht.checkpoint(f"{temp_path}/next.ht", overwrite=True)
     ht = ht.annotate(next_values=next_ht[ht.key].next_values)
 
     # Annotate expected variant count at current position
