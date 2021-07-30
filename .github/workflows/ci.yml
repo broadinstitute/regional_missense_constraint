@@ -1,0 +1,35 @@
+name: CI
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+jobs:
+  pylint:
+    name: Pylint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Setup Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.7
+      - name: Use pip cache
+        uses: actions/cache@v2
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            pip-
+      - name: Install dependencies
+        run: |
+          pip install wheel
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+      - name: Check formatting
+        run: black --check **/*.py
+      - name: Check docstrings
+        run: pydocstyle **/*.py
+      - name: Run Pylint
+        run: pylint **/*.py
