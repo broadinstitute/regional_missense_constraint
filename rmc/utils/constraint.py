@@ -1273,7 +1273,6 @@ def expand_two_break_window(
         window_ends=[ht.window_end],
         post_window_pos=[ht.post_window_pos],
     )
-    ht.describe()
     ht = ht.checkpoint(f"{temp_path}/simul_break_expand_ready.ht", overwrite=True)
 
     logger.info("Expanding window sizes...")
