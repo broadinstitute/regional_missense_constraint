@@ -949,7 +949,10 @@ def search_for_two_breaks(
         pos_ht = pos_ht.checkpoint(f"{temp_path}/pos_per_transcript.ht")
 
     def _get_post_window_pos(
-        ht: hl.Table, pos_ht: hl.Table, has_end: bool = False
+        ht: hl.Table,
+        pos_ht: hl.Table,
+        transcripts: hl.expr.SetExpression,
+        has_end: bool = False,
     ) -> hl.Table:
         """
         Get first position of transcript outside of window of constraint.
@@ -958,10 +961,13 @@ def search_for_two_breaks(
 
         :param hl.Table ht: Input Table.
         :param hl.Table pos_ht: Input GroupedTable grouped by transcript with list of all positions per transcript.
+        :param hl.expr.SetExpression: Setexpression containing all transcripts present in input Table.
         :param bool has_end: Whether the input HT has window ends defined in the HT. Default is False.
         :return: Table annotated with post-window position.
         :rtype: hl.Table
         """
+        # Filter pos_ht to transcripts present in ht
+        pos_ht = pos_ht.filter(transcripts.contains(pos_ht.transcript))
         logger.info("Annotating the positions per transcript back onto the input HT...")
         # This is to run `hl.binary_search` using the window end position as input
         ht = ht.key_by("transcript").join(pos_ht)
@@ -1042,6 +1048,7 @@ def search_for_two_breaks(
         "Checkpointing HT with sites that have their window ends defined in the HT..."
     )
     end_ht = ht.key_by("window_end").join(window_ht, how="inner")
+    end_ht = end_ht.drop("locus_1", "transcript_1")
     end_ht = end_ht.checkpoint(
         f"{temp_path}/simul_break_prep_end_def.ht", overwrite=True
     )
@@ -1055,7 +1062,7 @@ def search_for_two_breaks(
     )
     # NOTE: The annotation post_window_pos must actually be outside the window of constraint
     # Otherwise, `search_for_break` will undercount the obs/exp variant counts within the window of constraint
-    end_ht = _get_post_window_pos(end_ht, pos_ht, has_end=True)
+    end_ht = _get_post_window_pos(end_ht, pos_ht, end_transcripts, has_end=True)
     end_ht = end_ht.checkpoint(
         f"{temp_path}/simul_break_prep_end_def_ready.ht", overwrite=True
     )
@@ -1076,7 +1083,7 @@ def search_for_two_breaks(
     logger.info(
         "Adding post-window position for sites that don't have defined window ends..."
     )
-    no_end_ht = _get_post_window_pos(no_end_ht, pos_ht)
+    no_end_ht = _get_post_window_pos(no_end_ht, pos_ht, no_end_transcripts)
     no_end_ht.write(f"{temp_path}/simul_break_prep_no_end_ready.ht", overwrite=True)
     no_end_ht = hl.read_table(
         f"{temp_path}/simul_break_prep_no_end_ready.ht", _n_partitions=5000
@@ -1092,6 +1099,7 @@ def search_for_two_breaks(
     ht = end_ht.key_by("locus", "transcript").join(
         no_end_ht.key_by("locus", "transcript"), how="outer"
     )
+    ht = ht.drop("locus_1", "transcript_1")
     ht = ht.annotate(
         post_window_pos=hl.coalesce(ht.post_window_pos, ht.post_window_pos_1),
         **annotation_ht[ht.key],
