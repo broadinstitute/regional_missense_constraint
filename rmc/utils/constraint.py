@@ -1118,6 +1118,8 @@ def search_for_two_breaks(
             f"Position closest to window end for HT is smaller than window end position in {check_end} cases!"
         )
 
+    logger.info("Preparing HT to search for two breaks...")
+    logger.info("Creating HT with obs, exp, OE values for post-window positions...")
     # Create new HT with obs, exp, and OE values for post-window positions
     # This is to get the values for the section of the transcript after the window
     next_ht = ht.select("post_window_pos")
@@ -1141,6 +1143,7 @@ def search_for_two_breaks(
     next_ht = next_ht.checkpoint(f"{temp_path}/next.ht", overwrite=True)
     ht = ht.annotate(next_values=next_ht[ht.key].next_values)
 
+    logger.info("Annotating HT with obs, exp, OE values for pre-window positions...")
     # Annotate expected variant count at current position
     ht = ht.annotate(
         # Translate mu_snp at site to expected at window start site
@@ -1170,6 +1173,9 @@ def search_for_two_breaks(
         )
     )
 
+    logger.info(
+        "Annotating HT with obs, exp, OE values for positions in window of constraint..."
+    )
     # Annotate obsered and expected counts for window of constraint
     # These values are the cumulative values at the first position post-window minus
     # the cumulative values at the current window
@@ -1190,6 +1196,7 @@ def search_for_two_breaks(
         )
     )
 
+    logger.info("Annotating HT with obs, exp, OE values for post-window positions...")
     # Annotate observed and expected counts for section of transcript post-window
     # These values are the reverse values at the first position post-window plus
     # the observed and expected values at that first position post-window
