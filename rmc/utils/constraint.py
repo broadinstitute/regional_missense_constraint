@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Union
 
 import hail as hl
 
@@ -902,10 +902,7 @@ def get_avg_bases_between_mis(ht: hl.Table) -> int:
 
 
 def search_for_two_breaks(
-    ht: hl.Table,
-    break_size: int,
-    max_break_size: Optional[int] = None,
-    chisq_threshold: float = 13.8,
+    ht: hl.Table, break_size: int, chisq_threshold: float = 13.8,
 ) -> hl.Table:
     """
     Search for evidence of constraint within a set window size/number of base pairs.
@@ -914,24 +911,14 @@ def search_for_two_breaks(
 
     Assumes that:
         - Input Table has a field named 'transcript'.
-        - Input Table is annotated with a field named 'max_window_size' if `max_break_size` argument is not None.
 
     :param hl.Table ht: Input Table.
     :param int break_size: Number of bases to search for constraint (window size for simultaneous breaks).
-    :param int max_break_size: Maximum window size to search for constraint. Only used when expanding
-        boundaries of simultaneous breaks windows. Default is None.
     :param float chisq_threshold: Chi-square significance threshold.
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
     :return: Table annotated with is_break at the *end* position of a simultaneous break window.
     :rtype: hl.Table
     """
-    if max_break_size:
-        # Double check input HT has max_window_size annotation if max_break_size is set
-        if "max_window_size" not in ht.row:
-            raise DataException(
-                "HT must be annotated with max_window_size if max_break_size arg is set!"
-            )
-
     logger.info(
         f"Annotating each position with end position for window \
         if position + {break_size - 1} bases is less than or equal to the transcript stop pos..."
@@ -1280,10 +1267,7 @@ def expand_two_break_window(
     window_size = min_window_size + 1
     while window_size <= max_window_size:
         break_ht = search_for_two_breaks(
-            ht=ht,
-            break_size=window_size,
-            max_break_size=max_window_size,
-            chisq_threshold=chisq_threshold,
+            ht=ht, break_size=window_size, chisq_threshold=chisq_threshold,
         )
 
         # Re-add annotations that are dropped in search_for_two_breaks function
