@@ -1113,6 +1113,119 @@ def create_two_break_window(ht: hl.Table, break_size: int) -> hl.Table:
     return ht
 
 
+def annotate_two_breaks_section_values(ht: hl.Table) -> hl.Table:
+    """
+    Annotate observed (obs), expected (exp), observed/expected (OE) values for all transcript sections associated with searching for two simultaneous breaks.
+
+    Transcript sections are:
+        - Pre-window of constraint
+        - Window of constraint
+        - Post-window of constraint
+
+    Annotations are added with the following prefixes:
+        - 'pre' (for pre-window)
+        - 'window' (for window)
+        - 'post' (for post-window)
+
+    :return: Table annotated with obs, exp, OE values for all transcript sections.
+    :rtype: hl.Table
+    """
+    logger.info("Annotating HT with obs, exp, OE values for pre-window positions...")
+    logger.info(
+        "Pre-window values are cumulative values minus values at start of window of constraint..."
+    )
+    # Annotate expected variant count at current position
+    # Current position is equal to the window start position
+    ht = ht.annotate(
+        # Translate mu_snp at site to expected at window start site
+        # can't use translate_mu_to_exp_expr because that is expecting
+        # cumulative mu, and we want to use only the value for the window start
+        exp_at_site=(ht.mu_snp / ht.total_mu)
+        * ht.total_exp,
+    )
+    ht = ht.annotate(
+        # Annotate observed count for section of transcript pre-window
+        # = current cumulative obs minus the obs at window start
+        # Use hl.max to keep this value positive
+        pre_obs=hl.max(ht.cumulative_obs[ht.transcript] - ht.observed, 0),
+        pre_exp=hl.max(ht.cumulative_exp - ht.exp_at_site, 0),
+    )
+    # Make sure prev exp value isn't 0
+    # Otherwise the chisq calculation will return NaN
+    ht = ht.annotate(pre_exp=hl.if_else(ht.pre_exp > 0, ht.pre_exp, 1e-09))
+
+    # Annotate OE value for section of transcript pre-window
+    ht = ht.annotate(
+        pre_oe=get_obs_exp_expr(
+            cond_expr=True, obs_expr=ht.pre_obs, exp_expr=ht.pre_exp,
+        )
+    )
+
+    logger.info(
+        "Annotating HT with obs, exp, OE values for positions in window of constraint..."
+    )
+    # Annotate obsered and expected counts for window of constraint
+    # These values are the cumulative values at the first position post-window minus
+    # (1) the cumulative values at the current window and
+    # (2) the value at the first position post-window
+    # Subtraction (2) is necessary in case the first position post window has an observed variant
+    # (otherwise you'd overcount the number of obs within the window)
+    ht = ht.annotate(
+        window_obs=(ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript])
+        - ht.next_values.obs,
+        window_exp=(ht.next_values.exp - ht.cumulative_exp)
+        - ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
+    )
+
+    # Annotate OE value for section of transcript within window
+    ht = ht.annotate(
+        window_oe=get_obs_exp_expr(
+            cond_expr=True, obs_expr=ht.window_obs, exp_expr=ht.window_exp,
+        )
+    )
+
+    logger.info("Creating HT with obs, exp, OE values for post-window positions...")
+    # Create new HT with obs, exp, and OE values for post-window positions
+    # This is to get the values for the section of the transcript after the window
+    next_ht = ht.select("post_window_pos")
+    # Add new_locus annotation to pull obs, exp, OE values for post window position
+    next_ht = next_ht.annotate(
+        new_locus=hl.locus(next_ht.locus.contig, next_ht.post_window_pos)
+    )
+    indexed_ht = ht[next_ht.locus, next_ht.transcript]
+    next_ht = next_ht.annotate(
+        next_values=hl.struct(
+            cum_obs=indexed_ht.cumulative_obs[next_ht.transcript],
+            obs=indexed_ht.observed,
+            exp=indexed_ht.cumulative_exp,
+            mu_snp=indexed_ht.mu_snp,
+            oe=indexed_ht.forward_oe,
+            reverse_obs=indexed_ht.reverse.obs,
+            reverse_exp=indexed_ht.reverse.exp,
+        )
+    )
+    next_ht = next_ht.checkpoint(f"{temp_path}/next.ht", overwrite=True)
+    ht = ht.annotate(next_values=next_ht[ht.key].next_values)
+
+    logger.info("Annotating HT with obs, exp, OE values for post-window positions...")
+    # Annotate observed and expected counts for section of transcript post-window
+    # These values are the reverse values at the first position post-window plus
+    # the observed and expected values at that first position post-window
+    # (need to add here, otherwise would undercount the number post-window)
+    ht = ht.annotate(
+        post_obs=ht.next_values.reverse_obs + ht.next_values.obs,
+        post_exp=ht.next_values.reverse_exp
+        + ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
+    )
+
+    # Annotate OE value for section of transcript post-window
+    return ht.annotate(
+        post_oe=get_obs_exp_expr(
+            cond_expr=True, obs_expr=ht.post_obs, exp_expr=ht.post_exp,
+        )
+    )
+
+
 def search_for_two_breaks(
     ht: hl.Table, break_size: int, chisq_threshold: float = 13.8,
 ) -> hl.Table:
@@ -1135,100 +1248,7 @@ def search_for_two_breaks(
     ht = create_two_break_window(ht, break_size)
 
     logger.info("Preparing HT to search for two breaks...")
-    logger.info("Creating HT with obs, exp, OE values for post-window positions...")
-    # Create new HT with obs, exp, and OE values for post-window positions
-    # This is to get the values for the section of the transcript after the window
-    next_ht = ht.select("post_window_pos")
-    # Add new_locus annotation to pull obs, exp, OE values for post window position
-    next_ht = next_ht.annotate(
-        new_locus=hl.locus(next_ht.locus.contig, next_ht.post_window_pos)
-    )
-    next_ht = next_ht.annotate(
-        next_values=hl.struct(
-            cum_obs=ht[next_ht.new_locus, next_ht.transcript].cumulative_obs[
-                next_ht.transcript
-            ],
-            obs=ht[next_ht.new_locus, next_ht.transcript].observed,
-            exp=ht[next_ht.new_locus, next_ht.transcript].cumulative_exp,
-            mu_snp=ht[next_ht.new_locus, next_ht.transcript].mu_snp,
-            oe=ht[next_ht.new_locus, next_ht.transcript].forward_oe,
-            reverse_obs=ht[next_ht.new_locus, next_ht.transcript].reverse.obs,
-            reverse_exp=ht[next_ht.new_locus, next_ht.transcript].reverse.exp,
-        )
-    )
-    next_ht = next_ht.checkpoint(f"{temp_path}/next.ht", overwrite=True)
-    ht = ht.annotate(next_values=next_ht[ht.key].next_values)
-
-    logger.info("Annotating HT with obs, exp, OE values for pre-window positions...")
-    # Annotate expected variant count at current position
-    ht = ht.annotate(
-        # Translate mu_snp at site to expected at window start site
-        # can't use translate_mu_to_exp_expr because that is expecting
-        # cumulative mu, and we want to use the value for this site only
-        exp_at_site=(ht.mu_snp / ht.total_mu)
-        * ht.total_exp,
-    )
-
-    # Annotate observed and expected counts for section of transcript pre-window
-    # These values are the current cumulative values minus the value for the site
-    ht = ht.annotate(
-        # Annotate observed count for section of transcript pre-window
-        # = current cumulative obs minus the obs at position
-        # Use hl.max to keep this value positive
-        pre_obs=hl.max(ht.cumulative_obs[ht.transcript] - ht.observed, 0),
-        pre_exp=hl.max(ht.cumulative_exp - ht.exp_at_site, 0),
-    )
-    # Make sure prev exp value isn't 0
-    # Otherwise, the chisq calculation will return NaN
-    ht = ht.annotate(pre_exp=hl.if_else(ht.pre_exp > 0, ht.pre_exp, 1e-09))
-
-    # Annotate OE value for section of transcript pre-window
-    ht = ht.annotate(
-        pre_oe=get_obs_exp_expr(
-            cond_expr=True, obs_expr=ht.pre_obs, exp_expr=ht.pre_exp,
-        )
-    )
-
-    logger.info(
-        "Annotating HT with obs, exp, OE values for positions in window of constraint..."
-    )
-    # Annotate obsered and expected counts for window of constraint
-    # These values are the cumulative values at the first position post-window minus
-    # the cumulative values at the current window
-    # Also minus the value of the observed or expected variants at the first position post-window
-    # This subtraction is for both obs and exp in case the first position post window has an observed variant
-    # (otherwise you'd overcount the number of obs within the window)
-    ht = ht.annotate(
-        window_obs=(ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript])
-        - ht.next_values.obs,
-        window_exp=(ht.next_values.exp - ht.cumulative_exp)
-        - ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
-    )
-
-    # Annotate OE value for section of transcript within window
-    ht = ht.annotate(
-        window_oe=get_obs_exp_expr(
-            cond_expr=True, obs_expr=ht.window_obs, exp_expr=ht.window_exp,
-        )
-    )
-
-    logger.info("Annotating HT with obs, exp, OE values for post-window positions...")
-    # Annotate observed and expected counts for section of transcript post-window
-    # These values are the reverse values at the first position post-window plus
-    # the observed and expected values at that first position post-window
-    # (need to add here, otherwise would undercount the number post-window)
-    ht = ht.annotate(
-        post_obs=ht.next_values.reverse_obs + ht.next_values.obs,
-        post_exp=ht.next_values.reverse_exp
-        + ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
-    )
-
-    # Annotate OE value for section of transcript post-window
-    ht = ht.annotate(
-        post_oe=get_obs_exp_expr(
-            cond_expr=True, obs_expr=ht.post_obs, exp_expr=ht.post_exp,
-        )
-    )
+    ht = annotate_two_breaks_section_values(ht)
 
     logger.info("Searching for two breaks...")
     return search_for_break(
