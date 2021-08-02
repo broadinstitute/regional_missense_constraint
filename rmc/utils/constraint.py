@@ -1083,7 +1083,7 @@ def annotate_two_breaks_section_values(ht: hl.Table) -> hl.Table:
         # Translate mu_snp at site to expected at window start site
         # can't use translate_mu_to_exp_expr because that is expecting
         # cumulative mu, and we want to use only the value for the window start
-        exp_at_site=(ht.mu_snp / ht.total_mu)
+        exp_at_start=(ht.mu_snp / ht.total_mu)
         * ht.total_exp,
     )
     ht = ht.annotate(
@@ -1091,7 +1091,7 @@ def annotate_two_breaks_section_values(ht: hl.Table) -> hl.Table:
         # = current cumulative obs minus the obs at window start
         # Use hl.max to keep this value positive
         pre_obs=hl.max(ht.cumulative_obs[ht.transcript] - ht.observed, 0),
-        pre_exp=hl.max(ht.cumulative_exp - ht.exp_at_site, 0),
+        pre_exp=hl.max(ht.cumulative_exp - ht.exp_at_start, 0),
     )
     # Make sure prev exp value isn't 0
     # Otherwise the chisq calculation will return NaN
@@ -1125,7 +1125,7 @@ def annotate_two_breaks_section_values(ht: hl.Table) -> hl.Table:
         )
     )
     next_ht = next_ht.transmute(
-        exp_at_end_pos=(next_ht.mu_snp / next_ht.total_mu) * next_ht.total_exp
+        exp_at_end=(next_ht.mu_snp / next_ht.total_mu) * next_ht.total_exp
     )
     next_ht = next_ht.checkpoint(f"{temp_path}/next.ht", overwrite=True)
     ht = ht.annotate(next_values=next_ht[ht.key].next_values)
@@ -1135,15 +1135,23 @@ def annotate_two_breaks_section_values(ht: hl.Table) -> hl.Table:
     )
     # Annotate obsered and expected counts for window of constraint
     # These values are the cumulative values at the first position post-window minus
-    # (1) the cumulative values at the current window and
-    # (2) the value at the first position post-window
+    # (1) minus the cumulative values at the current window and
+    # (2) minus the value at the first position post-window
+    # (3) plus the value at the window start
     # Subtraction (2) is necessary in case the first position post window has an observed variant
     # (otherwise you'd overcount the number of obs within the window)
+    # Addition (3) is necessary in case the first position in the window has an observed variant
+    # (would not count this variant without this step (3))
     ht = ht.annotate(
-        window_obs=(ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript])
-        - ht.next_values.obs,
-        window_exp=(ht.next_values.exp - ht.cumulative_exp)
-        - ht.next_values.exp_at_end_pos,
+        window_obs=(
+            (ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript])
+            - ht.next_values.obs
+        )
+        + ht.observed,
+        window_exp=(
+            (ht.next_values.exp - ht.cumulative_exp) - ht.next_values.exp_at_end
+        )
+        + ht.exp_at_start,
     )
 
     # Annotate OE value for section of transcript within window
@@ -1160,7 +1168,7 @@ def annotate_two_breaks_section_values(ht: hl.Table) -> hl.Table:
     # (need to add here, otherwise would undercount the number post-window)
     ht = ht.annotate(
         post_obs=ht.next_values.reverse_obs + ht.next_values.obs,
-        post_exp=ht.next_values.reverse_exp + ht.next_values.exp_at_end_pos,
+        post_exp=ht.next_values.reverse_exp + ht.next_values.exp_at_end,
     )
 
     # Annotate OE value for section of transcript post-window
