@@ -1160,8 +1160,7 @@ def annotate_two_breaks_section_values(ht: hl.Table) -> hl.Table:
     # (need to add here, otherwise would undercount the number post-window)
     ht = ht.annotate(
         post_obs=ht.next_values.reverse_obs + ht.next_values.obs,
-        post_exp=ht.next_values.reverse_exp
-        + ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
+        post_exp=ht.next_values.reverse_exp + ht.next_values.exp_at_end_pos,
     )
 
     # Annotate OE value for section of transcript post-window
