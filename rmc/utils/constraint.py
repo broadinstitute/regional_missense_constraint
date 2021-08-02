@@ -1124,6 +1124,9 @@ def annotate_two_breaks_section_values(ht: hl.Table) -> hl.Table:
             reverse_exp=indexed_ht.reverse.exp,
         )
     )
+    next_ht = next_ht.transmute(
+        exp_at_end_pos=(next_ht.mu_snp / next_ht.total_mu) * next_ht.total_exp
+    )
     next_ht = next_ht.checkpoint(f"{temp_path}/next.ht", overwrite=True)
     ht = ht.annotate(next_values=next_ht[ht.key].next_values)
 
@@ -1140,7 +1143,7 @@ def annotate_two_breaks_section_values(ht: hl.Table) -> hl.Table:
         window_obs=(ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript])
         - ht.next_values.obs,
         window_exp=(ht.next_values.exp - ht.cumulative_exp)
-        - ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
+        - ht.next_values.exp_at_end_pos,
     )
 
     # Annotate OE value for section of transcript within window
