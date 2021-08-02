@@ -1104,29 +1104,6 @@ def annotate_two_breaks_section_values(ht: hl.Table) -> hl.Table:
         )
     )
 
-    logger.info(
-        "Annotating HT with obs, exp, OE values for positions in window of constraint..."
-    )
-    # Annotate obsered and expected counts for window of constraint
-    # These values are the cumulative values at the first position post-window minus
-    # (1) the cumulative values at the current window and
-    # (2) the value at the first position post-window
-    # Subtraction (2) is necessary in case the first position post window has an observed variant
-    # (otherwise you'd overcount the number of obs within the window)
-    ht = ht.annotate(
-        window_obs=(ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript])
-        - ht.next_values.obs,
-        window_exp=(ht.next_values.exp - ht.cumulative_exp)
-        - ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
-    )
-
-    # Annotate OE value for section of transcript within window
-    ht = ht.annotate(
-        window_oe=get_obs_exp_expr(
-            cond_expr=True, obs_expr=ht.window_obs, exp_expr=ht.window_exp,
-        )
-    )
-
     logger.info("Creating HT with obs, exp, OE values for post-window positions...")
     # Create new HT with obs, exp, and OE values for post-window positions
     # This is to get the values for the section of the transcript after the window
@@ -1149,6 +1126,29 @@ def annotate_two_breaks_section_values(ht: hl.Table) -> hl.Table:
     )
     next_ht = next_ht.checkpoint(f"{temp_path}/next.ht", overwrite=True)
     ht = ht.annotate(next_values=next_ht[ht.key].next_values)
+
+    logger.info(
+        "Annotating HT with obs, exp, OE values for positions in window of constraint..."
+    )
+    # Annotate obsered and expected counts for window of constraint
+    # These values are the cumulative values at the first position post-window minus
+    # (1) the cumulative values at the current window and
+    # (2) the value at the first position post-window
+    # Subtraction (2) is necessary in case the first position post window has an observed variant
+    # (otherwise you'd overcount the number of obs within the window)
+    ht = ht.annotate(
+        window_obs=(ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript])
+        - ht.next_values.obs,
+        window_exp=(ht.next_values.exp - ht.cumulative_exp)
+        - ((ht.next_values.mu_snp / ht.total_mu) * ht.total_exp),
+    )
+
+    # Annotate OE value for section of transcript within window
+    ht = ht.annotate(
+        window_oe=get_obs_exp_expr(
+            cond_expr=True, obs_expr=ht.window_obs, exp_expr=ht.window_exp,
+        )
+    )
 
     logger.info("Annotating HT with obs, exp, OE values for post-window positions...")
     # Annotate observed and expected counts for section of transcript post-window
