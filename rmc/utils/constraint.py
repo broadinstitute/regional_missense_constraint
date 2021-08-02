@@ -989,15 +989,15 @@ def search_for_two_breaks(
                     ht.post_window_index + 1 < ht.n_pos_per_transcript - 1,
                     ht.pos_per_transcript[ht.post_window_index + 1],
                 )
+                .when(
+                    ht.post_window_index + 1 == ht.n_pos_per_transcript - 1, ht.end_pos
+                )
                 # hl.binary_search will only return an index larger than the length of a list
                 # if that position is larger than the largest element in the list
                 # e.g., pos_per_transcript = [1, 4, 8]
                 # hl.binary_search(pos_per_transcript, 10) will return 3
                 # post-window positions should never be larger than the largest position of a transcript
                 # (so this should never happen)
-                .when(
-                    ht.post_window_index + 1 == ht.n_pos_per_transcript - 1, ht.end_pos
-                )
                 .or_missing()
             )
         return ht.annotate(
