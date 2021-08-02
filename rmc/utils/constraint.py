@@ -968,15 +968,108 @@ def get_post_window_pos(
     )
 
 
-def create_two_break_window(ht: hl.Table, break_size: int) -> hl.Table:
+def create_end_ht(ht: hl.Table, pos_ht: hl.Table, end_in_table: bool):
+    """
+    Create Table annotated with post window position.
+
+    Called twice:
+        - Once for positions with their window end positions present in the input Table
+        - Once for positions with their window ends not present in the input Table
+
+    :param hl.Table ht: Input Table.
+    :param hl.Table pos_ht: Table keyed by transcript annotated with list of all positions in transcript.
+    :param bool end_in_table: Whether to work on windows that have their end positions present in the input Table.
+    :return: Table annotated with post window positions.
+    :rtype: hl.Table
+    """
+    # The input HT contains every possible missense variant
+    # and will be missing positions if no missense variant was possible at that position
+    # Duplicate HT to check whether window ends are present in input HT
+    window_ht = ht.select().select_globals()
+    window_ht = window_ht.key_by("locus")
+
+    if end_in_table:
+        logger.info(
+            "Checkpointing HT with sites that have their window ends defined in the HT..."
+        )
+        end_ht = ht.key_by("window_end").join(window_ht, how="inner")
+        end_ht = end_ht.drop("locus_1", "transcript_1")
+        end_ht = end_ht.checkpoint(
+            f"{temp_path}/simul_break_prep_end_def.ht", overwrite=True
+        )
+        end_transcripts = end_ht.aggregate(
+            hl.agg.collect_as_set(end_ht.transcript), _localize=False
+        )
+        logger.info(f"Sites with defined window ends: {end_ht.count()}")
+
+        logger.info(
+            "Adding post-window position for sites that have their window ends defined..."
+        )
+        # NOTE: The annotation post_window_pos must actually be outside the window of constraint
+        # Otherwise, `search_for_break` will undercount the obs/exp variant counts within the window of constraint
+        end_ht = get_post_window_pos(end_ht, pos_ht, end_transcripts, has_end=True)
+        end_ht = end_ht.checkpoint(
+            f"{temp_path}/simul_break_prep_end_def_ready.ht", overwrite=True
+        )
+        end_ht = end_ht.key_by("locus", "transcript")
+        return end_ht.select("post_window_pos")
+
+    logger.info(
+        "Working on sites that don't have their window ends defined in the HT..."
+    )
+    no_end_ht = ht.key_by("window_end").anti_join(end_ht.key_by("window_end"))
+    no_end_ht = no_end_ht.checkpoint(
+        f"{temp_path}/simul_break_prep_no_end.ht", overwrite=True
+    )
+
+    no_end_transcripts = no_end_ht.aggregate(
+        hl.agg.collect_as_set(no_end_ht.transcript), _localize=False
+    )
+    logger.info(f"Sites without defined window ends: {no_end_ht.count()}")
+
+    logger.info(
+        "Adding post-window position for sites that don't have defined window ends..."
+    )
+    no_end_ht = get_post_window_pos(no_end_ht, pos_ht, no_end_transcripts)
+    no_end_ht = no_end_ht.checkpoint(
+        f"{temp_path}/simul_break_prep_no_end_ready.ht", overwrite=True
+    )
+    no_end_ht = no_end_ht.key_by("locus", "transcript")
+    return no_end_ht.select("post_window_pos")
+
+
+def create_two_break_window(
+    ht: hl.Table,
+    break_size: int,
+    annotations: List[str] = [
+        "mu_snp",
+        "total_exp",
+        "_mu_scan",
+        "total_mu",
+        "cumulative_obs",
+        "observed",
+        "cumulative_exp",
+        "total_obs",
+        "reverse",
+        "forward_oe",
+        "overall_oe",
+    ],
+) -> hl.Table:
     """
     Annotate input Table with simultaneous breaks window end positions.
 
     Also annotate Table with first position post-window.
     Function prepares Table for simultaneous breaks searches.
 
+    Assumes input Table has all annotations present in `annotations`.
+
     :param hl.Table ht: Input Table.
     :param int break_size: Number of bases to search for constraint (window size for simultaneous breaks).
+    :param List[str] annotations: Annotations to keep from input HT. Required to search for significant breakpoint.
+        Default is [
+            "mu_snp", "total_exp", "_mu_scan", "total_mu", "cumulative_obs", "observed", "cumulative_exp",
+            "total_obs", "reverse", "forward_oe", "overall_oe"
+        ].
     :return: Table annotated with window end and post window posiiton.
     :rtype: hl.Table
     """
@@ -1009,89 +1102,22 @@ def create_two_break_window(ht: hl.Table, break_size: int) -> hl.Table:
         )
         pos_ht = pos_ht.checkpoint(f"{temp_path}/pos_per_transcript.ht")
 
-    logger.info(
-        "Checking how many window end positions are actually defined in the input HT..."
-    )
-    # The input HT contains every possible missense variant
-    # and will be missing positions if no missense variant was possible at that position
-    # Duplicate HT to check window ends
-    window_ht = ht.select().select_globals()
-    window_ht = window_ht.key_by("locus")
-
+    logger.info("Getting the first position post-window...")
     # Keep version of HT with all relevant annotations and strip HT of all annotations
-    annotation_ht = ht.select(
-        "mu_snp",
-        "total_exp",
-        "_mu_scan",
-        "total_mu",
-        "cumulative_obs",
-        "observed",
-        "cumulative_exp",
-        "total_obs",
-        "reverse",
-        "forward_oe",
-        "overall_oe",
-    )
+    annotation_ht = ht.select(*annotations)
     ht = ht.select(
         "window_end", "start_pos", "end_pos", "transcript_size"
     ).select_globals()
     ht = ht.annotate(window_end=hl.locus(ht.locus.contig, ht.window_end))
 
-    logger.info(
-        "Checkpointing HT with sites that have their window ends defined in the HT..."
-    )
-    end_ht = ht.key_by("window_end").join(window_ht, how="inner")
-    end_ht = end_ht.drop("locus_1", "transcript_1")
-    end_ht = end_ht.checkpoint(
-        f"{temp_path}/simul_break_prep_end_def.ht", overwrite=True
-    )
-    end_transcripts = end_ht.aggregate(
-        hl.agg.collect_as_set(end_ht.transcript), _localize=False
-    )
-    logger.info(f"Sites with defined window ends: {end_ht.count()}")
-
-    logger.info(
-        "Adding post-window position for sites that have their window ends defined..."
-    )
-    # NOTE: The annotation post_window_pos must actually be outside the window of constraint
-    # Otherwise, `search_for_break` will undercount the obs/exp variant counts within the window of constraint
-    end_ht = get_post_window_pos(end_ht, pos_ht, end_transcripts, has_end=True)
-    end_ht = end_ht.checkpoint(
-        f"{temp_path}/simul_break_prep_end_def_ready.ht", overwrite=True
-    )
-
-    logger.info(
-        "Working on sites that don't have their window ends defined in the HT..."
-    )
-    no_end_ht = ht.key_by("window_end").anti_join(end_ht.key_by("window_end"))
-    no_end_ht.write(f"{temp_path}/simul_break_prep_no_end.ht", overwrite=True)
-    no_end_ht = hl.read_table(
-        f"{temp_path}/simul_break_prep_no_end.ht", _n_partitions=1000
-    )
-    no_end_transcripts = no_end_ht.aggregate(
-        hl.agg.collect_as_set(no_end_ht.transcript), _localize=False
-    )
-    logger.info(f"Sites without defined window ends: {no_end_ht.count()}")
-
-    logger.info(
-        "Adding post-window position for sites that don't have defined window ends..."
-    )
-    no_end_ht = get_post_window_pos(no_end_ht, pos_ht, no_end_transcripts)
-    no_end_ht.write(f"{temp_path}/simul_break_prep_no_end_ready.ht", overwrite=True)
-    no_end_ht = hl.read_table(
-        f"{temp_path}/simul_break_prep_no_end_ready.ht", _n_partitions=5000
-    )
+    logger.info("Creating end HT and no end HT...")
+    # Create two temporary HTs to handle case where window end is present in input HT
+    # and case where window end is missing from input HT
+    end_ht = create_end_ht(ht, pos_ht, end_in_table=True)
+    no_end_ht = create_end_ht(ht, pos_ht, end_in_table=False)
 
     logger.info("Joining no end HT with end HT...")
-    end_ht = end_ht.drop(
-        "pos_per_transcript", "post_window_index", "n_pos_per_transcript"
-    )
-    no_end_ht = no_end_ht.drop(
-        "pos_per_transcript", "post_window_index", "n_pos_per_transcript"
-    )
-    ht = end_ht.key_by("locus", "transcript").join(
-        no_end_ht.key_by("locus", "transcript"), how="outer"
-    )
+    ht = end_ht.join(no_end_ht, how="outer")
     ht = ht.drop("locus_1", "transcript_1")
     ht = ht.annotate(
         post_window_pos=hl.coalesce(ht.post_window_pos, ht.post_window_pos_1),
@@ -1257,7 +1283,26 @@ def search_for_two_breaks(
 
 
 def expand_two_break_window(
-    ht: hl.Table, transcript_percentage: float, chisq_threshold: float = 13.8,
+    ht: hl.Table,
+    transcript_percentage: float,
+    chisq_threshold: float = 13.8,
+    annotations: List[str] = [
+        "mu_snp",
+        "total_exp",
+        "_mu_scan",
+        "total_mu",
+        "cumulative_obs",
+        "observed",
+        "cumulative_exp",
+        "total_obs",
+        "reverse",
+        "forward_oe",
+        "overall_oe",
+        "start_pos",
+        "end_pos",
+        "transcript_size",
+        "max_window_size",
+    ],
 ) -> hl.Table:
     """
     Search for larger windows of constraint in transcripts with simultaneous breaks.
@@ -1270,6 +1315,11 @@ def expand_two_break_window(
     :param hl.Table ht: Input Table filtered to contain only transcripts with simultaneous breaks.
     :param float transcript_percentage: Maximum percentage of the transcript that can be included within a window of constraint.
     :param float chisq_threshold:  Chi-square significance threshold. Default is 13.8.
+    :param List[str] annotations: Annotations to keep from input HT. Required to search for significant breakpoint.
+        Default is [
+            "mu_snp", "total_exp", "_mu_scan", "total_mu", "cumulative_obs",  "observed", "cumulative_exp", "total_obs",
+            "reverse", "forward_oe", "overall_oe", "start_pos", "end_pos", "transcript_size", "max_window_size"
+        ].
     :return: Table with largest simultaneous break window size annotated per transcript.
     :rtype: hl.Table
     """
@@ -1286,21 +1336,7 @@ def expand_two_break_window(
     logger.info("Annotating each transcript with current window size...")
     # Also drop any unnecessary annotations
     ht = ht.select(
-        "mu_snp",
-        "total_exp",
-        "_mu_scan",
-        "total_mu",
-        "cumulative_obs",
-        "observed",
-        "cumulative_exp",
-        "total_obs",
-        "reverse",
-        "forward_oe",
-        "overall_oe",
-        "start_pos",
-        "end_pos",
-        "transcript_size",
-        "max_window_size",
+        *annotations,
         break_sizes=(
             hl.case()
             .when(ht.obs_mis_50.contains(ht.transcript), [ht.obs_mis_50_window_size])
