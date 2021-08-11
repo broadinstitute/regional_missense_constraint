@@ -4,6 +4,7 @@ import logging
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
@@ -31,7 +32,6 @@ from rmc.utils.constraint import (
     calculate_observed,
     expand_two_break_window,
     fix_xg,
-    get_avg_bases_between_mis,
     get_fwd_exprs,
     GROUPINGS,
     process_additional_breaks,
@@ -41,6 +41,7 @@ from rmc.utils.constraint import (
 from rmc.utils.generic import (
     filter_to_region_type,
     generate_models,
+    get_avg_bases_between_mis,
     get_coverage_correction_expr,
     get_outlier_transcripts,
     keep_criteria,
@@ -58,7 +59,7 @@ logger.setLevel(logging.INFO)
 
 
 def main(args):
-
+    """Call functions from `constraint.py` to calculate regional missense constraint."""
     hl.init(log="/RMC.log")
     exac = args.exac
 
@@ -353,7 +354,6 @@ def main(args):
                 a single significant break..."
             )
             context_ht = not_one_break.ht()
-            exome_ht = filtered_exomes.ht()
 
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
@@ -372,12 +372,19 @@ def main(args):
                 start_pos=hl.agg.min(full_context_ht.locus.position),
             )
 
-            logger.info(
-                "Checkpointing transcript HT to avoid redundant calculations..."
-            )
-            transcript_ht = transcript_ht.checkpoint(
-                f"{temp_path}/transcript.ht", overwrite=True
-            )
+            if file_exists(f"{temp_path}/transcript.ht"):
+                logger.warning(
+                    "Transcript HT with start position, end position, and size exists and will not be overwritten!"
+                )
+                transcript_ht = hl.read_table(f"{temp_path}/transcript.ht")
+            else:
+                logger.info(
+                    "Checkpointing transcript HT to avoid redundant calculations..."
+                )
+                transcript_ht = transcript_ht.checkpoint(
+                    f"{temp_path}/transcript.ht", overwrite=True
+                )
+
             context_ht = context_ht.annotate(
                 start_pos=transcript_ht[context_ht.transcript].start_pos,
                 end_pos=transcript_ht[context_ht.transcript].end_pos,
@@ -388,75 +395,21 @@ def main(args):
                 + 1,
             )
 
-            logger.info(
-                "Getting number of observed variants (these numbers are used to determine window size)..."
-            )
-            num_obs_var = list(map(int, args.num_obs_var.split(",")))
-
-            if len(num_obs_var) == 1:
-                raise DataException(
-                    "num_obs_var should contain at least two integers (e.g., '10,20')"
-                )
-
             logger.info("Searching for transcripts with simultaneous breaks...")
-            transcripts_per_window = {}
-            window_sizes = {}
-            for num in num_obs_var:
-
-                logger.info(
-                    "Searching for window size needed to observe %i missense variants (on average)",
-                    num,
+            # Get number of base pairs needed to observe `num` number of missense variants (on average)
+            # This number is used to determine the window size to search for constraint with simultaneous breaks
+            min_break_size = (
+                get_avg_bases_between_mis(
+                    get_reference_genome(context_ht.locus).name,
+                    args.get_total_exome_bases,
+                    args.get_total_gnomad_missense,
                 )
-                # Get number of base pairs needed to observe `num` number of missense variants (on average)
-                # This number is used to determine the window size to search for constraint with simultaneous breaks
-                break_size = get_avg_bases_between_mis(exome_ht) * num
-                window_sizes[num] = break_size
-                logger.info(
-                    "Number of bases to search for constraint (size for simultaneous breaks): %i",
-                    break_size,
-                )
-                ht = search_for_two_breaks(
-                    ht=context_ht,
-                    break_size=break_size,
-                    chisq_threshold=args.chisq_threshold,
-                )
-
-                logger.info("Checkpointing HT...")
-                is_break_ht = ht.filter(ht.is_break)
-                is_break_ht = is_break_ht.checkpoint(
-                    f"{temp_path}/simul_break_{num}_obs_mis.ht", overwrite=True,
-                )
-
-                transcripts_per_window[num] = is_break_ht.aggregate(
-                    hl.agg.collect_as_set(is_break_ht.transcript), _localize=False
-                )
-
-            logger.info("Writing out transcripts with simultaneous breaks...")
-            hts = [
-                hl.read_table(f"{temp_path}/simul_break_{num}_obs_mis.ht")
-                for num in num_obs_var
-            ]
-            ht = hts[0].union(*hts[1:])
-
-            # Get all transcripts with simultaneous breaks
-            transcripts = hl.empty_set(hl.tstr)
-            for num in transcripts_per_window:
-                transcripts.union(transcripts_per_window[num])
-                annot_dict = {
-                    f"obs_mis_{num}": transcripts_per_window[num],
-                    f"obs_mis_{num}_window_size": window_sizes[num],
-                }
-                ht = ht.annotate_globals(**annot_dict)
-            ht = ht.annotate_globals(all_simul_transcripts=transcripts)
-            ht.write(f"{temp_path}/simul_breaks.ht", overwrite=args.overwrite)
-
-            logger.info("Writing out transcripts with no breaks...")
-            # Get all transcripts with simultaneous breaks
-            transcripts = hl.empty_set(hl.tstr)
-            for num in transcripts_per_window:
-                transcripts.union(transcripts_per_window[num])
-            context_ht = context_ht.filter(~transcripts.contains(context_ht.transcript))
-            context_ht.write(no_breaks.path, overwrite=args.overwrite)
+                * args.min_num_obs
+            )
+            logger.info(
+                "Minimum window size (window size needed to observe %i missense variants on average): ",
+                min_break_size,
+            )
 
         if args.expand_simul_break_window:
             logger.info("Reading in HT with breakpoints for simultaneous breaks...")
@@ -737,11 +690,6 @@ if __name__ == "__main__":
         default=10.8,
     )
     parser.add_argument(
-        "--num_obs_var",
-        help="Comma delimited string with number of observed variants. Used when determining the window sizes for simultaneous breaks.",
-        default="10,20,50",
-    )
-    parser.add_argument(
         "--pre_process_data", help="Pre-process data", action="store_true"
     )
     parser.add_argument(
@@ -770,9 +718,20 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--expand_simul_break_window",
-        help="Expand the window of constraint in transcripts with two simultaneous breaks",
+        "--get_total_exome_bases",
+        help="Get total number of bases in the exome. If not set, will pull default value from TOTAL_EXOME_BASES.",
         action="store_true",
+    )
+    parser.add_argument(
+        "--get_total_gnomad_missense",
+        help="Get total number of missense variants in gnomAD. If not set, will pull default value from TOTAL_GNOMAD_MISSENSE.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--min_num_obs",
+        help="Number of observed variants. Used when determining the smallest possible window size for simultaneous breaks.",
+        default=10,
+        type=int,
     )
     parser.add_argument(
         "--transcript_percentage",
