@@ -679,80 +679,80 @@ if __name__ == "__main__":
         "--exac", help="Use ExAC Table (not gnomAD Table)", action="store_true"
     )
     parser.add_argument(
-        "--n_partitions",
+        "--n-partitions",
         help="Desired number of partitions for output data",
         type=int,
         default=40000,
     )
     parser.add_argument(
-        "--high_cov_cutoff",
+        "--high-cov-cutoff",
         help="Coverage threshold for a site to be considered high coverage",
         type=int,
         default=40,
     )
     parser.add_argument(
-        "--chisq_threshold",
+        "--chisq-threshold",
         help="Chi-square significance threshold. Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).",
         type=float,
         default=10.8,
     )
     parser.add_argument(
-        "--pre_process_data", help="Pre-process data", action="store_true"
+        "--pre-process-data", help="Pre-process data", action="store_true"
     )
     parser.add_argument(
-        "--prep_for_constraint",
+        "--prep-for-constraint",
         help="Prepare tables for constraint calculations",
         action="store_true",
     )
     parser.add_argument(
-        "--skip_calc_oe",
+        "--skip-calc-oe",
         help="Skip observed and expected variant calculations per transcript. Relevant only to gnomAD v2.1.1!",
         action="store_true",
     )
     parser.add_argument(
-        "--search_for_first_break",
+        "--search-for-first-break",
         help="Initial search for one break in all transcripts",
         action="store_true",
     )
     parser.add_argument(
-        "--search_for_additional_breaks",
+        "--search-for-additional-breaks",
         help="Search for additional break in transcripts with one significant break",
         action="store_true",
     )
     parser.add_argument(
-        "--search_for_simul_breaks",
+        "--search-for-simul-breaks",
         help="Search for two simultaneous breaks in transcripts without a single significant break",
         action="store_true",
     )
     parser.add_argument(
-        "--get_total_exome_bases",
+        "--get-total-exome-bases",
         help="Get total number of bases in the exome. If not set, will pull default value from TOTAL_EXOME_BASES.",
         action="store_true",
     )
     parser.add_argument(
-        "--get_total_gnomad_missense",
+        "--get-total-gnomad-missense",
         help="Get total number of missense variants in gnomAD. If not set, will pull default value from TOTAL_GNOMAD_MISSENSE.",
         action="store_true",
     )
     parser.add_argument(
-        "--min_num_obs",
+        "--min-num-obs",
         help="Number of observed variants. Used when determining the smallest possible window size for simultaneous breaks.",
         default=10,
         type=int,
     )
     parser.add_argument(
-        "--transcript_percentage",
+        "--transcript-percentage",
         help="Maximum percentage of the transcript that can be included within a window of constraint. Used for transcripts with simultaneous breaks. Default is 90%",
         type=float,
         default=0.9,
     )
     parser.add_argument(
-        "--fix_xg",
+        "--fix-xg",
         help="Fix XG (gene that spans PAR and non-PAR regions on chrX). Required only for gnomAD v2",
         action="store_true",
     )
     parser.add_argument(
-        "--xg_transcript", help="Transcript ID for XG", default="ENST00000419513",
+        "--xg-transcript", help="Transcript ID for XG", default="ENST00000419513",
     )
     parser.add_argument(
         "--finalize",
@@ -760,7 +760,7 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--remove_outlier_transcripts",
+        "--remove-outlier-transcripts",
         help="Remove outlier transcripts (transcripts with too many/few LoF, synonymous, or missense variants)",
         action="store_true",
     )
@@ -768,7 +768,7 @@ if __name__ == "__main__":
         "--overwrite", help="Overwrite existing data", action="store_true"
     )
     parser.add_argument(
-        "--slack_channel", help="Send message to Slack channel/user", default="@kc"
+        "--slack-channel", help="Send message to Slack channel/user", default="@kc"
     )
     args = parser.parse_args()
 
