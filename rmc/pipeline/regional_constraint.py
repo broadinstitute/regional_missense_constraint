@@ -353,7 +353,7 @@ def main(args):
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
             )
-            context_ht = not_one_break.ht()
+            context_ht = not_one_break.ht().drop("values").select_globals()
 
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
@@ -395,7 +395,6 @@ def main(args):
                 + 1,
             )
 
-            logger.info("Searching for transcripts with simultaneous breaks...")
             # Get number of base pairs needed to observe `num` number of missense variants (on average)
             # This number is used to determine the window size to search for constraint with simultaneous breaks
             min_break_size = (
@@ -411,23 +410,31 @@ def main(args):
                 min_break_size,
             )
 
-        if args.expand_simul_break_window:
-            logger.info("Reading in HT with breakpoints for simultaneous breaks...")
-            is_break_ht = hl.read_table(f"{temp_path}/simul_breaks.ht")
+            logger.info("Searching for transcripts with simultaneous breaks...")
+            context_ht = expand_two_break_window(
+                context_ht, args.transcript_percentage, args.chisq_threshold
+            )
+            context_ht = context_ht.checkpoint(
+                f"{temp_path}/simul_breaks.ht", overwrite=args.overwrite
+            )
+
+            logger.info("Writing out simultaneous breaks HT...")
+            break_ht = context_ht.filter(context_ht.max_chisq >= args.chisq_threshold)
+            simul_break_transcripts = break_ht.aggregate(
+                hl.agg.collect_as_set(break_ht.transcript), _localize=False
+            )
+            simul_break_ht = context_ht.filter(
+                simul_break_transcripts.contains(context_ht.transcript)
+            )
+            simul_break_ht.write(simul_break.path, overwrite=args.overwrite)
 
             logger.info(
-                "Reading in context HT and filtering to transcripts with simultaneous breaks..."
+                "Getting transcripts with no evidence of regional missense constraint..."
             )
-            ht = not_one_break.ht().select()
-            ht = ht.annotate_globals(**is_break_ht.index_globals())
-            ht = ht.filter(ht.transcript.contains(ht.transcript))
-            ht = ht.annotate(**is_break_ht[ht.key])
-
-            logger.info("Expanding simultaneous break windows...")
-            ht = expand_two_break_window(
-                ht, args.transcript_percentage, args.chisq_threshold
+            context_ht = context_ht.filter(
+                ~simul_break_transcripts.contains(context_ht.transcript)
             )
-            ht.write(simul_break.path, overwrite=args.overwrite)
+            context_ht.write(no_breaks.path, overwrite=args.overwrite)
 
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions
