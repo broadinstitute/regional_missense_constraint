@@ -30,13 +30,13 @@ from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
-    expand_two_break_window,
     fix_xg,
     get_fwd_exprs,
     GROUPINGS,
     process_additional_breaks,
     process_transcripts,
     search_for_two_breaks,
+    search_two_break_windows,
 )
 from rmc.utils.generic import (
     filter_to_region_type,
@@ -411,7 +411,7 @@ def main(args):
             )
 
             logger.info("Searching for transcripts with simultaneous breaks...")
-            context_ht = expand_two_break_window(
+            context_ht = search_two_break_windows(
                 context_ht, args.transcript_percentage, args.chisq_threshold
             )
             context_ht = context_ht.checkpoint(

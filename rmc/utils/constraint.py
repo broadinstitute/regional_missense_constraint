@@ -1180,7 +1180,7 @@ def search_for_two_breaks(
     )
 
 
-def expand_two_break_window(
+def search_two_break_windows(
     ht: hl.Table,
     transcript_percentage: float,
     chisq_threshold: float = 13.8,
