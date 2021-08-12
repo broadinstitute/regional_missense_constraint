@@ -128,7 +128,7 @@ def process_context_ht(
     :rtype: hl.Table
     """
     if build not in BUILDS:
-        raise DataException(f"Build must be one of {BUILDS}.")
+        raise DataException("Build must be one of %s.", BUILDS)
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     if build == "GRCh37":
@@ -140,7 +140,8 @@ def process_context_ht(
     ht = prepare_ht(ht, trimers)
 
     logger.info(
-        f"Filtering to canonical transcripts, annotating with most severe consequence, and filtering to {missense_str}..."
+        "Filtering to canonical transcripts, annotating with most severe consequence, and filtering to %s...",
+        missense_str,
     )
     ht = process_vep(ht, filter_csq=True, csq=missense_str)
 
@@ -174,7 +175,7 @@ def get_exome_bases(build: str) -> int:
     :rtype: int
     """
     if build not in BUILDS:
-        raise DataException(f"Build must be one of {BUILDS}.")
+        raise DataException("Build must be one of %s.", BUILDS)
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     if build == "GRCh37":
@@ -243,8 +244,10 @@ def get_avg_bases_between_mis(
         logger.info("Getting total number of missense variants in gnomAD...")
         total_variants = ht.count()
 
-    logger.info(f"Total number of bases in the exome: {total_bases}")
-    logger.info(f"Total number of missense variants in gnomAD exomes: {total_variants}")
+    logger.info("Total number of bases in the exome: %i", total_bases)
+    logger.info(
+        "Total number of missense variants in gnomAD exomes: %i", total_variants
+    )
     logger.info("Getting average bases between missense variants and returning...")
     return round(total_bases / total_variants)
 
@@ -300,7 +303,7 @@ def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.T
     ht = ht.explode(ht.transcript_consequences)
 
     if filter_csq:
-        logger.info(f"Filtering to {csq}...")
+        logger.info("Filtering to %s...", csq)
         ht = ht.filter(ht.transcript_consequences.most_severe_consequence == csq)
     return ht
 
