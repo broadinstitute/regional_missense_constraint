@@ -358,32 +358,35 @@ def main(args):
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
             )
-            # Read in full context HT (not filtered to missense variants)
-            # Also filter full context HT to canonical transcripts only
-            full_context_ht = full_context.ht()
-            full_context_ht = process_vep(full_context_ht)
-            full_context_ht = full_context_ht.annotate(
-                transcript=full_context_ht.transcript_consequences.transcript_id
-            )
-            transcript_ht = full_context_ht.group_by(
-                full_context_ht.transcript
-            ).aggregate(
-                end_pos=hl.agg.max(full_context_ht.locus.position),
-                start_pos=hl.agg.min(full_context_ht.locus.position),
-            )
-
-            if file_exists(f"{temp_path}/transcript.ht"):
-                logger.warning(
-                    "Transcript HT with start position, end position, and size exists and will not be overwritten!"
+            if (
+                not file_exists(f"{temp_path}/transcript.ht")
+            ) or args.overwrite_transcript_ht:
+                # Read in full context HT (not filtered to missense variants)
+                # Also filter full context HT to canonical transcripts only
+                full_context_ht = full_context.ht()
+                full_context_ht = process_vep(full_context_ht)
+                full_context_ht = full_context_ht.annotate(
+                    transcript=full_context_ht.transcript_consequences.transcript_id
                 )
-                transcript_ht = hl.read_table(f"{temp_path}/transcript.ht")
-            else:
+                transcript_ht = full_context_ht.group_by(
+                    full_context_ht.transcript
+                ).aggregate(
+                    end_pos=hl.agg.max(full_context_ht.locus.position),
+                    start_pos=hl.agg.min(full_context_ht.locus.position),
+                )
+
                 logger.info(
                     "Checkpointing transcript HT to avoid redundant calculations..."
                 )
                 transcript_ht = transcript_ht.checkpoint(
                     f"{temp_path}/transcript.ht", overwrite=True
                 )
+
+            if file_exists(f"{temp_path}/transcript.ht"):
+                logger.warning(
+                    "Transcript HT with start position, end position, and size exists and will not be overwritten!"
+                )
+                transcript_ht = hl.read_table(f"{temp_path}/transcript.ht")
 
             context_ht = context_ht.annotate(
                 start_pos=transcript_ht[context_ht.transcript].start_pos,
@@ -722,6 +725,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--search-for-simul-breaks",
         help="Search for two simultaneous breaks in transcripts without a single significant break",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--overwrite-transcript-ht",
+        help="Overwrite the transcript HT (HT with start/end positions and transcript sizes), even if it already exists.",
         action="store_true",
     )
     parser.add_argument(
