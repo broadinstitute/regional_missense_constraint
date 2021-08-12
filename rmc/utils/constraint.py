@@ -872,35 +872,6 @@ def process_additional_breaks(
     return process_sections(ht, chisq_threshold)
 
 
-def get_avg_bases_between_mis(ht: hl.Table) -> int:
-    """
-    Return average number of bases between observed missense variation.
-
-    For example, if the total number of bases is 30, and the total number of missense variants is 10,
-    this function will return 3.
-
-    This function is used to determine the minimum size window to check for significant missense depletion
-    when searching for two simultaneous breaks.
-
-    .. note::
-        Assumes input Table has been filtered to missense variants in canonical protein-coding transcripts only.
-
-    :param hl.Table ht: Input gnomAD exomes Table.
-    :return: Average number of bases between observed missense variants, rounded to the nearest integer,
-    :rtype: int
-    """
-    logger.info("Getting total number of bases in the exome from full context HT...")
-    total_bases = get_exome_bases(build=get_reference_genome(ht.locus).name)
-
-    logger.info("Getting total number of missense variants in gnomAD...")
-    total_variants = ht.count()
-    logger.info(f"Total number of bases in the exome: {total_bases}")
-    logger.info(f"Total number of missense variants in gnomAD exomes: {total_variants}")
-
-    logger.info("Getting average bases between missense variants and returning...")
-    return round(total_bases / total_variants)
-
-
 def get_post_window_pos(ht: hl.Table, pos_ht: hl.Table,) -> hl.Table:
     """
     Get first position of transcript outside of window of constraint.
@@ -1209,7 +1180,7 @@ def search_for_two_breaks(
     )
 
 
-def expand_two_break_window(
+def search_two_break_windows(
     ht: hl.Table,
     transcript_percentage: float,
     chisq_threshold: float = 13.8,

@@ -18,7 +18,7 @@ Path to bucket that stores hail logs.
 
 temp_path = "gs://regional_missense_constraint/temp"
 """
-Path to bucket to store temporary files. 
+Path to bucket to store temporary files.
 Used when checkpointing intermediate files.
 """
 
@@ -65,7 +65,7 @@ mutation_rate = TableResource(
 """
 Table with mutation rate recalculated for gnomAD constraint.
 
-This was calculated with `calculate_mu_by_downsampling` in 
+This was calculated with `calculate_mu_by_downsampling` in
 https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constraint_basics.py.
 """
 
@@ -104,7 +104,7 @@ one_break = VersionedTableResource(
     },
 )
 """
-Table containing transcripts with at least one break. 
+Table containing transcripts with at least one break.
 
 Found when searching constraint_prep HT for transcripts for a single (first) break.
 """
@@ -121,7 +121,7 @@ not_one_break = VersionedTableResource(
     },
 )
 """
-Table containing transcripts without one significant break. 
+Table containing transcripts without one significant break.
 
 Input to searching for simultaneous breaks.
 """
@@ -138,7 +138,7 @@ multiple_breaks = VersionedTableResource(
     },
 )
 """
-Table containing transcripts with multiple breaks. 
+Table containing transcripts with multiple breaks.
 """
 
 simul_break = VersionedTableResource(
@@ -182,4 +182,20 @@ no_breaks = VersionedTableResource(
 )
 """
 Table containing transcripts with no significant breaks.
+"""
+
+
+TOTAL_EXOME_BASES = {"GRCh37": 54426835}
+"""
+Dictionary containing total number of bases in the exome.
+
+Calculated using `get_exome_bases`.
+"""
+
+
+TOTAL_GNOMAD_MISSENSE = {"2.1.1": 5257859}
+"""
+Dictionary containing total number of missense variants seen in gnomAD.
+
+Calculated by filtering gnomAD release HT to missense variants only and running `ht.count()`.
 """

@@ -4,6 +4,8 @@ import logging
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import file_exists
+from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
@@ -29,18 +31,18 @@ from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
-    expand_two_break_window,
     fix_xg,
-    get_avg_bases_between_mis,
     get_fwd_exprs,
     GROUPINGS,
     process_additional_breaks,
     process_transcripts,
     search_for_two_breaks,
+    search_two_break_windows,
 )
 from rmc.utils.generic import (
     filter_to_region_type,
     generate_models,
+    get_avg_bases_between_mis,
     get_coverage_correction_expr,
     get_outlier_transcripts,
     keep_criteria,
@@ -58,7 +60,7 @@ logger.setLevel(logging.INFO)
 
 
 def main(args):
-
+    """Call functions from `constraint.py` to calculate regional missense constraint."""
     hl.init(log="/RMC.log")
     exac = args.exac
 
@@ -352,32 +354,32 @@ def main(args):
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
             )
-            context_ht = not_one_break.ht()
-            exome_ht = filtered_exomes.ht()
+            context_ht = not_one_break.ht().drop("values").select_globals()
 
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
             )
-            # Read in full context HT (not filtered to missense variants)
-            # Also filter full context HT to canonical transcripts only
-            full_context_ht = full_context.ht()
-            full_context_ht = process_vep(full_context_ht)
-            full_context_ht = full_context_ht.annotate(
-                transcript=full_context_ht.transcript_consequences.transcript_id
-            )
-            transcript_ht = full_context_ht.group_by(
-                full_context_ht.transcript
-            ).aggregate(
-                end_pos=hl.agg.max(full_context_ht.locus.position),
-                start_pos=hl.agg.min(full_context_ht.locus.position),
-            )
+            if (
+                not file_exists(f"{temp_path}/transcript.ht")
+            ) or args.overwrite_transcript_ht:
+                # Read in full context HT (not filtered to missense variants)
+                # Also filter full context HT to canonical transcripts only
+                full_context_ht = full_context.ht()
+                full_context_ht = process_vep(full_context_ht)
+                full_context_ht = full_context_ht.annotate(
+                    transcript=full_context_ht.transcript_consequences.transcript_id
+                )
+                transcript_ht = full_context_ht.group_by(
+                    full_context_ht.transcript
+                ).aggregate(
+                    end_pos=hl.agg.max(full_context_ht.locus.position),
+                    start_pos=hl.agg.min(full_context_ht.locus.position),
+                )
 
-            logger.info(
-                "Checkpointing transcript HT to avoid redundant calculations..."
-            )
-            transcript_ht = transcript_ht.checkpoint(
-                f"{temp_path}/transcript.ht", overwrite=True
-            )
+                logger.info("Writing transcript HT to avoid redundant calculations...")
+                transcript_ht.write(f"{temp_path}/transcript.ht", overwrite=True)
+            transcript_ht = hl.read_table(f"{temp_path}/transcript.ht")
+
             context_ht = context_ht.annotate(
                 start_pos=transcript_ht[context_ht.transcript].start_pos,
                 end_pos=transcript_ht[context_ht.transcript].end_pos,
@@ -388,93 +390,46 @@ def main(args):
                 + 1,
             )
 
-            logger.info(
-                "Getting number of observed variants (these numbers are used to determine window size)..."
-            )
-            num_obs_var = list(map(int, args.num_obs_var.split(",")))
-
-            if len(num_obs_var) == 1:
-                raise DataException(
-                    "num_obs_var should contain at least two integers (e.g., '10,20')"
+            # Get number of base pairs needed to observe `num` number of missense variants (on average)
+            # This number is used to determine the window size to search for constraint with simultaneous breaks
+            min_break_size = (
+                get_avg_bases_between_mis(
+                    get_reference_genome(context_ht.locus).name,
+                    args.get_total_exome_bases,
+                    args.get_total_gnomad_missense,
                 )
+                * args.min_num_obs
+            )
+            logger.info(
+                "Minimum window size (window size needed to observe %i missense variants on average): %s",
+                min_break_size,
+            )
 
             logger.info("Searching for transcripts with simultaneous breaks...")
-            transcripts_per_window = {}
-            window_sizes = {}
-            for num in num_obs_var:
+            context_ht = search_two_break_windows(
+                context_ht, args.transcript_percentage, args.chisq_threshold
+            )
+            context_ht = context_ht.checkpoint(
+                f"{temp_path}/simul_breaks.ht", overwrite=args.overwrite
+            )
 
-                logger.info(
-                    "Searching for window size needed to observe %i missense variants (on average)",
-                    num,
-                )
-                # Get number of base pairs needed to observe `num` number of missense variants (on average)
-                # This number is used to determine the window size to search for constraint with simultaneous breaks
-                break_size = get_avg_bases_between_mis(exome_ht) * num
-                window_sizes[num] = break_size
-                logger.info(
-                    "Number of bases to search for constraint (size for simultaneous breaks): %i",
-                    break_size,
-                )
-                ht = search_for_two_breaks(
-                    ht=context_ht,
-                    break_size=break_size,
-                    chisq_threshold=args.chisq_threshold,
-                )
-
-                logger.info("Checkpointing HT...")
-                is_break_ht = ht.filter(ht.is_break)
-                is_break_ht = is_break_ht.checkpoint(
-                    f"{temp_path}/simul_break_{num}_obs_mis.ht", overwrite=True,
-                )
-
-                transcripts_per_window[num] = is_break_ht.aggregate(
-                    hl.agg.collect_as_set(is_break_ht.transcript), _localize=False
-                )
-
-            logger.info("Writing out transcripts with simultaneous breaks...")
-            hts = [
-                hl.read_table(f"{temp_path}/simul_break_{num}_obs_mis.ht")
-                for num in num_obs_var
-            ]
-            ht = hts[0].union(*hts[1:])
-
-            # Get all transcripts with simultaneous breaks
-            transcripts = hl.empty_set(hl.tstr)
-            for num in transcripts_per_window:
-                transcripts.union(transcripts_per_window[num])
-                annot_dict = {
-                    f"obs_mis_{num}": transcripts_per_window[num],
-                    f"obs_mis_{num}_window_size": window_sizes[num],
-                }
-                ht = ht.annotate_globals(**annot_dict)
-            ht = ht.annotate_globals(all_simul_transcripts=transcripts)
-            ht.write(f"{temp_path}/simul_breaks.ht", overwrite=args.overwrite)
-
-            logger.info("Writing out transcripts with no breaks...")
-            # Get all transcripts with simultaneous breaks
-            transcripts = hl.empty_set(hl.tstr)
-            for num in transcripts_per_window:
-                transcripts.union(transcripts_per_window[num])
-            context_ht = context_ht.filter(~transcripts.contains(context_ht.transcript))
-            context_ht.write(no_breaks.path, overwrite=args.overwrite)
-
-        if args.expand_simul_break_window:
-            logger.info("Reading in HT with breakpoints for simultaneous breaks...")
-            is_break_ht = hl.read_table(f"{temp_path}/simul_breaks.ht")
+            logger.info("Writing out simultaneous breaks HT...")
+            break_ht = context_ht.filter(context_ht.max_chisq >= args.chisq_threshold)
+            simul_break_transcripts = break_ht.aggregate(
+                hl.agg.collect_as_set(break_ht.transcript), _localize=False
+            )
+            simul_break_ht = context_ht.filter(
+                simul_break_transcripts.contains(context_ht.transcript)
+            )
+            simul_break_ht.write(simul_break.path, overwrite=args.overwrite)
 
             logger.info(
-                "Reading in context HT and filtering to transcripts with simultaneous breaks..."
+                "Getting transcripts with no evidence of regional missense constraint..."
             )
-            ht = not_one_break.ht().select()
-            ht = ht.annotate_globals(**is_break_ht.index_globals())
-            ht = ht.filter(ht.transcript.contains(ht.transcript))
-            ht = ht.annotate(**is_break_ht[ht.key])
-
-            logger.info("Expanding simultaneous break windows...")
-            ht = expand_two_break_window(
-                ht, args.transcript_percentage, args.chisq_threshold
+            context_ht = context_ht.filter(
+                ~simul_break_transcripts.contains(context_ht.transcript)
             )
-            ht.write(simul_break.path, overwrite=args.overwrite)
+            context_ht.write(no_breaks.path, overwrite=args.overwrite)
 
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions
@@ -612,7 +567,8 @@ def main(args):
                     filtered_transcripts[break_num]
                 )
             logger.info(
-                f"Number of transcripts with evidence of RMC: {hl.eval(hl.len(total_rmc_transcripts))}"
+                "Number of transcripts with evidence of RMC: %s",
+                hl.eval(hl.len(total_rmc_transcripts)),
             )
 
             logger.info("Creating breaks HT...")
@@ -719,74 +675,85 @@ if __name__ == "__main__":
         "--exac", help="Use ExAC Table (not gnomAD Table)", action="store_true"
     )
     parser.add_argument(
-        "--n_partitions",
+        "--n-partitions",
         help="Desired number of partitions for output data",
         type=int,
         default=40000,
     )
     parser.add_argument(
-        "--high_cov_cutoff",
+        "--high-cov-cutoff",
         help="Coverage threshold for a site to be considered high coverage",
         type=int,
         default=40,
     )
     parser.add_argument(
-        "--chisq_threshold",
+        "--chisq-threshold",
         help="Chi-square significance threshold. Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).",
         type=float,
         default=10.8,
     )
     parser.add_argument(
-        "--num_obs_var",
-        help="Comma delimited string with number of observed variants. Used when determining the window sizes for simultaneous breaks.",
-        default="10,20,50",
+        "--pre-process-data", help="Pre-process data", action="store_true"
     )
     parser.add_argument(
-        "--pre_process_data", help="Pre-process data", action="store_true"
-    )
-    parser.add_argument(
-        "--prep_for_constraint",
+        "--prep-for-constraint",
         help="Prepare tables for constraint calculations",
         action="store_true",
     )
     parser.add_argument(
-        "--skip_calc_oe",
+        "--skip-calc-oe",
         help="Skip observed and expected variant calculations per transcript. Relevant only to gnomAD v2.1.1!",
         action="store_true",
     )
     parser.add_argument(
-        "--search_for_first_break",
+        "--search-for-first-break",
         help="Initial search for one break in all transcripts",
         action="store_true",
     )
     parser.add_argument(
-        "--search_for_additional_breaks",
+        "--search-for-additional-breaks",
         help="Search for additional break in transcripts with one significant break",
         action="store_true",
     )
     parser.add_argument(
-        "--search_for_simul_breaks",
+        "--search-for-simul-breaks",
         help="Search for two simultaneous breaks in transcripts without a single significant break",
         action="store_true",
     )
     parser.add_argument(
-        "--expand_simul_break_window",
-        help="Expand the window of constraint in transcripts with two simultaneous breaks",
+        "--overwrite-transcript-ht",
+        help="Overwrite the transcript HT (HT with start/end positions and transcript sizes), even if it already exists.",
         action="store_true",
     )
     parser.add_argument(
-        "--transcript_percentage",
+        "--get-total-exome-bases",
+        help="Get total number of bases in the exome. If not set, will pull default value from TOTAL_EXOME_BASES.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--get-total-gnomad-missense",
+        help="Get total number of missense variants in gnomAD. If not set, will pull default value from TOTAL_GNOMAD_MISSENSE.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--min-num-obs",
+        help="Number of observed variants. Used when determining the smallest possible window size for simultaneous breaks.",
+        default=10,
+        type=int,
+    )
+    parser.add_argument(
+        "--transcript-percentage",
         help="Maximum percentage of the transcript that can be included within a window of constraint. Used for transcripts with simultaneous breaks. Default is 90%",
         type=float,
         default=0.9,
     )
     parser.add_argument(
-        "--fix_xg",
+        "--fix-xg",
         help="Fix XG (gene that spans PAR and non-PAR regions on chrX). Required only for gnomAD v2",
         action="store_true",
     )
     parser.add_argument(
-        "--xg_transcript", help="Transcript ID for XG", default="ENST00000419513",
+        "--xg-transcript", help="Transcript ID for XG", default="ENST00000419513",
     )
     parser.add_argument(
         "--finalize",
@@ -794,7 +761,7 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--remove_outlier_transcripts",
+        "--remove-outlier-transcripts",
         help="Remove outlier transcripts (transcripts with too many/few LoF, synonymous, or missense variants)",
         action="store_true",
     )
@@ -802,7 +769,7 @@ if __name__ == "__main__":
         "--overwrite", help="Overwrite existing data", action="store_true"
     )
     parser.add_argument(
-        "--slack_channel", help="Send message to Slack channel/user", default="@kc"
+        "--slack-channel", help="Send message to Slack channel/user", default="@kc"
     )
     args = parser.parse_args()
 

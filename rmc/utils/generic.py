@@ -21,8 +21,10 @@ from rmc.resources.basics import (
     DIVERGENCE_SCORES_TSV_PATH,
     mutation_rate,
     MUTATION_RATE_TABLE_PATH,
+    TOTAL_EXOME_BASES,
+    TOTAL_GNOMAD_MISSENSE,
 )
-from rmc.resources.grch37.gnomad import constraint_ht
+from rmc.resources.grch37.gnomad import constraint_ht, filtered_exomes
 import rmc.resources.grch37.reference_data as grch37
 import rmc.resources.grch38.reference_data as grch38
 from rmc.resources.resource_utils import BUILDS, MISSENSE
@@ -126,7 +128,7 @@ def process_context_ht(
     :rtype: hl.Table
     """
     if build not in BUILDS:
-        raise DataException(f"Build must be one of {BUILDS}.")
+        raise DataException("Build must be one of %s.", BUILDS)
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     if build == "GRCh37":
@@ -138,7 +140,8 @@ def process_context_ht(
     ht = prepare_ht(ht, trimers)
 
     logger.info(
-        f"Filtering to canonical transcripts, annotating with most severe consequence, and filtering to {missense_str}..."
+        "Filtering to canonical transcripts, annotating with most severe consequence, and filtering to %s...",
+        missense_str,
     )
     ht = process_vep(ht, filter_csq=True, csq=missense_str)
 
@@ -172,7 +175,7 @@ def get_exome_bases(build: str) -> int:
     :rtype: int
     """
     if build not in BUILDS:
-        raise DataException(f"Build must be one of {BUILDS}.")
+        raise DataException("Build must be one of %s.", BUILDS)
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     if build == "GRCh37":
@@ -203,6 +206,50 @@ def get_exome_bases(build: str) -> int:
     ht = ht.filter(ht.values[0].coverage.exomes.median >= 5)
     ht = ht.select()
     return ht.count()
+
+
+def get_avg_bases_between_mis(
+    build: str,
+    get_total_exome_bases: bool = False,
+    get_total_gnomad_missense: bool = False,
+) -> int:
+    """
+    Return average number of bases between observed missense variation.
+
+    For example, if the total number of bases is 30, and the total number of missense variants is 10,
+    this function will return 3.
+
+    This function is used to determine the minimum size window to check for significant missense depletion
+    when searching for two simultaneous breaks.
+
+    :param str build: Reference genome build; must be one of BUILDS.
+    :param bool get_total_exome_bases: Boolean for whether to recalculate total number of bases in exome.
+        If False, will use value from `TOTAL_EXOME_BASES`. Default is False.
+    :param bool get_total_gnomad_missense: Boolean for whether to recount total number of missense variants in gnomAD.
+        If False, will use value from `TOTAL_GNOMAD_MISSENSE`. Default is False.
+    :return: Average number of bases between observed missense variants, rounded to the nearest integer,
+    :rtype: int
+    """
+    total_variants = TOTAL_GNOMAD_MISSENSE
+    total_bases = TOTAL_EXOME_BASES
+
+    if get_total_exome_bases:
+        logger.info(
+            "Getting total number of bases in the exome from full context HT..."
+        )
+        total_bases = get_exome_bases(build=get_reference_genome(ht.locus).name)
+
+    if get_total_gnomad_missense:
+        ht = filtered_exomes.ht()
+        logger.info("Getting total number of missense variants in gnomAD...")
+        total_variants = ht.count()
+
+    logger.info("Total number of bases in the exome: %i", total_bases)
+    logger.info(
+        "Total number of missense variants in gnomAD exomes: %i", total_variants
+    )
+    logger.info("Getting average bases between missense variants and returning...")
+    return round(total_bases / total_variants)
 
 
 def keep_criteria(ht: hl.Table, exac: bool = False) -> hl.expr.BooleanExpression:
@@ -256,7 +303,7 @@ def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.T
     ht = ht.explode(ht.transcript_consequences)
 
     if filter_csq:
-        logger.info(f"Filtering to {csq}...")
+        logger.info("Filtering to %s...", csq)
         ht = ht.filter(ht.transcript_consequences.most_severe_consequence == csq)
     return ht
 
