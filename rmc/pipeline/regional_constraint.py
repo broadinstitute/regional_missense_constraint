@@ -376,12 +376,9 @@ def main(args):
                     start_pos=hl.agg.min(full_context_ht.locus.position),
                 )
 
-                logger.info(
-                    "Checkpointing transcript HT to avoid redundant calculations..."
-                )
-                transcript_ht = transcript_ht.checkpoint(
-                    f"{temp_path}/transcript.ht", overwrite=True
-                )
+                logger.info("Writing transcript HT to avoid redundant calculations...")
+                transcript_ht.write(f"{temp_path}/transcript.ht", overwrite=True)
+            transcript_ht = hl.read_table(f"{temp_path}/transcript.ht")
 
             context_ht = context_ht.annotate(
                 start_pos=transcript_ht[context_ht.transcript].start_pos,
