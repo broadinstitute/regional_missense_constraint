@@ -4,6 +4,7 @@ import logging
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 
@@ -569,7 +570,8 @@ def main(args):
                     filtered_transcripts[break_num]
                 )
             logger.info(
-                f"Number of transcripts with evidence of RMC: {hl.eval(hl.len(total_rmc_transcripts))}"
+                "Number of transcripts with evidence of RMC: %s",
+                hl.eval(hl.len(total_rmc_transcripts)),
             )
 
             logger.info("Creating breaks HT...")
