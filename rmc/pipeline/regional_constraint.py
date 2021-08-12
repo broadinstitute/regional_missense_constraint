@@ -382,12 +382,6 @@ def main(args):
                     f"{temp_path}/transcript.ht", overwrite=True
                 )
 
-            if file_exists(f"{temp_path}/transcript.ht"):
-                logger.warning(
-                    "Transcript HT with start position, end position, and size exists and will not be overwritten!"
-                )
-                transcript_ht = hl.read_table(f"{temp_path}/transcript.ht")
-
             context_ht = context_ht.annotate(
                 start_pos=transcript_ht[context_ht.transcript].start_pos,
                 end_pos=transcript_ht[context_ht.transcript].end_pos,
