@@ -1086,9 +1086,7 @@ def create_two_break_window(
         max_ht = max_ht.filter(ht.window_end_max > ht.post_window_pos_max)
         max_ht.show()
         raise DataException(
-            "Position closest to window end is smaller than min or max window end position in %i and %i cases!",
-            check_min_end,
-            check_max_end,
+            f"Position closest to window end is smaller than min or max window end position in {check_min_end} and {check_max_end} cases!"
         )
     return (ht, max_window_size)
 
