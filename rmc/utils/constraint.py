@@ -868,6 +868,35 @@ def process_additional_breaks(
     return process_sections(ht, chisq_threshold)
 
 
+def get_window_end_pos_expr(
+    pos_expr: hl.expr.Int32Expression,
+    end_pos_expr: hl.expr.Int32Expression,
+    window_size_expr: int,
+) -> hl.expr.Expression:
+    """
+    Get window end position.
+
+    Annotates window end position only if the position + (`window_size_expr` - 1) is less than or equal to the transcript end position.
+
+    .. note::
+        The subtraction (`window_size_expr` - 1) is necessary to get a window with only `window_size_expr` base pairs.
+        Without the subtraction, the window size woudl be one base pair too many:
+        e.g., If position is 8, window size is 3 bp, and end position is 12, then:
+        the window end is 8 + (3 - 1) = 10, and the window is [8, 9, 10] (3 bp).
+        Without the subtraction, the window would be [8, 9, 10, 11], or 4 bp.
+
+    :param hl.expr.Int32Expression pos_expr: IntExpression representing chromosomal position.
+    :param hl.expr.Int32Expression end_pos_expr: IntExpression representing last position in transcript.
+    :param int window_size_expr: Size of two break window.
+    :return: Expression annotating window end position.
+    :rtype: hl.expr.Expression
+    """
+    return hl.or_missing(
+        pos_expr + (window_size_expr - 1) <= end_pos_expr,
+        pos_expr + (window_size_expr - 1),
+    )
+
+
 def get_min_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
     """
     Get the first position of transcript outside of smallest simultaneous break window.
@@ -973,14 +1002,10 @@ def get_min_two_break_window(
 
     logger.info("Annotating smallest possible window ends for each position...")
     ht = ht.annotate(
-        # Add smallest window end position only if position + (min_window_size - 1) is less than or
-        # equal to the transcript end position
-        # The position subtraction (removing one base pair) is necessary to get a window with min_window_size base pairs
-        # e.g., If position is 8, min_window_size is 3, and end position is 12, then min_window_end is 8 + (3-1) = 10
-        # Without the subtraction, the window would end up being one base pair too many: [8-10] is 3 bp but [8-11] is 4
-        min_window_end=hl.or_missing(
-            ht.locus.position + (min_window_size - 1) <= ht.end_pos,
-            ht.locus.position + (min_window_size - 1),
+        min_window_end=get_window_end_pos_expr(
+            pos_expr=ht.locus.position,
+            end_pos_expr=ht.end,
+            window_size_expr=min_window_size,
         ),
     )
 
@@ -1234,6 +1259,10 @@ def search_two_break_windows(
     :rtype: hl.Table
     """
     logger.info("Getting smallest window end and post-window positions...")
+    logger.info(
+        "Also getting maximum simultaneous break size (%f * largest transcript size)...",
+        transcript_percentage,
+    )
     ht, max_window_size = get_min_two_break_window(
         ht, min_window_size, transcript_percentage, annotations
     )
@@ -1244,8 +1273,62 @@ def search_two_break_windows(
     while window_size <= max_window_size:
         annotate_pre_values = False
         if window_size == min_window_size:
-            ht = ht.annotate(post_window_pos=ht.min_post_window_pos)
+            ht = ht.transmute(
+                post_window_pos=ht.min_post_window_pos,
+                post_window_index=ht.min_post_window_index,
+            )
             annotate_pre_values = True
+        else:
+            # Annotate window end position
+            # This will be missing if window end position is larger than the end position of the transcript
+            ht = ht.annotate(
+                window_end=get_window_end_pos_expr(
+                    pos_expr=ht.locus.position,
+                    end_pos_expr=ht.end,
+                    window_size_expr=window_size,
+                ),
+            )
+            # Annotate post window index
+            ht = ht.annotate(
+                post_window_index=hl.case()
+                # Check if post window index is the last index of the pos per transcript list
+                .when(
+                    ht.post_window_index == ht.n_pos_per_transcript - 1,
+                    # Return post window index as is if the position it points to is larger than the window end
+                    # Otherwise, return missing
+                    hl.or_missing(
+                        ht.pos_per_transcript[ht.n_pos_per_transcript - 1]
+                        > ht.window_end,
+                        ht.post_window_index,
+                    ),
+                )
+                # Otherwise, post window index is between the first and last index of the pos per transcript list
+                .default(
+                    ht.post_window_index < ht.n_pos_per_transcript,
+                    hl.if_else(
+                        # If position pointed to by currrent post window index is still larger than window end,
+                        # then return the same index. Otherwise, increase index by 1
+                        ht.pos_per_transcript[ht.post_window_index] > ht.window_end,
+                        ht.post_window_index,
+                        ht.post_window_index + 1,
+                    ),
+                )
+            )
+            ht = ht.annotate(
+                post_window_pos=hl.case()
+                .when(
+                    # Check if both the post window index and window end are defined
+                    # if window_end is the transcript end position, and the transcript end position isn't actually present in the
+                    # context HT filtered to missense variants only, then window_end could be defined while post_window_index is missing
+                    hl.is_defined(ht.post_window_index) & hl.is_defined(ht.window_end),
+                    hl.if_else(
+                        ht.post_window_index == ht.n_pos_per_transcript - 1,
+                        ht.end_pos,
+                        ht.pos_per_transcript[ht.post_window_index],
+                    ),
+                )
+                .or_missing()
+            )
 
         break_ht = search_for_two_breaks(
             ht=ht,
