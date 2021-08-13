@@ -1219,7 +1219,9 @@ def annotate_two_breaks_section_values(
     )
 
 
-def search_for_two_breaks(ht: hl.Table, chisq_threshold: float = 13.8,) -> hl.Table:
+def search_for_two_breaks(
+    ht: hl.Table, annotate_pre_values: bool, chisq_threshold: float = 13.8,
+) -> hl.Table:
     """
     Search for evidence of constraint within a set window size/number of base pairs.
 
@@ -1229,13 +1231,14 @@ def search_for_two_breaks(ht: hl.Table, chisq_threshold: float = 13.8,) -> hl.Ta
         - Input Table has a field named 'transcript'.
 
     :param hl.Table ht: Input Table.
+    :param bool annotate_pre_values: Whether to annotate pre-window of constraint values. Only needs to be done once.
     :param float chisq_threshold: Chi-square significance threshold.
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
     :return: Table annotated with is_break at the *end* position of a simultaneous break window.
     :rtype: hl.Table
     """
     logger.info("Preparing HT to search for two breaks...")
-    ht = annotate_two_breaks_section_values(ht)
+    ht = annotate_two_breaks_section_values(ht, annotate_pre_values)
 
     logger.info("Searching for two breaks...")
     return search_for_break(
@@ -1294,7 +1297,16 @@ def search_two_break_windows(
     # Start at one size larger than min window size because min window size has already been searched
     window_size = min_window_size
     while window_size <= max_window_size:
-        break_ht = search_for_two_breaks(ht=ht, chisq_threshold=chisq_threshold,)
+        annotate_pre_values = False
+        if window_size == min_window_size:
+            ht = ht.annotate(post_window_pos=ht.post_window_pos_min)
+            annotate_pre_values = True
+
+        break_ht = search_for_two_breaks(
+            ht=ht,
+            annotate_pre_values=annotate_pre_values,
+            chisq_threshold=chisq_threshold,
+        )
 
         # Re-add annotations that are dropped in search_for_two_breaks function
         annot_ht = ht.select(
