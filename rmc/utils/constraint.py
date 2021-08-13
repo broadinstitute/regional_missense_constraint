@@ -868,62 +868,14 @@ def process_additional_breaks(
     return process_sections(ht, chisq_threshold)
 
 
-def adjust_post_window_pos(
-    pos_list_expr: hl.expr.ArrayExpression,
-    len_expr: hl.expr.Int32Expression,
-    end_pos_expr: hl.expr.Int32Expression,
-    index_expr: hl.expr.Int32Expression,
-    window_end_pos_expr: hl.expr.Int32Expression,
-) -> hl.expr.builders.CaseBuilder:
+def get_min_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
     """
-    Adjust the post window position to make sure it is larger than the provided window end position.
-
-    .. note::
-        The default behavior in this case statement is to return the transcript end position.
-
-        This is because:
-            1) `pos_expr` is created using the filtered context table. This means:
-                - `pos_expr` contains only positions in each transcript that had a possible missense variant.
-                - `pos_expr` might not contain the transcript end position.
-            2) `hl.binary_search` will return an index larger than the length of a list if that position
-                is larger than the largest element in the list.
-                For example: if `pos_expr` is [1, 4, 8], then `hl.binary_search(pos_per_transcript, 10)` will return 3.
-
-    :param hl.expr.ArrayExpression pos_list_expr: ArrayExpression containing positions per transcript.
-    :param hl.expr.Int32Expression len_expr: IntExpression containing length of list containing positions per transcript.
-    :param hl.expr.Int32Expression end_pos_expr: IntExpression containing end position of transcript.
-    :param hl.expr.Int32Expression index_expr: IntExpression containing index returned by binary search.
-    :param hl.expr.Int32Expression window_end_pos_expr: IntExpression containing window end position.
-    :return: Case statement used to adjust post window position.
-    :rtype: hl.expr.builders.CaseBuilder
-    """
-    return (
-        hl.case()
-        # When the index returned is anywhere from the start index to the second to last index in the list:
-        .when(
-            index_expr < len_expr,
-            # Check if the position pointed to by the index is the same as the window end
-            # If the positions are the same, then return the next position in the list
-            hl.if_else(
-                pos_list_expr[index_expr] == window_end_pos_expr,
-                pos_list_expr[index_expr + 1],
-                pos_list_expr[index_expr],
-            ),
-        )
-        # Otherwise, return the transcript end position by default
-        .default(end_pos_expr)
-    )
-
-
-def get_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
-    """
-    Get first position of transcript outside of window of constraint.
+    Get the first position of transcript outside of smallest simultaneous break window.
 
     Run `hl.binary_search` to find index of first post-window position.
 
     Assumes:
-        - ht is annotated with smallest window end position (`window_end_min`)
-        - ht is annotated with largest window end position (`window_end_max`)
+        - ht is annotated with smallest window end position (`min_window_end`)
         - ht is annotated with transcript end position (`end_pos`)
 
     :param hl.Table ht: Input Table.
@@ -937,7 +889,7 @@ def get_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
     ht = ht.transmute(pos_per_transcript=ht.positions)
 
     logger.info(
-        "Running hl.binary_search to find the largest and smallest post window positions..."
+        "Running hl.binary_search to find the smallest post window positions..."
     )
     # hl.binary search will return the index of the position that is closest to the search element (window_end)
     # If window_end exists in the HT, hl.binary_search will return the index of the window_end
@@ -946,30 +898,35 @@ def get_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
     # hl.binary_search(pos_per_transcript, 4) will return 1
     # hl.binary_search(pos_per_transcript, 5) will return 2
     ht = ht.annotate(
-        post_window_index_min=hl.binary_search(
-            ht.pos_per_transcript, ht.window_end_min
-        ),
-        post_window_index_max=hl.binary_search(
-            ht.pos_per_transcript, ht.window_end_max
+        min_post_window_index=hl.binary_search(
+            ht.pos_per_transcript, ht.min_window_end
         ),
         n_pos_per_transcript=hl.len(ht.pos_per_transcript),
     )
 
+    # Adjust the post window position to make sure it is larger than the provided window end position
+    # The default behavior in this case statement is to return the transcript end position because:
+    # 1) `pos_expr` is created using the filtered context table. This means:
+    # - `pos_expr` contains only positions in each transcript that had a possible missense variant.
+    # - `pos_expr` might not contain the transcript end position.
+    # 2) `hl.binary_search` will return an index larger than the length of a list if that position
+    # is larger than the largest element in the list.
+    # For example: if `pos_expr` is [1, 4, 8], then `hl.binary_search(pos_per_transcript, 10)` will return 3.
     return ht.annotate(
-        post_window_pos_min=adjust_post_window_pos(
-            pos_list_expr=ht.pos_per_transcript,
-            len_expr=ht.n_pos_per_transcript,
-            end_pos_expr=ht.end_pos,
-            index_expr=ht.min_pos_window_index,
-            window_end_pos_expr=ht.min_post_window_index,
-        ),
-        post_window_pos_max=adjust_post_window_pos(
-            pos_list_expr=ht.pos_per_transcript,
-            len_expr=ht.n_pos_per_transcript,
-            end_pos_expr=ht.end_pos,
-            index_expr=ht.max_pos_window_index,
-            window_end_pos_expr=ht.max_post_window_index,
-        ),
+        min_post_window_pos=hl.case()
+        # When the index returned is anywhere from the start index to the second to last index in the list:
+        .when(
+            ht.min_post_window_index < ht.n_pos_per_transcript,
+            # Check if the position pointed to by the index is the same as the window end
+            # If the positions are the same, then return the next position in the list
+            hl.if_else(
+                ht.pos_per_transcript[ht.min_post_window_index] == ht.min_window_end,
+                ht.pos_per_transcript[ht.min_post_window_index + 1],
+                ht.pos_per_transcript[ht.min_post_window_index],
+            ),
+        )
+        # Otherwise, return the transcript end position by default
+        .default(ht.end_pos)
     )
 
 
@@ -1006,7 +963,7 @@ def create_two_break_window(
             "mu_snp", "total_exp", "_mu_scan", "total_mu", "cumulative_obs", "observed", "cumulative_exp",
             "total_obs", "reverse", "forward_oe", "overall_oe"
         ].
-    :return: Table annotated with window end and post window posiiton and maximum window size.
+    :return: Tuple of Table annotated with window end, post window position and maximum window size.
     :rtype: Tuple[hl.Table, int]
     """
     logger.info("Annotating each transcript with max window size...")
@@ -1014,23 +971,16 @@ def create_two_break_window(
     max_window_size = round(ht.aggregate(hl.agg.max(ht.max_window_size)))
     logger.info("Maximum window size: %i", max_window_size)
 
-    logger.info(
-        "Annotating largest and smallest possible window ends for each position..."
-    )
+    logger.info("Annotating smallest possible window ends for each position...")
     ht = ht.annotate(
         # Add smallest window end position only if position + (min_window_size - 1) is less than or
         # equal to the transcript end position
         # The position subtraction (removing one base pair) is necessary to get a window with min_window_size base pairs
-        # e.g., If position is 8, min_window_size is 3, and end position is 12, then window_end_min is 8 + (3-1) = 10
+        # e.g., If position is 8, min_window_size is 3, and end position is 12, then min_window_end is 8 + (3-1) = 10
         # Without the subtraction, the window would end up being one base pair too many: [8-10] is 3 bp but [8-11] is 4
-        window_end_min=hl.or_missing(
+        min_window_end=hl.or_missing(
             ht.locus.position + (min_window_size - 1) <= ht.end_pos,
             ht.locus.position + (min_window_size - 1),
-        ),
-        window_end_max=hl.or_missing(
-            # Annotate largest possible window end only if position + (max_window_size - 1) is <= transcript end pos
-            ht.locus.position + (max_window_size - 1) <= ht.end_pos,
-            ht.locus.position + (max_window_size - 1),
         ),
     )
 
@@ -1060,13 +1010,13 @@ def create_two_break_window(
         )
         pos_ht = pos_ht.checkpoint(f"{temp_path}/pos_per_transcript.ht")
 
-    logger.info("Getting largest and smallest post window positions...")
+    logger.info("Getting smallest post window positions...")
     # Keep version of HT with all relevant annotations and strip HT of all annotations to prepare for binary search
     annotation_ht = ht.select(*annotations)
     ht = ht.select(
-        "window_end_min", "window_end_max", "start_pos", "end_pos", "transcript_size"
+        "min_window_end", "start_pos", "end_pos", "transcript_size"
     ).select_globals()
-    ht = get_post_window_pos(ht, pos_ht)
+    ht = get_min_post_window_pos(ht, pos_ht)
 
     logger.info("Adding relevant annotations back onto HT...")
     ht = ht.annotate(**annotation_ht[ht.key])
@@ -1074,19 +1024,14 @@ def create_two_break_window(
     logger.info("HT count: %s", ht.count())
 
     # Check if post window pos is ever smaller than window_end
-    check_min_end = ht.aggregate(
-        hl.agg.count_where(ht.window_end_min > ht.post_window_pos_min)
+    check_end = ht.aggregate(
+        hl.agg.count_where(ht.min_window_end > ht.min_post_window_pos)
     )
-    check_max_end = ht.aggregate(
-        hl.agg.count_where(ht.window_end_max > ht.post_window_pos_max)
-    )
-    if check_min_end > 0 or check_max_end > 0:
-        min_ht = ht.filter(ht.window_end_min > ht.post_window_pos_min)
-        min_ht.show()
-        max_ht = max_ht.filter(ht.window_end_max > ht.post_window_pos_max)
-        max_ht.show()
+    if check_end > 0:
+        ht = ht.filter(ht.min_window_end > ht.min_post_window_pos)
+        ht.show()
         raise DataException(
-            f"Position closest to window end is smaller than min or max window end position in {check_min_end} and {check_max_end} cases!"
+            f"Position closest to window end is smaller than min window end position in {check_end} cases!"
         )
     return (ht, max_window_size)
 
@@ -1299,7 +1244,7 @@ def search_two_break_windows(
     while window_size <= max_window_size:
         annotate_pre_values = False
         if window_size == min_window_size:
-            ht = ht.annotate(post_window_pos=ht.post_window_pos_min)
+            ht = ht.annotate(post_window_pos=ht.min_post_window_pos)
             annotate_pre_values = True
 
         break_ht = search_for_two_breaks(
