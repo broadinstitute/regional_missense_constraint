@@ -401,7 +401,8 @@ def main(args):
                 * args.min_num_obs
             )
             logger.info(
-                "Minimum window size (window size needed to observe %i missense variants on average): %s",
+                "Minimum window size (window size needed to observe %i missense variants on average): %i",
+                args.min_num_obs,
                 min_break_size,
             )
 
