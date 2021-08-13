@@ -146,7 +146,7 @@ def calculate_exp_per_transcript(
     :return: Table grouped by transcript with expected counts per search field.
     :rtype: hl.Table
     """
-    logger.info(f"Grouping by {groupings}...")
+    logger.info("Grouping by %s...", groupings)
     group_ht = context_ht.group_by(*groupings).aggregate(
         mu_agg=hl.agg.sum(context_ht.raw_mu_snp)
     )
@@ -1071,7 +1071,7 @@ def create_two_break_window(
     logger.info("Adding relevant annotations back onto HT...")
     ht = ht.annotate(**annotation_ht[ht.key])
     ht = ht.checkpoint(f"{temp_path}/simul_break_ready.ht", overwrite=True)
-    logger.info(f"HT count: {ht.count()}")
+    logger.info("HT count: %s", ht.count())
 
     # Check if post window pos is ever smaller than window_end
     check_min_end = ht.aggregate(
@@ -1450,7 +1450,7 @@ def fix_xg(
         xg = xg.transmute(observed=hl.int(hl.is_defined(xg._obs)))
         return xg.annotate(total_obs=obs_ht[xg.transcript].observed)
 
-    logger.info(f"Filtering context HT to XG (transcript: {xg_transcript})...")
+    logger.info("Filtering context HT to XG (transcript: %s)...", xg_transcript)
     xg = context_ht.filter(context_ht.transcript == xg_transcript)
 
     logger.info("Fixing expected counts for XG...")
