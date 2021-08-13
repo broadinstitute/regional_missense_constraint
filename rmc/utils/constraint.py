@@ -930,7 +930,7 @@ def get_min_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
     )
 
 
-def create_two_break_window(
+def get_min_two_break_window(
     ht: hl.Table,
     min_window_size: int,
     transcript_percentage: float,
@@ -949,7 +949,7 @@ def create_two_break_window(
     ],
 ) -> Tuple[hl.Table, int]:
     """
-    Annotate input Table with simultaneous breaks window end positions.
+    Annotate input Table with smallest simultaneous breaks window end positions.
 
     Also annotate Table with first position post-window.
     Function prepares Table for simultaneous breaks searches.
@@ -1233,8 +1233,8 @@ def search_two_break_windows(
     :return: Table with largest simultaneous break window size annotated per transcript.
     :rtype: hl.Table
     """
-    logger.info("Getting window end and post-window positions...")
-    ht, max_window_size = create_two_break_window(
+    logger.info("Getting smallest window end and post-window positions...")
+    ht, max_window_size = get_min_two_break_window(
         ht, min_window_size, transcript_percentage, annotations
     )
 
