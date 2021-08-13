@@ -905,7 +905,6 @@ def get_min_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
 
     Assumes:
         - ht is annotated with smallest window end position (`min_window_end`)
-        - ht is annotated with transcript end position (`end_pos`)
 
     :param hl.Table ht: Input Table.
     :param hl.Table pos_ht: Input GroupedTable grouped by transcript with list of all positions per transcript.
@@ -943,6 +942,16 @@ def get_min_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
     # For example: if `pos_expr` is [1, 4, 8], then `hl.binary_search(pos_per_transcript, 10)` will return 3.
     return ht.annotate(
         min_post_window_pos=hl.case()
+        # When the index is the last index in the list
+        .when(
+            ht.min_post_window_index == ht.n_pos_per_transcript - 1,
+            # Return the position pointed to by the index only if it is larger than the window end
+            # Otherwise, return missing, since any larger positions in the transcript do not exist in the input HT
+            hl.or_missing(
+                ht.pos_per_transcript[ht.min_post_window_index] != ht.min_window_end,
+                ht.pos_per_transcript[ht.min_post_window_index],
+            ),
+        )
         # When the index returned is anywhere from the start index to the second to last index in the list:
         .when(
             ht.min_post_window_index < ht.n_pos_per_transcript,
@@ -953,9 +962,7 @@ def get_min_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
                 ht.pos_per_transcript[ht.min_post_window_index + 1],
                 ht.pos_per_transcript[ht.min_post_window_index],
             ),
-        )
-        # Otherwise, return the transcript end position by default
-        .default(ht.end_pos)
+        ).or_missing()
     )
 
 
