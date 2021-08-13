@@ -1263,7 +1263,6 @@ def search_two_break_windows(
         "start_pos",
         "end_pos",
         "transcript_size",
-        "max_window_size",
     ],
 ) -> hl.Table:
     """
@@ -1281,14 +1280,14 @@ def search_two_break_windows(
     :param List[str] annotations: Annotations to keep from input HT. Required to search for significant breakpoint.
         Default is [
             "mu_snp", "total_exp", "_mu_scan", "total_mu", "cumulative_obs",  "observed", "cumulative_exp", "total_obs",
-            "reverse", "forward_oe", "overall_oe", "start_pos", "end_pos", "transcript_size", "max_window_size"
+            "reverse", "forward_oe", "overall_oe", "start_pos", "end_pos", "transcript_size"
         ].
     :return: Table with largest simultaneous break window size annotated per transcript.
     :rtype: hl.Table
     """
     logger.info("Getting window end and post-window positions...")
     ht, max_window_size = create_two_break_window(
-        ht, min_window_size, transcript_percentage
+        ht, min_window_size, transcript_percentage, annotations
     )
 
     logger.info("Checking all possible window sizes...")
