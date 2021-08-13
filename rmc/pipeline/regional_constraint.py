@@ -407,7 +407,10 @@ def main(args):
 
             logger.info("Searching for transcripts with simultaneous breaks...")
             context_ht = search_two_break_windows(
-                context_ht, args.transcript_percentage, args.chisq_threshold
+                context_ht,
+                min_break_size,
+                args.transcript_percentage,
+                args.chisq_threshold,
             )
             context_ht = context_ht.checkpoint(
                 f"{temp_path}/simul_breaks.ht", overwrite=args.overwrite
