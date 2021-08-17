@@ -948,7 +948,7 @@ def get_min_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
             # Return the position pointed to by the index only if it is larger than the window end
             # Otherwise, return missing, since any larger positions in the transcript do not exist in the input HT
             hl.or_missing(
-                ht.pos_per_transcript[ht.min_post_window_index] != ht.min_window_end,
+                ht.pos_per_transcript[ht.min_post_window_index] > ht.min_window_end,
                 ht.pos_per_transcript[ht.min_post_window_index],
             ),
         )
