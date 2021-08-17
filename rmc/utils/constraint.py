@@ -970,6 +970,7 @@ def get_min_two_break_window(
     ht: hl.Table,
     min_window_size: int,
     transcript_percentage: float,
+    overwrite_pos_ht: bool = False,
     annotations: List[str] = [
         "mu_snp",
         "total_exp",
@@ -994,6 +995,8 @@ def get_min_two_break_window(
 
     :param hl.Table ht: Input Table.
     :param int min_window_size: Minimum number of bases to search for constraint (window size for simultaneous breaks).
+    :param float transcript_percentage: Maximum percentage of the transcript that can be included within a window of constraint.
+    :param bool overwrite_pos_ht: Whether to overwrite positions per transcript HT. Default is False.
     :param List[str] annotations: Annotations to keep from input HT. Required to search for significant breakpoint.
         Default is [
             "mu_snp", "total_exp", "_mu_scan", "total_mu", "cumulative_obs", "observed", "cumulative_exp",
@@ -1030,17 +1033,14 @@ def get_min_two_break_window(
 
     logger.info("Gathering all positions in each transcript...")
     pos_ht = ht.key_by("locus", "transcript").select()
-    if file_exists(f"{temp_path}/pos_per_transcript.ht"):
-        logger.warning(
-            "HT with all positions per transcripts exists and will not be overwritten!"
-        )
-    else:
+    if (not file_exists(f"{temp_path}/pos_per_transcript.ht")) or overwrite_pos_ht:
         # This collect assumes that the positions are in order from smallest to largest
         # (they should be, since the table is keyed by locus and transcript)
         pos_ht = ht.group_by("transcript").aggregate(
             positions=hl.agg.collect(ht.locus.position), _localize=False,
         )
-        pos_ht = pos_ht.checkpoint(f"{temp_path}/pos_per_transcript.ht")
+        pos_ht.write(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
+    pos_ht = hl.read_table(f"{temp_path}/pos_per_transcript.ht")
 
     logger.info("Getting smallest post window positions...")
     # Keep version of HT with all relevant annotations and strip HT of all annotations to prepare for binary search
@@ -1227,6 +1227,7 @@ def search_two_break_windows(
     ht: hl.Table,
     min_window_size: int,
     transcript_percentage: float,
+    overwrite_pos_ht: bool = False,
     chisq_threshold: float = 13.8,
     annotations: List[str] = [
         "mu_snp",
@@ -1256,6 +1257,7 @@ def search_two_break_windows(
     :param hl.Table ht: Input Table filtered to contain only transcripts with simultaneous breaks.
     :param int min_window_size: Smallest possible window size to search for two simultaneous breaks.
     :param float transcript_percentage: Maximum percentage of the transcript that can be included within a window of constraint.
+    :param bool overwrite_pos_ht: Whether to overwrite positions per transcript HT. Default is False.
     :param float chisq_threshold:  Chi-square significance threshold. Default is 13.8.
     :param List[str] annotations: Annotations to keep from input HT. Required to search for significant breakpoint.
         Default is [
@@ -1271,11 +1273,10 @@ def search_two_break_windows(
         transcript_percentage,
     )
     ht, max_window_size = get_min_two_break_window(
-        ht, min_window_size, transcript_percentage, annotations
+        ht, min_window_size, transcript_percentage, overwrite_pos_ht, annotations
     )
 
     logger.info("Checking all possible window sizes...")
-    # Start at one size larger than min window size because min window size has already been searched
     window_size = min_window_size
     while window_size <= max_window_size:
         annotate_pre_values = False
