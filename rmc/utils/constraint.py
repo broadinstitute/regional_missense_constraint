@@ -1,19 +1,15 @@
 import logging
-from typing import Dict, List, Union
+from typing import Dict, List, Tuple, Union
 
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
-from gnomad.utils.reference_genome import get_reference_genome
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
 from rmc.resources.basics import temp_path
-from rmc.utils.generic import (
-    get_coverage_correction_expr,
-    get_exome_bases,
-)
+from rmc.utils.generic import get_coverage_correction_expr
 
 
 logging.basicConfig(
@@ -1289,6 +1285,50 @@ def calculate_section_chisq(
     :rtype: hl.expr.Float64Expression
     """
     return ((obs_expr - exp_expr) ** 2) / exp_expr
+
+
+def get_section_info(
+    ht: hl.Table, is_middle: bool, indices: Tuple[int], is_first: bool
+) -> hl.Table:
+    """
+    Get the number of observed variants, number of expected variants, and chi square value for the first or last section of a transcript.
+
+    .. note::
+        Assumes that the input Table is annotated with a list of breakpoint positions (`break_pos`).
+
+    :param hl.Table ht: Input Table.
+    :param bool is_middle: Boolean for whether to get a section of the transcript between breakpoints.
+    :param Tuple[int] indices: List of indices pointing to breakpoints.
+        Relevant only if is_middle is True.
+    :param bool is_first: Boolean for whether to get the first section of the transcript.
+        Relevant only if is_middle is False.
+    :return: Table containing transcript and first section obs, exp, and chi square values.
+    """
+    logger.info("Getting info for section of transcript between two breakpoints...")
+    if is_middle:
+        ht = ht.filter(
+            (ht.locus.position > ht.break_pos[indices[0]])
+            & (ht.locus.position <= ht.break_pos[indices[1]])
+        )
+
+    else:
+        if is_first:
+            logger.info(
+                "Getting info for first section of transcript (up to and including smallest breakpoint pos)..."
+            )
+            ht = ht.filter(ht.locus.position <= ht.break_pos[0])
+        else:
+            logger.info(
+                "Getting info for last section of transcript (after largest breakpoint pos)..."
+            )
+            ht = ht.filter(ht.locus.position > ht.break_pos[-1])
+
+    ht = get_subsection_exprs(
+        ht, "transcript", "observed", "mu_snp", "total_mu", "total_exp"
+    )
+    return ht.annotate(
+        section_chisq=calculate_section_chisq(ht.section_obs, ht.section_exp)
+    )
 
 
 def constraint_flag_expr(
