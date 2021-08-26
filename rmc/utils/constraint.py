@@ -1287,6 +1287,20 @@ def calculate_section_chisq(
     return ((obs_expr - exp_expr) ** 2) / exp_expr
 
 
+def get_all_breakpoint_pos(ht: hl.Table) -> hl.GroupedTable:
+    """
+    Get all breakpoint positions per transcript.
+
+    :param hl.Table ht: Input Table.
+    :return: Table grouped by transcript, with all breakpoint positions annotated as a list.
+    :rtype: hl.GroupedTable
+    """
+    ht = ht.filter(ht.break_list.any(lambda x: x))
+    return ht.group_by("transcript").aggregate(
+        break_pos=hl.agg.collect(ht.locus.position)
+    )
+
+
 def get_section_info(
     ht: hl.Table, is_middle: bool, indices: Tuple[int], is_first: bool
 ) -> hl.Table:
