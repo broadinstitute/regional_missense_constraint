@@ -1291,6 +1291,9 @@ def get_all_breakpoint_pos(ht: hl.Table) -> hl.GroupedTable:
     """
     Get all breakpoint positions per transcript.
 
+    .. note::
+        Assumes input Table is annotated with list of Booleans (`break_list`) showing whether site is a breakpoint.
+
     :param hl.Table ht: Input Table.
     :return: Table grouped by transcript, with all breakpoint positions annotated as a list.
     :rtype: hl.GroupedTable
