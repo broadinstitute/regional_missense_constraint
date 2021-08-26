@@ -1302,7 +1302,7 @@ def get_all_breakpoint_pos(ht: hl.Table) -> hl.GroupedTable:
 
 
 def get_section_info(
-    ht: hl.Table, is_middle: bool, indices: Tuple[int], is_first: bool
+    ht: hl.Table, section_num: int, is_middle: bool, indices: Tuple[int], is_first: bool
 ) -> hl.Table:
     """
     Get the number of observed variants, number of expected variants, and chi square value for the first or last section of a transcript.
@@ -1311,6 +1311,7 @@ def get_section_info(
         Assumes that the input Table is annotated with a list of breakpoint positions (`break_pos`).
 
     :param hl.Table ht: Input Table.
+    :param int section_num: Transcript section number (e.g., 1 for first section, 2 for second, 3 for third, etc.).
     :param bool is_middle: Boolean for whether to get a section of the transcript between breakpoints.
     :param Tuple[int] indices: List of indices pointing to breakpoints.
         Relevant only if is_middle is True.
@@ -1337,12 +1338,51 @@ def get_section_info(
             )
             ht = ht.filter(ht.locus.position > ht.break_pos[-1])
 
+    ht = ht.annotate(section=hl.format("%s_%s", ht.transcript, str(section_num)))
     ht = get_subsection_exprs(
         ht, "transcript", "observed", "mu_snp", "total_mu", "total_exp"
     )
     return ht.annotate(
         section_chisq=calculate_section_chisq(ht.section_obs, ht.section_exp)
     )
+
+
+def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
+    """
+    Annotate each transcript section with observed, expected, OE, and section chi square values.
+
+    :param hl.Table ht: Input Table.
+    :param int max_n_breaks: Largest number of breaks.
+    :return: Table with section and section values annotated.
+    :rtype: hl.Table
+    """
+    logger.info("Get section information for first section of each transcript...")
+    count = 1
+    section_ht = get_section_info(
+        ht, section_num=count, is_middle=False, indices=None, is_first=True
+    )
+
+    # Check between each breakpoint
+    while count <= max_n_breaks:
+        if count == 1:
+            # One break transcripts only get divided into two sections
+            # Thus, increment counter and continue
+            count += 1
+            continue
+        else:
+            temp_ht = get_section_info(
+                ht,
+                section_num=count,
+                is_middle=True,
+                indices=(count - 2, count - 1),
+                is_first=False,
+            )
+            section_ht = section_ht.join(temp_ht, how="outer")
+            count += 1
+    end_ht = get_section_info(
+        ht, section_num=count, is_middle=False, indices=None, is_first=False
+    )
+    return section_ht.join(end_ht, how="outer")
 
 
 def constraint_flag_expr(
