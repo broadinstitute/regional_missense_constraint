@@ -769,14 +769,6 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     """
     ht = get_subsection_exprs(ht)
 
-    # TODO: Move this calculation to release HT generation step
-    logger.info("Getting section chi-squared values...")
-    ht = ht.annotate(
-        section_chisq=calculate_section_chisq(
-            obs_expr=ht.section_obs, exp_expr=ht.section_exp,
-        )
-    )
-
     logger.info("Splitting HT into pre and post breakpoint sections...")
     pre_ht = ht.filter(ht.section.contains("pre"))
     post_ht = ht.filter(ht.section.contains("post"))
