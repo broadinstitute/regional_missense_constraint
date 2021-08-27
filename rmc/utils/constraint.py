@@ -5,15 +5,11 @@ import hail as hl
 
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
-from gnomad.utils.reference_genome import get_reference_genome
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
 from rmc.resources.basics import temp_path
-from rmc.utils.generic import (
-    get_coverage_correction_expr,
-    get_exome_bases,
-)
+from rmc.utils.generic import get_coverage_correction_expr
 
 
 logging.basicConfig(
@@ -794,7 +790,14 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     )
 
     logger.info(
-        "Annotating post breakpoint HT with reverse observed and expected counts..."
+        "Annotating pre and post breakpoint HTs with reverse observed and expected counts..."
+    )
+    pre_ht = get_reverse_exprs(
+        ht=pre_ht,
+        total_obs_expr=pre_ht.section_obs,
+        total_exp_expr=pre_ht.section_exp,
+        scan_obs_expr=pre_ht.cumulative_obs[pre_ht.transcript],
+        scan_exp_expr=pre_ht.cumulative_exp,
     )
     post_ht = get_reverse_exprs(
         ht=post_ht,
@@ -811,16 +814,21 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
         simul_break=False,
         chisq_threshold=chisq_threshold,
     )
-    # Adjust is_break annotation in pre_ht
-    # to prevent this function from continually finding previous significant breaks
-    pre_ht = pre_ht.annotate(
-        is_break=hl.if_else(pre_ht.break_list.any(lambda x: x), False, pre_ht.is_break)
-    )
     post_ht = search_for_break(
         post_ht,
         search_field="transcript",
         simul_break=False,
         chisq_threshold=chisq_threshold,
+    )
+    # Adjust is_break annotation in both HTs
+    # to prevent this function from continually finding previous significant breaks
+    pre_ht = pre_ht.annotate(
+        is_break=hl.if_else(pre_ht.break_list.any(lambda x: x), False, pre_ht.is_break)
+    )
+    post_ht = post_ht.annotate(
+        is_break=hl.if_else(
+            post_ht.break_list.any(lambda x: x), False, post_ht.is_break
+        )
     )
     return pre_ht.union(post_ht)
 
