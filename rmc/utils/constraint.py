@@ -1300,7 +1300,7 @@ def get_all_breakpoint_pos(ht: hl.Table) -> hl.GroupedTable:
     """
     ht = ht.filter(ht.break_list.any(lambda x: x))
     return ht.group_by("transcript").aggregate(
-        break_pos=hl.agg.collect(ht.locus.position)
+        break_pos=hl.sorted(hl.agg.collect(ht.locus.position))
     )
 
 
@@ -1354,6 +1354,10 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
     """
     Annotate each transcript section with observed, expected, OE, and section chi square values.
 
+    .. note::
+        Needs to be run for each break number. For example, this function needs to be run for transcripts with three breaks,
+        and it needs to be run again for transcripts with four breaks.
+
     :param hl.Table ht: Input Table.
     :param int max_n_breaks: Largest number of breaks.
     :return: Table with section and section values annotated.
@@ -1365,7 +1369,7 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
         ht, section_num=count, is_middle=False, indices=None, is_first=True
     )
 
-    # Check between each breakpoint
+    # Check sections between breakpoint positions
     while count <= max_n_breaks:
         if count == 1:
             # One break transcripts only get divided into two sections
@@ -1385,7 +1389,19 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
     end_ht = get_section_info(
         ht, section_num=count, is_middle=False, indices=None, is_first=False
     )
-    return section_ht.join(end_ht, how="outer")
+    ht = section_ht.join(end_ht, how="outer")
+
+    logger.info("Merging section string and chi square expressions...")
+    section_name_expr = [ht.section] + [
+        ht[f"section_{count}"] for count in range(1, max_n_breaks + 1)
+    ]
+    section_chisq_expr = [ht.section_chisq] + [
+        ht[f"section_chisq_{count}"] for count in range(1, max_n_breaks + 1)
+    ]
+    return ht.annotate(
+        section=hl.coalesce(*section_name_expr),
+        section_chisq=hl.coalesce(*section_chisq_expr),
+    )
 
 
 def constraint_flag_expr(
