@@ -1014,7 +1014,7 @@ def get_min_two_break_window(
     ht = ht.annotate(
         min_window_end=get_window_end_pos_expr(
             pos_expr=ht.locus.position,
-            end_pos_expr=ht.end,
+            end_pos_expr=ht.end_pos,
             window_size_expr=min_window_size,
         ),
     )
