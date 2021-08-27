@@ -401,13 +401,18 @@ def main(args):
                 * args.min_num_obs
             )
             logger.info(
-                "Minimum window size (window size needed to observe %i missense variants on average): %s",
+                "Minimum window size (window size needed to observe %i missense variants on average): %i",
+                args.min_num_obs,
                 min_break_size,
             )
 
             logger.info("Searching for transcripts with simultaneous breaks...")
             context_ht = search_two_break_windows(
-                context_ht, args.transcript_percentage, args.chisq_threshold
+                context_ht,
+                min_break_size,
+                args.transcript_percentage,
+                args.overwrite_pos_ht,
+                args.chisq_threshold,
             )
             context_ht = context_ht.checkpoint(
                 f"{temp_path}/simul_breaks.ht", overwrite=args.overwrite
@@ -746,6 +751,11 @@ if __name__ == "__main__":
         help="Maximum percentage of the transcript that can be included within a window of constraint. Used for transcripts with simultaneous breaks. Default is 90%",
         type=float,
         default=0.9,
+    )
+    parser.add_argument(
+        "--overwrite-pos-ht",
+        help="Overwrite the positions per transcript HT (HT keyed by transcript with a list of positiosn per transcript), even if it already exists.",
+        action="store_true",
     )
     parser.add_argument(
         "--fix-xg",
