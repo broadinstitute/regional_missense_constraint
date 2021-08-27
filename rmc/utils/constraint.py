@@ -1108,11 +1108,9 @@ def annotate_two_breaks_section_values(
             # = current cumulative obs minus the obs at window start
             # Use hl.max to keep this value positive
             pre_obs=hl.max(ht.cumulative_obs[ht.transcript] - ht.observed, 0),
-            pre_exp=hl.max(ht.cumulative_exp - ht.exp_at_start, 0),
+            # Make sure prev exp value isn't 0 (to avoid having NaN chisq)
+            pre_exp=hl.max(ht.cumulative_exp - ht.exp_at_start, 1e-09),
         )
-        # Make sure prev exp value isn't 0
-        # Otherwise the chisq calculation will return NaN
-        ht = ht.annotate(pre_exp=hl.if_else(ht.pre_exp > 0, ht.pre_exp, 1e-09))
 
         # Annotate OE value for section of transcript pre-window
         ht = ht.annotate(
