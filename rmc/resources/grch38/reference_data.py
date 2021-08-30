@@ -6,7 +6,7 @@ from gnomad.resources.resource_utils import (
     VersionedTableResource,
 )
 
-from rmc.resources.resource_utils import import_gencode, RESOURCE_PREFIX
+from rmc.resources.resource_utils import RESOURCE_PREFIX
 
 ## Reference genome related resources
 full_context = VersionedTableResource(
