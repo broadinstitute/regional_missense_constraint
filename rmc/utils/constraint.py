@@ -1022,6 +1022,7 @@ def get_min_two_break_window(
     logger.info("Select new annotations to prepare for simultaneous break searches...")
     ht = ht.select(
         *annotations,
+        "min_window_end",
         break_sizes=hl.empty_array(hl.tint32),
         break_chisqs=hl.empty_array(hl.tfloat64),
         window_ends=hl.empty_array(hl.tint32),
@@ -1048,7 +1049,7 @@ def get_min_two_break_window(
     ht = ht.select(
         "min_window_end", "start_pos", "end_pos", "transcript_size"
     ).select_globals()
-    ht = get_min_post_window_pos(ht, pos_ht)
+    ht = get_min_post_window_pos(ht, pos_ht).key_by("locus", "transcript")
 
     logger.info("Adding relevant annotations back onto HT...")
     ht = ht.annotate(**annotation_ht[ht.key])
