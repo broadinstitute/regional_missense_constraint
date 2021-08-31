@@ -1010,7 +1010,7 @@ def get_min_two_break_window(
     max_window_size = round(ht.aggregate(hl.agg.max(ht.max_window_size)))
     logger.info("Maximum window size: %i", max_window_size)
 
-    logger.info("Annotating smallest possible window ends for each position...")
+    """logger.info("Annotating smallest possible window ends for each position...")
     ht = ht.annotate(
         min_window_end=get_window_end_pos_expr(
             pos_expr=ht.locus.position,
@@ -1053,7 +1053,8 @@ def get_min_two_break_window(
 
     logger.info("Adding relevant annotations back onto HT...")
     ht = ht.annotate(**annotation_ht[ht.key])
-    ht = ht.checkpoint(f"{temp_path}/simul_break_ready.ht", overwrite=True)
+    ht = ht.checkpoint(f"{temp_path}/simul_break_ready.ht", overwrite=True)"""
+    ht = hl.read_table(f"{temp_path}/simul_break_ready.ht")
     logger.info("HT count: %s", ht.count())
 
     # Check if post window pos is ever smaller than window_end
@@ -1140,11 +1141,13 @@ def annotate_two_breaks_section_values(
             reverse_exp=indexed_ht.reverse.exp,
         )
     )
-    next_ht = next_ht.transmute(
+    next_ht = next_ht.annotate(
         exp_at_end=(next_ht.next_values.mu_snp / next_ht.total_mu) * next_ht.total_exp
     )
     next_ht = next_ht.checkpoint(f"{temp_path}/next.ht", overwrite=True)
-    ht = ht.annotate(next_values=next_ht[ht.key].next_values)
+    ht = ht.annotate(
+        next_values=next_ht[ht.key].next_values, exp_at_end=next_ht[ht.key].exp_at_end
+    )
 
     logger.info(
         "Annotating HT with obs, exp, OE values for positions in window of constraint..."
@@ -1164,9 +1167,7 @@ def annotate_two_breaks_section_values(
             - ht.next_values.obs
         )
         + ht.observed,
-        window_exp=(
-            (ht.next_values.exp - ht.cumulative_exp) - ht.next_values.exp_at_end
-        )
+        window_exp=((ht.next_values.exp - ht.cumulative_exp) - ht.exp_at_end)
         + ht.exp_at_start,
     )
 
@@ -1184,7 +1185,7 @@ def annotate_two_breaks_section_values(
     # (need to add here, otherwise would undercount the number post-window)
     ht = ht.annotate(
         post_obs=ht.next_values.reverse_obs + ht.next_values.obs,
-        post_exp=ht.next_values.reverse_exp + ht.next_values.exp_at_end,
+        post_exp=ht.next_values.reverse_exp + ht.exp_at_end,
     )
 
     # Annotate OE value for section of transcript post-window
@@ -1274,6 +1275,12 @@ def search_two_break_windows(
     ht, max_window_size = get_min_two_break_window(
         ht, min_window_size, transcript_percentage, overwrite_pos_ht, annotations
     )
+    break_annot_ht = ht.annotate(
+        break_sizes=hl.empty_array(hl.tint32),
+        break_chisqs=hl.empty_array(hl.tfloat64),
+        window_ends=hl.empty_array(hl.tint32),
+        post_window_pos=hl.empty_array(hl.tint32),
+    )
 
     logger.info("Checking all possible window sizes...")
     window_size = min_window_size
@@ -1344,15 +1351,20 @@ def search_two_break_windows(
         )
 
         # Re-add annotations that are dropped in search_for_two_breaks function
-        annot_ht = ht.select(
-            "break_sizes", "break_chisqs", "window_ends", "post_window_pos"
-        )
-        break_ht = break_ht.join(annot_ht, how="left")
+        break_ht = break_ht.join(break_annot_ht, how="left")
         break_ht = break_ht.annotate(
             break_sizes=break_ht.break_sizes.append(window_size),
             break_chisqs=break_ht.break_chisqs.append(break_ht.max_chisq),
-            window_ends=break_ht.window_ends.append(break_ht.window_end),
         )
+        if window_size == min_window_size:
+            break_ht = break_ht.annotate(
+                window_ends=break_ht.window_ends.append(break_ht.min_window_end),
+            )
+        else:
+            break_ht = break_ht.annotate(
+                window_ends=break_ht.window_ends.append(break_ht.window_end),
+            )
+
         # This method will checkpoint a LOT of temporary tables...not sure if there is a better way
         break_ht = break_ht.checkpoint(
             f"{temp_path}/simul_break_{window_size}_window.ht", overwrite=True
