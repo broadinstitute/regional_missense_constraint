@@ -1275,7 +1275,7 @@ def search_two_break_windows(
     ht, max_window_size = get_min_two_break_window(
         ht, min_window_size, transcript_percentage, overwrite_pos_ht, annotations
     )
-    break_annot_ht = ht.annotate(
+    ht = ht.annotate(
         break_sizes=hl.empty_array(hl.tint32),
         break_chisqs=hl.empty_array(hl.tfloat64),
         window_ends=hl.empty_array(hl.tint32),
@@ -1349,9 +1349,7 @@ def search_two_break_windows(
             annotate_pre_values=annotate_pre_values,
             chisq_threshold=chisq_threshold,
         )
-
-        # Re-add annotations that are dropped in search_for_two_breaks function
-        break_ht = break_ht.join(break_annot_ht, how="left")
+        break_ht.describe()
         break_ht = break_ht.annotate(
             break_sizes=break_ht.break_sizes.append(window_size),
             break_chisqs=break_ht.break_chisqs.append(break_ht.max_chisq),
