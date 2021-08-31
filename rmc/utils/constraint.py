@@ -914,7 +914,7 @@ def get_min_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
     logger.info("Annotating the positions per transcript back onto the input HT...")
     # This is to run `hl.binary_search` using the window end position as input
     ht = ht.key_by("transcript").join(pos_ht)
-    ht = ht.transmute(pos_per_transcript=ht.positions)
+    ht = ht.transmute(pos_per_transcript=hl.sorted(ht.positions))
 
     logger.info(
         "Running hl.binary_search to find the smallest post window positions..."
@@ -1123,7 +1123,7 @@ def annotate_two_breaks_section_values(
     logger.info("Creating HT with obs, exp, OE values for post-window positions...")
     # Create new HT with obs, exp, and OE values for post-window positions
     # This is to get the values for the section of the transcript after the window
-    next_ht = ht.select("post_window_pos")
+    next_ht = ht.select("post_window_pos", "total_mu", "total_exp")
     # Add new_locus annotation to pull obs, exp, OE values for post window position
     next_ht = next_ht.annotate(
         new_locus=hl.locus(next_ht.locus.contig, next_ht.post_window_pos)
@@ -1141,7 +1141,7 @@ def annotate_two_breaks_section_values(
         )
     )
     next_ht = next_ht.transmute(
-        exp_at_end=(next_ht.mu_snp / next_ht.total_mu) * next_ht.total_exp
+        exp_at_end=(next_ht.next_values.mu_snp / next_ht.total_mu) * next_ht.total_exp
     )
     next_ht = next_ht.checkpoint(f"{temp_path}/next.ht", overwrite=True)
     ht = ht.annotate(next_values=next_ht[ht.key].next_values)
