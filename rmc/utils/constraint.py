@@ -765,14 +765,6 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     """
     ht = get_subsection_exprs(ht)
 
-    # TODO: Move this calculation to release HT generation step
-    logger.info("Getting section chi-squared values...")
-    ht = ht.annotate(
-        section_chisq=calculate_section_chisq(
-            obs_expr=ht.section_obs, exp_expr=ht.section_exp,
-        )
-    )
-
     logger.info("Splitting HT into pre and post breakpoint sections...")
     pre_ht = ht.filter(ht.section.contains("pre"))
     post_ht = ht.filter(ht.section.contains("post"))
@@ -1396,6 +1388,123 @@ def calculate_section_chisq(
     :rtype: hl.expr.Float64Expression
     """
     return ((obs_expr - exp_expr) ** 2) / exp_expr
+
+
+def get_all_breakpoint_pos(ht: hl.Table) -> hl.GroupedTable:
+    """
+    Get all breakpoint positions per transcript.
+
+    .. note::
+        Assumes input Table is annotated with list of Booleans (`break_list`) showing whether site is a breakpoint.
+
+    :param hl.Table ht: Input Table.
+    :return: Table grouped by transcript, with all breakpoint positions annotated as a list.
+    :rtype: hl.GroupedTable
+    """
+    ht = ht.filter(ht.break_list.any(lambda x: x))
+    return ht.group_by("transcript").aggregate(
+        break_pos=hl.sorted(hl.agg.collect(ht.locus.position))
+    )
+
+
+def get_section_info(
+    ht: hl.Table, section_num: int, is_middle: bool, indices: Tuple[int], is_first: bool
+) -> hl.Table:
+    """
+    Get the number of observed variants, number of expected variants, and chi square value for transcript section.
+
+    .. note::
+        Assumes that the input Table is annotated with a list of breakpoint positions (`break_pos`).
+
+    :param hl.Table ht: Input Table.
+    :param int section_num: Transcript section number (e.g., 1 for first section, 2 for second, 3 for third, etc.).
+    :param bool is_middle: Boolean for whether to get a section of the transcript between breakpoints.
+    :param Tuple[int] indices: List of indices pointing to breakpoints.
+        Relevant only if is_middle is True.
+    :param bool is_first: Boolean for whether to get the first section of the transcript.
+        Relevant only if is_middle is False.
+    :return: Table containing transcript and new section obs, exp, and chi square annotations.
+    """
+    logger.info("Getting info for section of transcript between two breakpoints...")
+    if is_middle:
+        ht = ht.filter(
+            (ht.locus.position > ht.break_pos[indices[0]])
+            & (ht.locus.position <= ht.break_pos[indices[1]])
+        )
+
+    else:
+        if is_first:
+            logger.info(
+                "Getting info for first section of transcript (up to and including smallest breakpoint pos)..."
+            )
+            ht = ht.filter(ht.locus.position <= ht.break_pos[0])
+        else:
+            logger.info(
+                "Getting info for last section of transcript (after largest breakpoint pos)..."
+            )
+            ht = ht.filter(ht.locus.position > ht.break_pos[-1])
+
+    ht = ht.annotate(section=hl.format("%s_%s", ht.transcript, str(section_num)))
+    ht = get_subsection_exprs(
+        ht, "transcript", "observed", "mu_snp", "total_mu", "total_exp"
+    )
+    return ht.annotate(
+        section_chisq=calculate_section_chisq(ht.section_obs, ht.section_exp)
+    )
+
+
+def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
+    """
+    Annotate each transcript section with observed, expected, OE, and section chi square values.
+
+    .. note::
+        Needs to be run for each break number. For example, this function needs to be run for transcripts with three breaks,
+        and it needs to be run again for transcripts with four breaks.
+
+    :param hl.Table ht: Input Table.
+    :param int max_n_breaks: Largest number of breaks.
+    :return: Table with section and section values annotated.
+    :rtype: hl.Table
+    """
+    logger.info("Get section information for first section of each transcript...")
+    count = 1
+    section_ht = get_section_info(
+        ht, section_num=count, is_middle=False, indices=None, is_first=True
+    )
+
+    # Check sections between breakpoint positions
+    while count <= max_n_breaks:
+        if count == 1:
+            # One break transcripts only get divided into two sections
+            # Thus, increment counter and continue
+            count += 1
+            continue
+        else:
+            temp_ht = get_section_info(
+                ht,
+                section_num=count,
+                is_middle=True,
+                indices=(count - 2, count - 1),
+                is_first=False,
+            )
+            section_ht = section_ht.join(temp_ht, how="outer")
+            count += 1
+    end_ht = get_section_info(
+        ht, section_num=count, is_middle=False, indices=None, is_first=False
+    )
+    ht = section_ht.join(end_ht, how="outer")
+
+    logger.info("Merging section string and chi square expressions...")
+    section_name_expr = [ht.section] + [
+        ht[f"section_{count}"] for count in range(1, max_n_breaks + 1)
+    ]
+    section_chisq_expr = [ht.section_chisq] + [
+        ht[f"section_chisq_{count}"] for count in range(1, max_n_breaks + 1)
+    ]
+    return ht.annotate(
+        section=hl.coalesce(*section_name_expr),
+        section_chisq=hl.coalesce(*section_chisq_expr),
+    )
 
 
 def constraint_flag_expr(
