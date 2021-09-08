@@ -1308,7 +1308,7 @@ def get_section_info(
     ht: hl.Table, section_num: int, is_middle: bool, indices: Tuple[int], is_first: bool
 ) -> hl.Table:
     """
-    Get the number of observed variants, number of expected variants, and chi square value for the first or last section of a transcript.
+    Get the number of observed variants, number of expected variants, and chi square value for transcript section.
 
     .. note::
         Assumes that the input Table is annotated with a list of breakpoint positions (`break_pos`).
@@ -1320,7 +1320,7 @@ def get_section_info(
         Relevant only if is_middle is True.
     :param bool is_first: Boolean for whether to get the first section of the transcript.
         Relevant only if is_middle is False.
-    :return: Table containing transcript and first section obs, exp, and chi square values.
+    :return: Table containing transcript and new section obs, exp, and chi square annotations.
     """
     logger.info("Getting info for section of transcript between two breakpoints...")
     if is_middle:
