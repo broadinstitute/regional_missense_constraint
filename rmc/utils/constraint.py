@@ -1370,8 +1370,17 @@ def search_two_break_windows(
             )
 
         break_ht = break_ht.select_globals()
-        break_ht = break_ht.drop(
-            "_localize", "next_values", "pre_obs", "pre_exp", "pre_oe"
+        break_ht = break_ht.select(
+            "break_sizes",
+            "break_chisqs",
+            "window_ends",
+            "section_nulls",
+            "section_alts",
+            "total_null",
+            "total_alt",
+            "chisq",
+            "max_chisq",
+            "is_break",
         )
         break_ht.describe()
         # This method will checkpoint a LOT of temporary tables...not sure if there is a better way
