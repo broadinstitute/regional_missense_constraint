@@ -1300,7 +1300,7 @@ def search_two_break_windows(
             ht = ht.annotate(
                 window_end=get_window_end_pos_expr(
                     pos_expr=ht.locus.position,
-                    end_pos_expr=ht.end,
+                    end_pos_expr=ht.end_pos,
                     window_size_expr=window_size,
                 ),
             )
