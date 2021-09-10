@@ -294,7 +294,10 @@ def main(args):
             logger.info(
                 "Searching for additional breaks in transcripts with at least one significant break..."
             )
-            context_ht = one_break.ht()
+            # context_ht = one_break.ht()
+            context_ht = hl.read_table(
+                "gs://regional_missense_constraint/temp/one_break.ht"
+            )
 
             # Add break_list annotation to context HT
             context_ht = context_ht.annotate(break_list=[context_ht.is_break])
@@ -354,7 +357,21 @@ def main(args):
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
             )
-            context_ht = not_one_break.ht().drop("values").select_globals()
+            # context_ht = not_one_break.ht().drop("values").select_globals()
+            context_ht = (
+                hl.read_table("gs://regional_missense_constraint/temp/not_one_break.ht")
+                .drop("values")
+                .select_globals()
+            )
+            from rmc.utils.constraint import get_reverse_exprs
+
+            context_ht = get_reverse_exprs(
+                context_ht,
+                context_ht.total_obs,
+                context_ht.total_exp,
+                context_ht.cumulative_obs[context_ht.transcript],
+                context_ht.cumulative_exp,
+            )
 
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
@@ -379,13 +396,15 @@ def main(args):
                 logger.info("Writing transcript HT to avoid redundant calculations...")
                 transcript_ht.write(f"{temp_path}/transcript.ht", overwrite=True)
             transcript_ht = hl.read_table(f"{temp_path}/transcript.ht")
-
             context_ht = context_ht.annotate(
-                start_pos=transcript_ht[context_ht.transcript].start_pos,
-                end_pos=transcript_ht[context_ht.transcript].end_pos,
+                transcript_info=transcript_ht[context_ht.transcript]
+            )
+            context_ht = context_ht.annotate(
+                start_pos=context_ht.transcript_info.start_pos,
+                end_pos=context_ht.transcript_info.end_pos,
                 transcript_size=(
-                    transcript_ht[context_ht.transcript].end_pos
-                    - transcript_ht[context_ht.transcript].start_pos
+                    context_ht.transcript_info.end_pos
+                    - context_ht.transcript_info.start_pos
                 )
                 + 1,
             )

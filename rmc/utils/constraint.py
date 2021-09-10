@@ -1216,6 +1216,8 @@ def search_for_two_breaks(
     """
     logger.info("Preparing HT to search for two breaks...")
     ht = annotate_two_breaks_section_values(ht, annotate_pre_values)
+    ht = ht.checkpoint(f"{temp_path}/simul_break_temp_annot.ht", overwrite=True)
+    ht.describe()
 
     logger.info("Searching for two breaks...")
     return search_for_break(
@@ -1344,6 +1346,10 @@ def search_two_break_windows(
                 .or_missing()
             )
 
+        ht = ht.checkpoint(
+            f"{temp_path}/simul_break_{window_size}_temp.ht", overwrite=True
+        )
+        ht.describe()
         break_ht = search_for_two_breaks(
             ht=ht,
             annotate_pre_values=annotate_pre_values,
