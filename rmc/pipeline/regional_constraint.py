@@ -433,6 +433,11 @@ def main(args):
                 args.overwrite_pos_ht,
                 args.chisq_threshold,
             )
+            context_ht = context_ht.select_globals()
+            context_ht = context_ht.drop(
+                "_localize", "next_values", "pre_obs", "pre_exp", "pre_oe"
+            )
+            context_ht.describe()
             context_ht = context_ht.checkpoint(
                 f"{temp_path}/simul_breaks.ht", overwrite=args.overwrite
             )
