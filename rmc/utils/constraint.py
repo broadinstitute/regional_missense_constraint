@@ -1295,6 +1295,12 @@ def search_two_break_windows(
                 post_window_index=ht.min_post_window_index,
             )
             annotate_pre_values = True
+            break_ht = hl.read_table(
+                "gs://regional_missense_constraint/temp/simul_break_100_window.ht"
+            )
+            ht = ht.annotate(**break_ht[ht.key])
+            window_size += 1
+            continue
         else:
             # Annotate window end position
             # This will be missing if window end position is larger than the end position of the transcript
@@ -1321,7 +1327,6 @@ def search_two_break_windows(
                 )
                 # Otherwise, post window index is between the first and last index of the pos per transcript list
                 .default(
-                    ht.post_window_index < ht.n_pos_per_transcript,
                     hl.if_else(
                         # If position pointed to by currrent post window index is still larger than window end,
                         # then return the same index. Otherwise, increase index by 1
