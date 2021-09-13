@@ -1039,7 +1039,7 @@ def get_min_two_break_window(
         # This collect assumes that the positions are in order from smallest to largest
         # (they should be, since the table is keyed by locus and transcript)
         pos_ht = ht.group_by("transcript").aggregate(
-            positions=hl.agg.collect(ht.locus.position), _localize=False,
+            positions=hl.agg.collect(ht.locus.position),
         )
         pos_ht.write(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
     pos_ht = hl.read_table(f"{temp_path}/pos_per_transcript.ht")
@@ -1275,15 +1275,17 @@ def search_two_break_windows(
         "Also getting maximum simultaneous break size (%f * largest transcript size)...",
         transcript_percentage,
     )
+    ht = ht.select_globals()
     ht, max_window_size = get_min_two_break_window(
         ht, min_window_size, transcript_percentage, overwrite_pos_ht, annotations
     )
-    ht = ht.annotate(
-        break_sizes=hl.empty_array(hl.tint32),
-        break_chisqs=hl.empty_array(hl.tfloat64),
-        window_ends=hl.empty_array(hl.tint32),
-        post_window_pos=hl.empty_array(hl.tint32),
-    )
+    # ht = ht.annotate(
+    #    break_sizes=hl.empty_array(hl.tint32),
+    #    break_chisqs=hl.empty_array(hl.tfloat64),
+    #    window_ends=hl.empty_array(hl.tint32),
+    #    post_window_pos=hl.empty_array(hl.tint32),
+    # )
+    ht = ht.drop("_localize")
 
     logger.info("Checking all possible window sizes...")
     window_size = min_window_size
@@ -1294,11 +1296,15 @@ def search_two_break_windows(
                 post_window_pos=ht.min_post_window_pos,
                 post_window_index=ht.min_post_window_index,
             )
-            annotate_pre_values = True
-            break_ht = hl.read_table(
-                "gs://regional_missense_constraint/temp/simul_break_100_window.ht"
-            )
-            ht = ht.annotate(**break_ht[ht.key])
+            # annotate_pre_values = True
+            # break_ht = hl.read_table(
+            #    "gs://regional_missense_constraint/temp/simul_break_100_window.ht"
+            # )
+            # break_ht = break_ht.select('break_sizes', 'break_chisqs', 'window_ends', 'section_nulls', 'section_alts')
+            # if not file_exists("gs://regional_missense_constraint/temp/simul_break_101_temp.ht"):
+            #    ht = ht.annotate(**break_ht[ht.key])
+            #    ht = ht.checkpoint("gs://regional_missense_constraint/temp/simul_break_101_temp.ht")
+            # ht = hl.read_table("gs://regional_missense_constraint/temp/simul_break_101_temp.ht")
             window_size += 1
             continue
         else:
@@ -1356,25 +1362,25 @@ def search_two_break_windows(
                 )
                 .or_missing()
             )
-            ht = ht.select_globals().select(
-                "mu_snp",
-                "total_exp",
-                "_mu_scan",
-                "total_mu",
-                "cumulative_obs",
-                "observed",
-                "cumulative_exp",
-                "total_obs",
-                "reverse",
-                "forward_oe",
-                "overall_oe",
-                "break_sizes",
-                "break_chisqs",
-                "window_ends",
-                "post_window_pos",
-            )
 
-        ht.show()
+        annot_ht = ht.select("n_pos_per_transcript", "pos_per_transcript")
+        ht = ht.select_globals().select(
+            "mu_snp",
+            "total_exp",
+            "_mu_scan",
+            "total_mu",
+            "cumulative_obs",
+            "observed",
+            "cumulative_exp",
+            "total_obs",
+            "reverse",
+            "overall_oe",
+            "post_window_pos",
+            "window_end",
+        )
+        ht.describe()
+        logger.info("Window size: %i", window_size)
+        logger.info("Checkpointing first temp ht...")
         ht = ht.checkpoint(
             f"{temp_path}/simul_break_{window_size}_temp.ht", overwrite=True
         )
@@ -1384,25 +1390,27 @@ def search_two_break_windows(
             annotate_pre_values=annotate_pre_values,
             chisq_threshold=chisq_threshold,
         )
-        break_ht.describe()
-        break_ht = break_ht.annotate(
-            break_sizes=break_ht.break_sizes.append(window_size),
-            break_chisqs=break_ht.break_chisqs.append(break_ht.max_chisq),
-        )
-        if window_size == min_window_size:
-            break_ht = break_ht.annotate(
-                window_ends=break_ht.window_ends.append(break_ht.min_window_end),
-            )
-        else:
-            break_ht = break_ht.annotate(
-                window_ends=break_ht.window_ends.append(break_ht.window_end),
-            )
+        # break_ht = break_ht.annotate(
+        #    break_sizes=break_ht.break_sizes.append(window_size),
+        #    break_chisqs=break_ht.break_chisqs.append(break_ht.max_chisq),
+        # )
+        # if window_size == min_window_size:
+        #    break_ht = break_ht.annotate(
+        #        window_ends=break_ht.window_ends.append(break_ht.min_window_end),
+        #    )
+        # else:
+        #    break_ht = break_ht.annotate(
+        #        window_ends=break_ht.window_ends.append(break_ht.window_end),
+        #    )
 
         break_ht = break_ht.select_globals()
         break_ht = break_ht.select(
-            "break_sizes",
-            "break_chisqs",
-            "window_ends",
+            # "break_sizes",
+            # "break_chisqs",
+            # "window_ends",
+            "window_size",
+            "max_chisq",
+            "window_end",
             "section_nulls",
             "section_alts",
             "total_null",
@@ -1417,7 +1425,8 @@ def search_two_break_windows(
             f"{temp_path}/simul_break_{window_size}_window.ht", overwrite=True
         )
         break_ht.describe()
-        ht = ht.annotate(**break_ht[ht.key])
+        # ht = ht.annotate(**break_ht[ht.key])
+        ht = ht.annotate(**annot_ht[ht.key])
         window_size += 1
 
     logger.info("Getting best window sizes for each transcript and returning...")
