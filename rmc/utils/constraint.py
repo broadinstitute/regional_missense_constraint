@@ -1364,20 +1364,7 @@ def search_two_break_windows(
             )
 
         annot_ht = ht.select("n_pos_per_transcript", "pos_per_transcript")
-        ht = ht.select_globals().select(
-            "mu_snp",
-            "total_exp",
-            "_mu_scan",
-            "total_mu",
-            "cumulative_obs",
-            "observed",
-            "cumulative_exp",
-            "total_obs",
-            "reverse",
-            "overall_oe",
-            "post_window_pos",
-            "window_end",
-        )
+        ht = ht.select_globals()
         ht.describe()
         logger.info("Window size: %i", window_size)
         logger.info("Checkpointing first temp ht...")
@@ -1387,7 +1374,8 @@ def search_two_break_windows(
         ht.describe()
         break_ht = search_for_two_breaks(
             ht=ht,
-            annotate_pre_values=annotate_pre_values,
+            # annotate_pre_values=annotate_pre_values,
+            annotate_pre_values=True,
             chisq_threshold=chisq_threshold,
         )
         # break_ht = break_ht.annotate(
@@ -1404,6 +1392,7 @@ def search_two_break_windows(
         #    )
 
         break_ht = break_ht.select_globals()
+        break_ht = break_ht.annotate(window_size=window_size)
         break_ht = break_ht.select(
             # "break_sizes",
             # "break_chisqs",
