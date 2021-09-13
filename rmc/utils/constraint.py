@@ -1325,6 +1325,11 @@ def search_two_break_windows(
                         ht.post_window_index,
                     ),
                 )
+                # Check if post window index is larger than last index of pos per transcript list
+                .when(
+                    ht.post_window_index == ht.n_pos_per_transcript,
+                    hl.missing(hl.tint32),
+                )
                 # Otherwise, post window index is between the first and last index of the pos per transcript list
                 .default(
                     hl.if_else(
