@@ -1356,7 +1356,25 @@ def search_two_break_windows(
                 )
                 .or_missing()
             )
+            ht = ht.select_globals().select(
+                "mu_snp",
+                "total_exp",
+                "_mu_scan",
+                "total_mu",
+                "cumulative_obs",
+                "observed",
+                "cumulative_exp",
+                "total_obs",
+                "reverse",
+                "forward_oe",
+                "overall_oe",
+                "break_sizes",
+                "break_chisqs",
+                "window_ends",
+                "post_window_pos",
+            )
 
+        ht.show()
         ht = ht.checkpoint(
             f"{temp_path}/simul_break_{window_size}_temp.ht", overwrite=True
         )
