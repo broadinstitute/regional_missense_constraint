@@ -1221,6 +1221,10 @@ def search_for_two_breaks(
     logger.info("Preparing HT to search for two breaks...")
     ht = annotate_two_breaks_section_values(ht, annotate_pre_values)
     ht = ht.checkpoint(f"{temp_path}/simul_break_temp_annot.ht", overwrite=True)
+    window_exp_check = ht.aggregate(hl.agg.count_where(ht.window_exp == 0))
+    if window_exp_check != 0:
+        logger.error("Found %i sites where window exp is 0", window_exp_check)
+        ht.show()
     ht.describe()
 
     logger.info("Searching for two breaks...")
@@ -1390,6 +1394,8 @@ def search_two_break_windows(
         # "break_sizes",
         # "break_chisqs",
         # "window_ends",
+        if "min_window_end" in ht.row:
+            ht = ht.transmute(window_end=ht.min_window_end)
         break_ht = break_ht.select(
             "window_size",
             "max_chisq",
