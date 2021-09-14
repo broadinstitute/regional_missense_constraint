@@ -1390,23 +1390,43 @@ def search_two_break_windows(
 
         break_ht = break_ht.select_globals()
         break_ht = break_ht.annotate(window_size=window_size)
-        break_ht.describe()
         # "break_sizes",
         # "break_chisqs",
         # "window_ends",
-        if "min_window_end" in ht.row:
-            ht = ht.transmute(window_end=ht.min_window_end)
-        break_ht = break_ht.select(
-            "window_size",
-            "max_chisq",
-            "window_end",
-            "section_nulls",
-            "section_alts",
-            "total_null",
-            "total_alt",
-            "chisq",
-            "max_chisq",
-            "is_break",
+        if "min_window_end" in break_ht.row:
+            break_ht = break_ht.transmute(window_end=break_ht.min_window_end)
+        break_ht.describe()
+        break_ht = break_ht.drop(
+            "start_pos",
+            "end_pos",
+            "transcript_size",
+            "pos_per_transcript",
+            "n_pos_per_transcript",
+            "mu_snp",
+            "total_exp",
+            "_mu_scan",
+            "total_mu",
+            "cumulative_obs",
+            "observed",
+            "cumulative_exp",
+            "total_obs",
+            "reverse",
+            "forward_oe",
+            "overall_oe",
+            "post_window_pos",
+            "post_window_index",
+            "exp_at_start",
+            "pre_obs",
+            "pre_exp",
+            "pre_oe",
+            "next_values",
+            "exp_at_end",
+            "window_obs",
+            "window_exp",
+            "window_oe",
+            "post_obs",
+            "post_exp",
+            "post_oe",
         )
         # This method will checkpoint a LOT of temporary tables...not sure if there is a better way
         break_ht = break_ht.checkpoint(
