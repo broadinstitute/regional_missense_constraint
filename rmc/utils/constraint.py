@@ -1168,8 +1168,11 @@ def annotate_two_breaks_section_values(
             - ht.next_values.obs
         )
         + ht.observed,
-        window_exp=((ht.next_values.exp - ht.cumulative_exp) - ht.exp_at_end)
-        + ht.exp_at_start,
+        window_exp=hl.max(
+            ((ht.next_values.exp - ht.cumulative_exp) - ht.exp_at_end)
+            + ht.exp_at_start,
+            1e-09,
+        ),
     )
 
     # Annotate OE value for section of transcript within window
@@ -1296,17 +1299,7 @@ def search_two_break_windows(
                 post_window_pos=ht.min_post_window_pos,
                 post_window_index=ht.min_post_window_index,
             )
-            # annotate_pre_values = True
-            # break_ht = hl.read_table(
-            #    "gs://regional_missense_constraint/temp/simul_break_100_window.ht"
-            # )
-            # break_ht = break_ht.select('break_sizes', 'break_chisqs', 'window_ends', 'section_nulls', 'section_alts')
-            # if not file_exists("gs://regional_missense_constraint/temp/simul_break_101_temp.ht"):
-            #    ht = ht.annotate(**break_ht[ht.key])
-            #    ht = ht.checkpoint("gs://regional_missense_constraint/temp/simul_break_101_temp.ht")
-            # ht = hl.read_table("gs://regional_missense_constraint/temp/simul_break_101_temp.ht")
-            window_size += 1
-            continue
+            annotate_pre_values = True
         else:
             # Annotate window end position
             # This will be missing if window end position is larger than the end position of the transcript
@@ -1374,8 +1367,8 @@ def search_two_break_windows(
         ht.describe()
         break_ht = search_for_two_breaks(
             ht=ht,
-            # annotate_pre_values=annotate_pre_values,
-            annotate_pre_values=True,
+            annotate_pre_values=annotate_pre_values,
+            # annotate_pre_values=True,
             chisq_threshold=chisq_threshold,
         )
         # break_ht = break_ht.annotate(
@@ -1393,10 +1386,11 @@ def search_two_break_windows(
 
         break_ht = break_ht.select_globals()
         break_ht = break_ht.annotate(window_size=window_size)
+        break_ht.describe()
+        # "break_sizes",
+        # "break_chisqs",
+        # "window_ends",
         break_ht = break_ht.select(
-            # "break_sizes",
-            # "break_chisqs",
-            # "window_ends",
             "window_size",
             "max_chisq",
             "window_end",
@@ -1408,7 +1402,6 @@ def search_two_break_windows(
             "max_chisq",
             "is_break",
         )
-        break_ht.describe()
         # This method will checkpoint a LOT of temporary tables...not sure if there is a better way
         break_ht = break_ht.checkpoint(
             f"{temp_path}/simul_break_{window_size}_window.ht", overwrite=True
