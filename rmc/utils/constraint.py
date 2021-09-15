@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Set, Tuple, Union
 
 import hail as hl
 
@@ -1505,6 +1505,114 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
         section=hl.coalesce(*section_name_expr),
         section_chisq=hl.coalesce(*section_chisq_expr),
     )
+
+
+def get_unique_transcripts(
+    transcript_set_1: hl.expr.SetExpression, transcript_set_2: hl.expr.SetExpression
+) -> Union[Set, hl.expr.SetExpression]:
+    """
+    Return the set of transcripts unique to `transcript_set_1`.
+
+    If the set is empty, return an empty SetExpression.
+
+    :param hl.expr.SetExpression transcript_set_1: Transcript set with desired output transcripts.
+    :param hl.expr.SetExpression transcript_set_2: Transcript set to check against.
+    :return: Set of transcripts unique to `transcript_set_1`, or empty SetExpression.
+    :rtype: Union[Set, hl.expression.SetExpression]
+    """
+    transcripts = hl.eval(transcript_set_1.difference(transcript_set_2))
+    if len(transcripts) == 0:
+        return hl.missing(hl.tset(hl.tstr))
+    return transcripts
+
+
+def finalize_multiple_breaks(
+    ht: hl.Table,
+    max_n_breaks: int,
+    annotations: List[str] = [
+        "mu_snp",
+        "observed",
+        "total_exp",
+        "total_mu",
+        "total_obs",
+        "cumulative_obs",
+        "_mu_scan",
+        "cumulative_exp",
+        "break_list",
+    ],
+) -> hl.Table:
+    """
+    Organize table of transcripts with multiple breaks.
+
+    Get number of transcripts unique to each break number and drop any extra annotations.
+    Also calculate each section's observed, expected, OE, and chi-square values.
+
+    Assumes:
+        - Table is annotated with set of transcripts per break (e.g., `break_1_transcripts`)
+
+    :param hl.Table ht: Input Table.
+    :param int max_n_breaks: Largest number of breakpoints in any transcript.
+    :param List[str] annotations: List of annotations to keep from input Table.
+        Default is ['mu_snp', 'observed', 'total_exp', 'total_mu', 'total_obs',
+                    'cumulative_obs', '_mu_scan', 'cumulative_exp','break_list'].
+    :return: Table annotated with breakpoint positions and section obs, exp, OE, chi-square values.
+    :rtype: hl.Table
+    """
+    logger.info(
+        "Fixing global annotations in HT (transcripts associated with each break number)..."
+    )
+    # Get number of transcripts UNIQUE to each break number
+    # Transcript sets in globals currently are not unique
+    # i.e., `break_1_transcripts` contains transcripts that are also present in `break_2_transcripts`
+    annot_dict = {}
+    for i in range(1, max_n_breaks + 1):
+        if i == max_n_breaks:
+            annot_dict[f"break_{i}_transcripts"] = ht[f"break_{i}_transcripts"]
+        else:
+            annot_dict[f"break_{i}_transcripts"] = get_unique_transcripts(
+                ht[f"break_{i}_transcripts"], ht[f"break_{i+1}_transcripts"]
+            )
+        if i == 1:
+            annotations.extend(["chisq", "total_null", "total_alt"])
+        else:
+            annotations.extend(
+                [f"break_{i}_chisq", f"break_{i}_null", f"break_{i}_alt"]
+            )
+
+    # Drop all globals from HT, including plateau/coverage model annotations
+    ht = ht.select_globals()
+    ht = ht.annotate_globals(**annot_dict)
+
+    logger.info("Selecting only relevant annotations from HT and checkpointing...")
+    ht = ht.select(*annotations)
+    ht = ht.transmute(
+        break_1_chisq=ht.chisq, break_1_null=ht.total_null, break_1_alt=ht.total_alt,
+    )
+    ht = ht.checkpoint(f"{temp_path}/multiple_breaks.ht", overwrite=True)
+
+    logger.info("Getting all breakpoint positions...")
+    break_ht = get_all_breakpoint_pos(ht)
+    break_ht = break_ht.checkpoint(
+        f"{temp_path}/multiple_breaks_breakpoints.ht", overwrite=True
+    )
+    ht = ht.annotate(break_pos=break_ht[ht.transcript])
+
+    logger.info("Get transcript section annotations (obs, exp, OE, chisq)...")
+    ht = annotate_transcript_sections(ht, max_n_breaks)
+    ht = ht.checkpoint(f"{temp_path}/multiple_breaks_annot.ht", overwrite=True)
+    return ht
+
+
+def finalize_simul_breaks():
+    """
+    Create table of transcripts with simultaneous breaks.
+
+    Combine transcripts from multiple temporary checkpointed Tables.
+
+    Get number of transcripts unique to each window size and drop any extra annotations.
+    Also calculate each section's observed, expected, OE, and chi-square values.
+    """
+    pass
 
 
 def constraint_flag_expr(
