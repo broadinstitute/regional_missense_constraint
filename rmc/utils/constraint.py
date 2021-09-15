@@ -1299,11 +1299,13 @@ def search_two_break_windows(
     while window_size <= max_window_size:
         annotate_pre_values = False
         if window_size == min_window_size:
+            window_size += 1
             ht = ht.transmute(
-                post_window_pos=ht.min_post_window_pos,
-                post_window_index=ht.min_post_window_index,
+                post_window_pos=ht.min_post_window_pos + 1,
+                post_window_index=ht.min_post_window_index + 1,
             )
             annotate_pre_values = True
+            continue
         else:
             # Annotate window end position
             # This will be missing if window end position is larger than the end position of the transcript
@@ -1330,7 +1332,7 @@ def search_two_break_windows(
                 )
                 # Check if post window index is larger than last index of pos per transcript list
                 .when(
-                    ht.post_window_index == ht.n_pos_per_transcript,
+                    ht.post_window_index >= ht.n_pos_per_transcript,
                     hl.missing(hl.tint32),
                 )
                 # Otherwise, post window index is between the first and last index of the pos per transcript list
@@ -1371,7 +1373,7 @@ def search_two_break_windows(
         ht.describe()
         break_ht = search_for_two_breaks(
             ht=ht,
-            annotate_pre_values=annotate_pre_values,
+            annotate_pre_values=True,
             # annotate_pre_values=True,
             chisq_threshold=chisq_threshold,
         )
@@ -1413,8 +1415,6 @@ def search_two_break_windows(
             "reverse",
             "forward_oe",
             "overall_oe",
-            "post_window_pos",
-            "post_window_index",
             "exp_at_start",
             "pre_obs",
             "pre_exp",

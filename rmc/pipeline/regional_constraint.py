@@ -353,6 +353,9 @@ def main(args):
             context_ht.write(multiple_breaks.path, overwrite=args.overwrite)
 
         if args.search_for_simul_breaks:
+            logger.info("Setting hail flag to avoid method too large error...")
+            hl._set_flags(no_whole_stage_codegen="1")
+
             logger.info(
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
