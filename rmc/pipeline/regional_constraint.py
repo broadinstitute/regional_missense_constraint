@@ -335,8 +335,6 @@ def main(args):
                 context_ht = context_ht.annotate_globals(**globals_annot_expr)
                 annot_expr = {
                     f"break_{break_num}_chisq": break_ht[context_ht.key].chisq,
-                    f"break_{break_num}_null": break_ht[context_ht.key].total_null,
-                    f"break_{break_num}_alt": break_ht[context_ht.key].total_alt,
                     "is_break": break_ht[context_ht.key].is_break,
                 }
                 context_ht = context_ht.annotate(**annot_expr)
