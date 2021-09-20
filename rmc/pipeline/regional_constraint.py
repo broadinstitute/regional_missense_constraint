@@ -335,10 +335,13 @@ def main(args):
                 context_ht = context_ht.annotate_globals(**globals_annot_expr)
                 annot_expr = {
                     f"break_{break_num}_chisq": break_ht[context_ht.key].chisq,
+                    f"break_{break_num}_max_chisq": break_ht[context_ht.key].max_chisq,
+                    f"break_{break_num}_null": break_ht[context_ht.key].total_null,
+                    f"break_{break_num}_alt": break_ht[context_ht.key].total_alt,
                     "is_break": break_ht[context_ht.key].is_break,
                 }
                 context_ht = context_ht.annotate(**annot_expr)
-                context_ht = context_ht.annotate(
+                context_ht = context_ht.transmute(
                     break_list=context_ht.break_list.append(context_ht.is_break)
                 )
 
