@@ -1603,7 +1603,9 @@ def finalize_multiple_breaks(
     return ht
 
 
-def finalize_simul_breaks():
+def finalize_simul_breaks(
+    min_window_size: int, max_window_size: int,
+):
     """
     Create table of transcripts with simultaneous breaks.
 
@@ -1612,7 +1614,20 @@ def finalize_simul_breaks():
     Get number of transcripts unique to each window size and drop any extra annotations.
     Also calculate each section's observed, expected, OE, and chi-square values.
     """
-    pass
+    logger.info("Getting transcripts associated with each window size...")
+    transcripts_per_window = {}
+    all_transcripts = []
+    for i in range(min_window_size, max_window_size + 1):
+        temp_ht = hl.read_table(f"{temp_path}/simul_break_{i}_temp.ht")
+        temp_ht = temp_ht.filter(temp_ht.is_break)
+        transcripts = temp_ht.aggregate(hl.agg.collect_as_set(temp_ht.transcript))
+        transcripts_per_window[i] = transcripts
+        all_transcripts.extend(list(transcripts))
+    unique_transcripts = set(all_transcripts)
+    logger.info(
+        "Total number of transcripts with simultaneous breaks: %i",
+        len(unique_transcripts),
+    )
 
 
 def constraint_flag_expr(
