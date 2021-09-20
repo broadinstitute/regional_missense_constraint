@@ -311,9 +311,6 @@ def main(args):
                 break_ht = process_additional_breaks(
                     break_ht, break_num, args.chisq_threshold
                 )
-                break_ht = break_ht.annotate(
-                    break_list=break_ht.break_list.append(break_ht.is_break)
-                )
                 break_ht = break_ht.checkpoint(
                     f"{temp_path}/break_{break_num}.ht", overwrite=True
                 )
@@ -340,9 +337,12 @@ def main(args):
                     f"break_{break_num}_chisq": break_ht[context_ht.key].chisq,
                     f"break_{break_num}_null": break_ht[context_ht.key].total_null,
                     f"break_{break_num}_alt": break_ht[context_ht.key].total_alt,
-                    "break_list": break_ht[context_ht.key].break_list,
+                    "is_break": break_ht[context_ht.key].is_break,
                 }
                 context_ht = context_ht.annotate(**annot_expr)
+                context_ht = context_ht.annotate(
+                    break_list=context_ht.break_list.append(context_ht.is_break)
+                )
 
                 break_ht = break_ht.filter(transcripts.contains(break_ht.transcript))
                 break_num += 1
