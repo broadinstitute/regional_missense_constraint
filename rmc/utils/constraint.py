@@ -1494,15 +1494,23 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
     )
     ht = section_ht.join(end_ht, how="outer")
 
-    logger.info("Merging section string and chi square expressions...")
+    logger.info("Merging section string, obs, exp, and chi square expressions...")
     section_name_expr = [ht.section] + [
         ht[f"section_{count}"] for count in range(1, max_n_breaks + 1)
+    ]
+    section_obs_expr = [ht.section_obs] + [
+        ht[f"section_obs_{count}"] for count in range(1, max_n_breaks + 1)
+    ]
+    section_exp_expr = [ht.section_exp] + [
+        ht[f"section_exp_{count}"] for count in range(1, max_n_breaks + 1)
     ]
     section_chisq_expr = [ht.section_chisq] + [
         ht[f"section_chisq_{count}"] for count in range(1, max_n_breaks + 1)
     ]
     return ht.annotate(
         section=hl.coalesce(*section_name_expr),
+        section_obs=hl.coalesge(*section_obs_expr),
+        section_exp=hl.coalesce(*section_exp_expr),
         section_chisq=hl.coalesce(*section_chisq_expr),
     )
 
