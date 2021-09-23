@@ -69,8 +69,18 @@ This was calculated with `calculate_mu_by_downsampling` in
 https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constraint_basics.py.
 """
 
-## Observed/expected related resources
+
+## Transcript related resources
 MODEL_PREFIX = f"{RMC_PREFIX}/model"
+transcript_ht = VersionedTableResource(
+    default_version=GNOMAD_VER,
+    versions={
+        GNOMAD_VER: TableResource(path=f"{MODEL_PREFIX}/{GNOMAD_VER}/transcript.ht"),
+    },
+)
+"""
+Table containing transcript start and end positions.
+"""
 
 constraint_prep = VersionedTableResource(
     default_version=GNOMAD_VER,
