@@ -1534,23 +1534,40 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
     )
 
 
-def get_unique_transcripts(
-    transcript_set_1: hl.expr.SetExpression, transcript_set_2: hl.expr.SetExpression
-) -> Union[Set, hl.expr.SetExpression]:
+def get_unique_transcripts_per_break(
+    ht: hl.Table, max_n_breaks: int,
+) -> Dict[int, Union[Set[str], hl.expr.SetExpression]]:
     """
-    Return the set of transcripts unique to `transcript_set_1`.
+    Return the set of transcripts unique to each break number.
 
     If the set is empty, return an empty SetExpression.
 
-    :param hl.expr.SetExpression transcript_set_1: Transcript set with desired output transcripts.
-    :param hl.expr.SetExpression transcript_set_2: Transcript set to check against.
-    :return: Set of transcripts unique to `transcript_set_1`, or empty SetExpression.
-    :rtype: Union[Set, hl.expression.SetExpression]
+    .. note::
+        - This function will only get unique transcripts for transcripts with one or one + additional breaks.
+        - This will not work for transcripts with two simultaneous breaks.
+        - Assumes input Table is annotated with list containing booleans for whether that locus is a breakpoint
+        (`break_list`).
+
+    :param hl.Table: Input Table.
+    :param int max_n_breaks: Largest number of breaks.
+    :return: Dictionary with break number (key) and set of transcripts unique to that break number or empty SetExpression (value).
+    :rtype: Dict[int, Union[Set[str], hl.expr.SetExpression]]
     """
-    transcripts = hl.eval(transcript_set_1.difference(transcript_set_2))
-    if len(transcripts) == 0:
-        return hl.missing(hl.tset(hl.tstr))
-    return transcripts
+    transcripts_per_break = {}
+    ht = ht.filter(ht.break_list.any(lambda x: x))
+    group_ht = ht.group_by("transcript").aggregate(n_breaks=hl.agg.count())
+    group_ht = group_ht.checkpoint(
+        f"{temp_path}/breaks_per_transcript.ht", overwrite=True
+    )
+
+    for i in range(1, max_n_breaks + 1):
+        temp_ht = group_ht.filter(group_ht.n_breaks == i)
+        transcripts = temp_ht.aggregate(hl.agg.collect_as_set(temp_ht.transcript))
+        if len(transcripts > 0):
+            transcripts_per_break[i] = transcripts
+        else:
+            transcripts_per_break[i] = hl.missing(hl.tset(hl.tstr))
+    return transcripts_per_break
 
 
 def finalize_multiple_breaks(
@@ -1593,25 +1610,10 @@ def finalize_multiple_breaks(
     )
     # Get number of transcripts UNIQUE to each break number
     # Transcript sets in globals currently are not unique
-    # i.e., `break_1_transcripts` contains transcripts that are also present in `break_2_transcripts`
-    annot_dict = {}
-    for i in range(1, max_n_breaks + 1):
-        if i == max_n_breaks:
-            annot_dict[f"break_{i}_transcripts"] = ht[f"break_{i}_transcripts"]
-        else:
-            annot_dict[f"break_{i}_transcripts"] = get_unique_transcripts(
-                ht[f"break_{i}_transcripts"], ht[f"break_{i+1}_transcripts"]
-            )
-        if i == 1:
-            annotations.extend(["chisq", "total_null", "total_alt"])
-        else:
-            annotations.extend(
-                [f"break_{i}_chisq", f"break_{i}_null", f"break_{i}_alt"]
-            )
-
-    # Drop all globals from HT, including plateau/coverage model annotations
+    # i.e., `break_1_transcripts` could contain transcripts that are also present in `break_2_transcripts`
     ht = ht.select_globals()
-    ht = ht.annotate_globals(**annot_dict)
+    transcripts_per_break = get_unique_transcripts_per_break(ht, max_n_breaks)
+    ht = ht.annotate_globals(**transcripts_per_break)
 
     logger.info("Selecting only relevant annotations from HT and checkpointing...")
     ht = ht.select(*annotations)
