@@ -23,6 +23,7 @@ from rmc.resources.basics import (
     MUTATION_RATE_TABLE_PATH,
     TOTAL_EXOME_BASES,
     TOTAL_GNOMAD_MISSENSE,
+    transcript_positions,
 )
 from rmc.resources.grch37.gnomad import constraint_ht, filtered_exomes
 import rmc.resources.grch37.reference_data as grch37
@@ -128,7 +129,7 @@ def process_context_ht(
     :rtype: hl.Table
     """
     if build not in BUILDS:
-        raise DataException("Build must be one of %s.", BUILDS)
+        raise DataException(f"Build must be one of {BUILDS}.")
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     if build == "GRCh37":
@@ -175,7 +176,7 @@ def get_exome_bases(build: str) -> int:
     :rtype: int
     """
     if build not in BUILDS:
-        raise DataException("Build must be one of %s.", BUILDS)
+        raise DataException(f"Build must be one of {BUILDS}.")
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     if build == "GRCh37":
@@ -237,7 +238,7 @@ def get_avg_bases_between_mis(
         logger.info(
             "Getting total number of bases in the exome from full context HT..."
         )
-        total_bases = get_exome_bases(build=get_reference_genome(ht.locus).name)
+        total_bases = get_exome_bases(build=build)
 
     if get_total_gnomad_missense:
         ht = filtered_exomes.ht()
@@ -425,6 +426,35 @@ def get_plateau_model(
         .when(locus_expr.in_y_nonpar(), globals_expr.plateau_y_models.total[cpg_expr])
         .default(globals_expr.plateau_models.total[cpg_expr])
     )
+
+
+def get_transcript_ht(build: str, overwrite: bool) -> None:
+    """
+    Create Table with start and end position for all transcripts.
+
+    :param bool overwrite: Whether to overwrite transcript HT, even if it already exists.
+    :return: None; writes context HT to transcript_ht resource path.
+    """
+    if build not in BUILDS:
+        raise DataException(f"Build must be one of {BUILDS}")
+
+    if (not file_exists(transcript_positions.path)) or overwrite:
+        logger.info("Reading in full context ht...")
+        if build == "GRCh37":
+            ht = grch37.full_context.ht()
+        else:
+            ht = grch38.full_context.ht()
+
+        logger.info("Filtering full context HT to canonical transcripts only...")
+        ht = process_vep(ht)
+        ht = ht.annotate(transcript=ht.transcript_consequences.transcript_id)
+        ht = ht.group_by(ht.transcript).aggregate(
+            end_pos=hl.agg.max(ht.locus.position),
+            start_pos=hl.agg.min(ht.locus.position),
+        )
+
+        logger.info("Writing transcript HT to avoid redundant calculations...")
+        ht.write(transcript_positions.path, overwrite=True)
 
 
 ## Outlier transcript util

@@ -17,6 +17,7 @@ from rmc.resources.basics import (
     one_break,
     simul_break,
     temp_path,
+    transcript_positions,
 )
 from rmc.resources.grch37.exac import filtered_exac
 from rmc.resources.grch37.gnomad import (
@@ -25,7 +26,7 @@ from rmc.resources.grch37.gnomad import (
     processed_exomes,
     prop_obs_coverage,
 )
-from rmc.resources.grch37.reference_data import full_context, processed_context
+from rmc.resources.grch37.reference_data import processed_context
 from rmc.resources.resource_utils import GNOMAD_VER, MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
@@ -45,6 +46,7 @@ from rmc.utils.generic import (
     get_avg_bases_between_mis,
     get_coverage_correction_expr,
     get_outlier_transcripts,
+    get_transcript_ht,
     keep_criteria,
     process_context_ht,
     process_vep,
@@ -361,25 +363,13 @@ def main(args):
                 "Getting start and end positions and total size for each transcript..."
             )
             if (
-                not file_exists(f"{temp_path}/transcript.ht")
+                not file_exists(transcript_positions.path)
             ) or args.overwrite_transcript_ht:
-                # Read in full context HT (not filtered to missense variants)
-                # Also filter full context HT to canonical transcripts only
-                full_context_ht = full_context.ht()
-                full_context_ht = process_vep(full_context_ht)
-                full_context_ht = full_context_ht.annotate(
-                    transcript=full_context_ht.transcript_consequences.transcript_id
+                get_transcript_ht(
+                    build=get_reference_genome(context_ht.locus).name,
+                    overwrite=args.overwrite_transcript_ht,
                 )
-                transcript_ht = full_context_ht.group_by(
-                    full_context_ht.transcript
-                ).aggregate(
-                    end_pos=hl.agg.max(full_context_ht.locus.position),
-                    start_pos=hl.agg.min(full_context_ht.locus.position),
-                )
-
-                logger.info("Writing transcript HT to avoid redundant calculations...")
-                transcript_ht.write(f"{temp_path}/transcript.ht", overwrite=True)
-            transcript_ht = hl.read_table(f"{temp_path}/transcript.ht")
+            transcript_ht = transcript_positions.ht()
 
             context_ht = context_ht.annotate(
                 start_pos=transcript_ht[context_ht.transcript].start_pos,

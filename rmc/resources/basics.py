@@ -72,7 +72,7 @@ https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constra
 
 ## Transcript related resources
 MODEL_PREFIX = f"{RMC_PREFIX}/model"
-transcript_ht = VersionedTableResource(
+transcript_positions = VersionedTableResource(
     default_version=GNOMAD_VER,
     versions={
         GNOMAD_VER: TableResource(path=f"{MODEL_PREFIX}/{GNOMAD_VER}/transcript.ht"),
