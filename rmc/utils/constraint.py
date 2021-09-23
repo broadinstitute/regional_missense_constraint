@@ -8,7 +8,7 @@ from gnomad.utils.file_utils import file_exists
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
-from rmc.resources.basics import temp_path
+from rmc.resources.basics import temp_path, transcript_positions
 from rmc.utils.generic import get_coverage_correction_expr
 
 
@@ -33,6 +33,7 @@ GROUPINGS = [
 ]
 """
 Core fields to group by when calculating expected variants per variant type.
+
 Fields taken from gnomAD LoF repo.
 """
 
@@ -1414,7 +1415,8 @@ def get_section_info(
     Get the number of observed variants, number of expected variants, and chi square value for transcript section.
 
     .. note::
-        Assumes that the input Table is annotated with a list of breakpoint positions (`break_pos`).
+        Assumes that the input Table is annotated with a list of breakpoint positions (`break_pos`) and
+        with each transcript's start and end positions (`start_pos`, `end_pos`).
 
     :param hl.Table ht: Input Table.
     :param int section_num: Transcript section number (e.g., 1 for first section, 2 for second, 3 for third, etc.).
@@ -1431,6 +1433,7 @@ def get_section_info(
             (ht.locus.position > ht.break_pos[indices[0]])
             & (ht.locus.position <= ht.break_pos[indices[1]])
         )
+        ht = ht.annotate(section_bp=ht.break_pos[indices[1]] - ht.break_pos[indices[0]])
 
     else:
         if is_first:
@@ -1438,11 +1441,13 @@ def get_section_info(
                 "Getting info for first section of transcript (up to and including smallest breakpoint pos)..."
             )
             ht = ht.filter(ht.locus.position <= ht.break_pos[0])
+            ht = ht.annotate(section_bp=ht.break_pos[0] - ht.start_pos)
         else:
             logger.info(
                 "Getting info for last section of transcript (after largest breakpoint pos)..."
             )
             ht = ht.filter(ht.locus.position > ht.break_pos[-1])
+            ht = ht.annotate(section_bp=ht.end_pos - ht.break_pos[-1])
 
     ht = ht.annotate(section=hl.format("%s_%s", ht.transcript, str(section_num)))
     ht = get_subsection_exprs(
@@ -1451,6 +1456,23 @@ def get_section_info(
     return ht.annotate(
         section_chisq=calculate_section_chisq(ht.section_obs, ht.section_exp)
     )
+
+
+def create_section_expr_array(
+    ht: hl.Table, annot_str: str, max_n_breaks: int
+) -> hl.expr.ArrayExpression:
+    """
+    Combine desired section annotation expressions into a single array.
+
+    :param hl.Table ht: Input Table.
+    :param str annot_str: Name of annotation.
+    :param int max_n_breaks: Largest number of breaks.
+    :return: ArrayExpression containing section annotations.
+    :rtype: hl.expr.ArrayExpression
+    """
+    return [ht[annot_str]] + [
+        ht[f"{annot_str}_{count}"] for count in range(1, max_n_breaks + 1)
+    ]
 
 
 def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
@@ -1466,6 +1488,11 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
     :return: Table with section and section values annotated.
     :rtype: hl.Table
     """
+    logger.info("Annotating HT with transcript start and end positions...")
+    transcript_ht = transcript_positions.ht()
+    indexed_ht = transcript_ht[ht.transcript]
+    ht = ht.annotate(start_pos=transcript_ht.start_pos, end_pos=transcript_ht.end_pos)
+
     logger.info("Get section information for first section of each transcript...")
     count = 1
     section_ht = get_section_info(
@@ -1495,21 +1522,13 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
     ht = section_ht.join(end_ht, how="outer")
 
     logger.info("Merging section string, obs, exp, and chi square expressions...")
-    section_name_expr = [ht.section] + [
-        ht[f"section_{count}"] for count in range(1, max_n_breaks + 1)
-    ]
-    section_obs_expr = [ht.section_obs] + [
-        ht[f"section_obs_{count}"] for count in range(1, max_n_breaks + 1)
-    ]
-    section_exp_expr = [ht.section_exp] + [
-        ht[f"section_exp_{count}"] for count in range(1, max_n_breaks + 1)
-    ]
-    section_chisq_expr = [ht.section_chisq] + [
-        ht[f"section_chisq_{count}"] for count in range(1, max_n_breaks + 1)
-    ]
+    section_name_expr = create_section_expr_array(ht, "section", max_n_breaks)
+    section_obs_expr = create_section_expr_array(ht, "section_obs", max_n_breaks)
+    section_exp_expr = create_section_expr_array(ht, "section_exp", max_n_breaks)
+    section_chisq_expr = create_section_expr_array(ht, "section_chisq", max_n_breaks)
     return ht.annotate(
         section=hl.coalesce(*section_name_expr),
-        section_obs=hl.coalesge(*section_obs_expr),
+        section_obs=hl.coalesce(*section_obs_expr),
         section_exp=hl.coalesce(*section_exp_expr),
         section_chisq=hl.coalesce(*section_chisq_expr),
     )
@@ -1547,6 +1566,8 @@ def finalize_multiple_breaks(
         "_mu_scan",
         "cumulative_exp",
         "break_list",
+        "start_pos",
+        "end_pos",
     ],
 ) -> hl.Table:
     """
@@ -1562,7 +1583,8 @@ def finalize_multiple_breaks(
     :param int max_n_breaks: Largest number of breakpoints in any transcript.
     :param List[str] annotations: List of annotations to keep from input Table.
         Default is ['mu_snp', 'observed', 'total_exp', 'total_mu', 'total_obs',
-                    'cumulative_obs', '_mu_scan', 'cumulative_exp','break_list'].
+                    'cumulative_obs', '_mu_scan', 'cumulative_exp','break_list',
+                    'start_pos', 'end_pos'].
     :return: Table annotated with breakpoint positions and section obs, exp, OE, chi-square values.
     :rtype: hl.Table
     """
