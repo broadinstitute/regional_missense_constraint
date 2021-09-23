@@ -70,7 +70,7 @@ https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constra
 """
 
 
-## Transcript related resources
+## Gene/Transcript related resources
 MODEL_PREFIX = f"{RMC_PREFIX}/model"
 transcript_positions = VersionedTableResource(
     default_version=GNOMAD_VER,
@@ -80,6 +80,13 @@ transcript_positions = VersionedTableResource(
 )
 """
 Table containing transcript start and end positions.
+"""
+
+hi_genes = f"{RESOURCE_PREFIX}/HI_genes.rCNV.txt"
+"""
+Path to haploinsufficient genes that cause severe disease.
+
+List is from Ryan Collins.
 """
 
 constraint_prep = VersionedTableResource(

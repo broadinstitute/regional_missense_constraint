@@ -5,6 +5,7 @@ import hail as hl
 
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
+from gnomad.utils.filtering import filter_to_clinvar_pathogenic
 
 from gnomad_lof.constraint_utils.constraint_basics import (
     add_most_severe_csq_to_tc_within_ht,
@@ -19,6 +20,7 @@ from rmc.resources.basics import (
     ACID_NAMES_PATH,
     CODON_TABLE_PATH,
     DIVERGENCE_SCORES_TSV_PATH,
+    hi_genes,
     mutation_rate,
     MUTATION_RATE_TABLE_PATH,
     TOTAL_EXOME_BASES,
@@ -484,3 +486,47 @@ def get_outlier_transcripts() -> hl.expr.SetExpression:
     return constraint_transcript_ht.aggregate(
         hl.agg.collect_as_set(constraint_transcript_ht.transcript), _localize=False,
     )
+
+
+## Assessment utils
+def import_clinvar_hi_variants(build: str) -> hl.Table:
+    """
+    Read in ClinVar HT and filter to pathogenic/likely pathogenic missense variants in haploinsufficient genes.
+
+    :param str build: Reference genome build; must be one of BUILDS.
+    :return: Table with P/LP missense variants in HI genes.
+    :rtype: hl.Table
+    """
+    if build not in BUILDS:
+        raise DataException(f"Build must be one of {BUILDS}.")
+    if build == "GRCh37":
+        from gnomad.resources.grch37.reference_data import clinvar
+    else:
+        from gnomad.resources.grch38.reference_data import clinvar
+    logger.info("Reading in ClinVar HT...")
+    clinvar_ht = clinvar.ht()
+    clinvar_ht = filter_to_clinvar_pathogenic(clinvar_ht)
+
+    logger.info("Filtering to missense variants...")
+    clinvar_ht = clinvar_ht.annotate(mc=clinvar_ht.info.MC)
+    clinvar_ht = clinvar_ht.filter(
+        clinvar_ht.mc.any(lambda x: x.contains("missense_variant"))
+    )
+    logger.info(
+        "Number of variants after filtering to missense: %i", clinvar_ht.count()
+    )
+
+    logger.info("Filtering to variants in haploinsufficient genes...")
+    # File header is '#gene'
+    hi_ht = hl.import_table(hi_genes)
+    hi_gene_set = hi_ht.aggregate(
+        hl.agg.collect_as_set(hi_ht["#gene"]), _localize=False
+    )
+
+    logger.info("Getting gene information from ClinVar HT...")
+    clinvar_ht = clinvar_ht.annotate(gene=clinvar_ht.info.GENEINFO.split(":")[0])
+    clinvar_ht = clinvar_ht.filter(hi_gene_set.contains(clinvar_ht.gene))
+    logger.info(
+        "Number of variants after filtering to HI genes: %i", clinvar_ht.count()
+    )
+    return clinvar_ht

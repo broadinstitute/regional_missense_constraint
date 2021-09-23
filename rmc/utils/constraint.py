@@ -1718,6 +1718,7 @@ def finalize_simul_breaks(
     Get number of transcripts unique to each window size and drop any extra annotations.
     Also calculate each section's observed, expected, OE, and chi-square values.
     """
+    # TODO: Finish this function once simul breaks are ready
     logger.info("Getting transcripts associated with each window size...")
     transcripts_per_window = {}
     all_transcripts = []
