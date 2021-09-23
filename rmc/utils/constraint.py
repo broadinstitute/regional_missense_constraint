@@ -8,7 +8,7 @@ from gnomad.utils.file_utils import file_exists
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
-from rmc.resources.basics import temp_path, transcript_positions
+from rmc.resources.basics import multiple_breaks, temp_path, transcript_positions
 from rmc.utils.generic import get_coverage_correction_expr, get_outlier_transcripts
 
 
@@ -1434,12 +1434,11 @@ def get_section_info(
             & (ht.locus.position <= ht.break_pos[indices[1]])
         )
 
-        # Add section start/end position and number of base pairs within the section annotations
+        # Add section start/end position annotations
         ht = ht.annotate(
             # Add 1 to break_pos[indices[0]] since it isn't actually included in the region
             section_start_pos=ht.break_pos[indices[0]] + 1,
             section_end_pos=ht.break_pos[indices[1]],
-            section_bp=ht.break_pos[indices[1]] - ht.break_pos[indices[0]],
         )
 
     else:
@@ -1452,7 +1451,6 @@ def get_section_info(
                 # Start position is transcript start if this is the first section
                 section_start_pos=ht.start_pos,
                 section_end_pos=ht.break_pos[0],
-                section_bp=ht.break_pos[0] - ht.start_pos,
             )
         else:
             logger.info(
@@ -1460,9 +1458,7 @@ def get_section_info(
             )
             ht = ht.filter(ht.locus.position > ht.break_pos[-1])
             ht = ht.annotate(
-                section_start_pos=ht.break_pos[-1] + 1,
-                section_end_pos=ht.end_pos,
-                section_bp=ht.end_pos - ht.break_pos[-1],
+                section_start_pos=ht.break_pos[-1] + 1, section_end_pos=ht.end_pos,
             )
 
     ht = ht.annotate(section=hl.format("%s_%s", ht.transcript, str(section_num)))
@@ -1538,14 +1534,13 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
     ht = section_ht.join(end_ht, how="outer")
 
     logger.info(
-        "Merging section string, start, end, bp, obs, exp, and chi square expressions..."
+        "Merging section string, start, end, obs, exp, and chi square expressions..."
     )
     section_name_expr = create_section_expr_array(ht, "section", max_n_breaks)
     section_start_expr = create_section_expr_array(
         ht, "section_start_pos", max_n_breaks
     )
     section_end_expr = create_section_expr_array(ht, "section_end_pos", max_n_breaks)
-    section_bp_expr = create_section_expr_array(ht, "section_bp", max_n_breaks)
     section_obs_expr = create_section_expr_array(ht, "section_obs", max_n_breaks)
     section_exp_expr = create_section_expr_array(ht, "section_exp", max_n_breaks)
     section_chisq_expr = create_section_expr_array(ht, "section_chisq", max_n_breaks)
@@ -1553,7 +1548,6 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
         section=hl.coalesce(*section_name_expr),
         section_start=hl.coalesce(*section_start_expr),
         section_end=hl.coalesce(*section_end_expr),
-        section_bp=hl.coalesce(*section_bp_expr),
         section_obs=hl.coalesce(*section_obs_expr),
         section_exp=hl.coalesce(*section_exp_expr),
         section_chisq=hl.coalesce(*section_chisq_expr),
@@ -1677,8 +1671,40 @@ def finalize_multiple_breaks(
     # Merge all HTs together
     ht = hts[0].union(*hts[1:])
     ht = ht.annotate_globals(**transcripts_per_break)
-    ht = ht.checkpoint(f"{temp_path}/multiple_breaks_annot.ht", overwrite=True)
-    return ht
+    ht.checkpoint(f"{temp_path}/multiple_breaks.ht", overwrite=True)
+
+    # Reformat annotations for release
+    # Desired schema:
+    """
+    ---------------------------------------
+    Row fields:
+        'transcript_id': str
+        'regions': array<struct {
+            'start': int32
+            'stop': int32
+            'observed_missense': int32
+            'expected_missense': float64
+            'chisq': float64
+        }>
+
+    ----------------------------------------
+    Key: ['transcript_id']
+    ----------------------------------------
+    """
+    ht = ht.annotate(
+        regions=hl.struct(
+            start=ht.section_start,
+            stop=ht.section_end,
+            observed_missense=ht.section_obs,
+            expected_missense=ht.section_exp,
+            chisq=ht.section_chisq,
+        )
+    )
+    # Group Table by transcript
+    ht = ht.group_by(transcript_id=ht.transcript).aggregate(
+        regions=hl.agg.collect(ht.regions)
+    )
+    ht.write(multiple_breaks.path, overwrite=True)
 
 
 def finalize_simul_breaks(
