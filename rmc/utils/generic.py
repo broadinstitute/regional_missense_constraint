@@ -530,3 +530,22 @@ def import_clinvar_hi_variants(build: str) -> hl.Table:
         "Number of variants after filtering to HI genes: %i", clinvar_ht.count()
     )
     return clinvar_ht
+
+
+def import_de_novo_variants() -> None:
+    """
+    Import de novo missense variants.
+
+    .. note::
+        These files currently only exist for build GRCh37.
+
+    :return: None; writes HT to resource path.
+    """
+    import grch37.de_novo_tsv as tsv_path
+    import grch37.de_novo.path as ht_path
+
+    dn_ht = hl.import_table(tsv_path, impute=True)
+    dn_ht = dn_ht.transmute(locus=hl.locus(dn_ht.chrom, dn_ht.pos))
+    dn_ht = dn_ht.key_by("locus")
+    dn_ht = dn_ht.select("case_control")
+    dn_ht.write(ht_path, overwrite=True)
