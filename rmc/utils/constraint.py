@@ -8,8 +8,18 @@ from gnomad.utils.file_utils import file_exists
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
-from rmc.resources.basics import multiple_breaks, temp_path, transcript_positions
-from rmc.utils.generic import get_coverage_correction_expr, get_outlier_transcripts
+from rmc.resources.basics import (
+    multiple_breaks,
+    oe_bin_counts_tsv,
+    temp_path,
+    transcript_positions,
+)
+from rmc.resources.grch37.reference_data import de_novo
+from rmc.utils.generic import (
+    get_coverage_correction_expr,
+    get_outlier_transcripts,
+    import_clinvar_hi_variants,
+)
 
 
 logging.basicConfig(
@@ -1733,6 +1743,134 @@ def finalize_simul_breaks(
         "Total number of transcripts with simultaneous breaks: %i",
         len(unique_transcripts),
     )
+
+
+def get_loci_counts(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:
+    """
+    Check if loci from `ht1` are present in `ht2`.
+
+    Annotate `ht1` with int showing whether locus is present in `ht2`.
+    Annotation with be "0" if locus isn't present in `ht2` and "1" if locus is present.
+
+    :param hl.Table ht1: Table to be annotated.
+    :param hl.Table ht2: Table to check for loci from `ht1`.
+    :param str annot_str: Name of annotation to be added to `ht1` designating whether locus is present in `ht2`.
+    :return: Annotated version of `ht1`.
+    :rtype: hl.Table
+    """
+    ht1 = ht1.annotate(_temp=ht2.index(ht1.locus))
+    annot_dict = {f"{annot_str}": hl.int(hl.is_defined(ht1._temp))}
+    return ht1.annotate(**annot_dict).drop("_temp")
+
+
+def get_oe_bins(
+    max_n_breaks: int,
+    build: str,
+    annotations: List[str] = [
+        "section",
+        "section_chisq",
+        "section_oe",
+        "oe_bin",
+        "section_obs",
+        "section_exp",
+        "section_bp",
+    ],
+) -> None:
+    """
+    Group RMC results HT by obs/exp (OE) bin and annotate.
+
+    Annotations:
+        - Proportion coding base pairs
+        - Proportion de novo missense from controls/cases
+        - Proportion ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes.
+
+    .. note::
+        Currently untested on simultaneous breaks results.
+
+    :param int max_n_breaks: Largest number of breaks.
+    :param str build: Reference genome build.
+    :param List[str] annotations: Annotations to keep from RMC results HT.
+    :return: None; writes TSV with OE bins + annotations to `oe_bin_counts_tsv` resource path.
+    :rtype: None
+    """
+    logger.info("Reading in ClinVar, de novo missense, and transcript HTs...")
+    clinvar_ht = import_clinvar_hi_variants(build)
+    dn_ht = de_novo.ht()
+    transcript_ht = transcript_positions.ht()
+
+    # Split de novo HT into two HTs -- one for controls and one for cases
+    dn_controls = dn_ht.filter(dn_ht.case_control == "control")
+    dn_case = dn_ht.filter(dn_ht.case_control != "control")
+
+    # Get total number of coding base pairs, also ClinVar and DNM variants
+    transcript_ht = transcript_ht.annotate(
+        bp=transcript_ht.end_pos - transcript_ht.start_pos
+    )
+    total_bp = transcript_ht.aggregate(hl.agg.sum(transcript_ht.bp))
+    total_clinvar = clinvar_ht.count()
+    total_control = dn_controls.count()
+    total_case = dn_case.count()
+
+    logger.info("Reading in multiple breaks HTs annotated with section information...")
+    group_hts = []
+    for i in range(1, max_n_breaks + 1):
+        path = f"gs://regional_missense_constraint/temp/break_{i}_sections.ht"
+        if file_exists(path):
+            t = hl.read_table(path)
+            t = t.transmute(section_bp=t.section_end - t.section_start,)
+            t = t.annotate(
+                oe_bin=hl.case()
+                .when(t.section_oe <= 0.2, "0-0.2")
+                .when((t.section_oe > 0.2) & (t.section_oe <= 0.4), "0.2-0.4")
+                .when((t.section_oe > 0.4) & (t.section_oe <= 0.6), "0.4-0.6")
+                .when((t.section_oe > 0.6) & (t.section_oe <= 0.8), "0.6-0.8")
+                .default("0.8-1.0")
+            )
+            t = t.select_globals().select(*annotations)
+
+            # Annotate with control and case DNM, ClinVar P/LP variants,
+            t = get_loci_counts(t, dn_controls, "dnm_controls")
+            t = get_loci_counts(t, dn_case, "dnm_cases")
+            t = get_loci_counts(t, clinvar_ht, "clinvar")
+
+            # Group Table by oe_bin and checkpoint
+            t = t.group_by("oe_bin").aggregate(
+                bp=hl.agg.sum(t.section_bp),
+                dnm_control=hl.agg.sum(t.dnm_controls),
+                dnm_case=hl.agg.sum(t.dnm_cases),
+                clinvar=hl.agg.sum(t.clinvar_path),
+            )
+            t = t.checkpoint(
+                f"{temp_path}/break_{i}_section_grouped.ht", overwrite=True
+            )
+            group_hts.append(t)
+
+    logger.info("Reading in grouped HTs and merging into single HT...")
+    assess_ht = group_hts[0].union(*group_hts[1:])
+    assess_ht = assess_ht.group_by("oe_bin").aggregate(
+        bp=hl.agg.sum(assess_ht.bp),
+        dnm_controls=hl.agg.sum(assess_ht.dnm_control),
+        dnm_case=hl.agg.sum(assess_ht.dnm_case),
+        clinvar=hl.agg.sum(assess_ht.clinvar),
+    )
+    assess_ht_count = assess_ht.count()
+    if assess_ht_count != 5:
+        raise DataException(
+            "Expected 5 OE bins but found {assess_ht_count}. Please double check and rerun!"
+        )
+
+    logger.info("Reformatting annotations on assessment HT...")
+    assess_ht = assess_ht.transmute(
+        bp=assess_ht.bp / total_bp,
+        controls=assess_ht.dnm_controls / total_control,
+        case=assess_ht.dnm_case / total_case,
+        clinvar=assess_ht.clinvar / total_clinvar,
+    )
+    # Add a show to double check HT
+    assess_ht.show()
+
+    logger.info("Exporting assessment HT (in preparation for plotting)...")
+    assess_ht.export(oe_bin_counts_tsv)
 
 
 def constraint_flag_expr(
