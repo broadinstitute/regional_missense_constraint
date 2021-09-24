@@ -201,6 +201,15 @@ no_breaks = VersionedTableResource(
 Table containing transcripts with no significant breaks.
 """
 
+oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/oe_bin.tsv"
+"""
+TSV with RMC regions grouped by obs/exp (OE) bin.
+
+Annotated with proportion coding base pairs, proportion de novo missense (controls),
+proportion de novo missense (case), and proportion ClinVar pathogenic/likely pathogenic
+severe haploinsufficient missense.
+"""
+
 
 TOTAL_EXOME_BASES = {"GRCh37": 54426835}
 """
