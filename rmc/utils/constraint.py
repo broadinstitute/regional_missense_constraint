@@ -1646,6 +1646,15 @@ def finalize_multiple_breaks(
     ht = ht.select_globals()
     transcripts_per_break = get_unique_transcripts_per_break(ht, max_n_breaks)
 
+    # Print number of transcripts per break to output
+    # This is used to create TSV input to `n_transcripts_per_break.R`
+    for break_num in transcripts_per_break:
+        logger.info(
+            "Break number %i has %i transcripts",
+            break_num,
+            len(transcripts_per_break[break_num]),
+        )
+
     logger.info("Selecting only relevant annotations from HT and checkpointing...")
     ht = ht.select(*annotations)
     ht = ht.checkpoint(f"{temp_path}/multiple_breaks.ht", overwrite=True)
