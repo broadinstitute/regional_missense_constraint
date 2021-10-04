@@ -1364,10 +1364,7 @@ def search_two_break_windows(
 
         ht = ht.select_globals()
         logger.info("Window size: %i", window_size)
-        logger.info("Checkpointing first temp ht...")
-        ht = ht.checkpoint(
-            f"{temp_path}/simul_break_{window_size}_temp.ht", overwrite=True
-        )
+
         if window_size == min_window_size:
             ht = ht.transmute(
                 post_window_pos=ht.min_post_window_pos,
