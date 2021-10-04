@@ -1033,9 +1033,6 @@ def get_min_two_break_window(
         post_window_pos=hl.empty_array(hl.tint32),
     )
 
-    logger.info("Checkpointing HT...")
-    ht = ht.checkpoint(f"{temp_path}/simul_break_temp.ht", overwrite=True)
-
     logger.info("Gathering all positions in each transcript...")
     pos_ht = ht.key_by("locus", "transcript").select()
     if (not file_exists(f"{temp_path}/pos_per_transcript.ht")) or overwrite_pos_ht:
@@ -1131,25 +1128,39 @@ def annotate_two_breaks_section_values(
     next_ht = next_ht.annotate(
         new_locus=hl.locus(next_ht.locus.contig, next_ht.post_window_pos)
     )
-    indexed_ht = ht[next_ht.locus, next_ht.transcript]
-    next_ht = next_ht.annotate(
+
+    # Select annotations frm HT
+    annot_ht = ht.select(
+        "cumulative_obs",
+        "observed",
+        "cumulative_exp",
+        "mu_snp",
+        "forward_oe",
+        "reverse",
+    )
+
+    # Annotate values onto next HT as struct to try to avoid extra shuffle joins
+    # Tim suggested this for another part of the constraint code:
+    # https://discuss.hail.is/t/resultstage-has-failed-the-maximum-allowable-number-of-times/2222/6?u=ch-kr
+    next_ht = next_ht.annotate(next=ht[next_ht.locus, next_ht.transcript])
+    next_ht = next_ht.transmute(
         next_values=hl.struct(
-            cum_obs=indexed_ht.cumulative_obs[next_ht.transcript],
-            obs=indexed_ht.observed,
-            exp=indexed_ht.cumulative_exp,
-            mu_snp=indexed_ht.mu_snp,
-            oe=indexed_ht.forward_oe,
-            reverse_obs=indexed_ht.reverse.obs,
-            reverse_exp=indexed_ht.reverse.exp,
+            cum_obs=next_ht.next.cumulative_obs[next_ht.transcript],
+            obs=next_ht.next.observed,
+            exp=next_ht.next.cumulative_exp,
+            mu_snp=next_ht.next.mu_snp,
+            oe=next_ht.next.forward_oe,
+            reverse_obs=next_ht.next.reverse.obs,
+            reverse_exp=next_ht.next.reverse.exp,
         )
     )
     next_ht = next_ht.annotate(
         exp_at_end=(next_ht.next_values.mu_snp / next_ht.total_mu) * next_ht.total_exp
     )
-    next_ht = next_ht.checkpoint(f"{temp_path}/next.ht", overwrite=True)
-    ht = ht.annotate(
-        next_values=next_ht[ht.key].next_values, exp_at_end=next_ht[ht.key].exp_at_end
-    )
+    # next_ht = next_ht.checkpoint(f"{temp_path}/next.ht", overwrite=True)
+
+    ht = ht.annotate(next=next_ht[ht.key])
+    ht = ht.transmute(next_values=ht.next.next_values, exp_at_end=ht.next.exp_at_end)
 
     logger.info(
         "Annotating HT with obs, exp, OE values for positions in window of constraint..."
@@ -1421,9 +1432,9 @@ def search_two_break_windows(
                 break_chisqs=annot_ht.break_chisqs.append(indexed_ht.max_chisq),
             )
         else:
-            break_sizes = (annot_ht.break_sizes.append(window_size),)
-            break_chisqs = (annot_ht.break_chisqs.append(indexed_ht.max_chisq),)
-            window_ends = (annot_ht.break_chisqs.append(indexed_ht.window_end),)
+            break_sizes = annot_ht.break_sizes.append(window_size)
+            break_chisqs = annot_ht.break_chisqs.append(indexed_ht.max_chisq)
+            window_ends = annot_ht.break_chisqs.append(indexed_ht.window_end)
             post_window_pos = (
                 annot_ht.break_chisqs.append(indexed_ht.post_window_pos),
             )
