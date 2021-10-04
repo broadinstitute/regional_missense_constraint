@@ -1365,13 +1365,13 @@ def search_two_break_windows(
         ht = ht.select_globals()
         logger.info("Window size: %i", window_size)
 
+        # Adjust annotation names if window size is the smallest window size
         if window_size == min_window_size:
             ht = ht.transmute(
                 post_window_pos=ht.min_post_window_pos,
                 window_end=ht.min_window_end,
                 post_window_index=ht.min_post_window_index,
             )
-        ht.describe()
         break_ht = search_for_two_breaks(
             ht=ht,
             # annotate_pre_values=True,
@@ -1380,7 +1380,6 @@ def search_two_break_windows(
         )
         break_ht = break_ht.select_globals()
         break_ht = break_ht.annotate(window_size=window_size)
-        break_ht.describe()
         break_ht = break_ht.drop(
             "start_pos",
             "end_pos",
