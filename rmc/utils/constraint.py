@@ -984,9 +984,6 @@ def get_min_two_break_window(
         "reverse",
         "forward_oe",
         "overall_oe",
-        "break_sizes",
-        "window_ends",
-        "post_window_pos",
     ],
 ) -> Tuple[hl.Table, int]:
     """
@@ -1027,10 +1024,6 @@ def get_min_two_break_window(
     ht = ht.select(
         *annotations,
         "min_window_end",
-        break_sizes=hl.empty_array(hl.tint32),
-        break_chisqs=hl.empty_array(hl.tfloat64),
-        window_ends=hl.empty_array(hl.tint32),
-        post_window_pos=hl.empty_array(hl.tint32),
     )
 
     logger.info("Gathering all positions in each transcript...")
