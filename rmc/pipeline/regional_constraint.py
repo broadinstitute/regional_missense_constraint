@@ -375,6 +375,12 @@ def main(args):
                 context_ht.cumulative_obs[context_ht.transcript],
                 context_ht.cumulative_exp,
             )
+            if args.remove_outlier_transcripts:
+                logger.info("Removing outlier transcripts...")
+                outlier_transcripts = get_outlier_transcripts()
+                context_ht = context_ht.filter(
+                    ~outlier_transcripts.contains(context_ht.transcript)
+                )
 
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
