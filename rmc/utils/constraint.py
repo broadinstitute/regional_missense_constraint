@@ -1418,25 +1418,29 @@ def search_two_break_windows(
         )
 
         logger.info("Annotating pre values back onto HT...")
-        indexed_ht = break_ht[ht.locus, ht.transcript]
-        ht = ht.annotate(
-            pre_obs=indexed_ht.pre_obs,
-            pre_exp=indexed_ht.pre_exp,
-            pre_oe=indexed_ht.pre_oe,
+        pre_ht = break_ht.select("pre_obs", "pre_exp", "pre_oe")
+        ht = ht.annotate(pre=pre_ht[ht.key])
+        ht = ht.transmute(
+            pre_obs=ht.pre.pre_obs, pre_exp=ht.pre.pre_exp, pre_oe=ht.pre.pre_oe,
         )
 
         logger.info("Annotating break information onto annot HT...")
-        indexed_ht = break_ht[annot_ht.locus, annot_ht.transcript]
+        break_ht = break_ht.select(
+            "window_size", "max_chisq", "window_end", "post_window_pos"
+        )
+        annot_ht = annot_ht.annotate(breaks=break_ht[ht.key])
         if window_size == min_window_size:
-            annot_ht = annot_ht.annotate(
-                break_chisqs=annot_ht.break_chisqs.append(indexed_ht.max_chisq),
+            annot_ht = annot_ht.transmute(
+                break_chisqs=annot_ht.break_chisqs.append(annot_ht.breaks.max_chisq),
             )
         else:
-            break_sizes = annot_ht.break_sizes.append(window_size)
-            break_chisqs = annot_ht.break_chisqs.append(indexed_ht.max_chisq)
-            window_ends = annot_ht.break_chisqs.append(indexed_ht.window_end)
-            post_window_pos = (
-                annot_ht.break_chisqs.append(indexed_ht.post_window_pos),
+            annot_ht = annot_ht.transmute(
+                break_sizes=annot_ht.break_sizes.append(window_size),
+                break_chisqs=annot_ht.break_chisqs.append(annot_ht.breaks.max_chisq),
+                window_ends=annot_ht.break_chisqs.append(annot_ht.breaks.window_end),
+                post_window_pos=annot_ht.break_chisqs.append(
+                    annot_ht.breaks.post_window_pos
+                ),
             )
         window_size += 1
 
