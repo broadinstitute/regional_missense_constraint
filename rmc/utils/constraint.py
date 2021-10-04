@@ -1362,7 +1362,6 @@ def search_two_break_windows(
                 .or_missing()
             )
 
-        annot_ht = ht.select("n_pos_per_transcript", "pos_per_transcript")
         ht = ht.select_globals()
         logger.info("Window size: %i", window_size)
         logger.info("Checkpointing first temp ht...")
