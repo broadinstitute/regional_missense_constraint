@@ -361,8 +361,9 @@ def main(args):
                 a single significant break..."
             )
             # context_ht = not_one_break.ht().drop("values").select_globals()
+            # Reading in from temp because that is the table written with a chi square cutoff of 6.6 (and not 10.8)
             context_ht = (
-                hl.read_table("gs://regional_missense_constraint/temp/not_one_break.ht")
+                hl.read_table(f"{temp_path}/not_one_break.ht")
                 .drop("values")
                 .select_globals()
             )
@@ -376,11 +377,19 @@ def main(args):
                 context_ht.cumulative_exp,
             )
             if args.remove_outlier_transcripts:
-                logger.info("Removing outlier transcripts...")
-                outlier_transcripts = get_outlier_transcripts()
-                context_ht = context_ht.filter(
-                    ~outlier_transcripts.contains(context_ht.transcript)
-                )
+                if file_exists(f"{temp_path}/not_one_break_filtered.ht"):
+                    logger.info(
+                        "HT without outlier transcripts already exists and will not be overwritten!"
+                    )
+                else:
+                    logger.info("Removing outlier transcripts...")
+                    outlier_transcripts = get_outlier_transcripts()
+                    context_ht = context_ht.filter(
+                        ~outlier_transcripts.contains(context_ht.transcript)
+                    )
+                    context_ht = context_ht.checkpoint(
+                        f"{temp_path}/not_one_break_filtered.ht"
+                    )
 
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
