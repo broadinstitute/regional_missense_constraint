@@ -787,7 +787,7 @@ if __name__ == "__main__":
         "--transcript-percentage",
         help="Maximum percentage of the transcript that can be included within a window of constraint. Used for transcripts with simultaneous breaks. Default is 90%",
         type=float,
-        default=0.9,
+        default=0.8,
     )
     parser.add_argument(
         "--overwrite-pos-ht",
