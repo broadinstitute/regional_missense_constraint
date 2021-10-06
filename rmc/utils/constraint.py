@@ -636,6 +636,7 @@ def search_for_break(
     # be adjusted."
     group_ht = ht.group_by(search_field).aggregate(max_chisq=hl.agg.max(ht.chisq))
     group_ht = group_ht.checkpoint(f"{temp_path}/max_chisq.ht", overwrite=True)
+    group_ht.show()
     ht = ht.annotate(max_chisq=group_ht[ht.transcript].max_chisq)
     return ht.annotate(
         is_break=((ht.chisq == ht.max_chisq) & (ht.chisq >= chisq_threshold))
@@ -1226,11 +1227,11 @@ def search_for_two_breaks(
     logger.info("Preparing HT to search for two breaks...")
     ht = annotate_two_breaks_section_values(ht, annotate_pre_values)
     ht = ht.checkpoint(f"{temp_path}/simul_break_temp_annot.ht", overwrite=True)
+
     window_exp_check = ht.aggregate(hl.agg.count_where(ht.window_exp == 0))
     if window_exp_check != 0:
         logger.error("Found %i sites where window exp is 0", window_exp_check)
         ht.show()
-    ht.describe()
 
     logger.info("Searching for two breaks...")
     return search_for_break(
@@ -1295,7 +1296,7 @@ def search_two_break_windows(
     logger.info(
         "Creating HT with simul break annotations (HT to return at the end of this function)..."
     )
-    annot_ht = ht.select()
+    annot_ht = ht.select("min_window_end", "min_post_window_pos")
     annot_ht = annot_ht.annotate_globals(max_window_size=max_window_size)
     annot_ht = annot_ht.transmute(
         break_sizes=[min_window_size],
@@ -1312,6 +1313,8 @@ def search_two_break_windows(
 
     logger.info("Checking all possible window sizes...")
     window_size = min_window_size
+
+    max_window_size = 102
     while window_size <= max_window_size:
         annotate_pre_values = False
         if window_size == min_window_size:
@@ -1388,6 +1391,7 @@ def search_two_break_windows(
             annotate_pre_values=annotate_pre_values,
             chisq_threshold=chisq_threshold,
         )
+
         break_ht = break_ht.select_globals()
         # NOTE: This drops the null and alt values for the breaks,
         # as well as all other transcript-related annotations
@@ -1397,6 +1401,8 @@ def search_two_break_windows(
             "post_window_pos",
             "pre_obs",
             "pre_exp",
+            "pre_oe",
+            "exp_at_start",
             "window_obs",
             "window_exp",
             "post_obs",
@@ -1409,38 +1415,42 @@ def search_two_break_windows(
         )
 
         logger.info("Annotating pre values back onto HT...")
-        pre_ht = break_ht.select("pre_obs", "pre_exp", "pre_oe")
+        pre_ht = break_ht.select("pre_obs", "pre_exp", "pre_oe", "exp_at_start")
         ht = ht.annotate(pre=pre_ht[ht.key])
         ht = ht.transmute(
-            pre_obs=ht.pre.pre_obs, pre_exp=ht.pre.pre_exp, pre_oe=ht.pre.pre_oe,
+            pre_obs=ht.pre.pre_obs,
+            pre_exp=ht.pre.pre_exp,
+            pre_oe=ht.pre.pre_oe,
+            exp_at_start=ht.pre.exp_at_start,
         )
 
         logger.info("Annotating break information onto annot HT...")
-        annot_ht = annot_ht.annotate(breaks=break_ht[ht.key])
+        break_ht = break_ht.drop("exp_at_start")
+        annot_ht = annot_ht.annotate(breaks=break_ht[annot_ht.key])
         if window_size == min_window_size:
             annot_ht = annot_ht.transmute(
                 break_chisqs=annot_ht.break_chisqs.append(annot_ht.breaks.max_chisq),
                 pre_obs=annot_ht.pre_obs.append(annot_ht.breaks.pre_obs),
-                pre_exp=annot_ht.pre_obs.append(annot_ht.breaks.pre_exp),
-                window_obs=annot_ht.pre_obs.append(annot_ht.breaks.window_obs),
-                window_exp=annot_ht.pre_obs.append(annot_ht.breaks.window_exp),
-                post_obs=annot_ht.pre_obs.append(annot_ht.breaks.post_obs),
-                post_exp=annot_ht.pre_obs.append(annot_ht.breaks.post_exp),
+                pre_exp=annot_ht.pre_exp.append(annot_ht.breaks.pre_exp),
+                window_obs=annot_ht.window_obs.append(annot_ht.breaks.window_obs),
+                window_exp=annot_ht.window_exp.append(annot_ht.breaks.window_exp),
+                post_obs=annot_ht.post_obs.append(annot_ht.breaks.post_obs),
+                post_exp=annot_ht.post_exp.append(annot_ht.breaks.post_exp),
             )
         else:
             annot_ht = annot_ht.transmute(
                 break_sizes=annot_ht.break_sizes.append(window_size),
                 break_chisqs=annot_ht.break_chisqs.append(annot_ht.breaks.max_chisq),
-                window_ends=annot_ht.break_chisqs.append(annot_ht.breaks.window_end),
-                post_window_pos=annot_ht.break_chisqs.append(
+                window_ends=annot_ht.window_ends.append(annot_ht.breaks.window_end),
+                post_window_pos=annot_ht.post_window_pos.append(
                     annot_ht.breaks.post_window_pos
                 ),
                 pre_obs=annot_ht.pre_obs.append(annot_ht.breaks.pre_obs),
-                pre_exp=annot_ht.pre_obs.append(annot_ht.breaks.pre_exp),
-                window_obs=annot_ht.pre_obs.append(annot_ht.breaks.window_obs),
-                window_exp=annot_ht.pre_obs.append(annot_ht.breaks.window_exp),
-                post_obs=annot_ht.pre_obs.append(annot_ht.breaks.post_obs),
-                post_exp=annot_ht.pre_obs.append(annot_ht.breaks.post_exp),
+                pre_exp=annot_ht.pre_exp.append(annot_ht.breaks.pre_exp),
+                window_obs=annot_ht.window_obs.append(annot_ht.breaks.window_obs),
+                window_exp=annot_ht.window_exp.append(annot_ht.breaks.window_exp),
+                post_obs=annot_ht.post_obs.append(annot_ht.breaks.post_obs),
+                post_exp=annot_ht.post_exp.append(annot_ht.breaks.post_exp),
             )
         window_size += 1
 
