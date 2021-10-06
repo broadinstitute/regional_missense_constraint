@@ -636,7 +636,6 @@ def search_for_break(
     # be adjusted."
     group_ht = ht.group_by(search_field).aggregate(max_chisq=hl.agg.max(ht.chisq))
     group_ht = group_ht.checkpoint(f"{temp_path}/max_chisq.ht", overwrite=True)
-    group_ht.show()
     ht = ht.annotate(max_chisq=group_ht[ht.transcript].max_chisq)
     return ht.annotate(
         is_break=((ht.chisq == ht.max_chisq) & (ht.chisq >= chisq_threshold))
@@ -1320,6 +1319,12 @@ def search_two_break_windows(
         if window_size == min_window_size:
             annotate_pre_values = True
         else:
+            # Annotate HT with boolean for whether window size is larger than max window size for each transcript
+            ht = ht.annotate(search=hl.or_missing(window_size <= ht.max_window_size, 1))
+            # Drop transcripts that are unable to be searched from HT to avoid writing out unnecessary rows
+            ht = ht.filter(hl.is_defined(ht.search))
+            ht = ht.drop("search")
+
             # Annotate window end position
             # This will be missing if window end position is larger than the end position of the transcript
             ht = ht.annotate(
