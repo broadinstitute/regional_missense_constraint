@@ -1003,6 +1003,9 @@ def get_max_two_break_window(
     :return: Tuple of Table annotated with window end, post window position and maximum window size.
     :rtype: Tuple[hl.Table, int]
     """
+    logger.info("Gathering transcripts in input Table...")
+    transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript), _localize=False)
+
     logger.info("Gathering all positions in each transcript...")
     pos_ht = ht.key_by("locus", "transcript").select()
     if (not file_exists(f"{temp_path}/pos_per_transcript.ht")) or overwrite_pos_ht:
@@ -1011,6 +1014,7 @@ def get_max_two_break_window(
         )
         pos_ht.write(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
     pos_ht = hl.read_table(f"{temp_path}/pos_per_transcript.ht")
+    pos_ht = pos_ht.filter(transcripts.contains(post_ht.transcript))
 
     logger.info("Annotating each transcript with max window size...")
     ht = ht.annotate(max_window_size=ht.transcript_size * transcript_percentage)
@@ -1052,6 +1056,17 @@ def get_max_two_break_window(
         ht.show()
         raise DataException(
             f"Position closest to window end is smaller or equal to the max window end position in {check_end} cases!"
+        )
+
+    # Check if any transcripts don't have any defined max window ends
+    check_def = ht.filter(hl.is_defined(ht.max_window_end))
+    transcripts_def = check_def.aggregate(
+        hl.agg.collect_as_set(check_def.transcript), _localize=False
+    )
+    num_missing = hl.eval(hl.len(transcripts.difference(transcripts_def)))
+    if num_missing != 0:
+        raise DataException(
+            f"{num_missing} transcripts don't have defined max window ends! Please double check and restart."
         )
     return (ht, max_window_size)
 
