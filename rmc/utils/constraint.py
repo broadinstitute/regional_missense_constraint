@@ -932,14 +932,14 @@ def get_max_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
     )
 
     # Adjust the post window position to make sure it is larger than the provided window end position
-    # The default behavior in this case statement is to return the transcript end position because:
+    # The default behavior in this case statement is to return missing because:
     # 1) `pos_expr` is created using the filtered context table. This means:
     # - `pos_expr` contains only positions in each transcript that had a possible missense variant.
     # - `pos_expr` might not contain the transcript end position.
     # 2) `hl.binary_search` will return an index larger than the length of a list if that position
     # is larger than the largest element in the list.
     # For example: if `pos_expr` is [1, 4, 8], then `hl.binary_search(pos_per_transcript, 10)` will return 3.
-    return ht.annotate(
+    ht = ht.annotate(
         max_post_window_pos=hl.case()
         # When the index is the last index in the list
         .when(
@@ -963,6 +963,7 @@ def get_max_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
             ),
         ).or_missing()
     )
+    return ht.key_by("locus", "transcript")
 
 
 def get_max_two_break_window(
@@ -1034,7 +1035,7 @@ def get_max_two_break_window(
     ht = ht.select(
         "max_window_end", "start_pos", "end_pos", "transcript_size"
     ).select_globals()
-    ht = get_max_post_window_pos(ht, pos_ht).key_by("locus", "transcript")
+    ht = get_max_post_window_pos(ht, pos_ht)
 
     logger.info("Adding relevant annotations back onto HT...")
     indexed_ht = annotation_ht[ht.key]
