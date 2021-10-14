@@ -982,6 +982,7 @@ def get_max_two_break_window(
         "reverse",
         "forward_oe",
         "overall_oe",
+        "max_window_size",
     ],
 ) -> Tuple[hl.Table, int]:
     """
@@ -1014,7 +1015,7 @@ def get_max_two_break_window(
         )
         pos_ht.write(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
     pos_ht = hl.read_table(f"{temp_path}/pos_per_transcript.ht")
-    pos_ht = pos_ht.filter(transcripts.contains(post_ht.transcript))
+    pos_ht = pos_ht.filter(transcripts.contains(pos_ht.transcript))
 
     logger.info("Annotating each transcript with max window size...")
     ht = ht.annotate(max_window_size=ht.transcript_size * transcript_percentage)
@@ -1029,7 +1030,7 @@ def get_max_two_break_window(
         max_window_end=get_window_end_pos_expr(
             pos_expr=ht.locus.position,
             end_pos_expr=ht.end_pos,
-            window_size_expr=ht.max_window_size,
+            window_size_expr=hl.int32(ht.max_window_size),
         ),
     )
 
@@ -1037,14 +1038,16 @@ def get_max_two_break_window(
     # Keep version of HT with all relevant annotations and strip HT of all annotations to prepare for binary search
     annotation_ht = ht.select(*annotations)
     ht = ht.select(
-        "max_window_end", "start_pos", "end_pos", "transcript_size"
+        "max_window_end", "start_pos", "end_pos", "transcript_size", "max_window_size"
     ).select_globals()
     ht = get_max_post_window_pos(ht, pos_ht)
 
     logger.info("Adding relevant annotations back onto HT...")
     indexed_ht = annotation_ht[ht.key]
     ht = ht.annotate(**indexed_ht)
-    ht = ht.checkpoint(f"{temp_path}/simul_break_ready.ht", overwrite=True)
+    # ht = ht.checkpoint(f"{temp_path}/simul_break_ready.ht", overwrite=True)
+    ht = ht.checkpoint(f"{temp_path}/simul_break_ready_DNAH2.ht", overwrite=True)
+    ht.describe()
     logger.info("HT count: %s", ht.count())
 
     # Check if post window pos is ever smaller or equal to the window end pos
@@ -1234,7 +1237,8 @@ def search_for_two_breaks(
     """
     logger.info("Preparing HT to search for two breaks...")
     ht = annotate_two_breaks_section_values(ht, annotate_pre_values)
-    ht = ht.checkpoint(f"{temp_path}/simul_break_temp_annot.ht", overwrite=True)
+    # ht = ht.checkpoint(f"{temp_path}/simul_break_temp_annot.ht", overwrite=True)
+    ht = ht.checkpoint(f"{temp_path}/simul_break_temp_annot_DNAH2.ht", overwrite=True)
 
     window_exp_check = ht.aggregate(hl.agg.count_where(ht.window_exp == 0))
     if window_exp_check != 0:
@@ -1310,15 +1314,15 @@ def search_two_break_windows(
     logger.info(
         "Creating HT with simul break annotations (HT to return at the end of this function)..."
     )
-    annot_ht = ht.select("max_window_end", "max_post_window_pos")
+    annot_ht = ht.select("window_end", "post_window_pos", "max_window_size")
     annot_ht = annot_ht.annotate_globals(
         window_range=hl.struct(min=min_window_size, max=max_window_size)
     )
     annot_ht = annot_ht.transmute(
         break_sizes=[annot_ht.max_window_size],
         break_chisqs=hl.empty_array(hl.tfloat64),
-        window_ends=[annot_ht.max_window_end],
-        post_window_pos=[annot_ht.max_post_window_pos],
+        window_ends=[annot_ht.window_end],
+        post_window_pos=[annot_ht.post_window_pos],
         pre_obs=hl.empty_array(hl.tint64),
         pre_exp=hl.empty_array(hl.tfloat64),
         window_obs=hl.empty_array(hl.tint64),
@@ -1332,19 +1336,28 @@ def search_two_break_windows(
         annotate_pre_values = False
         if count == 0:
             annotate_pre_values = True
+            ht = ht.annotate(window_size=ht.max_window_size)
         else:
             # Annotate HT with boolean for whether window size is greater than or equal to min window size
-            ht = ht.annotate(search=hl.or_missing(window_size >= min_window_size, 1))
+            ht = ht.annotate(window_size=ht.window_size - 1)
+            ht = ht.annotate(search=hl.or_missing(ht.window_size >= min_window_size, 1))
+
             # Drop transcripts that are no longer need to be searched from HT to avoid writing out unnecessary rows
-            ht = ht.filter(hl.is_defined(ht.search))
-            ht = ht.drop("search")
+            searchable_ht = ht.filter(ht.search == 1)
+            searchable_transcripts = searchable_ht.aggregate(
+                hl.agg.collect_as_set(searchable_ht.transcript), _localize=False
+            )
+            # Exit if HT has no transcripts left
+            if hl.eval(hl.len(searchable_transcripts)) == 0:
+                break
+            ht = ht.filter(searchable_transcripts.contains(ht.transcript))
 
             # Annotate window end position and post window index
             ht = ht.annotate(
                 window_end=get_window_end_pos_expr(
                     pos_expr=ht.locus.position,
                     end_pos_expr=ht.end_pos,
-                    window_size_expr=window_size,
+                    window_size_expr=ht.window_size,
                 ),
                 post_window_index=ht.post_window_index - 1,
             )
@@ -1370,24 +1383,20 @@ def search_two_break_windows(
             "window_exp",
             "post_obs",
             "post_exp",
+            "is_break",
         )
 
         # This method will checkpoint a LOT of temporary tables...not sure if there is a better way
         break_ht = break_ht.checkpoint(
-            f"{temp_path}/simul_break_{count}.ht", overwrite=True
+            # f"{temp_path}/simul_break_{count}.ht", overwrite=True
+            f"{temp_path}/simul_break_DNAH2_{count}.ht",
+            overwrite=True,
         )
 
         # If this isn't the first breakpoint search,
         # Keep only rows where the chi square value is larger than the chi square from the previous search
         if "pre_max_chisq" in ht.row:
             break_ht = break_ht.filter(break_ht.max_chisq > break_ht.pre_max_chisq)
-
-        logger.info("Checking if any transcripts had a significant breakpoint...")
-        is_break_ht = break_ht.filter(break_ht.is_break)
-
-        # Exit loop if no transcripts had a significant break
-        if is_break_ht.count() == 0:
-            break
 
         logger.info("Annotating pre values and chi square back onto HT...")
         pre_ht = break_ht.select(
@@ -1399,37 +1408,26 @@ def search_two_break_windows(
             pre_exp=ht.pre.pre_exp,
             pre_oe=ht.pre.pre_oe,
             exp_at_start=ht.pre.exp_at_start,
-            pre_max_chisq=ht.max_chisq,
+            pre_max_chisq=ht.pre.max_chisq,
         )
 
         logger.info("Annotating break information onto annot HT...")
         break_ht = break_ht.drop("exp_at_start")
         annot_ht = annot_ht.annotate(breaks=break_ht[annot_ht.key])
-        if window_size == min_window_size:
-            annot_ht = annot_ht.transmute(
-                break_chisqs=annot_ht.break_chisqs.append(annot_ht.breaks.max_chisq),
-                pre_obs=annot_ht.pre_obs.append(annot_ht.breaks.pre_obs),
-                pre_exp=annot_ht.pre_exp.append(annot_ht.breaks.pre_exp),
-                window_obs=annot_ht.window_obs.append(annot_ht.breaks.window_obs),
-                window_exp=annot_ht.window_exp.append(annot_ht.breaks.window_exp),
-                post_obs=annot_ht.post_obs.append(annot_ht.breaks.post_obs),
-                post_exp=annot_ht.post_exp.append(annot_ht.breaks.post_exp),
-            )
-        else:
-            annot_ht = annot_ht.transmute(
-                break_sizes=annot_ht.break_sizes.append(window_size),
-                break_chisqs=annot_ht.break_chisqs.append(annot_ht.breaks.max_chisq),
-                window_ends=annot_ht.window_ends.append(annot_ht.breaks.window_end),
-                post_window_pos=annot_ht.post_window_pos.append(
-                    annot_ht.breaks.post_window_pos
-                ),
-                pre_obs=annot_ht.pre_obs.append(annot_ht.breaks.pre_obs),
-                pre_exp=annot_ht.pre_exp.append(annot_ht.breaks.pre_exp),
-                window_obs=annot_ht.window_obs.append(annot_ht.breaks.window_obs),
-                window_exp=annot_ht.window_exp.append(annot_ht.breaks.window_exp),
-                post_obs=annot_ht.post_obs.append(annot_ht.breaks.post_obs),
-                post_exp=annot_ht.post_exp.append(annot_ht.breaks.post_exp),
-            )
+        annot_ht = annot_ht.transmute(
+            break_sizes=annot_ht.break_sizes.append(ht.window_size),
+            break_chisqs=annot_ht.break_chisqs.append(annot_ht.breaks.max_chisq),
+            window_ends=annot_ht.window_ends.append(annot_ht.breaks.window_end),
+            post_window_pos=annot_ht.post_window_pos.append(
+                annot_ht.breaks.post_window_pos
+            ),
+            pre_obs=annot_ht.pre_obs.append(annot_ht.breaks.pre_obs),
+            pre_exp=annot_ht.pre_exp.append(annot_ht.breaks.pre_exp),
+            window_obs=annot_ht.window_obs.append(annot_ht.breaks.window_obs),
+            window_exp=annot_ht.window_exp.append(annot_ht.breaks.window_exp),
+            post_obs=annot_ht.post_obs.append(annot_ht.breaks.post_obs),
+            post_exp=annot_ht.post_exp.append(annot_ht.breaks.post_exp),
+        )
         count += 1
 
     logger.info("Getting best window sizes for each transcript and returning...")

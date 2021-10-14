@@ -367,6 +367,10 @@ def main(args):
                 .drop("values")
                 .select_globals()
             )
+            logger.info("Filtering to DNAH2 to test...")
+            context_ht = hl.read_table(f"{temp_path}/not_one_break_filtered.ht")
+            context_ht = context_ht.filter(context_ht.transcript == "ENST00000572933")
+            logger.info(context_ht.count())
             from rmc.utils.constraint import get_reverse_exprs
 
             context_ht = get_reverse_exprs(
