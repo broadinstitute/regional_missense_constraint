@@ -1562,6 +1562,14 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
     section_obs_expr = create_section_expr_array(ht, "section_obs", max_n_breaks)
     section_exp_expr = create_section_expr_array(ht, "section_exp", max_n_breaks)
     section_chisq_expr = create_section_expr_array(ht, "section_chisq", max_n_breaks)
+    # Return the first non-missing value in each section expression array
+    # Each row in the table should only have one non-missing value in this array
+    # (the non-missing value will correspond to the section of the transcript the row belongs to)
+    # For example, if a transcript has two sections, and a row belongs to the first section,
+    # then it will have a non-missing value for ONLY the first value in each section expression array
+    # (each section array will look like this: [some value, missing])
+    # This coalesce is to flatten the arrays into a single annotation for each section and take only
+    # the value relevant to each row
     return ht.select(
         section=hl.coalesce(*section_name_expr),
         section_start=hl.coalesce(*section_start_expr),
