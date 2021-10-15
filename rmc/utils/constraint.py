@@ -1877,7 +1877,7 @@ def get_oe_bins(
             # Annotate with control and case DNM, ClinVar P/LP variants,
             ht = get_loci_counts(ht, dn_controls, "dnm_controls")
             ht = get_loci_counts(ht, dn_case, "dnm_cases")
-            ht = get_loci_counts(ht, clinvar_ht, "clinvar")
+            ht = get_loci_counts(ht, clinvar_ht, "clinvar_path")
 
             # Group Table by oe_bin and checkpoint
             ht = ht.group_by("oe_bin").aggregate(
