@@ -237,6 +237,9 @@ def get_avg_bases_between_mis(
     total_bases = TOTAL_EXOME_BASES
 
     if get_total_exome_bases:
+        if build not in BUILDS:
+            raise DataException(f"Build must be one of {BUILDS}.")
+
         logger.info(
             "Getting total number of bases in the exome from full context HT..."
         )
@@ -433,6 +436,8 @@ def get_plateau_model(
 def write_transcript_ht(build: str, overwrite: bool) -> None:
     """
     Create Table with start and end position for all transcripts.
+
+    This function writes the transcript HT to avoid redundant calculations.
 
     :param bool overwrite: Whether to overwrite transcript HT, even if it already exists.
     :return: None; writes context HT to transcript_ht resource path.
