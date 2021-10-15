@@ -1489,6 +1489,11 @@ def create_section_expr_array(
     """
     Combine desired section annotation expressions into a single array.
 
+    For example, if the input Table has the section annotations:
+    'section_exp_1', 'section_exp_2', 'section_exp_3',
+    this function will combine them into this array:
+    ['section_exp_1', 'section_exp_2', 'section_exp_3']
+
     :param hl.Table ht: Input Table.
     :param str annot_str: Name of annotation.
     :param int max_n_breaks: Largest number of breaks.
