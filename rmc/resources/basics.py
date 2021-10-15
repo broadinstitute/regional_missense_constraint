@@ -72,22 +72,10 @@ https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constra
 
 ## Gene/Transcript related resources
 MODEL_PREFIX = f"{RMC_PREFIX}/model"
-transcript_positions = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{MODEL_PREFIX}/{version}/transcript.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
 """
-Table containing transcript start and end positions.
-"""
+Path to bucket containing resources related to building the mutational models.
 
-hi_genes = f"{RESOURCE_PREFIX}/HI_genes.rCNV.txt"
-"""
-Path to haploinsufficient genes that cause severe disease.
-
-List is from Ryan Collins.
+Bucket also contains transcript-related resources.
 """
 
 constraint_prep = VersionedTableResource(
@@ -105,6 +93,23 @@ Context Table ready for RMC calculations.
 HT is annotated with observed and expected variant counts per base.
 """
 
+transcript_positions = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{MODEL_PREFIX}/{version}/transcript.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table containing transcript start and end positions.
+"""
+
+hi_genes = f"{RESOURCE_PREFIX}/HI_genes.rCNV.txt"
+"""
+Path to haploinsufficient genes that cause severe disease.
+
+List is from Ryan Collins.
+"""
 
 ## Constraint related resources
 CONSTRAINT_PREFIX = f"{RMC_PREFIX}/constraint"
