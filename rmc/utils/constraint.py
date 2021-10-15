@@ -1764,9 +1764,7 @@ def finalize_multiple_breaks(
     ht.write(multiple_breaks.path, overwrite=True)
 
 
-def finalize_simul_breaks(
-    min_window_size: int, max_window_size: int,
-):
+def finalize_simul_breaks(min_window_size: int, max_window_size: int,) -> None:
     """
     Create table of transcripts with simultaneous breaks.
 
@@ -1774,6 +1772,10 @@ def finalize_simul_breaks(
 
     Get number of transcripts unique to each window size and drop any extra annotations.
     Also calculate each section's observed, expected, OE, and chi-square values.
+
+    :param int min_window_size: Smallest two simultaneous breaks window size for constraint.
+    :param int max_window_size: Largest two simultaneous breaks window size for constraint.
+    :return: None
     """
     # TODO: Finish this function once simul breaks are ready
     logger.info("Getting transcripts associated with each window size...")
