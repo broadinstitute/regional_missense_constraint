@@ -1698,7 +1698,7 @@ def finalize_multiple_breaks(
     hts = []
     for i in range(1, max_n_breaks + 1):
         transcripts = hl.literal(transcripts_per_break[i])
-        if len(transcripts == 0):
+        if hl.is_missing(transcripts):
             logger.info("Break number %i has no transcripts. Continuing...")
 
         # Filter HT to transcripts associated with this break only
