@@ -46,10 +46,10 @@ from rmc.utils.generic import (
     get_avg_bases_between_mis,
     get_coverage_correction_expr,
     get_outlier_transcripts,
-    get_transcript_ht,
     keep_criteria,
     process_context_ht,
     process_vep,
+    write_transcript_ht,
 )
 
 
@@ -365,7 +365,7 @@ def main(args):
             if (
                 not file_exists(transcript_positions.path)
             ) or args.overwrite_transcript_ht:
-                get_transcript_ht(
+                write_transcript_ht(
                     build=get_reference_genome(context_ht.locus).name,
                     overwrite=args.overwrite_transcript_ht,
                 )

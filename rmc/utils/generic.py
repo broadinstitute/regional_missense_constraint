@@ -430,7 +430,7 @@ def get_plateau_model(
     )
 
 
-def get_transcript_ht(build: str, overwrite: bool) -> None:
+def write_transcript_ht(build: str, overwrite: bool) -> None:
     """
     Create Table with start and end position for all transcripts.
 
