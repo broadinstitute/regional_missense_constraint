@@ -517,15 +517,15 @@ def import_clinvar_hi_variants(build: str) -> hl.Table:
         "Number of variants after filtering to missense: %i", clinvar_ht.count()
     )
 
+    logger.info("Getting gene information from ClinVar HT...")
+    clinvar_ht = clinvar_ht.annotate(gene=clinvar_ht.info.GENEINFO.split(":")[0])
+    
     logger.info("Filtering to variants in haploinsufficient genes...")
     # File header is '#gene'
     hi_ht = hl.import_table(hi_genes)
     hi_gene_set = hi_ht.aggregate(
         hl.agg.collect_as_set(hi_ht["#gene"]), _localize=False
     )
-
-    logger.info("Getting gene information from ClinVar HT...")
-    clinvar_ht = clinvar_ht.annotate(gene=clinvar_ht.info.GENEINFO.split(":")[0])
     clinvar_ht = clinvar_ht.filter(hi_gene_set.contains(clinvar_ht.gene))
     logger.info(
         "Number of variants after filtering to HI genes: %i", clinvar_ht.count()
