@@ -16,9 +16,9 @@ from rmc.resources.basics import (
 )
 from rmc.resources.grch37.reference_data import de_novo
 from rmc.utils.generic import (
+    get_clinvar_hi_variants,
     get_coverage_correction_expr,
     get_outlier_transcripts,
-    import_clinvar_hi_variants,
 )
 
 
@@ -1811,7 +1811,10 @@ def get_loci_counts(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:
 
 
 def get_oe_bins(
-    max_n_breaks: int, build: str, annotations: List[str] = SECTION_ANNOTATIONS,
+    max_n_breaks: int,
+    build: str,
+    overwrite_clinvar_ht: bool,
+    annotations: List[str] = SECTION_ANNOTATIONS,
 ) -> None:
     """
     Group RMC results HT by obs/exp (OE) bin and annotate.
@@ -1826,6 +1829,7 @@ def get_oe_bins(
 
     :param int max_n_breaks: Largest number of breaks.
     :param str build: Reference genome build.
+    :param bool overwrite_clinvar_ht: Whether to overwrite ClinVar HT.
     :param List[str] annotations: Annotations to keep from RMC results HT. Default is SECTION_ANNOTATIONS.
     :return: None; writes TSV with OE bins + annotations to `oe_bin_counts_tsv` resource path.
     :rtype: None
@@ -1836,7 +1840,7 @@ def get_oe_bins(
         )
 
     logger.info("Reading in ClinVar, de novo missense, and transcript HTs...")
-    clinvar_ht = import_clinvar_hi_variants(build)
+    clinvar_ht = get_clinvar_hi_variants(build, overwrite_clinvar_ht)
     dn_ht = de_novo.ht()
     transcript_ht = transcript_positions.ht()
 

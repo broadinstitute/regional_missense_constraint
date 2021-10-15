@@ -29,6 +29,13 @@ processed_context = VersionedTableResource(
 
 
 ## Assessment related resources
+clinvar_path_mis = TableResource(
+    path=f"{RESOURCE_PREFIX}/GRCh37/reference_data/ht/clinvar_pathogenic_missense.ht",
+)
+"""
+ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes that cause severe disease.
+"""
+
 de_novo_tsv = f"{RESOURCE_PREFIX}/GRCh37/reference_data/fordist_KES_combined_asc_dd_dnms_2020_04_21_annotated.txt"
 """
 De novo missense variants from 31,058 cases with developmental disorders, 6,430 cases with autism spectrum disorders, and 2,179 controls.
