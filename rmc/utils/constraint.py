@@ -1862,34 +1862,34 @@ def get_oe_bins(
     for i in range(1, max_n_breaks + 1):
         path = f"{temp_path}/break_{i}_sections.ht"
         if file_exists(path):
-            t = hl.read_table(path)
-            t = t.transmute(section_bp=t.section_end - t.section_start,)
-            t = t.annotate(
+            ht = hl.read_table(path)
+            ht = ht.transmute(section_bp=ht.section_end - ht.section_start)
+            ht = ht.annotate(
                 oe_bin=hl.case()
-                .when(t.section_oe <= 0.2, "0-0.2")
-                .when((t.section_oe > 0.2) & (t.section_oe <= 0.4), "0.2-0.4")
-                .when((t.section_oe > 0.4) & (t.section_oe <= 0.6), "0.4-0.6")
-                .when((t.section_oe > 0.6) & (t.section_oe <= 0.8), "0.6-0.8")
+                .when(ht.section_oe <= 0.2, "0-0.2")
+                .when((ht.section_oe > 0.2) & (ht.section_oe <= 0.4), "0.2-0.4")
+                .when((ht.section_oe > 0.4) & (ht.section_oe <= 0.6), "0.4-0.6")
+                .when((ht.section_oe > 0.6) & (ht.section_oe <= 0.8), "0.6-0.8")
                 .default("0.8-1.0")
             )
-            t = t.select_globals().select(*annotations)
+            ht = ht.select_globals().select(*annotations)
 
             # Annotate with control and case DNM, ClinVar P/LP variants,
-            t = get_loci_counts(t, dn_controls, "dnm_controls")
-            t = get_loci_counts(t, dn_case, "dnm_cases")
-            t = get_loci_counts(t, clinvar_ht, "clinvar")
+            ht = get_loci_counts(ht, dn_controls, "dnm_controls")
+            ht = get_loci_counts(ht, dn_case, "dnm_cases")
+            ht = get_loci_counts(ht, clinvar_ht, "clinvar")
 
             # Group Table by oe_bin and checkpoint
-            t = t.group_by("oe_bin").aggregate(
-                bp=hl.agg.sum(t.section_bp),
-                dnm_control=hl.agg.sum(t.dnm_controls),
-                dnm_case=hl.agg.sum(t.dnm_cases),
-                clinvar=hl.agg.sum(t.clinvar_path),
+            ht = ht.group_by("oe_bin").aggregate(
+                bp=hl.agg.sum(ht.section_bp),
+                dnm_control=hl.agg.sum(ht.dnm_controls),
+                dnm_case=hl.agg.sum(ht.dnm_cases),
+                clinvar=hl.agg.sum(ht.clinvar_path),
             )
-            t = t.checkpoint(
+            ht = ht.checkpoint(
                 f"{temp_path}/break_{i}_section_grouped.ht", overwrite=True
             )
-            group_hts.append(t)
+            group_hts.append(ht)
 
     logger.info("Reading in grouped HTs and merging into single HT...")
     assess_ht = group_hts[0].union(*group_hts[1:])
