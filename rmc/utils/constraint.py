@@ -1794,7 +1794,7 @@ def finalize_simul_breaks(min_window_size: int, max_window_size: int,) -> None:
     )
 
 
-def get_loci_counts(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:
+def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:
     """
     Check if loci from `ht1` are present in `ht2`.
 
@@ -1875,9 +1875,9 @@ def get_oe_bins(
             ht = ht.select_globals().select(*annotations)
 
             # Annotate with control and case DNM, ClinVar P/LP variants,
-            ht = get_loci_counts(ht, dn_controls, "dnm_controls")
-            ht = get_loci_counts(ht, dn_case, "dnm_cases")
-            ht = get_loci_counts(ht, clinvar_ht, "clinvar_path")
+            ht = check_loci_existence(ht, dn_controls, "dnm_controls")
+            ht = check_loci_existence(ht, dn_case, "dnm_cases")
+            ht = check_loci_existence(ht, clinvar_ht, "clinvar_path")
 
             # Group Table by oe_bin and checkpoint
             ht = ht.group_by("oe_bin").aggregate(
