@@ -1720,37 +1720,47 @@ def finalize_multiple_breaks(
     ht = ht.annotate_globals(**transcripts_per_break)
     ht.checkpoint(f"{temp_path}/multiple_breaks.ht", overwrite=True)
 
-    # Reformat annotations for release
-    # Desired schema:
-    """
-    ---------------------------------------
-    Row fields:
-        'transcript_id': str
-        'regions': array<struct {
-            'start': int32
-            'stop': int32
-            'observed_missense': int32
-            'expected_missense': float64
-            'chisq': float64
-        }>
+    def _reformat_annotations_for_release(ht: hl.Table) -> hl.Table:
+        """
+        Reformat annotations on input HT for release.
 
-    ----------------------------------------
-    Key: ['transcript_id']
-    ----------------------------------------
-    """
-    ht = ht.annotate(
-        regions=hl.struct(
-            start=ht.section_start,
-            stop=ht.section_end,
-            observed_missense=ht.section_obs,
-            expected_missense=ht.section_exp,
-            chisq=ht.section_chisq,
+        This reformatting is necessary to load data into the gnomAD browser.
+
+        Desired schema:
+        ---------------------------------------
+        Row fields:
+            'transcript_id': str
+            'regions': array<struct {
+                'start': int32
+                'stop': int32
+                'observed_missense': int32
+                'expected_missense': float64
+                'chisq': float64
+            }>
+
+        ----------------------------------------
+        Key: ['transcript_id']
+        ----------------------------------------
+
+        :param hl.Table ht: Input Table.
+        :return: Table with schema described above.
+        :rtype: hl.Table
+        """
+        ht = ht.annotate(
+            regions=hl.struct(
+                start=ht.section_start,
+                stop=ht.section_end,
+                observed_missense=ht.section_obs,
+                expected_missense=ht.section_exp,
+                chisq=ht.section_chisq,
+            )
         )
-    )
-    # Group Table by transcript
-    ht = ht.group_by(transcript_id=ht.transcript).aggregate(
-        regions=hl.agg.collect(ht.regions)
-    )
+        # Group Table by transcript
+        return ht.group_by(transcript_id=ht.transcript).aggregate(
+            regions=hl.agg.collect(ht.regions)
+        )
+
+    ht = _reformat_annotations_for_release(ht)
     ht.write(multiple_breaks.path, overwrite=True)
 
 
