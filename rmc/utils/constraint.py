@@ -1513,7 +1513,7 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
     logger.info("Annotating HT with transcript start and end positions...")
     transcript_ht = transcript_positions.ht()
     indexed_ht = transcript_ht[ht.transcript]
-    ht = ht.annotate(start_pos=transcript_ht.start_pos, end_pos=transcript_ht.end_pos)
+    ht = ht.annotate(start_pos=indexed_ht.start_pos, end_pos=indexed_ht.end_pos)
 
     logger.info("Get section information for first section of each transcript...")
     count = 1
