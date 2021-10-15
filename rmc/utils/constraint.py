@@ -1808,8 +1808,8 @@ def get_oe_bins(
     transcript_ht = transcript_positions.ht()
 
     # Split de novo HT into two HTs -- one for controls and one for cases
-    dn_controls = dn_ht.filter(dn_ht.case_control == "control")
-    dn_case = dn_ht.filter(dn_ht.case_control != "control")
+    dn_controls_ht = dn_ht.filter(dn_ht.case_control == "control")
+    dn_case_ht = dn_ht.filter(dn_ht.case_control != "control")
 
     # Get total number of coding base pairs, also ClinVar and DNM variants
     transcript_ht = transcript_ht.annotate(
