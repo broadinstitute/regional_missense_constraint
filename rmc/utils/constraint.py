@@ -1621,8 +1621,15 @@ def get_unique_transcripts_per_break(
     :rtype: Dict[int, Union[Set[str], hl.expr.SetExpression]]
     """
     transcripts_per_break = {}
+    # Use `break_list` annotation (list of booleans for whether a row is a breakpoint)
+    # to filter one/additional breaks ht to rows that are significant breakpoints ONLY
     ht = ht.filter(ht.break_list.any(lambda x: x))
+
+    # Group HT (filtered to breakpoint positions only) by transcript and
+    # count the number of breakpoints associated with each transcript
     group_ht = ht.group_by("transcript").aggregate(n_breaks=hl.agg.count())
+
+    # Checkpoint to force hail to finish this group by computation
     group_ht = group_ht.checkpoint(
         f"{temp_path}/breaks_per_transcript.ht", overwrite=True
     )
