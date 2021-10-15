@@ -1807,9 +1807,7 @@ def get_loci_counts(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:
     :return: Annotated version of `ht1`.
     :rtype: hl.Table
     """
-    ht1 = ht1.annotate(_temp=ht2.index(ht1.locus))
-    annot_dict = {f"{annot_str}": hl.int(hl.is_defined(ht1._temp))}
-    return ht1.annotate(**annot_dict).drop("_temp")
+    return ht1.annotate(**{f"{annot_str}": hl.int(hl.is_defined(ht2[ht1.locus]))})
 
 
 def get_oe_bins(
