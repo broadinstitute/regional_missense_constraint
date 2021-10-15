@@ -47,6 +47,60 @@ Core fields to group by when calculating expected variants per variant type.
 Fields taken from gnomAD LoF repo.
 """
 
+CONSTRAINT_ANNOTATIONS = [
+    "mu_snp",
+    "total_exp",
+    "_mu_scan",
+    "total_mu",
+    "cumulative_obs",
+    "observed",
+    "cumulative_exp",
+    "total_obs",
+    "reverse",
+    "forward_oe",
+    "overall_oe",
+    "start_pos",
+    "end_pos",
+    "transcript_size",
+]
+"""
+List of annotations required to calculate constraint.
+
+Used to drop unnecessary fields when searching for simultaneous breaks.
+"""
+
+FINAL_ANNOTATIONS = [
+    "mu_snp",
+    "observed",
+    "total_exp",
+    "total_mu",
+    "total_obs",
+    "cumulative_obs",
+    "_mu_scan",
+    "cumulative_exp",
+    "break_list",
+    "start_pos",
+    "end_pos",
+]
+"""
+List of annotations to keep when finalizing release HT.
+"""
+
+SECTION_ANNOTATIONS = [
+    "section",
+    "section_chisq",
+    "section_oe",
+    "oe_bin",
+    "section_obs",
+    "section_exp",
+    "section_bp",
+]
+"""
+List of annotations relevant to transcript sections.
+
+Used when grouping results by observed/expected (OE) bins.
+"""
+
 
 def calculate_observed(ht: hl.Table) -> hl.Table:
     """
@@ -986,19 +1040,7 @@ def get_min_two_break_window(
     min_window_size: int,
     transcript_percentage: float,
     overwrite_pos_ht: bool = False,
-    annotations: List[str] = [
-        "mu_snp",
-        "total_exp",
-        "_mu_scan",
-        "total_mu",
-        "cumulative_obs",
-        "observed",
-        "cumulative_exp",
-        "total_obs",
-        "reverse",
-        "forward_oe",
-        "overall_oe",
-    ],
+    annotations: List[str] = CONSTRAINT_ANNOTATIONS,
 ) -> Tuple[hl.Table, int]:
     """
     Annotate input Table with smallest simultaneous breaks window end positions.
@@ -1013,10 +1055,7 @@ def get_min_two_break_window(
     :param float transcript_percentage: Maximum percentage of the transcript that can be included within a window of constraint.
     :param bool overwrite_pos_ht: Whether to overwrite positions per transcript HT. Default is False.
     :param List[str] annotations: Annotations to keep from input HT. Required to search for significant breakpoint.
-        Default is [
-            "mu_snp", "total_exp", "_mu_scan", "total_mu", "cumulative_obs", "observed", "cumulative_exp",
-            "total_obs", "reverse", "forward_oe", "overall_oe"
-        ].
+        Default is CONSTRAINT_ANNOTATIONS.
     :return: Tuple of Table annotated with window end, post window position and maximum window size.
     :rtype: Tuple[hl.Table, int]
     """
@@ -1242,22 +1281,7 @@ def search_two_break_windows(
     transcript_percentage: float,
     overwrite_pos_ht: bool = False,
     chisq_threshold: float = 13.8,
-    annotations: List[str] = [
-        "mu_snp",
-        "total_exp",
-        "_mu_scan",
-        "total_mu",
-        "cumulative_obs",
-        "observed",
-        "cumulative_exp",
-        "total_obs",
-        "reverse",
-        "forward_oe",
-        "overall_oe",
-        "start_pos",
-        "end_pos",
-        "transcript_size",
-    ],
+    annotations: List[str] = CONSTRAINT_ANNOTATIONS,
 ) -> hl.Table:
     """
     Search for windows of constraint in transcripts with simultaneous breaks.
@@ -1273,10 +1297,7 @@ def search_two_break_windows(
     :param bool overwrite_pos_ht: Whether to overwrite positions per transcript HT. Default is False.
     :param float chisq_threshold:  Chi-square significance threshold. Default is 13.8.
     :param List[str] annotations: Annotations to keep from input HT. Required to search for significant breakpoint.
-        Default is [
-            "mu_snp", "total_exp", "_mu_scan", "total_mu", "cumulative_obs",  "observed", "cumulative_exp", "total_obs",
-            "reverse", "forward_oe", "overall_oe", "start_pos", "end_pos", "transcript_size"
-        ].
+        Default is CONSTRAINT_ANNOTATIONS.
     :return: Table with largest simultaneous break window size annotated per transcript.
     :rtype: hl.Table
     """
@@ -1617,21 +1638,7 @@ def get_unique_transcripts_per_break(
 
 
 def finalize_multiple_breaks(
-    ht: hl.Table,
-    max_n_breaks: int,
-    annotations: List[str] = [
-        "mu_snp",
-        "observed",
-        "total_exp",
-        "total_mu",
-        "total_obs",
-        "cumulative_obs",
-        "_mu_scan",
-        "cumulative_exp",
-        "break_list",
-        "start_pos",
-        "end_pos",
-    ],
+    ht: hl.Table, max_n_breaks: int, annotations: List[str] = FINAL_ANNOTATIONS,
 ) -> hl.Table:
     """
     Organize table of transcripts with multiple breaks.
@@ -1645,9 +1652,7 @@ def finalize_multiple_breaks(
     :param hl.Table ht: Input Table.
     :param int max_n_breaks: Largest number of breakpoints in any transcript.
     :param List[str] annotations: List of annotations to keep from input Table.
-        Default is ['mu_snp', 'observed', 'total_exp', 'total_mu', 'total_obs',
-                    'cumulative_obs', '_mu_scan', 'cumulative_exp','break_list',
-                    'start_pos', 'end_pos'].
+        Default is FINAL_ANNOTATIONS.
     :return: Table annotated with breakpoint positions and section obs, exp, OE, chi-square values.
     :rtype: hl.Table
     """
@@ -1789,17 +1794,7 @@ def get_loci_counts(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:
 
 
 def get_oe_bins(
-    max_n_breaks: int,
-    build: str,
-    annotations: List[str] = [
-        "section",
-        "section_chisq",
-        "section_oe",
-        "oe_bin",
-        "section_obs",
-        "section_exp",
-        "section_bp",
-    ],
+    max_n_breaks: int, build: str, annotations: List[str] = SECTION_ANNOTATIONS,
 ) -> None:
     """
     Group RMC results HT by obs/exp (OE) bin and annotate.
@@ -1814,7 +1809,7 @@ def get_oe_bins(
 
     :param int max_n_breaks: Largest number of breaks.
     :param str build: Reference genome build.
-    :param List[str] annotations: Annotations to keep from RMC results HT.
+    :param List[str] annotations: Annotations to keep from RMC results HT. Default is SECTION_ANNOTATIONS.
     :return: None; writes TSV with OE bins + annotations to `oe_bin_counts_tsv` resource path.
     :rtype: None
     """
