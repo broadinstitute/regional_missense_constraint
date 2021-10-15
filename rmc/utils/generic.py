@@ -434,6 +434,7 @@ def get_transcript_ht(build: str, overwrite: bool) -> None:
     """
     Create Table with start and end position for all transcripts.
 
+    :param str build: Reference genome build; must be one of BUILDS.
     :param bool overwrite: Whether to overwrite transcript HT, even if it already exists.
     :return: None; writes context HT to transcript_ht resource path.
     """
