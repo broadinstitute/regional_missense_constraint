@@ -1759,7 +1759,7 @@ def get_loci_counts(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:
     Check if loci from `ht1` are present in `ht2`.
 
     Annotate `ht1` with int showing whether locus is present in `ht2`.
-    Annotation with be "0" if locus isn't present in `ht2` and "1" if locus is present.
+    Annotation will be "0" if locus isn't present in `ht2` and "1" if locus is present.
 
     :param hl.Table ht1: Table to be annotated.
     :param hl.Table ht2: Table to check for loci from `ht1`.
