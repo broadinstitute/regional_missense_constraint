@@ -1664,7 +1664,7 @@ def finalize_multiple_breaks(
     break_ht = break_ht.checkpoint(
         f"{temp_path}/multiple_breaks_breakpoints.ht", overwrite=True
     )
-    ht = ht.annotate(break_pos=break_ht[ht.transcript])
+    ht = ht.annotate(break_pos=break_ht[ht.transcript].break_pos)
 
     logger.info("Get transcript section annotations (obs, exp, OE, chisq)...")
     hts = []
