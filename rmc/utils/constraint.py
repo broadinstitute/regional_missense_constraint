@@ -1854,7 +1854,7 @@ def get_oe_bins(
             )
             group_hts.append(t)
 
-    logger.info("Reading in grouped HTs and merging into single HT...")
+    logger.info("Merging grouped HTs into a single HT...")
     assess_ht = group_hts[0].union(*group_hts[1:])
     assess_ht = assess_ht.group_by("oe_bin").aggregate(
         bp=hl.agg.sum(assess_ht.bp),
