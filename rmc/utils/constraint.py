@@ -1860,7 +1860,7 @@ def get_oe_bins(
     logger.info("Reading in multiple breaks HTs annotated with section information...")
     group_hts = []
     for i in range(1, max_n_breaks + 1):
-        path = f"gs://regional_missense_constraint/temp/break_{i}_sections.ht"
+        path = f"{temp_path}/break_{i}_sections.ht"
         if file_exists(path):
             t = hl.read_table(path)
             t = t.transmute(section_bp=t.section_end - t.section_start,)
