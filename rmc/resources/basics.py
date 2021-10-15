@@ -69,7 +69,6 @@ This was calculated with `calculate_mu_by_downsampling` in
 https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constraint_basics.py.
 """
 
-
 ## Gene/Transcript related resources
 MODEL_PREFIX = f"{RMC_PREFIX}/model"
 """

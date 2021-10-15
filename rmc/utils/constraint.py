@@ -1542,7 +1542,7 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
     logger.info("Annotating HT with transcript start and end positions...")
     transcript_ht = transcript_positions.ht()
     indexed_ht = transcript_ht[ht.transcript]
-    ht = ht.annotate(start_pos=transcript_ht.start_pos, end_pos=transcript_ht.end_pos)
+    ht = ht.annotate(start_pos=indexed_ht.start_pos, end_pos=indexed_ht.end_pos)
 
     logger.info("Get section information for first section of each transcript...")
     count = 1
@@ -1667,7 +1667,7 @@ def finalize_multiple_breaks(
     outlier_transcripts = get_outlier_transcripts()
     ht = ht.filter(~outlier_transcripts.contains(ht.transcript))
 
-    logger.info("Getting transcripts associated with each break number)...")
+    logger.info("Getting transcripts associated with each break number...")
     # Get number of transcripts UNIQUE to each break number
     # Transcript sets in globals currently are not unique
     # i.e., `break_1_transcripts` could contain transcripts that are also present in `break_2_transcripts`
@@ -1692,7 +1692,7 @@ def finalize_multiple_breaks(
     break_ht = break_ht.checkpoint(
         f"{temp_path}/multiple_breaks_breakpoints.ht", overwrite=True
     )
-    ht = ht.annotate(break_pos=break_ht[ht.transcript])
+    ht = ht.annotate(break_pos=break_ht[ht.transcript].break_pos)
 
     logger.info("Get transcript section annotations (obs, exp, OE, chisq)...")
     hts = []
@@ -1799,7 +1799,7 @@ def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Tab
     Check if loci from `ht1` are present in `ht2`.
 
     Annotate `ht1` with int showing whether locus is present in `ht2`.
-    Annotation with be "0" if locus isn't present in `ht2` and "1" if locus is present.
+    Annotation will be "0" if locus isn't present in `ht2` and "1" if locus is present.
 
     :param hl.Table ht1: Table to be annotated.
     :param hl.Table ht2: Table to check for loci from `ht1`.
@@ -1845,8 +1845,8 @@ def get_oe_bins(
     transcript_ht = transcript_positions.ht()
 
     # Split de novo HT into two HTs -- one for controls and one for cases
-    dn_controls = dn_ht.filter(dn_ht.case_control == "control")
-    dn_case = dn_ht.filter(dn_ht.case_control != "control")
+    dn_controls_ht = dn_ht.filter(dn_ht.case_control == "control")
+    dn_case_ht = dn_ht.filter(dn_ht.case_control != "control")
 
     # Get total number of coding base pairs, also ClinVar and DNM variants
     transcript_ht = transcript_ht.annotate(
@@ -1854,8 +1854,8 @@ def get_oe_bins(
     )
     total_bp = transcript_ht.aggregate(hl.agg.sum(transcript_ht.bp))
     total_clinvar = clinvar_ht.count()
-    total_control = dn_controls.count()
-    total_case = dn_case.count()
+    total_control = dn_controls_ht.count()
+    total_case = dn_case_ht.count()
 
     logger.info("Reading in multiple breaks HTs annotated with section information...")
     group_hts = []
@@ -1875,8 +1875,8 @@ def get_oe_bins(
             ht = ht.select_globals().select(*annotations)
 
             # Annotate with control and case DNM, ClinVar P/LP variants,
-            ht = check_loci_existence(ht, dn_controls, "dnm_controls")
-            ht = check_loci_existence(ht, dn_case, "dnm_cases")
+            ht = check_loci_existence(ht, dn_controls_ht, "dnm_controls")
+            ht = check_loci_existence(ht, dn_case_ht, "dnm_cases")
             ht = check_loci_existence(ht, clinvar_ht, "clinvar_path")
 
             # Group Table by oe_bin and checkpoint
@@ -1891,7 +1891,7 @@ def get_oe_bins(
             )
             group_hts.append(ht)
 
-    logger.info("Reading in grouped HTs and merging into single HT...")
+    logger.info("Merging grouped HTs into a single HT...")
     assess_ht = group_hts[0].union(*group_hts[1:])
     assess_ht = assess_ht.group_by("oe_bin").aggregate(
         bp=hl.agg.sum(assess_ht.bp),

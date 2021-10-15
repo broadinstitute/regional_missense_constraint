@@ -439,6 +439,7 @@ def write_transcript_ht(build: str, overwrite: bool) -> None:
 
     This function writes the transcript HT to avoid redundant calculations.
 
+    :param str build: Reference genome build; must be one of BUILDS.
     :param bool overwrite: Whether to overwrite transcript HT, even if it already exists.
     :return: None; writes context HT to transcript_ht resource path.
     """
