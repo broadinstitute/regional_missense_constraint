@@ -1639,7 +1639,7 @@ def finalize_multiple_breaks(
     outlier_transcripts = get_outlier_transcripts()
     ht = ht.filter(~outlier_transcripts.contains(ht.transcript))
 
-    logger.info("Getting transcripts associated with each break number)...")
+    logger.info("Getting transcripts associated with each break number...")
     # Get number of transcripts UNIQUE to each break number
     # Transcript sets in globals currently are not unique
     # i.e., `break_1_transcripts` could contain transcripts that are also present in `break_2_transcripts`
