@@ -1468,7 +1468,10 @@ def get_section_info(
             )
             ht = ht.filter(ht.locus.position > ht.break_pos[-1])
             ht = ht.annotate(
-                section_start_pos=ht.break_pos[-1] + 1, section_end_pos=ht.end_pos,
+                # Get last position from break_pos list and add 1 since it isn't included in the region
+                # Use the transcript end position as the end position since this is the last section
+                section_start_pos=ht.break_pos[-1] + 1,
+                section_end_pos=ht.end_pos,
             )
 
     ht = ht.annotate(section=hl.format("%s_%s", ht.transcript, str(section_num)))
@@ -1802,6 +1805,11 @@ def get_oe_bins(
     :return: None; writes TSV with OE bins + annotations to `oe_bin_counts_tsv` resource path.
     :rtype: None
     """
+    if build != "GRCh37":
+        raise DataException(
+            "ClinVar and de novo files currently only exist for GRCh37!"
+        )
+
     logger.info("Reading in ClinVar, de novo missense, and transcript HTs...")
     clinvar_ht = import_clinvar_hi_variants(build)
     dn_ht = de_novo.ht()
