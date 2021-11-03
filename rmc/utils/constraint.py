@@ -1337,7 +1337,6 @@ def search_two_break_windows(
         window_exp=hl.empty_array(hl.tfloat64),
         post_obs=hl.empty_array(hl.tint64),
         post_exp=hl.empty_array(hl.tfloat64),
-        break_list=hl.empty_array(hl.tbool),
     )
     # annot_ht = annot_ht.checkpoint(f"{temp_path}/empty_annot.ht", overwrite=True)
     annot_ht = annot_ht.checkpoint(f"{temp_path}/DNAH2_empty_annot.ht", overwrite=True)
@@ -1399,7 +1398,6 @@ def search_two_break_windows(
             "window_exp",
             "post_obs",
             "post_exp",
-            "is_break",
         )
 
         # If this isn't the first breakpoint search,
@@ -1422,7 +1420,6 @@ def search_two_break_windows(
             window_exp=annot_ht.window_exp.append(annot_ht.breaks.window_exp),
             post_obs=annot_ht.post_obs.append(annot_ht.breaks.post_obs),
             post_exp=annot_ht.post_exp.append(annot_ht.breaks.post_exp),
-            break_list=annot_ht.break_list.append(annot_ht.breaks.is_break),
         )
         # annot_ht = annot_ht.checkpoint(f"{temp_path}/annot_{count}.ht", overwrite=True)
         annot_ht = annot_ht.checkpoint(f"{temp_path}/annot_DNAH2_{count}.ht",)
@@ -1431,15 +1428,50 @@ def search_two_break_windows(
     logger.info("Getting best window sizes for each transcript and returning...")
     # Extract max chi square value
     annot_ht = annot_ht.annotate(
-        max_chisq=hl.sorted(annot_ht.break_chisqs, reverse=True)[0]
+        max_chisq_for_pos=hl.sorted(annot_ht.break_chisqs, reverse=True)[0]
     )
-    # Get index associated with max chi square
+    group_ht = annot_ht.group_by("transcript").aggregate(
+        max_chisq_per_transcript=hl.agg.max(annot_ht.max_chisq_for_pos)
+    )
+    group_ht = group_ht.checkpoint(
+        f"{temp_path}/simul_breaks_max_chisq.ht", overwrite=True
+    )
     annot_ht = annot_ht.annotate(
-        chisq_index=annot_ht.break_chisqs.index(annot_ht.max_chisq)
+        max_chisq_per_transcript=group_ht[annot_ht.transcript].max_chisq_per_transcript
     )
-    return annot_ht.annotate(
-        best_window_size=annot_ht.break_sizes[annot_ht.chisq_index]
-    ).drop("chisq_index")
+    annot_ht = annot_ht.annotate(
+        is_break=(annot_ht.max_chisq_for_pos == annot_ht.max_chisq_per_transcript)
+        & (annot_ht.max_chisq_per_transcript > chisq_threshold)
+    )
+    # annot_ht = annot_ht.checkpoint(f"{temp_path}/annot_max_chisq.ht", overwrite=True)
+    annot_ht = annot_ht.checkpoint(f"{temp_path}/DNAH2_max_chisq.ht", overwrite=True)
+
+    # Filter to breakpoint positions only
+    is_break_ht = annot_ht.filter(annot_ht.is_break)
+
+    # Get index associated with max chi square
+    is_break_ht = is_break_ht.annotate(
+        chisq_index=is_break_ht.break_chisqs.index(is_break_ht.max_chisq_for_pos)
+    )
+    # Get annotations associated with best window size
+    is_break_ht = is_break_ht.transmute(
+        window_size=is_break_ht.window_sizes[is_break_ht.chisq_index],
+        chisq=is_break_ht.max_chisq_per_transcript,
+        window_end=is_break_ht.window_ends[is_break_ht.chisq_index],
+        post_window_pos=is_break_ht.post_window_pos[is_break_ht.chisq_index],
+        pre_obs=is_break_ht.pre_obs[is_break_ht.chisq_index],
+        pre_exp=is_break_ht.pre_exp[is_break_ht.chisq_index],
+        window_obs=is_break_ht.window_obs[is_break_ht.chisq_index],
+        window_exp=is_break_ht.window_exp[is_break_ht.chisq_index],
+        post_obs=is_break_ht.post_obs[is_break_ht.chisq_index],
+        post_exp=is_break_ht.post_exp[is_break_ht.chisq_index],
+    )
+    is_break_ht = is_break_ht.drop("chisq_index")
+    # is_break_ht = is_break_ht.checkpoint(f"{temp_path}/simul_breaks_is_break.ht", overwrite=True)
+    is_break_ht = is_break_ht.checkpoint(
+        f"{temp_path}/DNAH2_is_break.ht", overwrite=True
+    )
+    return is_break_ht
 
 
 def calculate_section_chisq(
