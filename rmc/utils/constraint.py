@@ -1015,7 +1015,7 @@ def get_max_two_break_window(
         )
         pos_ht.write(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
     pos_ht = hl.read_table(f"{temp_path}/pos_per_transcript.ht")
-    pos_ht = pos_ht.filter(transcripts.contains(pos_ht.transcript))
+    pos_ht = pos_ht.filter(hl.literal(transcripts).contains(pos_ht.transcript))
 
     logger.info("Annotating each transcript with max window size...")
     ht = ht.annotate(max_window_size=ht.transcript_size * transcript_percentage)
