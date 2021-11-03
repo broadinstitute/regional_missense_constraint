@@ -471,25 +471,23 @@ def main(args):
             )
 
             logger.info("Searching for transcripts with simultaneous breaks...")
-            context_ht = search_two_break_windows(
+            break_ht = search_two_break_windows(
                 context_ht,
                 min_break_size,
                 args.transcript_percentage,
                 args.overwrite_pos_ht,
                 args.chisq_threshold,
             )
-            context_ht = context_ht.checkpoint(
-                f"{temp_path}/simul_breaks.ht", overwrite=args.overwrite
-            )
 
             logger.info("Writing out simultaneous breaks HT...")
-            break_ht = context_ht.filter(context_ht.max_chisq >= args.chisq_threshold)
             simul_break_transcripts = break_ht.aggregate(
-                hl.agg.collect_as_set(break_ht.transcript), _localize=False
+                hl.agg.collect_as_set(break_ht.transcript),
             )
+            simul_break_transcripts = hl.literal(simul_break_transcripts)
             simul_break_ht = context_ht.filter(
                 simul_break_transcripts.contains(context_ht.transcript)
             )
+            simul_break_ht = simul_break_ht.annotate(**break_ht[simul_break_ht.key])
             simul_break_ht.write(simul_break.path, overwrite=args.overwrite)
 
             logger.info(
