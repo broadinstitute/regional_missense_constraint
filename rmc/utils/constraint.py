@@ -916,6 +916,8 @@ def get_max_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
     # This is to run `hl.binary_search` using the window end position as input
     ht = ht.annotate(pos=pos_ht[ht.transcript])
     ht = ht.transmute(pos_per_transcript=hl.sorted(ht.pos.positions))
+    # ht = ht.checkpoint(f"{temp_path}/not_one_break_pos_per_transcript.ht", overwrite=True)
+    ht = ht.checkpoint(f"{temp_path}/DNAH2_pos_per_transcript.ht", overwrite=True)
 
     logger.info("Running hl.binary_search to find the largest post window positions...")
     # hl.binary search will return the index of the position that is closest to the search element (window_end)
