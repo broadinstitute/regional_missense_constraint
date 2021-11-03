@@ -288,6 +288,7 @@ def main(args):
                 "Filtering HT to transcripts without a significant break and writing..."
             )
             not_one_break_ht = context_ht.anti_join(one_break_ht)
+            not_one_break_ht = not_one_break_ht.drop("values")
             not_one_break_ht.write(not_one_break.path, overwrite=args.overwrite)
 
         if args.search_for_additional_breaks:
@@ -360,76 +361,98 @@ def main(args):
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
             )
-            # context_ht = not_one_break.ht().drop("values").select_globals()
-            # Reading in from temp because that is the table written with a chi square cutoff of 6.6 (and not 10.8)
-            context_ht = (
-                hl.read_table(f"{temp_path}/not_one_break.ht")
-                .drop("values")
-                .select_globals()
-            )
-            logger.info("Filtering to DNAH2 to test...")
-            context_ht = hl.read_table(f"{temp_path}/not_one_break_filtered.ht")
-            context_ht = context_ht.filter(context_ht.transcript == "ENST00000572933")
-            logger.info(context_ht.count())
-            from rmc.utils.constraint import get_reverse_exprs
+            # Check if temp version of not one break HT already exists
+            # If not, re-key not one break HT by transcript and locus (rather than by locus and transcript)
+            # to speed up operations that operate on transcripts faster
+            # E.g., creating the pos_per_transcript HT requires grouping by transcript (an operation on transcript)
+            if not file_exists(f"{temp_path}/not_one_break.ht"):
+                context_ht = not_one_break.ht().select_globals()
+                context_ht = context_ht.key_by("transcript", "locus")
+                context_ht = context_ht.checkpoint(
+                    f"{temp_path}/not_one_break.ht", overwrite=True
+                )
 
-            context_ht = get_reverse_exprs(
-                context_ht,
-                context_ht.total_obs,
-                context_ht.total_exp,
-                context_ht.cumulative_obs[context_ht.transcript],
-                context_ht.cumulative_exp,
-            )
-            if args.remove_outlier_transcripts:
-                if file_exists(f"{temp_path}/not_one_break_filtered.ht"):
+            if args.get_transcript_annotations:
+                logger.info("Getting transcript start/end positions and sizes...")
+                # NOTE: for gnomAD v2.1, table in temp used chi square cutoff of 6.6 (and not 10.8)
+                context_ht = (
+                    hl.read_table(f"{temp_path}/not_one_break.ht")
+                    .drop("values")
+                    .select_globals()
+                )
+                logger.info("Filtering to DNAH2 to test...")
+                context_ht = hl.read_table(f"{temp_path}/not_one_break_filtered.ht")
+                context_ht = context_ht.filter(
+                    context_ht.transcript == "ENST00000572933"
+                )
+                logger.info(context_ht.count())
+                from rmc.utils.constraint import get_reverse_exprs
+
+                context_ht = get_reverse_exprs(
+                    context_ht,
+                    context_ht.total_obs,
+                    context_ht.total_exp,
+                    context_ht.cumulative_obs[context_ht.transcript],
+                    context_ht.cumulative_exp,
+                )
+                if args.remove_outlier_transcripts:
+                    if file_exists(f"{temp_path}/not_one_break_filtered.ht"):
+                        logger.info(
+                            "HT without outlier transcripts already exists and will not be overwritten!"
+                        )
+                    else:
+                        logger.info("Removing outlier transcripts...")
+                        outlier_transcripts = get_outlier_transcripts()
+                        context_ht = context_ht.filter(
+                            ~outlier_transcripts.contains(context_ht.transcript)
+                        )
+                        context_ht = context_ht.checkpoint(
+                            f"{temp_path}/not_one_break_filtered.ht"
+                        )
+
+                logger.info(
+                    "Getting start and end positions and total size for each transcript..."
+                )
+                if (
+                    not file_exists(f"{temp_path}/transcript.ht")
+                ) or args.overwrite_transcript_ht:
+                    # Read in full context HT (not filtered to missense variants)
+                    # Also filter full context HT to canonical transcripts only
+                    full_context_ht = full_context.ht()
+                    full_context_ht = process_vep(full_context_ht)
+                    full_context_ht = full_context_ht.annotate(
+                        transcript=full_context_ht.transcript_consequences.transcript_id
+                    )
+                    transcript_ht = full_context_ht.group_by(
+                        full_context_ht.transcript
+                    ).aggregate(
+                        end_pos=hl.agg.max(full_context_ht.locus.position),
+                        start_pos=hl.agg.min(full_context_ht.locus.position),
+                    )
+
                     logger.info(
-                        "HT without outlier transcripts already exists and will not be overwritten!"
+                        "Writing transcript HT to avoid redundant calculations..."
                     )
-                else:
-                    logger.info("Removing outlier transcripts...")
-                    outlier_transcripts = get_outlier_transcripts()
-                    context_ht = context_ht.filter(
-                        ~outlier_transcripts.contains(context_ht.transcript)
-                    )
-                    context_ht = context_ht.checkpoint(
-                        f"{temp_path}/not_one_break_filtered.ht"
-                    )
-
-            logger.info(
-                "Getting start and end positions and total size for each transcript..."
-            )
-            if (
-                not file_exists(f"{temp_path}/transcript.ht")
-            ) or args.overwrite_transcript_ht:
-                # Read in full context HT (not filtered to missense variants)
-                # Also filter full context HT to canonical transcripts only
-                full_context_ht = full_context.ht()
-                full_context_ht = process_vep(full_context_ht)
-                full_context_ht = full_context_ht.annotate(
-                    transcript=full_context_ht.transcript_consequences.transcript_id
+                    transcript_ht.write(f"{temp_path}/transcript.ht", overwrite=True)
+                transcript_ht = hl.read_table(f"{temp_path}/transcript.ht")
+                context_ht = context_ht.annotate(
+                    transcript_info=transcript_ht[context_ht.transcript]
                 )
-                transcript_ht = full_context_ht.group_by(
-                    full_context_ht.transcript
-                ).aggregate(
-                    end_pos=hl.agg.max(full_context_ht.locus.position),
-                    start_pos=hl.agg.min(full_context_ht.locus.position),
+                context_ht = context_ht.annotate(
+                    start_pos=context_ht.transcript_info.start_pos,
+                    end_pos=context_ht.transcript_info.end_pos,
+                    transcript_size=(
+                        context_ht.transcript_info.end_pos
+                        - context_ht.transcript_info.start_pos
+                    )
+                    + 1,
+                )
+                context_ht.write(
+                    f"{temp_path}/not_one_break_transcript.ht", overwrite=True
                 )
 
-                logger.info("Writing transcript HT to avoid redundant calculations...")
-                transcript_ht.write(f"{temp_path}/transcript.ht", overwrite=True)
-            transcript_ht = hl.read_table(f"{temp_path}/transcript.ht")
-            context_ht = context_ht.annotate(
-                transcript_info=transcript_ht[context_ht.transcript]
-            )
-            context_ht = context_ht.annotate(
-                start_pos=context_ht.transcript_info.start_pos,
-                end_pos=context_ht.transcript_info.end_pos,
-                transcript_size=(
-                    context_ht.transcript_info.end_pos
-                    - context_ht.transcript_info.start_pos
-                )
-                + 1,
-            )
+            logger.info("Reading in not one break HT...")
+            context_ht = hl.read_table(f"{temp_path}/not_one_break_transcript.ht")
 
             # Get number of base pairs needed to observe `num` number of missense variants (on average)
             # This number is used to determine the window size to search for constraint with simultaneous breaks
@@ -766,34 +789,43 @@ if __name__ == "__main__":
         help="Search for two simultaneous breaks in transcripts without a single significant break",
         action="store_true",
     )
-    parser.add_argument(
+    simul_breaks = parser.add_argument_group(
+        "simul_breaks",
+        description="Options specific to running simultaneous breaks search",
+    )
+    simul_breaks.add_argument(
         "--overwrite-transcript-ht",
         help="Overwrite the transcript HT (HT with start/end positions and transcript sizes), even if it already exists.",
         action="store_true",
     )
-    parser.add_argument(
+    simul_breaks.add_argument(
+        "--get-transcript-annotations",
+        help="Annotate the context HT (filtered to transcripts without one significant break) with transcript start/end positions and sizes (only need to run once).",
+        action="store_true",
+    )
+    simul_breaks.add_argument(
         "--get-total-exome-bases",
         help="Get total number of bases in the exome. If not set, will pull default value from TOTAL_EXOME_BASES.",
         action="store_true",
     )
-    parser.add_argument(
+    simul_breaks.add_argument(
         "--get-total-gnomad-missense",
         help="Get total number of missense variants in gnomAD. If not set, will pull default value from TOTAL_GNOMAD_MISSENSE.",
         action="store_true",
     )
-    parser.add_argument(
+    simul_breaks.add_argument(
         "--min-num-obs",
         help="Number of observed variants. Used when determining the smallest possible window size for simultaneous breaks.",
         default=10,
         type=int,
     )
-    parser.add_argument(
+    simul_breaks.add_argument(
         "--transcript-percentage",
         help="Maximum percentage of the transcript that can be included within a window of constraint. Used for transcripts with simultaneous breaks. Default is 90%",
         type=float,
         default=0.8,
     )
-    parser.add_argument(
+    simul_breaks.add_argument(
         "--overwrite-pos-ht",
         help="Overwrite the positions per transcript HT (HT keyed by transcript with a list of positiosn per transcript), even if it already exists.",
         action="store_true",
