@@ -939,7 +939,7 @@ def get_max_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
     # 2) `hl.binary_search` will return an index larger than the length of a list if that position
     # is larger than the largest element in the list.
     # For example: if `pos_expr` is [1, 4, 8], then `hl.binary_search(pos_per_transcript, 10)` will return 3.
-    ht = ht.annotate(
+    return ht.annotate(
         max_post_window_pos=hl.case()
         # When the index is the last index in the list
         .when(
@@ -963,7 +963,6 @@ def get_max_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
             ),
         ).or_missing()
     )
-    return ht.key_by("locus", "transcript")
 
 
 def get_max_two_break_window(
@@ -1005,10 +1004,9 @@ def get_max_two_break_window(
     :rtype: Tuple[hl.Table, int]
     """
     logger.info("Gathering transcripts in input Table...")
-    transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript), _localize=False)
+    transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
 
     logger.info("Gathering all positions in each transcript...")
-    pos_ht = ht.key_by("locus", "transcript").select()
     if (not file_exists(f"{temp_path}/pos_per_transcript.ht")) or overwrite_pos_ht:
         pos_ht = ht.group_by("transcript").aggregate(
             positions=hl.sorted(hl.agg.collect(ht.locus.position)),
@@ -1034,13 +1032,23 @@ def get_max_two_break_window(
         ),
     )
 
+    logger.info("Checkpointing HT...")
+    # Add a checkpoint here before splitting HT into two:
+    # HT becomes both annot_ht and ht below
+    # ht = ht.checkpoint(f"{temp_path}/not_one_break_max_windows.ht", overwrite=True)
+    ht = ht.checkpoint(f"{temp_path}/DNAH2_max_windows.ht", overwrite=True)
+
     logger.info("Getting largest post window positions...")
     # Keep version of HT with all relevant annotations and strip HT of all annotations to prepare for binary search
     annotation_ht = ht.select(*annotations)
     ht = ht.select(
         "max_window_end", "start_pos", "end_pos", "transcript_size", "max_window_size"
-    ).select_globals()
+    )
     ht = get_max_post_window_pos(ht, pos_ht)
+    # Adding a checkpoint here because `get_max_post_window_pos` joins ht with pos_ht,
+    # and code below adds another join (joins ht with annot_ht)
+    # ht = ht.checkpoint(f"{temp_path}/not_one_break_max_post_windows.ht", overwrite=True)
+    ht = ht.checkpoint(f"{temp_path}/DNAH2_max_post_windows.ht", overwrite=True)
 
     logger.info("Adding relevant annotations back onto HT...")
     indexed_ht = annotation_ht[ht.key]
@@ -1063,10 +1071,8 @@ def get_max_two_break_window(
 
     # Check if any transcripts don't have any defined max window ends
     check_def = ht.filter(hl.is_defined(ht.max_window_end))
-    transcripts_def = check_def.aggregate(
-        hl.agg.collect_as_set(check_def.transcript), _localize=False
-    )
-    num_missing = hl.eval(hl.len(transcripts.difference(transcripts_def)))
+    transcripts_def = check_def.aggregate(hl.agg.collect_as_set(check_def.transcript))
+    num_missing = transcripts.difference(transcripts_def)
     if num_missing != 0:
         raise DataException(
             f"{num_missing} transcripts don't have defined max window ends! Please double check and restart."
