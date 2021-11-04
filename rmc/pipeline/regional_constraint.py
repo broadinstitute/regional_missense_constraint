@@ -452,7 +452,9 @@ def main(args):
                 )
 
             logger.info("Reading in not one break HT...")
-            context_ht = hl.read_table(f"{temp_path}/not_one_break_transcript.ht")
+            # context_ht = hl.read_table(f"{temp_path}/not_one_break_transcript.ht")
+            logger.info("Reading in DES HT (for testing)...")
+            context_ht = hl.read_table(f"{temp_path}/DES.ht")
 
             # Get number of base pairs needed to observe `num` number of missense variants (on average)
             # This number is used to determine the window size to search for constraint with simultaneous breaks
