@@ -917,7 +917,7 @@ def get_max_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
     ht = ht.annotate(pos=pos_ht[ht.transcript])
     ht = ht.transmute(pos_per_transcript=hl.sorted(ht.pos.positions))
     # ht = ht.checkpoint(f"{temp_path}/not_one_break_pos_per_transcript.ht", overwrite=True)
-    ht = ht.checkpoint(f"{temp_path}/DNAH2_pos_per_transcript.ht", overwrite=True)
+    ht = ht.checkpoint(f"{temp_path}/DES_pos_per_transcript.ht", overwrite=True)
 
     logger.info("Running hl.binary_search to find the largest post window positions...")
     # hl.binary search will return the index of the position that is closest to the search element (window_end)
@@ -1038,7 +1038,7 @@ def get_max_two_break_window(
     # Add a checkpoint here before splitting HT into two:
     # HT becomes both annot_ht and ht below
     # ht = ht.checkpoint(f"{temp_path}/not_one_break_max_windows.ht", overwrite=True)
-    ht = ht.checkpoint(f"{temp_path}/DNAH2_max_windows.ht", overwrite=True)
+    ht = ht.checkpoint(f"{temp_path}/DES_max_windows.ht", overwrite=True)
 
     logger.info("Getting largest post window positions...")
     # Keep version of HT with all relevant annotations and strip HT of all annotations to prepare for binary search
@@ -1050,13 +1050,13 @@ def get_max_two_break_window(
     # Adding a checkpoint here because `get_max_post_window_pos` joins ht with pos_ht,
     # and code below adds another join (joins ht with annot_ht)
     # ht = ht.checkpoint(f"{temp_path}/not_one_break_max_post_windows.ht", overwrite=True)
-    ht = ht.checkpoint(f"{temp_path}/DNAH2_max_post_windows.ht", overwrite=True)
+    ht = ht.checkpoint(f"{temp_path}/DES_max_post_windows.ht", overwrite=True)
 
     logger.info("Adding relevant annotations back onto HT...")
     indexed_ht = annotation_ht[ht.key]
     ht = ht.annotate(**indexed_ht)
     # ht = ht.checkpoint(f"{temp_path}/simul_break_ready.ht", overwrite=True)
-    ht = ht.checkpoint(f"{temp_path}/simul_break_ready_DNAH2.ht", overwrite=True)
+    ht = ht.checkpoint(f"{temp_path}/simul_break_ready_DES.ht", overwrite=True)
     ht.describe()
     logger.info("HT count: %s", ht.count())
 
@@ -1246,7 +1246,7 @@ def search_for_two_breaks(
     logger.info("Preparing HT to search for two breaks...")
     ht = annotate_two_breaks_section_values(ht, annotate_pre_values)
     # ht = ht.checkpoint(f"{temp_path}/simul_break_temp_annot.ht", overwrite=True)
-    ht = ht.checkpoint(f"{temp_path}/simul_break_temp_annot_DNAH2.ht", overwrite=True)
+    ht = ht.checkpoint(f"{temp_path}/simul_break_temp_annot_DES.ht", overwrite=True)
 
     window_exp_check = ht.aggregate(hl.agg.count_where(ht.window_exp == 0))
     if window_exp_check != 0:
@@ -1339,7 +1339,7 @@ def search_two_break_windows(
         post_exp=hl.empty_array(hl.tfloat64),
     )
     # annot_ht = annot_ht.checkpoint(f"{temp_path}/empty_annot.ht", overwrite=True)
-    annot_ht = annot_ht.checkpoint(f"{temp_path}/DNAH2_empty_annot.ht", overwrite=True)
+    annot_ht = annot_ht.checkpoint(f"{temp_path}/DES_empty_annot.ht", overwrite=True)
 
     count = 0
     while True:
@@ -1383,7 +1383,7 @@ def search_two_break_windows(
         # This method will checkpoint a LOT of temporary tables...not sure if there is a better way
         ht = ht.checkpoint(
             # f"{temp_path}/simul_break_{count}.ht", overwrite=True
-            f"{temp_path}/simul_break_DNAH2_{count}.ht",
+            f"{temp_path}/simul_break_DES_{count}.ht",
             overwrite=True,
         )
 
@@ -1422,7 +1422,7 @@ def search_two_break_windows(
             post_exp=annot_ht.post_exp.append(annot_ht.breaks.post_exp),
         )
         # annot_ht = annot_ht.checkpoint(f"{temp_path}/annot_{count}.ht", overwrite=True)
-        annot_ht = annot_ht.checkpoint(f"{temp_path}/annot_DNAH2_{count}.ht",)
+        annot_ht = annot_ht.checkpoint(f"{temp_path}/annot_DES_{count}.ht",)
         count += 1
 
     logger.info("Getting best window sizes for each transcript and returning...")
@@ -1444,7 +1444,7 @@ def search_two_break_windows(
         & (annot_ht.max_chisq_per_transcript > chisq_threshold)
     )
     # annot_ht = annot_ht.checkpoint(f"{temp_path}/annot_max_chisq.ht", overwrite=True)
-    annot_ht = annot_ht.checkpoint(f"{temp_path}/DNAH2_max_chisq.ht", overwrite=True)
+    annot_ht = annot_ht.checkpoint(f"{temp_path}/DES_max_chisq.ht", overwrite=True)
 
     # Filter to breakpoint positions only
     is_break_ht = annot_ht.filter(annot_ht.is_break)
@@ -1468,9 +1468,7 @@ def search_two_break_windows(
     )
     is_break_ht = is_break_ht.drop("chisq_index")
     # is_break_ht = is_break_ht.checkpoint(f"{temp_path}/simul_breaks_is_break.ht", overwrite=True)
-    is_break_ht = is_break_ht.checkpoint(
-        f"{temp_path}/DNAH2_is_break.ht", overwrite=True
-    )
+    is_break_ht = is_break_ht.checkpoint(f"{temp_path}/DES_is_break.ht", overwrite=True)
     return is_break_ht
 
 
