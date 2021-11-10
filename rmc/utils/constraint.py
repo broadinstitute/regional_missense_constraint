@@ -916,8 +916,6 @@ def get_max_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
     # This is to run `hl.binary_search` using the window end position as input
     ht = ht.annotate(pos=pos_ht[ht.transcript])
     ht = ht.transmute(pos_per_transcript=hl.sorted(ht.pos.positions))
-    # ht = ht.checkpoint(f"{temp_path}/not_one_break_pos_per_transcript.ht", overwrite=True)
-    ht = ht.checkpoint(f"{temp_path}/DES_pos_per_transcript.ht", overwrite=True)
 
     logger.info("Running hl.binary_search to find the largest post window positions...")
     # hl.binary search will return the index of the position that is closest to the search element (window_end)
@@ -1076,6 +1074,7 @@ def get_max_two_break_window(
     transcripts_def = check_def.aggregate(hl.agg.collect_as_set(check_def.transcript))
     num_missing = transcripts.difference(transcripts_def)
     if num_missing != 0:
+        ht.show()
         raise DataException(
             f"{num_missing} transcripts don't have defined max window ends! Please double check and restart."
         )
@@ -1133,16 +1132,10 @@ def annotate_two_breaks_section_values(
             )
         )
 
-    logger.info("Creating HT with obs, exp, OE values for post-window positions...")
-    # Create new HT with obs, exp, and OE values for post-window positions
-    # This is to get the values for the section of the transcript after the window
-    next_ht = ht.select("post_window_pos", "total_mu", "total_exp")
-    # Add new_locus annotation to pull obs, exp, OE values for post window position
-    next_ht = next_ht.annotate(
-        new_locus=hl.locus(next_ht.locus.contig, next_ht.post_window_pos)
-    )
+    # Checkpoint HT here before generating next HT, annot HT
+    ht = ht.checkpoint(f"{temp_path}/annotate_pre_values.ht", overwrite=True)
 
-    # Select annotations frm HT
+    # Select annotations from HT
     annot_ht = ht.select(
         "cumulative_obs",
         "observed",
@@ -1152,26 +1145,31 @@ def annotate_two_breaks_section_values(
         "reverse",
     )
 
-    # Annotate values onto next HT as struct to try to avoid extra shuffle joins
-    # Tim suggested this for another part of the constraint code:
-    # https://discuss.hail.is/t/resultstage-has-failed-the-maximum-allowable-number-of-times/2222/6?u=ch-kr
-    next_ht = next_ht.annotate(next=ht[next_ht.locus, next_ht.transcript])
-    next_ht = next_ht.transmute(
+    logger.info("Creating HT with obs, exp, OE values for post-window positions...")
+    # Add new_locus annotation and use this new_locus to re-key this new HT by post window pos
+    next_ht = ht.annotate(new_locus=hl.locus(ht.locus.contig, ht.post_window_pos))
+    next_ht = next_ht.filter(hl.is_defined(next_ht.new_locus))
+    next_ht = next_ht.key_by()
+    next_ht = next_ht.key_by(locus=next_ht.new_locus, transcript=next_ht.transcript)
+    next_ht = next_ht.annotate(
         next_values=hl.struct(
-            cum_obs=next_ht.next.cumulative_obs[next_ht.transcript],
-            obs=next_ht.next.observed,
-            exp=next_ht.next.cumulative_exp,
-            mu_snp=next_ht.next.mu_snp,
-            oe=next_ht.next.forward_oe,
-            reverse_obs=next_ht.next.reverse.obs,
-            reverse_exp=next_ht.next.reverse.exp,
+            cum_obs=next_ht.cumulative_obs[next_ht.transcript],
+            obs=next_ht.observed,
+            exp=next_ht.cumulative_exp,
+            mu_snp=next_ht.mu_snp,
+            oe=next_ht.forward_oe,
+            reverse_obs=next_ht.reverse.obs,
+            reverse_exp=next_ht.reverse.exp,
         )
     )
     next_ht = next_ht.annotate(
         exp_at_end=(next_ht.next_values.mu_snp / next_ht.total_mu) * next_ht.total_exp
-    )
-    # next_ht = next_ht.checkpoint(f"{temp_path}/next.ht", overwrite=True)
+    ).select("next_values", "exp_at_end")
 
+    # TODO: Remove this extra join???
+    # Annotate values onto next HT as struct to try to avoid extra shuffle joins
+    # Tim suggested this for another part of the constraint code:
+    # https://discuss.hail.is/t/resultstage-has-failed-the-maximum-allowable-number-of-times/2222/6?u=ch-kr
     ht = ht.annotate(next=next_ht[ht.key])
     ht = ht.transmute(next_values=ht.next.next_values, exp_at_end=ht.next.exp_at_end)
 
@@ -1355,10 +1353,10 @@ def search_two_break_windows(
             # Drop transcripts that are no longer need to be searched from HT to avoid writing out unnecessary rows
             searchable_ht = ht.filter(ht.search == 1)
             searchable_transcripts = searchable_ht.aggregate(
-                hl.agg.collect_as_set(searchable_ht.transcript), _localize=False
+                hl.agg.collect_as_set(searchable_ht.transcript),
             )
             # Exit if HT has no transcripts left
-            if hl.eval(hl.len(searchable_transcripts)) == 0:
+            if len(searchable_transcripts) == 0:
                 break
             ht = ht.filter(searchable_transcripts.contains(ht.transcript))
 
@@ -1378,7 +1376,7 @@ def search_two_break_windows(
             chisq_threshold=chisq_threshold,
         )
         # Drop unnecessary annotations before checkpointing
-        ht = ht.drop("section_nulls", "section_alts", "total_null", "total_alt",)
+        ht = ht.drop("section_nulls", "section_alts", "total_null", "total_alt")
 
         # This method will checkpoint a LOT of temporary tables...not sure if there is a better way
         ht = ht.checkpoint(
@@ -1421,8 +1419,9 @@ def search_two_break_windows(
             post_obs=annot_ht.post_obs.append(annot_ht.breaks.post_obs),
             post_exp=annot_ht.post_exp.append(annot_ht.breaks.post_exp),
         )
+        # TODO: Check if this checkpoint is necessary
         # annot_ht = annot_ht.checkpoint(f"{temp_path}/annot_{count}.ht", overwrite=True)
-        annot_ht = annot_ht.checkpoint(f"{temp_path}/annot_DES_{count}.ht",)
+        # annot_ht = annot_ht.checkpoint(f"{temp_path}/annot_DES_{count}.ht",)
         count += 1
 
     logger.info("Getting best window sizes for each transcript and returning...")
@@ -1430,6 +1429,8 @@ def search_two_break_windows(
     annot_ht = annot_ht.annotate(
         max_chisq_for_pos=hl.sorted(annot_ht.break_chisqs, reverse=True)[0]
     )
+    # TODO: Checkpoint annot ht here (either this or line 1430)
+    # TODO: add logger here to see how long the annot ht + break ht joins is taking
     group_ht = annot_ht.group_by("transcript").aggregate(
         max_chisq_per_transcript=hl.agg.max(annot_ht.max_chisq_for_pos)
     )
