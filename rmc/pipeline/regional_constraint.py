@@ -794,12 +794,6 @@ if __name__ == "__main__":
         type=int,
     )
     simul_breaks.add_argument(
-        "--transcript-percentage",
-        help="Maximum percentage of the transcript that can be included within a window of constraint. Used for transcripts with simultaneous breaks. Default is 90%",
-        type=float,
-        default=0.8,
-    )
-    simul_breaks.add_argument(
         "--overwrite-pos-ht",
         help="Overwrite the positions per transcript HT (HT keyed by transcript with a list of positiosn per transcript), even if it already exists.",
         action="store_true",
