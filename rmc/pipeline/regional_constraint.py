@@ -4,7 +4,6 @@ import logging
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 
@@ -25,7 +24,7 @@ from rmc.resources.grch37.gnomad import (
     processed_exomes,
     prop_obs_coverage,
 )
-from rmc.resources.grch37.reference_data import full_context, processed_context
+from rmc.resources.grch37.reference_data import processed_context
 from rmc.resources.resource_utils import GNOMAD_VER, MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
@@ -360,75 +359,8 @@ def main(args):
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
             )
-            # Store path to not one break HT annotated with transcript information as variable
-            # This table is temporary and should be removed once search for simul breaks is complete
-            not_one_break_transcript_ht_path = (
-                f"{temp_path}/not_one_break_transcript.ht"
-            )
-            if args.get_transcript_annotations:
-                logger.info("Getting transcript start/end positions and sizes...")
-                context_ht = not_one_break.ht()
-
-                if args.remove_outlier_transcripts:
-                    if file_exists(f"{temp_path}/not_one_break_filtered.ht"):
-                        logger.info(
-                            "HT without outlier transcripts already exists and will not be overwritten!"
-                        )
-                    else:
-                        logger.info("Removing outlier transcripts...")
-                        outlier_transcripts = get_outlier_transcripts()
-                        context_ht = context_ht.filter(
-                            ~outlier_transcripts.contains(context_ht.transcript)
-                        )
-                        context_ht = context_ht.checkpoint(
-                            f"{temp_path}/not_one_break_filtered.ht"
-                        )
-
-                logger.info(
-                    "Getting start and end positions and total size for each transcript..."
-                )
-                if (
-                    not file_exists(f"{temp_path}/transcript.ht")
-                ) or args.overwrite_transcript_ht:
-                    # Read in full context HT (not filtered to missense variants)
-                    # Also filter full context HT to canonical transcripts only
-                    full_context_ht = full_context.ht()
-                    full_context_ht = process_vep(full_context_ht)
-                    full_context_ht = full_context_ht.annotate(
-                        transcript=full_context_ht.transcript_consequences.transcript_id
-                    )
-                    transcript_ht = full_context_ht.group_by(
-                        full_context_ht.transcript
-                    ).aggregate(
-                        end_pos=hl.agg.max(full_context_ht.locus.position),
-                        start_pos=hl.agg.min(full_context_ht.locus.position),
-                    )
-
-                    logger.info(
-                        "Writing transcript HT to avoid redundant calculations..."
-                    )
-                    transcript_ht.write(f"{temp_path}/transcript.ht", overwrite=True)
-                transcript_ht = hl.read_table(f"{temp_path}/transcript.ht")
-                context_ht = context_ht.annotate(
-                    transcript_info=transcript_ht[context_ht.transcript]
-                )
-                context_ht = context_ht.transmute(
-                    start_pos=context_ht.transcript_info.start_pos,
-                    end_pos=context_ht.transcript_info.end_pos,
-                    transcript_size=(
-                        context_ht.transcript_info.end_pos
-                        - context_ht.transcript_info.start_pos
-                    )
-                    + 1,
-                )
-                context_ht.write(not_one_break_transcript_ht_path, overwrite=True)
-
             logger.info("Reading in not one break HT...")
-            if not file_exists(not_one_break_transcript_ht_path):
-                raise DataException(
-                    "Not one break HT with transcript annotations does not exist. Please specify --get-transcript-annotations."
-                )
-            context_ht = hl.read_table(not_one_break_transcript_ht_path)
+            context_ht = not_one_break.ht()
 
             # Get number of base pairs needed to observe `num` number of missense variants (on average)
             # This number is used to determine the window size to search for constraint with simultaneous breaks
