@@ -361,40 +361,15 @@ def main(args):
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
             )
-            # Check if temp version of not one break HT already exists
-            # If not, re-key not one break HT by transcript and locus (rather than by locus and transcript)
-            # to speed up operations that operate on transcripts faster
-            # E.g., creating the pos_per_transcript HT requires grouping by transcript (an operation on transcript)
-            if not file_exists(f"{temp_path}/not_one_break.ht"):
-                context_ht = not_one_break.ht().select_globals()
-                context_ht = context_ht.key_by("transcript", "locus")
-                context_ht = context_ht.checkpoint(
-                    f"{temp_path}/not_one_break.ht", overwrite=True
-                )
-
+            # Store path to not one break HT annotated with transcript information as variable
+            # This table is temporary and should be removed once search for simul breaks is complete
+            not_one_break_transcript_ht_path = (
+                f"{temp_path}/not_one_break_transcript.ht"
+            )
             if args.get_transcript_annotations:
                 logger.info("Getting transcript start/end positions and sizes...")
-                # NOTE: for gnomAD v2.1, table in temp used chi square cutoff of 6.6 (and not 10.8)
-                context_ht = (
-                    hl.read_table(f"{temp_path}/not_one_break.ht")
-                    .drop("values")
-                    .select_globals()
-                )
-                logger.info("Filtering to DNAH2 to test...")
-                context_ht = hl.read_table(f"{temp_path}/not_one_break_filtered.ht")
-                context_ht = context_ht.filter(
-                    context_ht.transcript == "ENST00000572933"
-                )
-                logger.info(context_ht.count())
-                from rmc.utils.constraint import get_reverse_exprs
+                context_ht = not_one_break.ht()
 
-                context_ht = get_reverse_exprs(
-                    context_ht,
-                    context_ht.total_obs,
-                    context_ht.total_exp,
-                    context_ht.cumulative_obs[context_ht.transcript],
-                    context_ht.cumulative_exp,
-                )
                 if args.remove_outlier_transcripts:
                     if file_exists(f"{temp_path}/not_one_break_filtered.ht"):
                         logger.info(
@@ -438,7 +413,7 @@ def main(args):
                 context_ht = context_ht.annotate(
                     transcript_info=transcript_ht[context_ht.transcript]
                 )
-                context_ht = context_ht.annotate(
+                context_ht = context_ht.transmute(
                     start_pos=context_ht.transcript_info.start_pos,
                     end_pos=context_ht.transcript_info.end_pos,
                     transcript_size=(
@@ -447,14 +422,14 @@ def main(args):
                     )
                     + 1,
                 )
-                context_ht.write(
-                    f"{temp_path}/not_one_break_transcript.ht", overwrite=True
-                )
+                context_ht.write(not_one_break_transcript_ht_path, overwrite=True)
 
             logger.info("Reading in not one break HT...")
-            # context_ht = hl.read_table(f"{temp_path}/not_one_break_transcript.ht")
-            logger.info("Reading in DES HT (for testing)...")
-            context_ht = hl.read_table(f"{temp_path}/DES.ht")
+            if not file_exists(not_one_break_transcript_ht_path):
+                raise DataException(
+                    "Not one break HT with transcript annotations does not exist. Please specify --get-transcript-annotations."
+                )
+            context_ht = hl.read_table(not_one_break_transcript_ht_path)
 
             # Get number of base pairs needed to observe `num` number of missense variants (on average)
             # This number is used to determine the window size to search for constraint with simultaneous breaks
