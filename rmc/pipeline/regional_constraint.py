@@ -37,7 +37,6 @@ from rmc.utils.constraint import (
     process_additional_breaks,
     process_transcripts,
     search_for_two_breaks,
-    search_two_break_windows,
 )
 from rmc.utils.generic import (
     filter_to_region_type,
