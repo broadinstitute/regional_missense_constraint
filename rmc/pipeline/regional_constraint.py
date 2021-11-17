@@ -447,12 +447,8 @@ def main(args):
             )
 
             logger.info("Searching for transcripts with simultaneous breaks...")
-            break_ht = search_two_break_windows(
-                context_ht,
-                min_break_size,
-                args.transcript_percentage,
-                args.overwrite_pos_ht,
-                args.chisq_threshold,
+            break_ht = search_for_two_breaks(
+                context_ht, min_break_size, args.overwrite_pos_ht, args.chisq_threshold,
             )
 
             logger.info("Writing out simultaneous breaks HT...")
