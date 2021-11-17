@@ -974,6 +974,7 @@ def search_for_two_breaks(
     )
 
     logger.info("Checkpointing HT...")
+    # Checkpointing here because HT branches and becomes both group_ht and max_chisq ht below
     ht = ht.checkpoint(f"{temp_path}/simul_breaks_ready.ht", overwrite=True)
 
     logger.info("Getting max chi square per transcript...")
