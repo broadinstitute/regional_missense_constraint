@@ -4,6 +4,7 @@ import logging
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 
@@ -24,7 +25,7 @@ from rmc.resources.grch37.gnomad import (
     processed_exomes,
     prop_obs_coverage,
 )
-from rmc.resources.grch37.reference_data import processed_context
+from rmc.resources.grch37.reference_data import full_context, processed_context
 from rmc.resources.resource_utils import GNOMAD_VER, MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
@@ -468,6 +469,29 @@ def main(args):
                 # xg = xg.annotate(break_list=[xg.is_break])
 
         if args.finalize:
+            logger.info(
+                "Getting start and end positions and total size for each transcript..."
+            )
+            if (
+                not file_exists(f"{temp_path}/transcript.ht")
+            ) or args.overwrite_transcript_ht:
+                # Read in full context HT (not filtered to missense variants)
+                # Also filter full context HT to canonical transcripts only
+                full_context_ht = full_context.ht()
+                full_context_ht = process_vep(full_context_ht)
+                full_context_ht = full_context_ht.annotate(
+                    transcript=full_context_ht.transcript_consequences.transcript_id
+                )
+                transcript_ht = full_context_ht.group_by(
+                    full_context_ht.transcript
+                ).aggregate(
+                    end_pos=hl.agg.max(full_context_ht.locus.position),
+                    start_pos=hl.agg.min(full_context_ht.locus.position),
+                )
+
+                logger.info("Writing transcript HT to avoid redundant calculations...")
+                transcript_ht.write(f"{temp_path}/transcript.ht", overwrite=True)
+
             if args.remove_outlier_transcripts:
                 outlier_transcripts = get_outlier_transcripts()
 
