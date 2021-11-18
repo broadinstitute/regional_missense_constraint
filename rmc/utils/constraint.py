@@ -1005,7 +1005,7 @@ def search_for_two_breaks(
     pos_ht = hl.read_table(f"{temp_path}/pos_per_transcript.ht")
 
     max_chisq_ht = max_chisq_ht.annotate(
-        pos_per_transcript=pos_ht[ht.transcript].positions
+        pos_per_transcript=pos_ht[max_chisq_ht.transcript].positions
     )
     max_chisq_ht = max_chisq_ht.annotate(
         window_start=max_chisq_ht.pos_per_transcript[max_chisq_ht.chisq_index]
