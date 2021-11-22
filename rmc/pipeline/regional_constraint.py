@@ -353,6 +353,9 @@ def main(args):
             logger.info("Setting hail flag to avoid method too large error...")
             hl._set_flags(no_whole_stage_codegen="1")
 
+            logger.info("Setting another hail flag to speed up scans...")
+            hl._set_flags(distributed_scan_comb_op="1")
+
             logger.info(
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
