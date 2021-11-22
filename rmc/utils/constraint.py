@@ -887,14 +887,16 @@ def search_for_two_breaks(
     :param int min_window_size: Smallest possible window size to search for two simultaneous breaks.
     :param bool overwrite_pos_ht: Whether to overwrite positions per transcript HT. Default is False.
     :param float chisq_threshold:  Chi-square significance threshold. Default is 13.8.
+        Default is from ExAC RMC code and corresponds to a p-value of 0.999 with 2 degrees of freedom.
+        (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
     :return: Table with largest simultaneous break window size annotated per transcript.
     :rtype: hl.Table
     """
     logger.info(
         "Creating arrays of cumulative observed and expected missense values..."
     )
-    # Reformat cumulative obs annotation from a dict of transcript: int to just an int
-    # Also reformat cumulative mu annotation from dict of transcript: float to just float
+    # Reformat cumulative obs annotation from a dict ({transcript: int}) to just an int
+    # Also reformat cumulative mu annotation from dict ({transcript: float}) to just float
     # TODO: Fix these annotations in the code above when they're written
     ht = ht.transmute(
         cumulative_obs=ht.cumulative_obs[ht.transcript],
@@ -909,13 +911,14 @@ def search_for_two_breaks(
         prev_obs=hl.scan.group_by(ht.transcript, hl.scan.collect(ht.cumulative_obs)),
         prev_mu=hl.scan.group_by(ht.transcript, hl.scan.collect(ht.cumulative_mu)),
     )
+    ht = ht.checkpoint(f"{temp_path}/simul_breaks_scan_collect.ht", overwrite=True)
     # Translate mu to expected
     ht = ht.annotate(
         prev_exp=hl.if_else(
             hl.is_missing(ht.prev_mu.get(ht.transcript)),
             hl.empty_array(hl.tfloat64),
             hl.map(
-                lambda x: (x / ht.total_mu) * ht.total_exp, ht._prev_mu[ht.transcript]
+                lambda x: (x / ht.total_mu) * ht.total_exp, ht.prev_mu[ht.transcript]
             ),
         )
     ).drop("prev_mu")
@@ -955,7 +958,7 @@ def search_for_two_breaks(
                         1,
                     ),
                 )
-                * hl.dpois(ht.reverse.obs, ht.reverse.exp * ht.reverse.reverse_oe)
+                * hl.dpois(ht.reverse.obs, ht.reverse.exp * ht.reverse.reverse_obs_exp)
             )
         ),
     )
@@ -969,7 +972,7 @@ def search_for_two_breaks(
     logger.info("Getting max chi square value for each position...")
     ht = ht.annotate(
         max_chisq_for_pos=hl.or_missing(
-            hl.len(ht.chi_squares) > 0, hl.sorted(ht.chi_squares, reverse=True)[0]
+            hl.len(ht.chi_squares) > 0, hl.max(ht.chi_squares)
         )
     )
 
@@ -997,7 +1000,7 @@ def search_for_two_breaks(
     )
 
     logger.info("Gathering all positions in each transcript...")
-    if (not file_exists(f"{temp_path}/pos_per_transcript.ht")) or overwrite_pos_ht:
+    if not file_exists(f"{temp_path}/pos_per_transcript.ht") or overwrite_pos_ht:
         pos_ht = ht.group_by("transcript").aggregate(
             positions=hl.sorted(hl.agg.collect(ht.locus.position)),
         )
