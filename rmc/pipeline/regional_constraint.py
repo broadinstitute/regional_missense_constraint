@@ -382,13 +382,18 @@ def main(args):
             )
 
             logger.info("Writing out simultaneous breaks HT...")
+            # Collecting all transcripts with two simultaneous breaks
             simul_break_transcripts = break_ht.aggregate(
                 hl.agg.collect_as_set(break_ht.transcript),
             )
             simul_break_transcripts = hl.literal(simul_break_transcripts)
+
+            # Filter context HT to transcripts with two simultaneous breaks
             simul_break_ht = context_ht.filter(
                 simul_break_transcripts.contains(context_ht.transcript)
             )
+
+            # Add simultaneous breaks annotations, including max chi square value and window start position
             simul_break_ht = simul_break_ht.annotate(**break_ht[simul_break_ht.key])
             simul_break_ht.write(simul_break.path, overwrite=args.overwrite)
 
