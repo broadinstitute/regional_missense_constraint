@@ -724,16 +724,6 @@ if __name__ == "__main__":
         description="Options specific to running simultaneous breaks search",
     )
     simul_breaks.add_argument(
-        "--overwrite-transcript-ht",
-        help="Overwrite the transcript HT (HT with start/end positions and transcript sizes), even if it already exists.",
-        action="store_true",
-    )
-    simul_breaks.add_argument(
-        "--get-transcript-annotations",
-        help="Annotate the context HT (filtered to transcripts without one significant break) with transcript start/end positions and sizes (only need to run once).",
-        action="store_true",
-    )
-    simul_breaks.add_argument(
         "--get-total-exome-bases",
         help="Get total number of bases in the exome. If not set, will pull default value from TOTAL_EXOME_BASES.",
         action="store_true",
@@ -765,6 +755,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--finalize",
         help="Combine and reformat (finalize) RMC output",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--overwrite-transcript-ht",
+        help="Overwrite the transcript HT (HT with start/end positions and transcript sizes), even if it already exists.",
         action="store_true",
     )
     parser.add_argument(
