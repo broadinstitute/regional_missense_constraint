@@ -294,10 +294,7 @@ def main(args):
             logger.info(
                 "Searching for additional breaks in transcripts with at least one significant break..."
             )
-            # context_ht = one_break.ht()
-            context_ht = hl.read_table(
-                "gs://regional_missense_constraint/temp/one_break.ht"
-            )
+            context_ht = one_break.ht()
 
             # Add break_list annotation to context HT
             context_ht = context_ht.annotate(break_list=[context_ht.is_break])
@@ -474,8 +471,10 @@ def main(args):
             )
             if (
                 not file_exists(f"{temp_path}/transcript.ht")
-            ) or args.overwrite_transcript_ht:
+                or args.overwrite_transcript_ht
+            ):
                 # Read in full context HT (not filtered to missense variants)
+                # Want to use full context HT here to get true start and end positions of transcripts
                 # Also filter full context HT to canonical transcripts only
                 full_context_ht = full_context.ht()
                 full_context_ht = process_vep(full_context_ht)
