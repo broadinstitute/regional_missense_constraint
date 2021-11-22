@@ -37,7 +37,6 @@ from rmc.utils.constraint import (
     process_additional_breaks,
     process_transcripts,
     search_for_two_breaks,
-    search_two_break_windows,
 )
 from rmc.utils.generic import (
     filter_to_region_type,
@@ -288,6 +287,7 @@ def main(args):
                 "Filtering HT to transcripts without a significant break and writing..."
             )
             not_one_break_ht = context_ht.anti_join(one_break_ht)
+            not_one_break_ht = not_one_break_ht.drop("values")
             not_one_break_ht.write(not_one_break.path, overwrite=args.overwrite)
 
         if args.search_for_additional_breaks:
@@ -350,45 +350,15 @@ def main(args):
             context_ht.write(multiple_breaks.path, overwrite=args.overwrite)
 
         if args.search_for_simul_breaks:
+            logger.info("Setting hail flag to avoid method too large error...")
+            hl._set_flags(no_whole_stage_codegen="1")
+
             logger.info(
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
             )
-            context_ht = not_one_break.ht().drop("values").select_globals()
-
-            logger.info(
-                "Getting start and end positions and total size for each transcript..."
-            )
-            if (
-                not file_exists(f"{temp_path}/transcript.ht")
-            ) or args.overwrite_transcript_ht:
-                # Read in full context HT (not filtered to missense variants)
-                # Also filter full context HT to canonical transcripts only
-                full_context_ht = full_context.ht()
-                full_context_ht = process_vep(full_context_ht)
-                full_context_ht = full_context_ht.annotate(
-                    transcript=full_context_ht.transcript_consequences.transcript_id
-                )
-                transcript_ht = full_context_ht.group_by(
-                    full_context_ht.transcript
-                ).aggregate(
-                    end_pos=hl.agg.max(full_context_ht.locus.position),
-                    start_pos=hl.agg.min(full_context_ht.locus.position),
-                )
-
-                logger.info("Writing transcript HT to avoid redundant calculations...")
-                transcript_ht.write(f"{temp_path}/transcript.ht", overwrite=True)
-            transcript_ht = hl.read_table(f"{temp_path}/transcript.ht")
-
-            context_ht = context_ht.annotate(
-                start_pos=transcript_ht[context_ht.transcript].start_pos,
-                end_pos=transcript_ht[context_ht.transcript].end_pos,
-                transcript_size=(
-                    transcript_ht[context_ht.transcript].end_pos
-                    - transcript_ht[context_ht.transcript].start_pos
-                )
-                + 1,
-            )
+            logger.info("Reading in not one break HT...")
+            context_ht = not_one_break.ht()
 
             # Get number of base pairs needed to observe `num` number of missense variants (on average)
             # This number is used to determine the window size to search for constraint with simultaneous breaks
@@ -407,25 +377,24 @@ def main(args):
             )
 
             logger.info("Searching for transcripts with simultaneous breaks...")
-            context_ht = search_two_break_windows(
-                context_ht,
-                min_break_size,
-                args.transcript_percentage,
-                args.overwrite_pos_ht,
-                args.chisq_threshold,
-            )
-            context_ht = context_ht.checkpoint(
-                f"{temp_path}/simul_breaks.ht", overwrite=args.overwrite
+            break_ht = search_for_two_breaks(
+                context_ht, min_break_size, args.overwrite_pos_ht, args.chisq_threshold,
             )
 
             logger.info("Writing out simultaneous breaks HT...")
-            break_ht = context_ht.filter(context_ht.max_chisq >= args.chisq_threshold)
+            # Collecting all transcripts with two simultaneous breaks
             simul_break_transcripts = break_ht.aggregate(
-                hl.agg.collect_as_set(break_ht.transcript), _localize=False
+                hl.agg.collect_as_set(break_ht.transcript),
             )
+            simul_break_transcripts = hl.literal(simul_break_transcripts)
+
+            # Filter context HT to transcripts with two simultaneous breaks
             simul_break_ht = context_ht.filter(
                 simul_break_transcripts.contains(context_ht.transcript)
             )
+
+            # Add simultaneous breaks annotations, including max chi square value and window start position
+            simul_break_ht = simul_break_ht.annotate(**break_ht[simul_break_ht.key])
             simul_break_ht.write(simul_break.path, overwrite=args.overwrite)
 
             logger.info(
@@ -502,6 +471,31 @@ def main(args):
                 # xg = xg.annotate(break_list=[xg.is_break])
 
         if args.finalize:
+            logger.info(
+                "Getting start and end positions and total size for each transcript..."
+            )
+            if (
+                not file_exists(f"{temp_path}/transcript.ht")
+                or args.overwrite_transcript_ht
+            ):
+                # Read in full context HT (not filtered to missense variants)
+                # Want to use full context HT here to get true start and end positions of transcripts
+                # Also filter full context HT to canonical transcripts only
+                full_context_ht = full_context.ht()
+                full_context_ht = process_vep(full_context_ht)
+                full_context_ht = full_context_ht.annotate(
+                    transcript=full_context_ht.transcript_consequences.transcript_id
+                )
+                transcript_ht = full_context_ht.group_by(
+                    full_context_ht.transcript
+                ).aggregate(
+                    end_pos=hl.agg.max(full_context_ht.locus.position),
+                    start_pos=hl.agg.min(full_context_ht.locus.position),
+                )
+
+                logger.info("Writing transcript HT to avoid redundant calculations...")
+                transcript_ht.write(f"{temp_path}/transcript.ht", overwrite=True)
+
             if args.remove_outlier_transcripts:
                 outlier_transcripts = get_outlier_transcripts()
 
@@ -725,34 +719,27 @@ if __name__ == "__main__":
         help="Search for two simultaneous breaks in transcripts without a single significant break",
         action="store_true",
     )
-    parser.add_argument(
-        "--overwrite-transcript-ht",
-        help="Overwrite the transcript HT (HT with start/end positions and transcript sizes), even if it already exists.",
-        action="store_true",
+    simul_breaks = parser.add_argument_group(
+        "simul_breaks",
+        description="Options specific to running simultaneous breaks search",
     )
-    parser.add_argument(
+    simul_breaks.add_argument(
         "--get-total-exome-bases",
         help="Get total number of bases in the exome. If not set, will pull default value from TOTAL_EXOME_BASES.",
         action="store_true",
     )
-    parser.add_argument(
+    simul_breaks.add_argument(
         "--get-total-gnomad-missense",
         help="Get total number of missense variants in gnomAD. If not set, will pull default value from TOTAL_GNOMAD_MISSENSE.",
         action="store_true",
     )
-    parser.add_argument(
+    simul_breaks.add_argument(
         "--min-num-obs",
         help="Number of observed variants. Used when determining the smallest possible window size for simultaneous breaks.",
         default=10,
         type=int,
     )
-    parser.add_argument(
-        "--transcript-percentage",
-        help="Maximum percentage of the transcript that can be included within a window of constraint. Used for transcripts with simultaneous breaks. Default is 90%",
-        type=float,
-        default=0.9,
-    )
-    parser.add_argument(
+    simul_breaks.add_argument(
         "--overwrite-pos-ht",
         help="Overwrite the positions per transcript HT (HT keyed by transcript with a list of positiosn per transcript), even if it already exists.",
         action="store_true",
@@ -768,6 +755,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--finalize",
         help="Combine and reformat (finalize) RMC output",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--overwrite-transcript-ht",
+        help="Overwrite the transcript HT (HT with start/end positions and transcript sizes), even if it already exists.",
         action="store_true",
     )
     parser.add_argument(

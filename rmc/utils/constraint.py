@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Union
 
 import hail as hl
 
@@ -635,6 +635,7 @@ def search_for_break(
     # 10.8 (p ~ 10e-3) and is 13.8 (p ~ 10e-4) for two breaks. These currently cannot
     # be adjusted."
     group_ht = ht.group_by(search_field).aggregate(max_chisq=hl.agg.max(ht.chisq))
+    group_ht = group_ht.checkpoint(f"{temp_path}/max_chisq.ht", overwrite=True)
     ht = ht.annotate(max_chisq=group_ht[ht.transcript].max_chisq)
     return ht.annotate(
         is_break=((ht.chisq == ht.max_chisq) & (ht.chisq >= chisq_threshold))
@@ -872,506 +873,161 @@ def process_additional_breaks(
     return process_sections(ht, chisq_threshold)
 
 
-def get_window_end_pos_expr(
-    pos_expr: hl.expr.Int32Expression,
-    end_pos_expr: hl.expr.Int32Expression,
-    window_size_expr: int,
-) -> hl.expr.Expression:
-    """
-    Get window end position.
-
-    Annotates window end position only if the position + (`window_size_expr` - 1) is less than or equal to the transcript end position.
-
-    .. note::
-        The subtraction (`window_size_expr` - 1) is necessary to get a window with only `window_size_expr` base pairs.
-        Without the subtraction, the window size woudl be one base pair too many:
-        e.g., If position is 8, window size is 3 bp, and end position is 12, then:
-        the window end is 8 + (3 - 1) = 10, and the window is [8, 9, 10] (3 bp).
-        Without the subtraction, the window would be [8, 9, 10, 11], or 4 bp.
-
-    :param hl.expr.Int32Expression pos_expr: IntExpression representing chromosomal position.
-    :param hl.expr.Int32Expression end_pos_expr: IntExpression representing last position in transcript.
-    :param int window_size_expr: Size of two break window.
-    :return: Expression annotating window end position.
-    :rtype: hl.expr.Expression
-    """
-    return hl.or_missing(
-        pos_expr + (window_size_expr - 1) <= end_pos_expr,
-        pos_expr + (window_size_expr - 1),
-    )
-
-
-def get_min_post_window_pos(ht: hl.Table, pos_ht: hl.Table) -> hl.Table:
-    """
-    Get the first position of transcript outside of smallest simultaneous break window.
-
-    Run `hl.binary_search` to find index of first post-window position.
-
-    Assumes:
-        - ht is annotated with smallest window end position (`min_window_end`)
-
-    :param hl.Table ht: Input Table.
-    :param hl.Table pos_ht: Input GroupedTable grouped by transcript with list of all positions per transcript.
-    :return: Table annotated with post-window position.
-    :rtype: hl.Table
-    """
-    logger.info("Annotating the positions per transcript back onto the input HT...")
-    # This is to run `hl.binary_search` using the window end position as input
-    ht = ht.key_by("transcript").join(pos_ht)
-    ht = ht.transmute(pos_per_transcript=ht.positions)
-
-    logger.info(
-        "Running hl.binary_search to find the smallest post window positions..."
-    )
-    # hl.binary search will return the index of the position that is closest to the search element (window_end)
-    # If window_end exists in the HT, hl.binary_search will return the index of the window_end
-    # If window_end does not exist in the HT, hl.binary_search will return the index of the next largest position
-    # e.g., pos_per_transcript = [1, 4, 8]
-    # hl.binary_search(pos_per_transcript, 4) will return 1
-    # hl.binary_search(pos_per_transcript, 5) will return 2
-    ht = ht.annotate(
-        min_post_window_index=hl.binary_search(
-            ht.pos_per_transcript, ht.min_window_end
-        ),
-        n_pos_per_transcript=hl.len(ht.pos_per_transcript),
-    )
-
-    # Adjust the post window position to make sure it is larger than the provided window end position
-    # The default behavior in this case statement is to return the transcript end position because:
-    # 1) `pos_expr` is created using the filtered context table. This means:
-    # - `pos_expr` contains only positions in each transcript that had a possible missense variant.
-    # - `pos_expr` might not contain the transcript end position.
-    # 2) `hl.binary_search` will return an index larger than the length of a list if that position
-    # is larger than the largest element in the list.
-    # For example: if `pos_expr` is [1, 4, 8], then `hl.binary_search(pos_per_transcript, 10)` will return 3.
-    return ht.annotate(
-        min_post_window_pos=hl.case()
-        # When the index is the last index in the list
-        .when(
-            ht.min_post_window_index == ht.n_pos_per_transcript - 1,
-            # Return the position pointed to by the index only if it is larger than the window end
-            # Otherwise, return missing, since any larger positions in the transcript do not exist in the input HT
-            hl.or_missing(
-                ht.pos_per_transcript[ht.min_post_window_index] > ht.min_window_end,
-                ht.pos_per_transcript[ht.min_post_window_index],
-            ),
-        )
-        # When the index returned is anywhere from the start index to the second to last index in the list:
-        .when(
-            ht.min_post_window_index < ht.n_pos_per_transcript,
-            # Check if the position pointed to by the index is the same as the window end
-            # If the positions are the same, then return the next position in the list
-            hl.if_else(
-                ht.pos_per_transcript[ht.min_post_window_index] == ht.min_window_end,
-                ht.pos_per_transcript[ht.min_post_window_index + 1],
-                ht.pos_per_transcript[ht.min_post_window_index],
-            ),
-        ).or_missing()
-    )
-
-
-def get_min_two_break_window(
-    ht: hl.Table,
-    min_window_size: int,
-    transcript_percentage: float,
-    overwrite_pos_ht: bool = False,
-    annotations: List[str] = [
-        "mu_snp",
-        "total_exp",
-        "_mu_scan",
-        "total_mu",
-        "cumulative_obs",
-        "observed",
-        "cumulative_exp",
-        "total_obs",
-        "reverse",
-        "forward_oe",
-        "overall_oe",
-    ],
-) -> Tuple[hl.Table, int]:
-    """
-    Annotate input Table with smallest simultaneous breaks window end positions.
-
-    Also annotate Table with first position post-window.
-    Function prepares Table for simultaneous breaks searches.
-
-    Assumes input Table has all annotations present in `annotations`.
-
-    :param hl.Table ht: Input Table.
-    :param int min_window_size: Minimum number of bases to search for constraint (window size for simultaneous breaks).
-    :param float transcript_percentage: Maximum percentage of the transcript that can be included within a window of constraint.
-    :param bool overwrite_pos_ht: Whether to overwrite positions per transcript HT. Default is False.
-    :param List[str] annotations: Annotations to keep from input HT. Required to search for significant breakpoint.
-        Default is [
-            "mu_snp", "total_exp", "_mu_scan", "total_mu", "cumulative_obs", "observed", "cumulative_exp",
-            "total_obs", "reverse", "forward_oe", "overall_oe"
-        ].
-    :return: Tuple of Table annotated with window end, post window position and maximum window size.
-    :rtype: Tuple[hl.Table, int]
-    """
-    logger.info("Annotating each transcript with max window size...")
-    ht = ht.annotate(max_window_size=ht.transcript_size * transcript_percentage)
-    max_window_size = round(ht.aggregate(hl.agg.max(ht.max_window_size)))
-    logger.info("Maximum window size: %i", max_window_size)
-
-    logger.info("Annotating smallest possible window ends for each position...")
-    ht = ht.annotate(
-        min_window_end=get_window_end_pos_expr(
-            pos_expr=ht.locus.position,
-            end_pos_expr=ht.end,
-            window_size_expr=min_window_size,
-        ),
-    )
-
-    logger.info("Select new annotations to prepare for simultaneous break searches...")
-    ht = ht.select(
-        *annotations,
-        break_sizes=hl.empty_array(hl.tint32),
-        break_chisqs=hl.empty_array(hl.tfloat64),
-        window_ends=hl.empty_array(hl.tint32),
-        post_window_pos=hl.empty_array(hl.tint32),
-    )
-
-    logger.info("Checkpointing HT...")
-    ht = ht.checkpoint(f"{temp_path}/simul_break_temp.ht", overwrite=True)
-
-    logger.info("Gathering all positions in each transcript...")
-    pos_ht = ht.key_by("locus", "transcript").select()
-    if (not file_exists(f"{temp_path}/pos_per_transcript.ht")) or overwrite_pos_ht:
-        # This collect assumes that the positions are in order from smallest to largest
-        # (they should be, since the table is keyed by locus and transcript)
-        pos_ht = ht.group_by("transcript").aggregate(
-            positions=hl.agg.collect(ht.locus.position), _localize=False,
-        )
-        pos_ht.write(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
-    pos_ht = hl.read_table(f"{temp_path}/pos_per_transcript.ht")
-
-    logger.info("Getting smallest post window positions...")
-    # Keep version of HT with all relevant annotations and strip HT of all annotations to prepare for binary search
-    annotation_ht = ht.select(*annotations)
-    ht = ht.select(
-        "min_window_end", "start_pos", "end_pos", "transcript_size"
-    ).select_globals()
-    ht = get_min_post_window_pos(ht, pos_ht)
-
-    logger.info("Adding relevant annotations back onto HT...")
-    ht = ht.annotate(**annotation_ht[ht.key])
-    ht = ht.checkpoint(f"{temp_path}/simul_break_ready.ht", overwrite=True)
-    logger.info("HT count: %s", ht.count())
-
-    # Check if post window pos is ever smaller than window_end
-    check_end = ht.aggregate(
-        hl.agg.count_where(ht.min_window_end > ht.min_post_window_pos)
-    )
-    if check_end > 0:
-        ht = ht.filter(ht.min_window_end > ht.min_post_window_pos)
-        ht.show()
-        raise DataException(
-            f"Position closest to window end is smaller than min window end position in {check_end} cases!"
-        )
-    return (ht, max_window_size)
-
-
-def annotate_two_breaks_section_values(
-    ht: hl.Table, annotate_pre_values: bool
-) -> hl.Table:
-    """
-    Annotate observed (obs), expected (exp), observed/expected (OE) values for all transcript sections associated with searching for two simultaneous breaks.
-
-    Transcript sections are:
-        - Pre-window of constraint
-        - Window of constraint
-        - Post-window of constraint
-
-    Annotations are added with the following prefixes:
-        - 'pre' (for pre-window)
-        - 'window' (for window)
-        - 'post' (for post-window)
-
-    :param hl.Table ht: Input Table to be annotated.
-    :param bool annotate_pre_values: Whether to annotate pre-window of constraint values. Only needs to be done once.
-    :return: Table annotated with obs, exp, OE values for all transcript sections.
-    :rtype: hl.Table
-    """
-    logger.info("Annotating HT with obs, exp, OE values for pre-window positions...")
-    if annotate_pre_values:
-        logger.info(
-            "Pre-window values are cumulative values minus values at start of window of constraint..."
-        )
-        # Annotate expected variant count at current position
-        # Current position is equal to the window start position
-        ht = ht.annotate(
-            # Translate mu_snp at site to expected at window start site
-            # can't use translate_mu_to_exp_expr because that is expecting
-            # cumulative mu, and we want to use only the value for the window start
-            exp_at_start=(ht.mu_snp / ht.total_mu)
-            * ht.total_exp,
-        )
-        ht = ht.annotate(
-            # Annotate observed count for section of transcript pre-window
-            # = current cumulative obs minus the obs at window start
-            # Use hl.max to keep this value positive
-            pre_obs=hl.max(ht.cumulative_obs[ht.transcript] - ht.observed, 0),
-            # Make sure prev exp value isn't 0 (to avoid having NaN chisq)
-            pre_exp=hl.max(ht.cumulative_exp - ht.exp_at_start, 1e-09),
-        )
-
-        # Annotate OE value for section of transcript pre-window
-        ht = ht.annotate(
-            pre_oe=get_obs_exp_expr(
-                cond_expr=True, obs_expr=ht.pre_obs, exp_expr=ht.pre_exp,
-            )
-        )
-
-    logger.info("Creating HT with obs, exp, OE values for post-window positions...")
-    # Create new HT with obs, exp, and OE values for post-window positions
-    # This is to get the values for the section of the transcript after the window
-    next_ht = ht.select("post_window_pos")
-    # Add new_locus annotation to pull obs, exp, OE values for post window position
-    next_ht = next_ht.annotate(
-        new_locus=hl.locus(next_ht.locus.contig, next_ht.post_window_pos)
-    )
-    indexed_ht = ht[next_ht.locus, next_ht.transcript]
-    next_ht = next_ht.annotate(
-        next_values=hl.struct(
-            cum_obs=indexed_ht.cumulative_obs[next_ht.transcript],
-            obs=indexed_ht.observed,
-            exp=indexed_ht.cumulative_exp,
-            mu_snp=indexed_ht.mu_snp,
-            oe=indexed_ht.forward_oe,
-            reverse_obs=indexed_ht.reverse.obs,
-            reverse_exp=indexed_ht.reverse.exp,
-        )
-    )
-    next_ht = next_ht.transmute(
-        exp_at_end=(next_ht.mu_snp / next_ht.total_mu) * next_ht.total_exp
-    )
-    next_ht = next_ht.checkpoint(f"{temp_path}/next.ht", overwrite=True)
-    ht = ht.annotate(next_values=next_ht[ht.key].next_values)
-
-    logger.info(
-        "Annotating HT with obs, exp, OE values for positions in window of constraint..."
-    )
-    # Annotate obsered and expected counts for window of constraint
-    # These values are the cumulative values at the first position post-window minus
-    # (1) minus the cumulative values at the current window and
-    # (2) minus the value at the first position post-window
-    # (3) plus the value at the window start
-    # Subtraction (2) is necessary in case the first position post window has an observed variant
-    # (otherwise you'd overcount the number of obs within the window)
-    # Addition (3) is necessary in case the first position in the window has an observed variant
-    # (would not count this variant without this step (3))
-    ht = ht.annotate(
-        window_obs=(
-            (ht.next_values.cum_obs - ht.cumulative_obs[ht.transcript])
-            - ht.next_values.obs
-        )
-        + ht.observed,
-        window_exp=(
-            (ht.next_values.exp - ht.cumulative_exp) - ht.next_values.exp_at_end
-        )
-        + ht.exp_at_start,
-    )
-
-    # Annotate OE value for section of transcript within window
-    ht = ht.annotate(
-        window_oe=get_obs_exp_expr(
-            cond_expr=True, obs_expr=ht.window_obs, exp_expr=ht.window_exp,
-        )
-    )
-
-    logger.info("Annotating HT with obs, exp, OE values for post-window positions...")
-    # Annotate observed and expected counts for section of transcript post-window
-    # These values are the reverse values at the first position post-window plus
-    # the observed and expected values at that first position post-window
-    # (need to add here, otherwise would undercount the number post-window)
-    ht = ht.annotate(
-        post_obs=ht.next_values.reverse_obs + ht.next_values.obs,
-        post_exp=ht.next_values.reverse_exp + ht.next_values.exp_at_end,
-    )
-
-    # Annotate OE value for section of transcript post-window
-    return ht.annotate(
-        post_oe=get_obs_exp_expr(
-            cond_expr=True, obs_expr=ht.post_obs, exp_expr=ht.post_exp,
-        )
-    )
-
-
 def search_for_two_breaks(
-    ht: hl.Table, annotate_pre_values: bool, chisq_threshold: float = 13.8,
-) -> hl.Table:
-    """
-    Search for evidence of constraint within a set window size/number of base pairs.
-
-    Function is designed to search in transcripts that didn't have one single significant break.
-
-    Assumes that:
-        - Input Table has a field named 'transcript'.
-
-    :param hl.Table ht: Input Table.
-    :param bool annotate_pre_values: Whether to annotate pre-window of constraint values. Only needs to be done once.
-    :param float chisq_threshold: Chi-square significance threshold.
-        Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
-    :return: Table annotated with is_break at the *end* position of a simultaneous break window.
-    :rtype: hl.Table
-    """
-    logger.info("Preparing HT to search for two breaks...")
-    ht = annotate_two_breaks_section_values(ht, annotate_pre_values)
-
-    logger.info("Searching for two breaks...")
-    return search_for_break(
-        ht, "transcript", simul_break=True, chisq_threshold=chisq_threshold
-    )
-
-
-def search_two_break_windows(
     ht: hl.Table,
     min_window_size: int,
-    transcript_percentage: float,
     overwrite_pos_ht: bool = False,
     chisq_threshold: float = 13.8,
-    annotations: List[str] = [
-        "mu_snp",
-        "total_exp",
-        "_mu_scan",
-        "total_mu",
-        "cumulative_obs",
-        "observed",
-        "cumulative_exp",
-        "total_obs",
-        "reverse",
-        "forward_oe",
-        "overall_oe",
-        "start_pos",
-        "end_pos",
-        "transcript_size",
-    ],
 ) -> hl.Table:
     """
     Search for windows of constraint in transcripts with simultaneous breaks.
 
-    This function searches for breaks for break sizes of `min_window_size` to `max_window_size`,
-    where `min_window_size` is the number of base pairs needed, on average, to see 10 missense variants, and
-    `max_window_size` is the number of base pairs equal to `transcript_percentage` of the largest transcript size.
-    For example, for gnomAD v2.1, `min_window_size` is 100bp, and `max_window_size` is 90% of the largest transcript.
+    This function searches for breaks for all possible window sizes but only keeps break sizes >= `min_window_size`.
+    `min_window_size` is the number of base pairs needed, on average, to see 10 missense variants (by default).
+
+    For gnomAD v2.1, `min_window_size` is 100bp.
 
     :param hl.Table ht: Input Table filtered to contain only transcripts with simultaneous breaks.
     :param int min_window_size: Smallest possible window size to search for two simultaneous breaks.
-    :param float transcript_percentage: Maximum percentage of the transcript that can be included within a window of constraint.
     :param bool overwrite_pos_ht: Whether to overwrite positions per transcript HT. Default is False.
     :param float chisq_threshold:  Chi-square significance threshold. Default is 13.8.
-    :param List[str] annotations: Annotations to keep from input HT. Required to search for significant breakpoint.
-        Default is [
-            "mu_snp", "total_exp", "_mu_scan", "total_mu", "cumulative_obs",  "observed", "cumulative_exp", "total_obs",
-            "reverse", "forward_oe", "overall_oe", "start_pos", "end_pos", "transcript_size"
-        ].
+        Default is from ExAC RMC code and corresponds to a p-value of 0.999 with 2 degrees of freedom.
+        (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
     :return: Table with largest simultaneous break window size annotated per transcript.
     :rtype: hl.Table
     """
-    logger.info("Getting smallest window end and post-window positions...")
     logger.info(
-        "Also getting maximum simultaneous break size (%f * largest transcript size)...",
-        transcript_percentage,
+        "Creating arrays of cumulative observed and expected missense values..."
     )
-    ht, max_window_size = get_min_two_break_window(
-        ht, min_window_size, transcript_percentage, overwrite_pos_ht, annotations
+    # Reformat cumulative obs annotation from a dict ({transcript: int}) to just an int
+    # Also reformat cumulative mu annotation from dict ({transcript: float}) to just float
+    # TODO: Fix these annotations in the code above when they're written
+    ht = ht.transmute(
+        cumulative_obs=ht.cumulative_obs[ht.transcript],
+        cumulative_mu=ht._mu_scan[ht.transcript],
     )
+    # Also add the expected value for each position
+    ht = ht.annotate(expected=(ht.mu_snp / ht.total_mu) * ht.total_exp)
+    ht = ht.annotate(
+        # NOTE: These scans do NOT need to be inclusive per row (do not need adjusting)
+        # This is because these cumulative values are going to be used to calculate the
+        # observed and expected missense counts for the section pre-window
+        prev_obs=hl.scan.group_by(ht.transcript, hl.scan.collect(ht.cumulative_obs)),
+        prev_mu=hl.scan.group_by(ht.transcript, hl.scan.collect(ht.cumulative_mu)),
+    )
+    ht = ht.checkpoint(f"{temp_path}/simul_breaks_scan_collect.ht", overwrite=True)
+    # Translate mu to expected
+    ht = ht.annotate(
+        prev_exp=hl.if_else(
+            hl.is_missing(ht.prev_mu.get(ht.transcript)),
+            hl.empty_array(hl.tfloat64),
+            hl.map(
+                lambda x: (x / ht.total_mu) * ht.total_exp, ht.prev_mu[ht.transcript]
+            ),
+        )
+    ).drop("prev_mu")
 
-    logger.info("Checking all possible window sizes...")
-    window_size = min_window_size
-    while window_size <= max_window_size:
-        annotate_pre_values = False
-        if window_size == min_window_size:
-            ht = ht.transmute(
-                post_window_pos=ht.min_post_window_pos,
-                post_window_index=ht.min_post_window_index,
+    # Run a quick validity check that each row has the same number of values in prev_obs and prev_exp
+    mismatch_len_count = ht.aggregate(
+        hl.agg.count_where(hl.len(ht.prev_obs) != hl.len(ht.prev_exp))
+    )
+    if mismatch_len_count != 0:
+        ht = ht.filter(hl.len(ht.prev_obs) != hl.len(ht.prev_exp))
+        ht.show()
+        raise DataException(
+            f"{mismatch_len_count} lines have different scan array lengths for prev obs and prev exp!"
+        )
+
+    logger.info("Calculating null and alt distributions...")
+    ht = ht.annotate(
+        nulls=hl.zip(ht.prev_obs, ht.prev_exp).starmap(
+            lambda obs, exp: (
+                hl.dpois(obs, exp * ht.overall_oe)
+                * hl.dpois(
+                    (ht.total_obs - ht.reverse.obs - obs),
+                    (ht.total_exp - ht.reverse.exp - exp) * ht.overall_oe,
+                )
+                * hl.dpois(ht.reverse.obs, ht.reverse.exp * ht.overall_oe)
             )
-            annotate_pre_values = True
-        else:
-            # Annotate window end position
-            # This will be missing if window end position is larger than the end position of the transcript
-            ht = ht.annotate(
-                window_end=get_window_end_pos_expr(
-                    pos_expr=ht.locus.position,
-                    end_pos_expr=ht.end,
-                    window_size_expr=window_size,
-                ),
-            )
-            # Annotate post window index
-            ht = ht.annotate(
-                post_window_index=hl.case()
-                # Check if post window index is the last index of the pos per transcript list
-                .when(
-                    ht.post_window_index == ht.n_pos_per_transcript - 1,
-                    # Return post window index as is if the position it points to is larger than the window end
-                    # Otherwise, return missing
-                    hl.or_missing(
-                        ht.pos_per_transcript[ht.n_pos_per_transcript - 1]
-                        > ht.window_end,
-                        ht.post_window_index,
+        ),
+        alts=hl.zip(ht.prev_obs, ht.prev_exp).starmap(
+            lambda obs, exp: (
+                hl.dpois(obs, exp * hl.min(obs / exp, 1))
+                * hl.dpois(
+                    (ht.total_obs - ht.reverse.obs - obs),
+                    (ht.total_exp - ht.reverse.exp - exp)
+                    * hl.min(
+                        (ht.total_obs - ht.reverse.obs - obs)
+                        / (ht.total_exp - ht.reverse.exp - exp),
+                        1,
                     ),
                 )
-                # Otherwise, post window index is between the first and last index of the pos per transcript list
-                .default(
-                    ht.post_window_index < ht.n_pos_per_transcript,
-                    hl.if_else(
-                        # If position pointed to by currrent post window index is still larger than window end,
-                        # then return the same index. Otherwise, increase index by 1
-                        ht.pos_per_transcript[ht.post_window_index] > ht.window_end,
-                        ht.post_window_index,
-                        ht.post_window_index + 1,
-                    ),
-                )
+                * hl.dpois(ht.reverse.obs, ht.reverse.exp * ht.reverse.reverse_obs_exp)
             )
-            ht = ht.annotate(
-                post_window_pos=hl.case()
-                .when(
-                    # Check if both the post window index and window end are defined
-                    # if window_end is the transcript end position, and the transcript end position isn't actually present in the
-                    # context HT filtered to missense variants only, then window_end could be defined while post_window_index is missing
-                    hl.is_defined(ht.post_window_index) & hl.is_defined(ht.window_end),
-                    hl.if_else(
-                        ht.post_window_index == ht.n_pos_per_transcript - 1,
-                        ht.end_pos,
-                        ht.pos_per_transcript[ht.post_window_index],
-                    ),
-                )
-                .or_missing()
-            )
-
-        break_ht = search_for_two_breaks(
-            ht=ht,
-            annotate_pre_values=annotate_pre_values,
-            chisq_threshold=chisq_threshold,
-        )
-
-        # Re-add annotations that are dropped in search_for_two_breaks function
-        annot_ht = ht.select(
-            "break_sizes", "break_chisqs", "window_ends", "post_window_pos"
-        )
-        break_ht = break_ht.join(annot_ht, how="left")
-        break_ht = break_ht.annotate(
-            break_sizes=break_ht.break_sizes.append(window_size),
-            break_chisqs=break_ht.break_chisqs.append(break_ht.max_chisq),
-            window_ends=break_ht.window_ends.append(break_ht.window_end),
-        )
-        # This method will checkpoint a LOT of temporary tables...not sure if there is a better way
-        break_ht = break_ht.checkpoint(
-            f"{temp_path}/simul_break_{window_size}_window.ht", overwrite=True
-        )
-        break_ht.describe()
-        ht = ht.annotate(**break_ht[ht.key])
-        window_size += 1
-
-    logger.info("Getting best window sizes for each transcript and returning...")
-    # Extract max chi square value
-    ht = ht.annotate(max_chisq=hl.sorted(ht.break_chisqs, reverse=True)[0])
-    # Get index associated with max chi square
-    ht = ht.annotate(chisq_index=ht.break_chisqs.index(ht.max_chisq))
-    return ht.annotate(best_window_size=ht.break_sizes[ht.chisq_index]).drop(
-        "chisq_index"
+        ),
     )
+
+    logger.info("Calculating chi square values...")
+    ht = ht.annotate(
+        chi_squares=hl.zip(ht.nulls, ht.alts).starmap(
+            lambda null, alt: 2 * (hl.log10(alt) - hl.log10(null))
+        )
+    )
+    logger.info("Getting max chi square value for each position...")
+    ht = ht.annotate(
+        max_chisq_for_pos=hl.or_missing(
+            hl.len(ht.chi_squares) > 0, hl.max(ht.chi_squares)
+        )
+    )
+
+    logger.info("Checkpointing HT...")
+    # Checkpointing here because HT branches and becomes both group_ht and max_chisq ht below
+    ht = ht.checkpoint(f"{temp_path}/simul_breaks_ready.ht", overwrite=True)
+
+    logger.info("Getting max chi square per transcript...")
+    group_ht = ht.group_by("transcript").aggregate(
+        max_chisq_per_transcript=hl.agg.max(ht.max_chisq_for_pos)
+    )
+    group_ht = group_ht.checkpoint(
+        f"{temp_path}/simul_breaks_chisq_group.ht", overwrite=True
+    )
+    ht = ht.annotate(
+        max_chisq_per_transcript=group_ht[ht.transcript].max_chisq_per_transcript
+    )
+
+    logger.info("Checking for positions associated with maximum chi square values...")
+    max_chisq_ht = ht.filter(ht.max_chisq_for_pos == ht.max_chisq_per_transcript)
+    max_chisq_ht = max_chisq_ht.annotate(
+        chisq_index=max_chisq_ht.chi_squares.index(
+            max_chisq_ht.max_chisq_per_transcript
+        )
+    )
+
+    logger.info("Gathering all positions in each transcript...")
+    if not file_exists(f"{temp_path}/pos_per_transcript.ht") or overwrite_pos_ht:
+        pos_ht = ht.group_by("transcript").aggregate(
+            positions=hl.sorted(hl.agg.collect(ht.locus.position)),
+        )
+        pos_ht.write(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
+    pos_ht = hl.read_table(f"{temp_path}/pos_per_transcript.ht")
+
+    max_chisq_ht = max_chisq_ht.annotate(
+        pos_per_transcript=pos_ht[max_chisq_ht.transcript].positions
+    )
+    max_chisq_ht = max_chisq_ht.annotate(
+        window_start=max_chisq_ht.pos_per_transcript[max_chisq_ht.chisq_index]
+    )
+    max_chisq_ht = max_chisq_ht.filter(
+        (max_chisq_ht.max_chisq_for_pos > chisq_threshold)
+        & (max_chisq_ht.locus.position - max_chisq_ht.window_start >= min_window_size)
+    )
+    max_chisq_ht = max_chisq_ht.checkpoint(
+        f"{temp_path}/simul_breaks_max_chisq.ht", overwrite=True
+    )
+
+    ht = ht.annotate(is_break=hl.is_defined(max_chisq_ht[ht.key]))
+    ht = ht.checkpoint(f"{temp_path}/simul_breaks.ht", overwrite=True)
+    return ht
 
 
 def calculate_section_chisq(
