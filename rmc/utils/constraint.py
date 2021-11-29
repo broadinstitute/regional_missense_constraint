@@ -919,6 +919,7 @@ def search_for_two_breaks(
         prev_mu=hl.scan.collect(ht.cumulative_mu),
     )
     ht = ht.select(
+        "overall_oe",
         "prev_obs",
         "prev_mu",
         "total_obs",
