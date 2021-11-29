@@ -390,6 +390,7 @@ def main(args):
             for transcript in transcripts:
                 break_ht = search_for_two_breaks(
                     context_ht,
+                    transcript,
                     min_break_size,
                     args.overwrite_pos_ht,
                     args.chisq_threshold,
