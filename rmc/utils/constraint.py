@@ -916,6 +916,7 @@ def search_for_two_breaks(
         prev_mu=hl.scan.group_by(ht.transcript, hl.scan.collect(ht.cumulative_mu)),
     )
     ht = ht.checkpoint(f"{temp_path}/simul_breaks_scan_collect.ht", overwrite=True)
+
     # Translate mu to expected
     ht = ht.annotate(
         prev_exp=hl.if_else(
@@ -926,6 +927,15 @@ def search_for_two_breaks(
             ),
         )
     ).drop("prev_mu")
+
+    # Reformat prev_obs scan from dict ({transcript: [obs, obs, obs, ...]}) to list ([obs, obs, obs,...])
+    ht = ht.transmute(
+        prev_obs=hl.if_else(
+            hl.is_missing(ht.prev_obs.get(ht.transcript)),
+            hl.empty_array(hl.tint64),
+            ht.prev_obs[ht.transcript],
+        )
+    )
 
     # Run a quick validity check that each row has the same number of values in prev_obs and prev_exp
     mismatch_len_count = ht.aggregate(
@@ -962,7 +972,7 @@ def search_for_two_breaks(
                         1,
                     ),
                 )
-                * hl.dpois(ht.reverse.obs, ht.reverse.exp * ht.reverse.reverse_obs_exp)
+                * hl.dpois(ht.reverse.obs, ht.reverse.exp * ht.reverse_obs_exp)
             )
         ),
     )
