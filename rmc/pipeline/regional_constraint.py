@@ -400,6 +400,10 @@ def main(args):
                     simul_breaks_hts.append(break_ht)
                     simul_break_transcripts.append(transcript)
 
+            logger.info(
+                "Found %i transcripts with evidence of simultaneous breaks...",
+                len(simul_break_transcripts),
+            )
             logger.info("Writing out simultaneous breaks HT...")
             # Union break HTs to keep simultaneous breaks annotations, including
             # max chi square value and window start position
