@@ -1002,6 +1002,7 @@ def search_for_two_breaks(
     )
 
     logger.info("Checkpointing HT...")
+    ht = ht.select("chi_squares", "max_chisq_for_pos")
     # Checkpointing here because HT branches and becomes both group_ht and max_chisq ht below
     ht = ht.checkpoint(f"{temp_path}/simul_breaks_ready.ht", overwrite=True)
 
