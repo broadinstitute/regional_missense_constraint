@@ -918,12 +918,21 @@ def search_for_two_breaks(
         prev_obs=hl.scan.collect(ht.cumulative_obs),
         prev_mu=hl.scan.collect(ht.cumulative_mu),
     )
+    ht = ht.select(
+        "prev_obs",
+        "prev_mu",
+        "total_obs",
+        "total_exp",
+        "total_mu",
+        "reverse",
+        "reverse_obs_exp",
+    )
     ht = ht.checkpoint(f"{temp_path}/simul_breaks_scan_collect.ht", overwrite=True)
 
     # Translate mu to expected
     ht = ht.annotate(
         prev_exp=hl.if_else(
-            hl.is_missing(ht.prev_mu.get(ht.transcript)),
+            hl.len(ht.prev_mu) == 0,
             hl.empty_array(hl.tfloat64),
             hl.map(
                 lambda x: (x / ht.total_mu) * ht.total_exp, ht.prev_mu[ht.transcript]
