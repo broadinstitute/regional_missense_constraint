@@ -362,6 +362,7 @@ def main(args):
             )
             logger.info("Reading in not one break HT...")
             context_ht = not_one_break.ht()
+            context_ht = context_ht.drop("_obs_scan")
 
             # Get number of base pairs needed to observe `num` number of missense variants (on average)
             # This number is used to determine the window size to search for constraint with simultaneous breaks

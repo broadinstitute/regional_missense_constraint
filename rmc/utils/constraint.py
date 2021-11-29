@@ -1040,6 +1040,8 @@ def search_for_two_breaks(
     )
 
     ht = ht.annotate(is_break=hl.is_defined(max_chisq_ht[ht.key]))
+    ht = ht.annotate(window_start=max_chisq_ht[ht.key])
+    ht = ht.select("window_start", chisq=ht.max_chisq_per_transcript)
     ht = ht.checkpoint(f"{temp_path}/simul_breaks_{transcript}.ht", overwrite=True)
 
     is_break_ht = ht.filter(ht.is_break)
