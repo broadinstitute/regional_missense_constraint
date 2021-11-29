@@ -875,6 +875,7 @@ def process_additional_breaks(
 
 def search_for_two_breaks(
     ht: hl.Table,
+    transcript: str,
     min_window_size: int,
     overwrite_pos_ht: bool = False,
     chisq_threshold: float = 13.8,
@@ -896,6 +897,9 @@ def search_for_two_breaks(
     :return: Table with largest simultaneous break window size annotated per transcript.
     :rtype: hl.Table
     """
+    logger.info("Filtering to %s...", transcript)
+    ht = ht.filter(ht.transcript == transcript)
+
     logger.info(
         "Creating arrays of cumulative observed and expected missense values..."
     )
@@ -994,7 +998,7 @@ def search_for_two_breaks(
     # Checkpointing here because HT branches and becomes both group_ht and max_chisq ht below
     ht = ht.checkpoint(f"{temp_path}/simul_breaks_ready.ht", overwrite=True)
 
-    logger.info("Getting max chi square per transcript...")
+    logger.info("Getting max chi square for transcript...")
     group_ht = ht.group_by("transcript").aggregate(
         max_chisq_per_transcript=hl.agg.max(ht.max_chisq_for_pos)
     )
@@ -1036,7 +1040,11 @@ def search_for_two_breaks(
     )
 
     ht = ht.annotate(is_break=hl.is_defined(max_chisq_ht[ht.key]))
-    ht = ht.checkpoint(f"{temp_path}/simul_breaks.ht", overwrite=True)
+    ht = ht.checkpoint(f"{temp_path}/simul_breaks_{transcript}.ht", overwrite=True)
+
+    is_break_ht = ht.filter(ht.is_break)
+    if is_break_ht.count() == 0:
+        return None
     return ht
 
 

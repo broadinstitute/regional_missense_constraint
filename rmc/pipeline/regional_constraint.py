@@ -380,29 +380,34 @@ def main(args):
             )
 
             logger.info("Searching for transcripts with simultaneous breaks...")
-            break_ht = search_for_two_breaks(
-                context_ht, min_break_size, args.overwrite_pos_ht, args.chisq_threshold,
+            # Converting to list here because `hl.agg.collect_as_set` will return `frozenset`
+            transcripts = list(
+                context_ht.aggregate(hl.agg.collect_as_set(context_ht.transcript))
             )
+
+            simul_breaks_hts = []
+            simul_break_transcripts = []
+            for transcript in transcripts:
+                break_ht = search_for_two_breaks(
+                    context_ht,
+                    min_break_size,
+                    args.overwrite_pos_ht,
+                    args.chisq_threshold,
+                )
+                if break_ht:
+                    simul_breaks_hts.append(break_ht)
+                    simul_break_transcripts.append(transcript)
 
             logger.info("Writing out simultaneous breaks HT...")
-            # Collecting all transcripts with two simultaneous breaks
-            simul_break_transcripts = break_ht.aggregate(
-                hl.agg.collect_as_set(break_ht.transcript),
-            )
-            simul_break_transcripts = hl.literal(simul_break_transcripts)
-
-            # Filter context HT to transcripts with two simultaneous breaks
-            simul_break_ht = context_ht.filter(
-                simul_break_transcripts.contains(context_ht.transcript)
-            )
-
-            # Add simultaneous breaks annotations, including max chi square value and window start position
-            simul_break_ht = simul_break_ht.annotate(**break_ht[simul_break_ht.key])
+            # Union break HTs to keep simultaneous breaks annotations, including
+            # max chi square value and window start position
+            simul_break_ht = simul_breaks_hts[0].union(*simul_breaks_hts[1:])
             simul_break_ht.write(simul_break.path, overwrite=args.overwrite)
 
             logger.info(
                 "Getting transcripts with no evidence of regional missense constraint..."
             )
+            simul_break_transcripts = hl.literal(simul_break_transcripts)
             context_ht = context_ht.filter(
                 ~simul_break_transcripts.contains(context_ht.transcript)
             )
