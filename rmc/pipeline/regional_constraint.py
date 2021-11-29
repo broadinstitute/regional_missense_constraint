@@ -388,7 +388,8 @@ def main(args):
 
             simul_breaks_hts = []
             simul_break_transcripts = []
-            for transcript in transcripts:
+            for count, transcript in enumerate(transcripts):
+                logger.info("Working on transcript #%i (%s)...", count, transcript)
                 break_ht = search_for_two_breaks(
                     context_ht,
                     transcript,

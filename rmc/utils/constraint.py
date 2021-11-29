@@ -897,7 +897,6 @@ def search_for_two_breaks(
     :return: Table with largest simultaneous break window size annotated per transcript.
     :rtype: hl.Table
     """
-    logger.info("Filtering to %s...", transcript)
     ht = ht.filter(ht.transcript == transcript)
 
     logger.info(
@@ -916,8 +915,8 @@ def search_for_two_breaks(
         # NOTE: These scans do NOT need to be inclusive per row (do not need adjusting)
         # This is because these cumulative values are going to be used to calculate the
         # observed and expected missense counts for the section pre-window
-        prev_obs=hl.scan.group_by(ht.transcript, hl.scan.collect(ht.cumulative_obs)),
-        prev_mu=hl.scan.group_by(ht.transcript, hl.scan.collect(ht.cumulative_mu)),
+        prev_obs=hl.scan.collect(ht.cumulative_obs),
+        prev_mu=hl.scan.collect(ht.cumulative_mu),
     )
     ht = ht.checkpoint(f"{temp_path}/simul_breaks_scan_collect.ht", overwrite=True)
 
@@ -933,13 +932,13 @@ def search_for_two_breaks(
     ).drop("prev_mu")
 
     # Reformat prev_obs scan from dict ({transcript: [obs, obs, obs, ...]}) to list ([obs, obs, obs,...])
-    ht = ht.transmute(
-        prev_obs=hl.if_else(
-            hl.is_missing(ht.prev_obs.get(ht.transcript)),
-            hl.empty_array(hl.tint64),
-            ht.prev_obs[ht.transcript],
-        )
-    )
+    # ht = ht.transmute(
+    #    prev_obs=hl.if_else(
+    #        hl.is_missing(ht.prev_obs.get(ht.transcript)),
+    #        hl.empty_array(hl.tint64),
+    #        ht.prev_obs[ht.transcript],
+    #    )
+    # )
 
     # Run a quick validity check that each row has the same number of values in prev_obs and prev_exp
     mismatch_len_count = ht.aggregate(
@@ -999,14 +998,16 @@ def search_for_two_breaks(
     ht = ht.checkpoint(f"{temp_path}/simul_breaks_ready.ht", overwrite=True)
 
     logger.info("Getting max chi square for transcript...")
-    group_ht = ht.group_by("transcript").aggregate(
-        max_chisq_per_transcript=hl.agg.max(ht.max_chisq_for_pos)
-    )
-    group_ht = group_ht.checkpoint(
-        f"{temp_path}/simul_breaks_chisq_group.ht", overwrite=True
-    )
+    # group_ht = ht.group_by("transcript").aggregate(
+    #    max_chisq_per_transcript=hl.agg.max(ht.max_chisq_for_pos)
+    # )
+    # group_ht = group_ht.checkpoint(
+    #    f"{temp_path}/simul_breaks_chisq_group.ht", overwrite=True
+    # )
+    max_chisq_for_transcript = ht.aggregate(hl.agg.max(ht.max_chisq_for_pos))
     ht = ht.annotate(
-        max_chisq_per_transcript=group_ht[ht.transcript].max_chisq_per_transcript
+        # max_chisq_per_transcript=group_ht[ht.transcript].max_chisq_per_transcript
+        max_chisq_for_transcript=max_chisq_for_transcript
     )
 
     logger.info("Checking for positions associated with maximum chi square values...")
@@ -1035,6 +1036,8 @@ def search_for_two_breaks(
         (max_chisq_ht.max_chisq_for_pos > chisq_threshold)
         & (max_chisq_ht.locus.position - max_chisq_ht.window_start >= min_window_size)
     )
+    if max_chisq_ht.count() == 0:
+        return None
     max_chisq_ht = max_chisq_ht.checkpoint(
         f"{temp_path}/simul_breaks_max_chisq.ht", overwrite=True
     )
@@ -1043,10 +1046,6 @@ def search_for_two_breaks(
     ht = ht.annotate(window_start=max_chisq_ht[ht.key].window_start)
     ht = ht.select("window_start", "is_break", chisq=ht.max_chisq_per_transcript)
     ht = ht.checkpoint(f"{temp_path}/simul_breaks_{transcript}.ht", overwrite=True)
-
-    is_break_ht = ht.filter(ht.is_break)
-    if is_break_ht.count() == 0:
-        return None
     return ht
 
 
