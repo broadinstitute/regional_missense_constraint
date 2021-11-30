@@ -1,6 +1,5 @@
 import argparse
 import logging
-from tqdm import tqdm
 
 import hail as hl
 
@@ -37,7 +36,6 @@ from rmc.utils.constraint import (
     GROUPINGS,
     process_additional_breaks,
     process_transcripts,
-    search_for_two_breaks,
 )
 from rmc.utils.generic import (
     filter_to_region_type,
@@ -356,7 +354,6 @@ def main(args):
             context_ht.write(multiple_breaks.path, overwrite=args.overwrite)
 
         if args.search_for_simul_breaks:
-            hl.init(log="RMC_simul_breaks.log")
 
             logger.info(
                 "Searching for two simultaneous breaks in transcripts that didn't have \
@@ -365,6 +362,7 @@ def main(args):
             transcript_tsv_path = args.transcript_tsv
 
             if args.get_no_break_transcripts:
+                hl.init(log="/RMC_simul_breaks_get_transcripts.log")
                 logger.warning(
                     "Not one break HT is big (~1.3 TiB) -- this step should be run in Dataproc!"
                 )
@@ -387,7 +385,7 @@ def main(args):
                         o.write(f"{transcript}\n")
 
             if args.get_min_window_size:
-
+                hl.init(log="/RMC_simul_breaks_get_window_size.log")
                 # Get number of base pairs needed to observe `num` number of missense variants (on average)
                 # This number is used to determine the window size to search for constraint with simultaneous breaks
                 min_break_size = (
@@ -409,86 +407,13 @@ def main(args):
                     f"{transcript_tsv_path} doesn't exist. Please rerun with --get-no-break-transcripts!"
                 )
 
-            transcripts = []
-            with hl.hadoop_open(transcript_tsv_path) as i:
-                for line in i:
-                    transcripts.append(line.strip())
-
-            if args.run_batch_simul_breaks_job:
-                import hailtop.batch as hb
-
-                logger.info("Setting up batch parameters...")
-                backend = hb.ServiceBackend(
-                    billing_project=args.billing_project,
-                    remote_tmpdir=args.batch_bucket,
-                    google_project=args.google_project,
-                )
-                b = hb.Batch(
-                    name="simul_breaks",
-                    backend=backend,
-                    default_memory=args.batch_memory,
-                    default_cpu=args.batch_cpu,
-                    default_storage=args.batch_storage,
-                    default_python_image=args.docker_image,
-                )
-
-                # Table stored in temp bucket that is used to calculate constraint but can be deleted afterwards
-                # This Table is grouped by transcript and has all positions in each transcript collected into a list
-                pos_ht_path = f"{temp_path}/pos_per_transcript.ht"
-                if not file_exists(pos_ht_path) or args.overwrite_pos_ht:
-                    ht = not_one_break.ht()
-                    pos_ht = ht.group_by("transcript").aggregate(
-                        positions=hl.sorted(hl.agg.collect(ht.locus.position)),
-                    )
-                    pos_ht.write(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
-
-                logger.info("Checking for output file existence...")
-                transcript_success_map = {}
-                transcript_ht_map = {}
-                for transcript in transcripts:
-                    transcript_success_map[
-                        transcript
-                    ] = f"{temp_path}/{transcript}_success.txt"
-                    transcript_ht_map[
-                        transcript
-                    ] = f"{temp_path}/simul_breaks_{transcript}.ht"
-                print(transcript_success_map)
-                print(transcript_ht_map)
-                success_files_exist = parallel_file_exists(
-                    list(transcript_success_map.values())
-                )
-                hts_exist = parallel_file_exists(list(transcript_ht_map.values()))
-
-                simul_break_transcripts = []
-                transcripts_to_run = []
-                for transcript in transcripts:
-                    output_tsv = f"{temp_path}/{transcript}_success.txt"
-                    # Adding this code for one time use to skip transcripts that finished while running serially
-                    if hts_exist[transcript_ht_map[transcript]]:
-                        continue
-                    if not success_files_exist[transcript_success_map[transcript]]:
-                        transcripts_to_run.append(transcript)
-                logger.info("Found %i transcripts to search...", len(transcripts))
-
-                for transcript in tqdm(transcripts, unit="transcripts"):
-                    logger.info("Working on %s...", transcript)
-                    j = b.new_python_job(name=transcript)
-                    j.call(
-                        search_for_two_breaks,
-                        not_one_break.path,
-                        f"{temp_path}/pos_per_transcript.ht",
-                        transcript,
-                        f"{temp_path}/simul_breaks_{transcript}.ht",
-                        transcript_success_map[transcript],
-                        f"{temp_path}/simul_breaks_scan_collect.ht",
-                        f"{temp_path}/simul_breaks_chisq.ht",
-                        args.min_window_size,
-                        args.chisq_threshold,
-                    )
-
-                b.run(wait=False)
-
             if args.write_simul_breaks_results:
+
+                hl.init(log="/RMC_write_simul_breaks.log")
+                transcripts = []
+                with hl.hadoop_open(transcript_tsv_path) as i:
+                    for line in i:
+                        transcripts.append(line.strip())
 
                 # Run this step in Dataproc
                 transcript_ht_map = {}
@@ -579,16 +504,6 @@ def main(args):
                     start_pos=transcript_ht[xg.transcript].start_pos,
                     end_pos=transcript_ht[xg.transcript].end_pos,
                 )
-
-                logger.info("Searching for simultaneous breaks...")
-                xg = search_for_two_breaks(xg)
-                is_break_ht = xg.filter(xg.is_break)
-                if is_break_ht.count() == 0:
-                    logger.info("XG has no breaks!")
-                else:
-                    is_break_ht.write(
-                        f"{temp_path}/XG_simul_break.ht", overwrite=args.overwrite
-                    )
             else:
                 logger.info("XG has at least one break!")
                 is_break_ht = is_break_ht.checkpoint(
@@ -790,8 +705,9 @@ def main(args):
             )
 
     finally:
-        logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(LOGGING_PATH)
+        if not args.run_batch_simul_breaks_job:
+            logger.info("Copying hail log to logging bucket...")
+            hl.copy_log(LOGGING_PATH)
 
 
 if __name__ == "__main__":
@@ -884,59 +800,6 @@ if __name__ == "__main__":
         help="Number of observed variants. Used when determining the smallest possible window size for simultaneous breaks.",
         default=10,
         type=int,
-    )
-    simul_breaks.add_argument(
-        "--overwrite-pos-ht",
-        help="Overwrite the positions per transcript HT (HT keyed by transcript with a list of positiosn per transcript), even if it already exists.",
-        action="store_true",
-    )
-    simul_breaks.add_argument(
-        "--min-window-size",
-        help="Smallest possible window size for simultaneous breaks. Determined by running --get-min-window-size.",
-        type=int,
-    )
-    simul_breaks.add_argument(
-        "--run-batch-simul-breaks-job",
-        help="Run hail batch job to search for simultaneous breaks.",
-        action="store_true",
-    )
-    simul_breaks.add_argument(
-        "--billing-project",
-        help="Billing project to use with hail batch.",
-        default="gnomad-production",
-    )
-    simul_breaks.add_argument(
-        "--batch-bucket",
-        help="Bucket provided to hail batch for temporary storage.",
-        default="gs://gnomad-tmp/kc/",
-    )
-    simul_breaks.add_argument(
-        "--google-project",
-        help="Google cloud project provided to hail batch for storage objects access.",
-        default="broad-mpg-gnomad",
-    )
-    simul_breaks.add_argument(
-        "--batch-memory",
-        help="Amount of memory to request for hail batch jobs.",
-        default=30,
-        type=int,
-    )
-    simul_breaks.add_argument(
-        "--batch-cpu",
-        help="Number of CPUs to request for hail batch jobs.",
-        default=8,
-        type=int,
-    )
-    simul_breaks.add_argument(
-        "--batch-storage",
-        help="Amount of disk storage to request for hail batch jobs.",
-        default=10,
-        type=int,
-    )
-    simul_breaks.add_argument(
-        "--docker-image",
-        help="Docker image to provide to hail batch. Must have dill, hail, and python installed.",
-        default="gcr.io/broad-mpg-gnomad/tgg-methods-vm:20210915",
     )
     simul_breaks.add_argument(
         "--write-simul-breaks-results",
