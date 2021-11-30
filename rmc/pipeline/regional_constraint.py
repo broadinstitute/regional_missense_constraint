@@ -1,10 +1,11 @@
 import argparse
 import logging
+from tqdm import tqdm
 
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
+from gnomad.utils.file_utils import file_exists, parallel_file_exists
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 
@@ -350,75 +351,171 @@ def main(args):
             context_ht.write(multiple_breaks.path, overwrite=args.overwrite)
 
         if args.search_for_simul_breaks:
-            logger.info("Setting hail flag to avoid method too large error...")
-            hl._set_flags(no_whole_stage_codegen="1")
-
-            logger.info("Setting another hail flag to speed up scans...")
-            hl._set_flags(distributed_scan_comb_op="1")
-
             logger.info(
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
             )
-            logger.info("Reading in not one break HT...")
-            context_ht = not_one_break.ht()
-            context_ht = context_ht.drop("_obs_scan")
+            transcript_tsv_path = args.transcript_tsv
 
-            # Get number of base pairs needed to observe `num` number of missense variants (on average)
-            # This number is used to determine the window size to search for constraint with simultaneous breaks
-            min_break_size = (
-                get_avg_bases_between_mis(
-                    get_reference_genome(context_ht.locus).name,
-                    args.get_total_exome_bases,
-                    args.get_total_gnomad_missense,
+            if args.get_no_break_transcripts:
+
+                logger.warning(
+                    "Not one break HT is big (~1.3 TiB) -- this step should be run in Dataproc!"
                 )
-                * args.min_num_obs
-            )
-            logger.info(
-                "Minimum window size (window size needed to observe %i missense variants on average): %i",
-                args.min_num_obs,
-                min_break_size,
-            )
+                logger.info("Reading in not one break HT...")
+                context_ht = not_one_break.ht()
+                context_ht = context_ht.drop("_obs_scan")
 
-            logger.info("Searching for transcripts with simultaneous breaks...")
-            # Converting to list here because `hl.agg.collect_as_set` will return `frozenset`
-            transcripts = list(
-                context_ht.aggregate(hl.agg.collect_as_set(context_ht.transcript))
-            )
+                if args.remove_outlier_transcripts:
+                    outlier_transcripts = get_outlier_transcripts()
+                    context_ht = context_ht.filter(
+                        ~outlier_transcripts.contains(context_ht.transcript)
+                    )
 
-            simul_breaks_hts = []
-            simul_break_transcripts = []
-            for count, transcript in enumerate(transcripts):
-                logger.info("Working on transcript #%i (%s)...", count, transcript)
-                break_ht = search_for_two_breaks(
-                    context_ht,
-                    transcript,
+                # Converting to list here because `hl.agg.collect_as_set` will return `frozenset`
+                transcripts = list(
+                    context_ht.aggregate(hl.agg.collect_as_set(context_ht.transcript))
+                )
+                with hl.hadoop_open(transcript_tsv_path, "w") as o:
+                    for transcript in transcripts:
+                        o.write(f"{transcript}\n")
+
+            if args.get_min_window_size:
+                # Get number of base pairs needed to observe `num` number of missense variants (on average)
+                # This number is used to determine the window size to search for constraint with simultaneous breaks
+                min_break_size = (
+                    get_avg_bases_between_mis(
+                        get_reference_genome(context_ht.locus).name,
+                        args.get_total_exome_bases,
+                        args.get_total_gnomad_missense,
+                    )
+                    * args.min_num_obs
+                )
+                logger.info(
+                    "Minimum window size (window size needed to observe %i missense variants on average): %i",
+                    args.min_num_obs,
                     min_break_size,
-                    args.overwrite_pos_ht,
-                    args.chisq_threshold,
                 )
-                if break_ht:
-                    simul_breaks_hts.append(break_ht)
-                    simul_break_transcripts.append(transcript)
 
-            logger.info(
-                "Found %i transcripts with evidence of simultaneous breaks...",
-                len(simul_break_transcripts),
-            )
-            logger.info("Writing out simultaneous breaks HT...")
-            # Union break HTs to keep simultaneous breaks annotations, including
-            # max chi square value and window start position
-            simul_break_ht = simul_breaks_hts[0].union(*simul_breaks_hts[1:])
-            simul_break_ht.write(simul_break.path, overwrite=args.overwrite)
+            if args.run_batch_simul_breaks_job:
+                import hailtop.batch as hb
 
-            logger.info(
-                "Getting transcripts with no evidence of regional missense constraint..."
-            )
-            simul_break_transcripts = hl.literal(simul_break_transcripts)
-            context_ht = context_ht.filter(
-                ~simul_break_transcripts.contains(context_ht.transcript)
-            )
-            context_ht.write(no_breaks.path, overwrite=args.overwrite)
+                logger.info("Setting up batch parameters...")
+                backend = hb.ServiceBackend(
+                    billing_project=args.billing_project,
+                    remote_tmpdir=args.batch_bucket,
+                    google_project=args.google_project,
+                )
+                b = hb.Batch(
+                    name="simul_breaks",
+                    backend=backend,
+                    default_memory=30,
+                    default_cpu=8,
+                    default_storage=10,
+                    default_python_image=args.docker_image,
+                )
+
+                if not file_exists(transcript_tsv_path):
+                    raise DataException(
+                        f"{transcript_tsv_path} doesn't exist. Please rerun with --get-no-break-transcripts!"
+                    )
+
+                # Table stored in temp bucket that is used to calculate constraint but can be deleted afterwards
+                # This Table is grouped by transcript and has all positions in each transcript collected into a list
+                pos_ht_path = f"{temp_path}/pos_per_transcript.ht"
+                if not file_exists(pos_ht_path) or args.overwrite_pos_ht:
+                    ht = not_one_break.ht()
+                    pos_ht = ht.group_by("transcript").aggregate(
+                        positions=hl.sorted(hl.agg.collect(ht.locus.position)),
+                    )
+                    pos_ht.write(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
+
+                logger.info("Checking for output file existence...")
+                transcript_success_map = {}
+                transcript_ht_map = {}
+                for transcript in transcripts:
+                    transcript_success_map[
+                        transcript
+                    ] = f"{temp_path}/{transcript}_success.txt"
+                    transcript_ht_map[
+                        transcript
+                    ] = f"{temp_path}/simul_breaks_{transcript}.ht"
+                success_files_exist = parallel_file_exists(
+                    list(transcript_success_map.values())
+                )
+                hts_exist = parallel_file_exists(list(transcript_ht_map.values()))
+
+                simul_break_transcripts = []
+                transcripts_to_run = []
+                for transcript in transcripts:
+                    output_tsv = f"{temp_path}/{transcript}_success.txt"
+                    # Adding this code for one time use to skip transcripts that finished while running serially
+                    if hts_exist[transcript_ht_map[transcript]]:
+                        continue
+                    if not success_files_exist[transcript_success_map[transcript]]:
+                        transcripts_to_run.append(transcript)
+                logger.info("Found %i transcripts to search...", len(transcripts))
+
+                for transcript in tqdm(transcripts, unit="transcripts"):
+                    logger.info("Working on %s...", transcript)
+                    j = b.new_python_job(name=transcript)
+                    j.call(
+                        search_for_two_breaks,
+                        not_one_break.path,
+                        f"{temp_path}/pos_per_transcript.ht",
+                        transcript,
+                        f"{temp_path}/simul_breaks_{transcript}.ht",
+                        transcript_success_map[transcript],
+                        f"{temp_path}/simul_breaks_scan_collect.ht",
+                        f"{temp_path}/simul_breaks_chisq.ht",
+                        args.min_window_size,
+                        args.chisq_threshold,
+                    )
+
+                b.run(wait=False)
+
+            if args.write_simul_breaks_results:
+                # Run this step in Dataproc
+                transcript_ht_map = {}
+                for transcript in transcripts:
+                    transcript_ht_map[
+                        transcript
+                    ] = f"{temp_path}/simul_breaks_{transcript}.ht"
+
+                hts_exist = parallel_file_exists(list(transcript_ht_map.values()))
+                simul_break_transcripts = []
+                for transcript in transcripts:
+
+                    if hts_exist[transcript_ht_map[transcript]]:
+                        simul_break_transcripts.append(transcript)
+
+                logger.info(
+                    "Found %i transcripts with evidence of simultaneous breaks...",
+                    len(simul_break_transcripts),
+                )
+
+                logger.info("Writing out simultaneous breaks HT...")
+                simul_breaks_hts = []
+                for count, transcript in enumerate(simul_break_transcripts):
+                    if count == 0:
+                        ht = hl.read_table(transcript_ht_map[transcript])
+                    else:
+                        # Union break HTs to keep simultaneous breaks annotations, including
+                        # max chi square value and window start position
+                        temp_ht = hl.read_table(transcript_ht_map[transcript])
+                        ht = ht.union(temp_ht)
+
+                ht.write(simul_break.path, overwrite=args.overwrite)
+
+                logger.info(
+                    "Getting transcripts with no evidence of regional missense constraint..."
+                )
+                context_ht = not_one_break.ht().drop("_obs_scan")
+                simul_break_transcripts = hl.literal(simul_break_transcripts)
+                context_ht = context_ht.filter(
+                    ~simul_break_transcripts.contains(context_ht.transcript)
+                )
+                context_ht.write(no_breaks.path, overwrite=args.overwrite)
 
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions
@@ -739,6 +836,21 @@ if __name__ == "__main__":
         description="Options specific to running simultaneous breaks search",
     )
     simul_breaks.add_argument(
+        "--transcript-tsv",
+        help="Path to store transcripts to search for two simultaneous breaks. Path should be to a file in Google cloud storage.",
+        default=f"{temp_path}/no_break_transcripts.tsv",
+    )
+    simul_breaks.add_argument(
+        "--get-no-break-transcripts",
+        help="Get all transcripts without evidence of one significant break (to search for two simultaneous breaks.",
+        action="store_true",
+    )
+    simul_breaks.add_argument(
+        "--get-min-window-size",
+        help="Determine smallest possible window size for simultaneous breaks.",
+        action="store_true",
+    )
+    simul_breaks.add_argument(
         "--get-total-exome-bases",
         help="Get total number of bases in the exome. If not set, will pull default value from TOTAL_EXOME_BASES.",
         action="store_true",
@@ -757,6 +869,21 @@ if __name__ == "__main__":
     simul_breaks.add_argument(
         "--overwrite-pos-ht",
         help="Overwrite the positions per transcript HT (HT keyed by transcript with a list of positiosn per transcript), even if it already exists.",
+        action="store_true",
+    )
+    simul_breaks.add_argument(
+        "--min-window-size",
+        help="Smallest possible window size for simultaneous breaks. Determined by running --get-min-window-size.",
+        type=int,
+    )
+    simul_breaks.add_argument(
+        "--run-batch-simul-breaks-job",
+        help="Run hail batch job to search for simultaneous breaks.",
+        action="store_true",
+    )
+    simul_breaks.add_argument(
+        "--write-simul-breaks-results",
+        help="Write simultaneous breaks and no break transcripts HTs.",
         action="store_true",
     )
     parser.add_argument(

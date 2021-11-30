@@ -4,7 +4,6 @@ from typing import Dict, List, Set, Tuple, Union
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
@@ -874,12 +873,16 @@ def process_additional_breaks(
 
 
 def search_for_two_breaks(
-    ht: hl.Table,
+    ht_path: str,
+    pos_ht_path: str,
     transcript: str,
+    success_ht_path: str,
+    success_path: str,
+    scan_checkpoint_path: str,
+    chisq_checkpoint_path: str,
     min_window_size: int,
-    overwrite_pos_ht: bool = False,
     chisq_threshold: float = 13.8,
-) -> hl.Table:
+) -> None:
     """
     Search for windows of constraint in transcripts with simultaneous breaks.
 
@@ -888,20 +891,28 @@ def search_for_two_breaks(
 
     For gnomAD v2.1, `min_window_size` is 100bp.
 
-    :param hl.Table ht: Input Table filtered to contain only transcripts with simultaneous breaks.
+    :param str ht_path: Path to input Table filtered to contain only transcripts without one significant break.
+    :param str pos_ht_path: Path to Table containing all positions per transcript.
+    :param str transcript: Transcript to search.
+    :param str success_ht_path: Path to output Table.
+    :param str success_path: Path to output success file.
+    :param str scan_checkpoint_path: Path to checkpoint temporary HT (after completing scans).
+    :param str chisq_checkpoint_path: Path to checkpoint temporary HT (after calculating null/alt distributions and associated chi square values).
     :param int min_window_size: Smallest possible window size to search for two simultaneous breaks.
-    :param bool overwrite_pos_ht: Whether to overwrite positions per transcript HT. Default is False.
     :param float chisq_threshold:  Chi-square significance threshold. Default is 13.8.
         Default is from ExAC RMC code and corresponds to a p-value of 0.999 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
-    :return: Table with largest simultaneous break window size annotated per transcript.
-    :rtype: hl.Table
+    :return: None
     """
+    # Set hail flag to avoid method too large and out of memory errors
+    hl._set_flags(no_whole_stage_codegen="1")
+
+    # Set hail flag to speed up scans
+    hl._set_flags(distributed_scan_comb_op="1")
+
+    ht = hl.read_table(ht_path)
     ht = ht.filter(ht.transcript == transcript)
 
-    logger.info(
-        "Creating arrays of cumulative observed and expected missense values..."
-    )
     # Reformat cumulative obs annotation from a dict ({transcript: int}) to just an int
     # Also reformat cumulative mu annotation from dict ({transcript: float}) to just float
     # TODO: Fix these annotations in the code above when they're written
@@ -909,8 +920,8 @@ def search_for_two_breaks(
         cumulative_obs=ht.cumulative_obs[ht.transcript],
         cumulative_mu=ht._mu_scan[ht.transcript],
     )
-    # Also add the expected value for each position
-    ht = ht.annotate(expected=(ht.mu_snp / ht.total_mu) * ht.total_exp)
+
+    # Create arrays of cumulative observed and expected missense values
     ht = ht.annotate(
         # NOTE: These scans do NOT need to be inclusive per row (do not need adjusting)
         # This is because these cumulative values are going to be used to calculate the
@@ -918,6 +929,7 @@ def search_for_two_breaks(
         prev_obs=hl.scan.collect(ht.cumulative_obs),
         prev_mu=hl.scan.collect(ht.cumulative_mu),
     )
+    # Select annotations needed for simultaneous breaks calculations
     ht = ht.select(
         "overall_oe",
         "prev_obs",
@@ -928,25 +940,17 @@ def search_for_two_breaks(
         "reverse",
         "reverse_obs_exp",
     )
-    ht = ht.checkpoint(f"{temp_path}/simul_breaks_scan_collect.ht", overwrite=True)
+    # Checkpoint HT here because the scans are computationally intense
+    ht = ht.checkpoint(scan_checkpoint_path, overwrite=True)
 
     # Translate mu to expected
     ht = ht.annotate(
         prev_exp=hl.if_else(
             hl.len(ht.prev_mu) == 0,
             ht.prev_mu,
-            hl.map(lambda x: (x / ht.total_mu) * ht.total_exp, ht.prev_mu,),
+            hl.map(lambda x: (x / ht.total_mu) * ht.total_exp, ht.prev_mu),
         )
     ).drop("prev_mu")
-
-    # Reformat prev_obs scan from dict ({transcript: [obs, obs, obs, ...]}) to list ([obs, obs, obs,...])
-    # ht = ht.transmute(
-    #    prev_obs=hl.if_else(
-    #        hl.is_missing(ht.prev_obs.get(ht.transcript)),
-    #        hl.empty_array(hl.tint64),
-    #        ht.prev_obs[ht.transcript],
-    #    )
-    # )
 
     # Run a quick validity check that each row has the same number of values in prev_obs and prev_exp
     mismatch_len_count = ht.aggregate(
@@ -959,7 +963,7 @@ def search_for_two_breaks(
             f"{mismatch_len_count} lines have different scan array lengths for prev obs and prev exp!"
         )
 
-    logger.info("Calculating null and alt distributions...")
+    # Calculate null and alt distributions
     ht = ht.annotate(
         nulls=hl.zip(ht.prev_obs, ht.prev_exp).starmap(
             lambda obs, exp: (
@@ -988,38 +992,30 @@ def search_for_two_breaks(
         ),
     )
 
-    logger.info("Calculating chi square values...")
+    # Calculate chi square values
     ht = ht.annotate(
         chi_squares=hl.zip(ht.nulls, ht.alts).starmap(
             lambda null, alt: 2 * (hl.log10(alt) - hl.log10(null))
         )
     )
-    logger.info("Getting max chi square value for each position...")
+
+    # Get maximum chi square value for each position
     ht = ht.annotate(
         max_chisq_for_pos=hl.or_missing(
             hl.len(ht.chi_squares) > 0, hl.max(ht.chi_squares)
         )
     )
 
-    logger.info("Checkpointing HT...")
+    # Select chi square annotations only (only required annotations) and checkpoint
+    # Checkpoint here becuase HT branches and becomes both group_ht and max_chisq ht below
     ht = ht.select("chi_squares", "max_chisq_for_pos")
-    # Checkpointing here because HT branches and becomes both group_ht and max_chisq ht below
-    ht = ht.checkpoint(f"{temp_path}/simul_breaks_ready.ht", overwrite=True)
+    ht = ht.checkpoint(chisq_checkpoint_path, overwrite=True)
 
-    logger.info("Getting max chi square for transcript...")
-    # group_ht = ht.group_by("transcript").aggregate(
-    #    max_chisq_per_transcript=hl.agg.max(ht.max_chisq_for_pos)
-    # )
-    # group_ht = group_ht.checkpoint(
-    #    f"{temp_path}/simul_breaks_chisq_group.ht", overwrite=True
-    # )
+    # Get maximum chi square value for each transcript
     max_chisq_for_transcript = ht.aggregate(hl.agg.max(ht.max_chisq_for_pos))
-    ht = ht.annotate(
-        # max_chisq_per_transcript=group_ht[ht.transcript].max_chisq_per_transcript
-        max_chisq_for_transcript=max_chisq_for_transcript
-    )
+    ht = ht.annotate(max_chisq_for_transcript=max_chisq_for_transcript)
 
-    logger.info("Checking for positions associated with maximum chi square values...")
+    # Find window start position associated with maximum chi square values
     max_chisq_ht = ht.filter(ht.max_chisq_for_pos == ht.max_chisq_for_transcript)
     max_chisq_ht = max_chisq_ht.annotate(
         chisq_index=max_chisq_ht.chi_squares.index(
@@ -1027,35 +1023,29 @@ def search_for_two_breaks(
         )
     )
 
-    logger.info("Gathering all positions in each transcript...")
-    if not file_exists(f"{temp_path}/pos_per_transcript.ht") or overwrite_pos_ht:
-        pos_ht = ht.group_by("transcript").aggregate(
-            positions=hl.sorted(hl.agg.collect(ht.locus.position)),
-        )
-        pos_ht.write(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
-    pos_ht = hl.read_table(f"{temp_path}/pos_per_transcript.ht")
-
+    # Get all positions present in transcript to map chi square index back to window start position
+    pos_ht = hl.read_table(pos_ht_path)
     max_chisq_ht = max_chisq_ht.annotate(
         pos_per_transcript=pos_ht[max_chisq_ht.transcript].positions
     )
     max_chisq_ht = max_chisq_ht.annotate(
         window_start=max_chisq_ht.pos_per_transcript[max_chisq_ht.chisq_index]
     )
+
+    # Make sure window start position is at least the same as minimum window size
     max_chisq_ht = max_chisq_ht.filter(
         (max_chisq_ht.max_chisq_for_pos > chisq_threshold)
         & (max_chisq_ht.locus.position - max_chisq_ht.window_start >= min_window_size)
     )
-    if max_chisq_ht.count() == 0:
-        return None
-    max_chisq_ht = max_chisq_ht.checkpoint(
-        f"{temp_path}/simul_breaks_max_chisq.ht", overwrite=True
-    )
 
-    ht = ht.filter(hl.is_defined(max_chisq_ht[ht.key]))
-    ht = ht.annotate(window_start=max_chisq_ht[ht.key].window_start)
-    ht = ht.select("window_start", chisq=ht.max_chisq_for_transcript)
-    ht = ht.checkpoint(f"{temp_path}/simul_breaks_{transcript}.ht", overwrite=True)
-    return ht
+    # Write output Table only if there is a significant break
+    if max_chisq_ht.count() != 0:
+        max_chisq_ht.write(success_ht_path, overwrite=True)
+
+    # Write success file regardless of whether transcript had significant break
+    # This ensures the transcript will be skipped successfully if batch job needs to be rerun
+    with hl.hadoop_open(success_path, "w") as o:
+        o.write("")
 
 
 def calculate_section_chisq(
