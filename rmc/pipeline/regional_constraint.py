@@ -409,9 +409,9 @@ def main(args):
                 b = hb.Batch(
                     name="simul_breaks",
                     backend=backend,
-                    default_memory=30,
-                    default_cpu=8,
-                    default_storage=10,
+                    default_memory=args.batch_memory,
+                    default_cpu=args.batch_cpu,
+                    default_storage=args.bathc_storage,
                     default_python_image=args.docker_image,
                 )
 
@@ -880,6 +880,44 @@ if __name__ == "__main__":
         "--run-batch-simul-breaks-job",
         help="Run hail batch job to search for simultaneous breaks.",
         action="store_true",
+    )
+    simul_breaks.add_argument(
+        "--billing-project",
+        help="Billing project to use with hail batch.",
+        default="gnomad-production",
+    )
+    simul_breaks.add_argument(
+        "--batch-bucket",
+        help="Bucket provided to hail batch for temporary storage.",
+        default="gs://gnomad-tmp/kc/",
+    )
+    simul_breaks.add_argument(
+        "--google-project",
+        help="Google cloud project provided to hail batch for storage objects access.",
+        default="broad-mpg-gnomad",
+    )
+    simul_breaks.add_argument(
+        "--batch-memory",
+        help="Amount of memory to request for hail batch jobs.",
+        default=30,
+        type=int,
+    )
+    simul_breaks.add_argument(
+        "--batch-cpu",
+        help="Number of CPUs to request for hail batch jobs.",
+        default=8,
+        type=int,
+    )
+    simul_breaks.add_argument(
+        "--batch-storage",
+        help="Amount of disk storage to request for hail batch jobs.",
+        default=10,
+        type=int,
+    )
+    simul_breaks.add_argument(
+        "--docker-image",
+        help="Docker image to provide to hail batch. Must have dill, hail, and python installed.",
+        default="gcr.io/broad-mpg-gnomad/tgg-methods-vm:20210915",
     )
     simul_breaks.add_argument(
         "--write-simul-breaks-results",
