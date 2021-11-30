@@ -5,11 +5,13 @@ import hail as hl
 
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
+from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
     not_one_break,
     temp_path,
 )
+from rmc.slack_creds import slack_token
 
 
 logging.basicConfig(
@@ -278,8 +280,17 @@ if __name__ == "__main__":
         type=int,
     )
     parser.add_argument(
-        "--output_name", help="Name to append to output files.",
+        "--output-name", help="Name to append to output files.",
     )
-
+    parser.add_argument(
+        "--slack-channel",
+        help="Send message to Slack channel/user",
+        default="@kc (she/her)",
+    )
     args = parser.parse_args()
-    main(args)
+
+    if args.slack_channel:
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
+    else:
+        main(args)
