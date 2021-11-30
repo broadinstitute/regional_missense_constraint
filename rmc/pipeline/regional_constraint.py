@@ -61,11 +61,11 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
-    hl.init(log="/RMC.log")
     exac = args.exac
 
     try:
         if args.pre_process_data:
+            hl.init(log="/RMC_pre_process.log")
             # TODO: Add code to create annotations necessary for constraint_flag_expr and filter transcripts prior to running constraint
             logger.warning("Code currently only processes b37 data!")
             logger.info(
@@ -104,6 +104,7 @@ def main(args):
             logger.info("Done preprocessing files")
 
         if args.prep_for_constraint:
+            hl.init(log="/RMC_prep_for_constraint.log")
             logger.info("Reading in exome HT...")
             if exac:
                 exome_ht = filtered_exac.ht()
@@ -262,6 +263,8 @@ def main(args):
             )
 
         if args.search_for_first_break:
+            hl.init(log="/RMC_first_break.log")
+
             logger.info("Searching for transcripts with a significant break...")
             context_ht = constraint_prep.ht()
             context_ht = process_transcripts(context_ht, args.chisq_threshold)
@@ -292,6 +295,8 @@ def main(args):
             not_one_break_ht.write(not_one_break.path, overwrite=args.overwrite)
 
         if args.search_for_additional_breaks:
+            hl.init(log="/RMC_additional_breaks.log")
+
             logger.info(
                 "Searching for additional breaks in transcripts with at least one significant break..."
             )
@@ -358,7 +363,7 @@ def main(args):
             transcript_tsv_path = args.transcript_tsv
 
             if args.get_no_break_transcripts:
-
+                hl.init(log="/RMC_get_no_break_transcripts.log")
                 logger.warning(
                     "Not one break HT is big (~1.3 TiB) -- this step should be run in Dataproc!"
                 )
@@ -381,6 +386,8 @@ def main(args):
                         o.write(f"{transcript}\n")
 
             if args.get_min_window_size:
+                hl.init(log="/RMC_get_min_window_size.log")
+
                 # Get number of base pairs needed to observe `num` number of missense variants (on average)
                 # This number is used to determine the window size to search for constraint with simultaneous breaks
                 min_break_size = (
@@ -411,7 +418,7 @@ def main(args):
                     backend=backend,
                     default_memory=args.batch_memory,
                     default_cpu=args.batch_cpu,
-                    default_storage=args.bathc_storage,
+                    default_storage=args.batch_storage,
                     default_python_image=args.docker_image,
                 )
 
@@ -475,6 +482,8 @@ def main(args):
                 b.run(wait=False)
 
             if args.write_simul_breaks_results:
+                hl.init(log="/RMC_write_simul_breaks_results.log")
+
                 # Run this step in Dataproc
                 transcript_ht_map = {}
                 for transcript in transcripts:
@@ -521,6 +530,8 @@ def main(args):
         # Fixed expected counts for any genes that span PAR and non-PAR regions
         # after running on gnomAD v2
         if args.fix_xg:
+            hl.init(log="/RMC_fix_XG.log")
+
             logger.info("Reading in exome HT...")
             exome_ht = filtered_exomes.ht()
 
@@ -583,6 +594,8 @@ def main(args):
                 # xg = xg.annotate(break_list=[xg.is_break])
 
         if args.finalize:
+            hl.init(log="/RMC_finalize.log")
+
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
             )
@@ -771,8 +784,9 @@ def main(args):
             )
 
     finally:
-        logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(LOGGING_PATH)
+        if not args.run_batch_simul_breaks_job:
+            logger.info("Copying hail log to logging bucket...")
+            hl.copy_log(LOGGING_PATH)
 
 
 if __name__ == "__main__":
