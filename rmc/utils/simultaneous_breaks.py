@@ -1,13 +1,10 @@
 import argparse
 import logging
-import sys
-from tqdm import tqdm
 
 import hail as hl
-import hailtop.batch as hb
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists, parallel_file_exists
+from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import (
     not_one_break,
@@ -24,11 +21,10 @@ logger.setLevel(logging.INFO)
 
 
 def search_for_two_breaks(
-    ht_path: str,
-    pos_ht_path: str,
+    ht: hl.Table,
+    pos_ht: hl.Table,
     transcript: str,
     success_ht_path: str,
-    success_path: str,
     scan_checkpoint_path: str,
     chisq_checkpoint_path: str,
     min_window_size: int,
@@ -42,11 +38,10 @@ def search_for_two_breaks(
 
     For gnomAD v2.1, `min_window_size` is 100bp.
 
-    :param str ht_path: Path to input Table filtered to contain only transcripts without one significant break.
-    :param str pos_ht_path: Path to Table containing all positions per transcript.
+    :param str ht_path:Input Table filtered to contain only transcripts without one significant break.
+    :param str pos_ht_path: Table containing all positions per transcript.
     :param str transcript: Transcript to search.
     :param str success_ht_path: Path to output Table.
-    :param str success_path: Path to output success file.
     :param str scan_checkpoint_path: Path to checkpoint temporary HT (after completing scans).
     :param str chisq_checkpoint_path: Path to checkpoint temporary HT (after calculating null/alt distributions and associated chi square values).
     :param int min_window_size: Smallest possible window size to search for two simultaneous breaks.
@@ -55,13 +50,6 @@ def search_for_two_breaks(
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
     :return: None
     """
-    # Set hail flag to avoid method too large and out of memory errors
-    hl._set_flags(no_whole_stage_codegen="1")
-
-    # Set hail flag to speed up scans
-    hl._set_flags(distributed_scan_comb_op="1")
-
-    ht = hl.read_table(ht_path)
     ht = ht.filter(ht.transcript == transcript)
 
     # Reformat cumulative obs annotation from a dict ({transcript: int}) to just an int
@@ -110,7 +98,7 @@ def search_for_two_breaks(
     if mismatch_len_count != 0:
         ht = ht.filter(hl.len(ht.prev_obs) != hl.len(ht.prev_exp))
         ht.show()
-        sys.exit(
+        raise DataException(
             f"{mismatch_len_count} lines have different scan array lengths for prev obs and prev exp!"
         )
 
@@ -175,7 +163,6 @@ def search_for_two_breaks(
     )
 
     # Get all positions present in transcript to map chi square index back to window start position
-    pos_ht = hl.read_table(pos_ht_path)
     max_chisq_ht = max_chisq_ht.annotate(
         pos_per_transcript=pos_ht[max_chisq_ht.transcript].positions
     )
@@ -193,14 +180,17 @@ def search_for_two_breaks(
     if max_chisq_ht.count() != 0:
         max_chisq_ht.write(success_ht_path, overwrite=True)
 
-    # Write success file regardless of whether transcript had significant break
-    # This ensures the transcript will be skipped successfully if batch job needs to be rerun
-    with hl.hadoop_open(success_path, "w") as o:
-        o.write("")
-
 
 def main(args):
     """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
+    hl.init(log="/search_for_two_breaks.log")
+
+    # Set hail flag to avoid method too large and out of memory errors
+    hl._set_flags(no_whole_stage_codegen="1")
+
+    # Set hail flag to speed up scans
+    hl._set_flags(distributed_scan_comb_op="1")
+
     logger.info(
         "Searching for two simultaneous breaks in transcripts that didn't have \
         a single significant break..."
@@ -208,30 +198,14 @@ def main(args):
     transcript_tsv_path = args.transcript_tsv
 
     if not file_exists(transcript_tsv_path):
-        raise DataException(
-            f"{transcript_tsv_path} doesn't exist. Please rerun with --get-no-break-transcripts!"
-        )
+        raise DataException(f"{transcript_tsv_path} doesn't exist!")
 
     transcripts = []
     with hl.hadoop_open(transcript_tsv_path) as i:
         for line in i:
             transcripts.append(line.strip())
 
-    logger.info("Setting up batch parameters...")
-    backend = hb.ServiceBackend(
-        billing_project=args.billing_project,
-        remote_tmpdir=args.batch_bucket,
-        google_project=args.google_project,
-    )
-    b = hb.Batch(
-        name="simul_breaks",
-        backend=backend,
-        default_memory=args.batch_memory,
-        default_cpu=args.batch_cpu,
-        default_storage=args.batch_storage,
-        default_python_image=args.docker_image,
-    )
-
+    logger.info("Checking for positions per transcript HT...")
     # Table stored in temp bucket that is used to calculate constraint but can be deleted afterwards
     # This Table is grouped by transcript and has all positions in each transcript collected into a list
     pos_ht_path = f"{temp_path}/pos_per_transcript.ht"
@@ -241,44 +215,25 @@ def main(args):
             positions=hl.sorted(hl.agg.collect(ht.locus.position)),
         )
         pos_ht.write(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
+    ht = not_one_break.ht()
+    pos_ht = hl.read_table(pos_ht_path)
 
-    logger.info("Checking for output file existence...")
     transcript_success_map = {}
     transcript_ht_map = {}
     for transcript in transcripts:
-        transcript_success_map[transcript] = f"{temp_path}/{transcript}_success.txt"
-        transcript_ht_map[transcript] = f"{temp_path}/simul_breaks_{transcript}.ht"
-    success_files_exist = parallel_file_exists(list(transcript_success_map.values()))
-    hts_exist = parallel_file_exists(list(transcript_ht_map.values()))
-
-    simul_break_transcripts = []
-    transcripts_to_run = []
-    for transcript in transcripts:
-        output_tsv = f"{temp_path}/{transcript}_success.txt"
-        # Adding this code for one time use to skip transcripts that finished while running serially
-        if hts_exist[transcript_ht_map[transcript]]:
-            continue
-        if not success_files_exist[transcript_success_map[transcript]]:
-            transcripts_to_run.append(transcript)
-    logger.info("Found %i transcripts to search...", len(transcripts))
-
-    for transcript in tqdm(transcripts, unit="transcripts"):
         logger.info("Working on %s...", transcript)
-        j = b.new_python_job(name=transcript)
-        j.call(
-            search_for_two_breaks,
-            not_one_break.path,
-            f"{temp_path}/pos_per_transcript.ht",
+
+        # Search for simultaneous breaks
+        search_for_two_breaks(
+            ht,
+            pos_ht,
             transcript,
             f"{temp_path}/simul_breaks_{transcript}.ht",
-            transcript_success_map[transcript],
             f"{temp_path}/simul_breaks_scan_collect_{transcript}.ht",
             f"{temp_path}/simul_breaks_chisq_{transcript}.ht",
             args.min_window_size,
             args.chisq_threshold,
         )
-
-    b.run(wait=False)
 
 
 if __name__ == "__main__":
@@ -343,11 +298,6 @@ if __name__ == "__main__":
         "--docker-image",
         help="Docker image to provide to hail batch. Must have dill, hail, and python installed.",
         default="gcr.io/broad-mpg-gnomad/tgg-methods-vm:20211130",
-    )
-    parser.add_argument(
-        "--remove-outlier-transcripts",
-        help="Remove outlier transcripts (transcripts with too many/few LoF, synonymous, or missense variants)",
-        action="store_true",
     )
     args = parser.parse_args()
     main(args)
