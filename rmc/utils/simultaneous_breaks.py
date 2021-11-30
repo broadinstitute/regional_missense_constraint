@@ -1,5 +1,6 @@
 import argparse
 import logging
+import os
 
 import hail as hl
 
@@ -216,7 +217,10 @@ def main(args):
         a single significant break..."
     )
     transcript_tsv_path = args.transcript_tsv
-    output_name = args.output_name
+    if args.output_name:
+        output_name = args.output_name
+    else:
+        output_name = os.path.basename(transcript_tsv_path)
 
     if not file_exists(transcript_tsv_path):
         raise DataException(f"{transcript_tsv_path} doesn't exist!")
