@@ -410,12 +410,12 @@ def main(args):
                 )
 
             transcripts = []
+            hl.init(log="/RMC_simul_breaks.log")
             with hl.hadoop_open(transcript_tsv_path) as i:
                 for line in i:
                     transcripts.append(line.strip())
 
             if args.run_batch_simul_breaks_job:
-                hl.init(log="/RMC_simul_breaks.log")
                 import hailtop.batch as hb
 
                 logger.info("Setting up batch parameters...")
@@ -453,6 +453,8 @@ def main(args):
                     transcript_ht_map[
                         transcript
                     ] = f"{temp_path}/simul_breaks_{transcript}.ht"
+                print(transcript_success_map)
+                print(transcript_ht_map)
                 success_files_exist = parallel_file_exists(
                     list(transcript_success_map.values())
                 )
@@ -488,7 +490,6 @@ def main(args):
                 b.run(wait=False)
 
             if args.write_simul_breaks_results:
-                hl.init(log="/RMC_write_simul_breaks_results.log")
 
                 # Run this step in Dataproc
                 transcript_ht_map = {}
