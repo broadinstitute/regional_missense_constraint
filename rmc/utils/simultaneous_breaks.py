@@ -23,7 +23,6 @@ logger.setLevel(logging.INFO)
 def search_for_two_breaks(
     ht: hl.Table,
     pos_ht: hl.Table,
-    transcript: str,
     success_ht_path: str,
     scan_checkpoint_path: str,
     chisq_checkpoint_path: str,
@@ -50,8 +49,6 @@ def search_for_two_breaks(
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
     :return: None
     """
-    ht = ht.filter(ht.transcript == transcript)
-
     # Reformat cumulative obs annotation from a dict ({transcript: int}) to just an int
     # Also reformat cumulative mu annotation from dict ({transcript: float}) to just float
     # TODO: Fix these annotations in the code above when they're written
@@ -217,6 +214,7 @@ def main(args):
         a single significant break..."
     )
     transcript_tsv_path = args.transcript_tsv
+    output_name = args.output_name
 
     if not file_exists(transcript_tsv_path):
         raise DataException(f"{transcript_tsv_path} doesn't exist!")
@@ -225,6 +223,7 @@ def main(args):
     with hl.hadoop_open(transcript_tsv_path) as i:
         for line in i:
             transcripts.append(line.strip())
+    transcripts = hl.literal(transcripts)
 
     logger.info("Checking for positions per transcript HT...")
     # Table stored in temp bucket that is used to calculate constraint but can be deleted afterwards
@@ -239,22 +238,18 @@ def main(args):
     ht = not_one_break.ht()
     pos_ht = hl.read_table(pos_ht_path)
 
-    transcript_success_map = {}
-    transcript_ht_map = {}
-    for transcript in transcripts:
-        logger.info("Working on %s...", transcript)
+    ht = ht.filter(transcripts.contains(ht.transcript))
 
-        # Search for simultaneous breaks
-        search_for_two_breaks(
-            ht,
-            pos_ht,
-            transcript,
-            f"{temp_path}/simul_breaks_{transcript}.ht",
-            f"{temp_path}/simul_breaks_scan_collect_{transcript}.ht",
-            f"{temp_path}/simul_breaks_chisq_{transcript}.ht",
-            args.min_window_size,
-            args.chisq_threshold,
-        )
+    logger.info("Searching for simultaneous breaks...")
+    search_for_two_breaks(
+        ht,
+        pos_ht,
+        f"{temp_path}/simul_breaks_{output_name}.ht",
+        f"{temp_path}/simul_breaks_scan_collect_{output_name}.ht",
+        f"{temp_path}/simul_breaks_chisq_{output_name}.ht",
+        args.min_window_size,
+        args.chisq_threshold,
+    )
 
 
 if __name__ == "__main__":
@@ -282,5 +277,9 @@ if __name__ == "__main__":
         help="Smallest possible window size for simultaneous breaks. Determined by running --get-min-window-size.",
         type=int,
     )
+    parser.add_argument(
+        "--output_name", help="Name to append to output files.",
+    )
+
     args = parser.parse_args()
     main(args)
