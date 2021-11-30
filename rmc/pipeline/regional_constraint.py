@@ -404,6 +404,16 @@ def main(args):
                     min_break_size,
                 )
 
+            if not file_exists(transcript_tsv_path):
+                raise DataException(
+                    f"{transcript_tsv_path} doesn't exist. Please rerun with --get-no-break-transcripts!"
+                )
+
+            transcripts = []
+            with hl.hadoop_open(transcript_tsv_path) as i:
+                for line in i:
+                    transcripts.append(line.strip())
+
             if args.run_batch_simul_breaks_job:
                 import hailtop.batch as hb
 
@@ -421,11 +431,6 @@ def main(args):
                     default_storage=args.batch_storage,
                     default_python_image=args.docker_image,
                 )
-
-                if not file_exists(transcript_tsv_path):
-                    raise DataException(
-                        f"{transcript_tsv_path} doesn't exist. Please rerun with --get-no-break-transcripts!"
-                    )
 
                 # Table stored in temp bucket that is used to calculate constraint but can be deleted afterwards
                 # This Table is grouped by transcript and has all positions in each transcript collected into a list
@@ -965,7 +970,9 @@ if __name__ == "__main__":
         "--overwrite", help="Overwrite existing data", action="store_true"
     )
     parser.add_argument(
-        "--slack-channel", help="Send message to Slack channel/user", default="@kc"
+        "--slack-channel",
+        help="Send message to Slack channel/user",
+        default="@kc (she/her)",
     )
     args = parser.parse_args()
 
