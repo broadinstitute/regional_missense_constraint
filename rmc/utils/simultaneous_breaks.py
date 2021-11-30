@@ -65,8 +65,8 @@ def search_for_two_breaks(
         # NOTE: These scans do NOT need to be inclusive per row (do not need adjusting)
         # This is because these cumulative values are going to be used to calculate the
         # observed and expected missense counts for the section pre-window
-        prev_obs=hl.scan.collect(ht.cumulative_obs),
-        prev_mu=hl.scan.collect(ht.cumulative_mu),
+        prev_obs=hl.scan.group_by(ht.transcript, hl.scan.collect(ht.cumulative_obs)),
+        prev_mu=hl.scan.group_by(ht.transcript, hl.scan.collect(ht.cumulative_mu)),
     )
     # Select annotations needed for simultaneous breaks calculations
     ht = ht.select(
@@ -83,13 +83,29 @@ def search_for_two_breaks(
     ht = ht.checkpoint(scan_checkpoint_path, overwrite=True)
 
     # Translate mu to expected
+    # ht = ht.annotate(
+    #    prev_exp=hl.if_else(
+    #        hl.len(ht.prev_mu) == 0,
+    #        ht.prev_mu,
+    #        hl.map(lambda x: (x / ht.total_mu) * ht.total_exp, ht.prev_mu),
+    #    )
+    # ).drop("prev_mu")
     ht = ht.annotate(
         prev_exp=hl.if_else(
-            hl.len(ht.prev_mu) == 0,
-            ht.prev_mu,
-            hl.map(lambda x: (x / ht.total_mu) * ht.total_exp, ht.prev_mu),
+            hl.is_missing(ht.prev_mu.get(ht.transcript)),
+            hl.empty_array(hl.tfloat64),
+            hl.map(
+                lambda x: (x / ht.total_mu) * ht.total_exp, ht.prev_mu[ht.transcript]
+            ),
         )
     ).drop("prev_mu")
+    ht = ht.transmute(
+        prev_obs=hl.if_else(
+            hl.is_missing(ht.prev_obs.get(ht.transcript)),
+            hl.empty_array(hl.tint64),
+            ht.prev_obs[ht.transcript],
+        )
+    )
 
     # Run a quick validity check that each row has the same number of values in prev_obs and prev_exp
     mismatch_len_count = ht.aggregate(
@@ -146,19 +162,23 @@ def search_for_two_breaks(
     )
 
     # Select chi square annotations only (only required annotations) and checkpoint
-    # Checkpoint here becuase HT branches and becomes both group_ht and max_chisq ht below
+    # Checkpoint here because HT branches and becomes both group_ht and max_chisq ht below
     ht = ht.select("chi_squares", "max_chisq_for_pos")
     ht = ht.checkpoint(chisq_checkpoint_path, overwrite=True)
 
     # Get maximum chi square value for each transcript
-    max_chisq_for_transcript = ht.aggregate(hl.agg.max(ht.max_chisq_for_pos))
-    ht = ht.annotate(max_chisq_for_transcript=max_chisq_for_transcript)
+    group_ht = ht.group_by("transcript").aggregate(
+        max_chisq_per_transcript=hl.agg.max(ht.max_chisq_for_pos)
+    )
+    ht = ht.annotate(
+        max_chisq_per_transcript=group_ht[ht.transcript].max_chisq_per_transcript
+    )
 
     # Find window start position associated with maximum chi square values
-    max_chisq_ht = ht.filter(ht.max_chisq_for_pos == ht.max_chisq_for_transcript)
+    max_chisq_ht = ht.filter(ht.max_chisq_for_pos == ht.max_chisq_per_transcript)
     max_chisq_ht = max_chisq_ht.annotate(
         chisq_index=max_chisq_ht.chi_squares.index(
-            max_chisq_ht.max_chisq_for_transcript
+            max_chisq_ht.max_chisq_per_transcript
         )
     )
 
@@ -172,12 +192,13 @@ def search_for_two_breaks(
 
     # Make sure window start position is at least the same as minimum window size
     max_chisq_ht = max_chisq_ht.filter(
-        (max_chisq_ht.max_chisq_for_pos > chisq_threshold)
+        (max_chisq_ht.max_chisq_for_pos >= chisq_threshold)
         & (max_chisq_ht.locus.position - max_chisq_ht.window_start >= min_window_size)
     )
 
     # Write output Table only if there is a significant break
     if max_chisq_ht.count() != 0:
+        max_chisq_ht = max_chisq_ht.select("window_start", "max_chisq_per_transcript")
         max_chisq_ht.write(success_ht_path, overwrite=True)
 
 
@@ -260,44 +281,6 @@ if __name__ == "__main__":
         "--min-window-size",
         help="Smallest possible window size for simultaneous breaks. Determined by running --get-min-window-size.",
         type=int,
-    )
-    parser.add_argument(
-        "--billing-project",
-        help="Billing project to use with hail batch.",
-        default="gnomad-production",
-    )
-    parser.add_argument(
-        "--batch-bucket",
-        help="Bucket provided to hail batch for temporary storage.",
-        default="gs://gnomad-tmp/kc/",
-    )
-    parser.add_argument(
-        "--google-project",
-        help="Google cloud project provided to hail batch for storage objects access.",
-        default="broad-mpg-gnomad",
-    )
-    parser.add_argument(
-        "--batch-memory",
-        help="Amount of memory to request for hail batch jobs.",
-        default=15,
-        type=int,
-    )
-    parser.add_argument(
-        "--batch-cpu",
-        help="Number of CPUs to request for hail batch jobs.",
-        default=8,
-        type=int,
-    )
-    parser.add_argument(
-        "--batch-storage",
-        help="Amount of disk storage to request for hail batch jobs.",
-        default=10,
-        type=int,
-    )
-    parser.add_argument(
-        "--docker-image",
-        help="Docker image to provide to hail batch. Must have dill, hail, and python installed.",
-        default="gcr.io/broad-mpg-gnomad/tgg-methods-vm:20211130",
     )
     args = parser.parse_args()
     main(args)
