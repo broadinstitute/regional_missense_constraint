@@ -356,6 +356,8 @@ def main(args):
             context_ht.write(multiple_breaks.path, overwrite=args.overwrite)
 
         if args.search_for_simul_breaks:
+            hl.init(log="RMC_simul_breaks.log")
+
             logger.info(
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
@@ -363,7 +365,6 @@ def main(args):
             transcript_tsv_path = args.transcript_tsv
 
             if args.get_no_break_transcripts:
-                hl.init(log="/RMC_get_no_break_transcripts.log")
                 logger.warning(
                     "Not one break HT is big (~1.3 TiB) -- this step should be run in Dataproc!"
                 )
@@ -386,7 +387,6 @@ def main(args):
                         o.write(f"{transcript}\n")
 
             if args.get_min_window_size:
-                hl.init(log="/RMC_get_min_window_size.log")
 
                 # Get number of base pairs needed to observe `num` number of missense variants (on average)
                 # This number is used to determine the window size to search for constraint with simultaneous breaks
@@ -410,7 +410,6 @@ def main(args):
                 )
 
             transcripts = []
-            hl.init(log="/RMC_simul_breaks.log")
             with hl.hadoop_open(transcript_tsv_path) as i:
                 for line in i:
                     transcripts.append(line.strip())
