@@ -706,6 +706,12 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     :rtype: hl.Table
     """
     ht = get_subsection_exprs(ht)
+    ht.describe()
+
+    # Rename break_oe (each section's observed/expected value) to be overall_oe
+    # This is because the overall OE ratio used in searching for additional breaks should be
+    # transcript section OE and not transcript overall OE
+    ht = ht.transmute(overall_oe=ht.break_oe)
 
     logger.info("Splitting HT into pre and post breakpoint sections...")
     pre_ht = ht.filter(ht.section.contains("pre"))
