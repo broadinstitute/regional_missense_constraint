@@ -708,9 +708,8 @@ def main(args):
             )
 
     finally:
-        if not args.run_batch_simul_breaks_job:
-            logger.info("Copying hail log to logging bucket...")
-            hl.copy_log(LOGGING_PATH)
+        logger.info("Copying hail log to logging bucket...")
+        hl.copy_log(LOGGING_PATH)
 
 
 if __name__ == "__main__":

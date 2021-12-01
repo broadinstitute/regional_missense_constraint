@@ -706,7 +706,6 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     :rtype: hl.Table
     """
     ht = get_subsection_exprs(ht)
-    ht.describe()
 
     # Rename break_oe (each section's observed/expected value) to be overall_oe
     # This is because the overall OE ratio used in searching for additional breaks should be
