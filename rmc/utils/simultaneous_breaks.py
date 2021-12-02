@@ -83,13 +83,6 @@ def search_for_two_breaks(
     ht = ht.checkpoint(scan_checkpoint_path, overwrite=True)
 
     # Translate mu to expected
-    # ht = ht.annotate(
-    #    prev_exp=hl.if_else(
-    #        hl.len(ht.prev_mu) == 0,
-    #        ht.prev_mu,
-    #        hl.map(lambda x: (x / ht.total_mu) * ht.total_exp, ht.prev_mu),
-    #    )
-    # ).drop("prev_mu")
     ht = ht.annotate(
         prev_exp=hl.if_else(
             hl.is_missing(ht.prev_mu.get(ht.transcript)),
