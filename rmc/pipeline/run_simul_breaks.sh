@@ -65,8 +65,7 @@ for tsv in ${transcript_tsv_list[@]}; do
     log=${tsv_name}.log
     echo "Starting job for transcripts in ${tsv_name}. Log file: ${log}"
     set -x
-    (
-    hailctl dataproc submit ${cluster} ${python_path} --min-window-size ${window_size} --chisq-threshold ${chisq} --transcript-tsv ${tsv}
+    (hailctl dataproc submit ${cluster} ${python_path} --min-window-size ${window_size} --chisq-threshold ${chisq} --transcript-tsv ${tsv}
     wait
     ) &> $log
     set +x
