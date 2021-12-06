@@ -422,12 +422,15 @@ def main(args):
                     .strip()
                     .split("\n")
                 )
+                # NOTE: These tables all have a single position for each transcript
+                # i.e., these tables contain only the row with a break
                 hts = [os.path.split(f)[-1] for f in files]
 
-                # Union all tables to keep simultaneous breaks annotations, including
-                # max chi square value and window start position
-                ht = hl.read_table(hts[0]).union(*hts[1:])
-                ht = ht.checkpoint(simul_break.path, overwrite=args.overwrite)
+                # Union all tables to create the temporary simultaneous breaks HT
+                ht = hl.read_table(hts[0]).union(*hts[1:], unify=True)
+                ht = ht.checkpoint(f"{temp_path}/simul_breaks_temp.ht", overwrite=True)
+
+                # Get the transcripts that have two simultaneous breaks
                 simul_break_transcripts = ht.aggregate(
                     hl.agg.collect_as_set(ht.transcript)
                 )
@@ -435,12 +438,26 @@ def main(args):
                     "Found %i transcripts with evidence of RMC...",
                     len(simul_break_transcripts),
                 )
+                simul_break_transcripts = hl.literal(simul_break_transcripts)
+
+                # Read in full not one break HT to get relevant observed, expected annotations
+                # (Needed downstream to calculation section chi square values)
+                context_ht = not_one_break.ht().drop("_obs_scan")
+                simul_breaks = not_one_break.filter(
+                    simul_break_transcripts.contains(not_one_break.transcript)
+                )
+                simul_breaks = simul_breaks.select(
+                    "observed", "mu_snp", "total_mu", "total_exp", "total_obs"
+                )
+                simul_breaks = simul_breaks.annotate(**ht[simul_breaks.key])
+                simul_breaks = simul_breaks.annotate(
+                    is_break=hl.is_defined(ht[simul_breaks.key])
+                )
+                simul_breaks = simul_breaks.write(simul_break.path, overwrite=True)
 
                 logger.info(
                     "Getting transcripts with no evidence of regional missense constraint..."
                 )
-                context_ht = not_one_break.ht().drop("_obs_scan")
-                simul_break_transcripts = hl.literal(simul_break_transcripts)
                 context_ht = context_ht.filter(
                     ~simul_break_transcripts.contains(context_ht.transcript)
                 )
