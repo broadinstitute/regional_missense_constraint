@@ -1,10 +1,12 @@
 import argparse
 import logging
+import os
+import subprocess
 
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists, parallel_file_exists
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 
@@ -369,9 +371,6 @@ def main(args):
 
             if args.get_no_break_transcripts:
                 hl.init(log="/RMC_simul_breaks_get_transcripts.log")
-                logger.warning(
-                    "Not one break HT is big (~1.3 TiB) -- this step should be run in Dataproc!"
-                )
                 logger.info("Reading in not one break HT...")
                 context_ht = not_one_break.ht()
                 context_ht = context_ht.drop("_obs_scan")
@@ -408,50 +407,34 @@ def main(args):
                     min_break_size,
                 )
 
-            if not file_exists(transcript_tsv_path):
-                raise DataException(
-                    f"{transcript_tsv_path} doesn't exist. Please rerun with --get-no-break-transcripts!"
-                )
-
             if args.write_simul_breaks_results:
 
                 hl.init(log="/RMC_write_simul_breaks.log")
-                transcripts = []
-                with hl.hadoop_open(transcript_tsv_path) as i:
-                    for line in i:
-                        transcripts.append(line.strip())
-
-                # Run this step in Dataproc
-                transcript_ht_map = {}
-                for transcript in transcripts:
-                    transcript_ht_map[
-                        transcript
-                    ] = f"{temp_path}/simul_breaks_{transcript}.ht"
-
-                hts_exist = parallel_file_exists(list(transcript_ht_map.values()))
-                simul_break_transcripts = []
-                for transcript in transcripts:
-
-                    if hts_exist[transcript_ht_map[transcript]]:
-                        simul_break_transcripts.append(transcript)
 
                 logger.info(
-                    "Found %i transcripts with evidence of simultaneous breaks...",
+                    "Getting path to simultaneous breaks results temporary tables..."
+                )
+                files = (
+                    subprocess.check_output(
+                        ["gsutil", "ls", args.simul_breaks_temp_path]
+                    )
+                    .decode("utf8")
+                    .strip()
+                    .split("\n")
+                )
+                hts = [os.path.split(f)[-1] for f in files]
+
+                # Union all tables to keep simultaneous breaks annotations, including
+                # max chi square value and window start position
+                ht = hl.read_table(hts[0]).union(*hts[1:])
+                ht = ht.checkpoint(simul_break.path, overwrite=args.overwrite)
+                simul_break_transcripts = ht.aggregate(
+                    hl.agg.collect_as_set(ht.transcript)
+                )
+                logger.info(
+                    "Found %i transcripts with evidence of RMC...",
                     len(simul_break_transcripts),
                 )
-
-                logger.info("Writing out simultaneous breaks HT...")
-                simul_breaks_hts = []
-                for count, transcript in enumerate(simul_break_transcripts):
-                    if count == 0:
-                        ht = hl.read_table(transcript_ht_map[transcript])
-                    else:
-                        # Union break HTs to keep simultaneous breaks annotations, including
-                        # max chi square value and window start position
-                        temp_ht = hl.read_table(transcript_ht_map[transcript])
-                        ht = ht.union(temp_ht)
-
-                ht.write(simul_break.path, overwrite=args.overwrite)
 
                 logger.info(
                     "Getting transcripts with no evidence of regional missense constraint..."
@@ -810,6 +793,11 @@ if __name__ == "__main__":
         "--write-simul-breaks-results",
         help="Write simultaneous breaks and no break transcripts HTs.",
         action="store_true",
+    )
+    simul_breaks.add_argument(
+        "--simul-breaks-temp-path",
+        help="Path to bucket with temporary simultaneous breaks results tables.",
+        default=f"{temp_path}/simul_breaks_x*.ht",
     )
     parser.add_argument(
         "--fix-xg",
