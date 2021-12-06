@@ -3,6 +3,10 @@ usage() {
 cat << EOF
     This script runs `simultaneous_breaks.py` on groups of transcripts serially.
 
+    NOTE that this script assumes you have collected all of the transcripts to run,
+    split them into multiple files, and copied them into a Google cloud bucket.
+    For example, `split -l 200 transcripts.tsv`.
+
     Inputs:
         -b    Google cloud bucket containing TSVs with groups of transcripts.
         -p    Prefix for transcript TSV file name.
