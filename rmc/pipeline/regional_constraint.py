@@ -430,6 +430,9 @@ def main(args):
                 ht = hl.read_table(hts[0]).union(*hts[1:], unify=True)
                 ht = ht.checkpoint(f"{temp_path}/simul_breaks_temp.ht", overwrite=True)
 
+                # Add `break_pos` annotation (list used to finalize transcript sections later)
+                ht = ht.annotate(break_pos=[ht.window_start, ht.locus.position])
+
                 # Run quick check to make sure no transcript appears more than once
                 duplicates = {}
                 transcript_counter = ht.aggregate(hl.agg.counter(ht.transcript))
