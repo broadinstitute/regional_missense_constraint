@@ -9,6 +9,7 @@ from gnomad.utils.file_utils import file_exists
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
 from rmc.resources.basics import (
+    breaks,
     multiple_breaks,
     oe_bin_counts_tsv,
     temp_path,
@@ -1526,7 +1527,21 @@ def create_section_expr_array(
     ]
 
 
-def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
+def get_transcript_start_end(ht: hl.Table) -> hl.Table:
+    """
+    Annotate input Table with start and end position for each transcript.
+
+    :param hl.Table ht: Input Table.
+    :return: Table annotated with `start_pos` and `end_pos` (transcript start and end positions).
+    """
+    transcript_ht = transcript_positions.ht()
+    indexed_ht = transcript_ht[ht.transcript]
+    return ht.annotate(start_pos=indexed_ht.start_pos, end_pos=indexed_ht.end_pos)
+
+
+def annotate_transcript_sections(
+    ht: hl.Table, max_n_breaks: int, simul_breaks: bool
+) -> hl.Table:
     """
     Annotate each transcript section with observed, expected, OE, and section chi square values.
 
@@ -1536,41 +1551,61 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
 
     :param hl.Table ht: Input Table.
     :param int max_n_breaks: Largest number of breaks.
+    :param bool simul_breaks: True if  input Table contains two simultaneous breaks transcripts.
+        False if input Table contains first/additional breaks transcripts/
     :return: Table with section and section values annotated.
     :rtype: hl.Table
     """
     logger.info("Annotating HT with transcript start and end positions...")
-    transcript_ht = transcript_positions.ht()
-    indexed_ht = transcript_ht[ht.transcript]
-    ht = ht.annotate(start_pos=indexed_ht.start_pos, end_pos=indexed_ht.end_pos)
+    ht = get_transcript_start_end(ht)
 
-    logger.info("Get section information for first section of each transcript...")
-    count = 1
-    section_ht = get_section_info(
-        ht, section_num=count, is_middle=False, indices=None, is_first=True
-    )
+    if simul_breaks:
+        logger.info("Get section information for first section of each transcript...")
+        first_ht = get_section_info(
+            ht, section_num=1, is_middle=False, indices=None, is_first=True
+        )
 
-    # Check sections between breakpoint positions
-    while count <= max_n_breaks:
-        if count == 1:
-            # One break transcripts only get divided into two sections
-            # Thus, increment counter and continue
-            count += 1
-            continue
-        else:
-            temp_ht = get_section_info(
-                ht,
-                section_num=count,
-                is_middle=True,
-                indices=(count - 2, count - 1),
-                is_first=False,
-            )
-            section_ht = section_ht.join(temp_ht, how="outer")
-            count += 1
-    end_ht = get_section_info(
-        ht, section_num=count, is_middle=False, indices=None, is_first=False
-    )
-    ht = section_ht.join(end_ht, how="outer")
+        logger.info("Get section information for middle section of each transcript...")
+        middle_ht = get_section_info(
+            ht, section_num=2, is_middle=True, indices=(0, 1), is_first=False,
+        )
+
+        logger.info("Get section information for last section of each transcript...")
+        last_ht = get_section_info(
+            ht, section_num=3, is_middle=False, indices=None, is_first=False
+        )
+
+        logger.info("Joining section HTs...")
+        ht = first_ht.join(middle_ht, how="outer").join(last_ht, how="outer")
+
+    else:
+        logger.info("Get section information for first section of each transcript...")
+        count = 1
+        section_ht = get_section_info(
+            ht, section_num=count, is_middle=False, indices=None, is_first=True
+        )
+
+        # Check sections between breakpoint positions
+        while count <= max_n_breaks:
+            if count == 1:
+                # One break transcripts only get divided into two sections
+                # Thus, increment counter and continue
+                count += 1
+                continue
+            else:
+                temp_ht = get_section_info(
+                    ht,
+                    section_num=count,
+                    is_middle=True,
+                    indices=(count - 2, count - 1),
+                    is_first=False,
+                )
+                section_ht = section_ht.join(temp_ht, how="outer")
+                count += 1
+        end_ht = get_section_info(
+            ht, section_num=count, is_middle=False, indices=None, is_first=False
+        )
+        ht = section_ht.join(end_ht, how="outer")
 
     logger.info(
         "Merging section string, start, end, obs, exp, and chi square expressions..."
@@ -1644,6 +1679,47 @@ def get_unique_transcripts_per_break(
     return transcripts_per_break
 
 
+def reformat_annotations_for_release(ht: hl.Table) -> hl.Table:
+    """
+    Reformat annotations in input HT for release.
+
+    This reformatting is necessary to load data into the gnomAD browser.
+
+    Desired schema:
+    ---------------------------------------
+    Row fields:
+        'transcript_id': str
+        'regions': array<struct {
+            'start': int32
+            'stop': int32
+            'observed_missense': int32
+            'expected_missense': float64
+            'chisq': float64
+        }>
+
+    ----------------------------------------
+    Key: ['transcript_id']
+    ----------------------------------------
+
+    :param hl.Table ht: Input Table.
+    :return: Table with schema described above.
+    :rtype: hl.Table
+    """
+    ht = ht.annotate(
+        regions=hl.struct(
+            start=ht.section_start,
+            stop=ht.section_end,
+            observed_missense=ht.section_obs,
+            expected_missense=ht.section_exp,
+            chisq=ht.section_chisq,
+        )
+    )
+    # Group Table by transcript
+    return ht.group_by(transcript_id=ht.transcript).aggregate(
+        regions=hl.agg.collect(ht.regions)
+    )
+
+
 def finalize_multiple_breaks(
     ht: hl.Table, max_n_breaks: int, annotations: List[str] = FINAL_ANNOTATIONS,
 ) -> hl.Table:
@@ -1660,7 +1736,7 @@ def finalize_multiple_breaks(
     :param int max_n_breaks: Largest number of breakpoints in any transcript.
     :param List[str] annotations: List of annotations to keep from input Table.
         Default is FINAL_ANNOTATIONS.
-    :return: Table annotated with breakpoint positions and section obs, exp, OE, chi-square values.
+    :return: Table annotated with transcript subsection values and breakpoint positions.
     :rtype: hl.Table
     """
     logger.info("Removing outlier transcripts...")
@@ -1704,7 +1780,7 @@ def finalize_multiple_breaks(
         # Filter HT to transcripts associated with this break only
         # and annotate section information
         temp_ht = ht.filter(transcripts.contains(ht.transcript))
-        temp_ht = annotate_transcript_sections(temp_ht, i)
+        temp_ht = annotate_transcript_sections(temp_ht, i, simul_breaks=False)
 
         # Add section oe
         # Do not cap section oe value here (this is for browser display)
@@ -1718,80 +1794,58 @@ def finalize_multiple_breaks(
     # Merge all HTs together
     ht = hts[0].union(*hts[1:])
     ht = ht.annotate_globals(**transcripts_per_break)
-    ht.checkpoint(f"{temp_path}/multiple_breaks.ht", overwrite=True)
-
-    def _reformat_annotations_for_release(ht: hl.Table) -> hl.Table:
-        """
-        Reformat annotations on input HT for release.
-
-        This reformatting is necessary to load data into the gnomAD browser.
-
-        Desired schema:
-        ---------------------------------------
-        Row fields:
-            'transcript_id': str
-            'regions': array<struct {
-                'start': int32
-                'stop': int32
-                'observed_missense': int32
-                'expected_missense': float64
-                'chisq': float64
-            }>
-
-        ----------------------------------------
-        Key: ['transcript_id']
-        ----------------------------------------
-
-        :param hl.Table ht: Input Table.
-        :return: Table with schema described above.
-        :rtype: hl.Table
-        """
-        ht = ht.annotate(
-            regions=hl.struct(
-                start=ht.section_start,
-                stop=ht.section_end,
-                observed_missense=ht.section_obs,
-                expected_missense=ht.section_exp,
-                chisq=ht.section_chisq,
-            )
-        )
-        # Group Table by transcript
-        return ht.group_by(transcript_id=ht.transcript).aggregate(
-            regions=hl.agg.collect(ht.regions)
-        )
-
-    ht = _reformat_annotations_for_release(ht)
-    ht.write(multiple_breaks.path, overwrite=True)
+    ht = ht.checkpoint(multiple_breaks.path, overwrite=True)
+    return ht
 
 
-def finalize_simul_breaks(min_window_size: int, max_window_size: int,) -> None:
+def finalize_simul_breaks(ht: hl.Table) -> hl.Table:
     """
-    Create table of transcripts with simultaneous breaks.
+    Process Table containing transcripts with two simultaneous breaks.
 
-    Combine transcripts from multiple temporary checkpointed Tables.
+    Calculate each transcript subsection observed, expected, OE, and chi-square values.
 
-    Get number of transcripts unique to each window size and drop any extra annotations.
-    Also calculate each section's observed, expected, OE, and chi-square values.
-
-    :param int min_window_size: Smallest two simultaneous breaks window size for constraint.
-    :param int max_window_size: Largest two simultaneous breaks window size for constraint.
-    :return: None
+    :param hl.Table ht: Input Table with simultaneous breaks results.
+    :return: Table annotated with transcript subsection values.
+    :rtype: hl.Table
     """
-    # TODO: Finish this function once simul breaks are ready
-    logger.info("Getting transcripts associated with each window size...")
-    transcripts_per_window = {}
-    all_transcripts = []
-    for i in range(min_window_size, max_window_size + 1):
-        temp_ht = hl.read_table(f"{temp_path}/simul_break_{i}_temp.ht")
-        temp_ht = temp_ht.filter(temp_ht.is_break)
-        transcripts = temp_ht.aggregate(hl.agg.collect_as_set(temp_ht.transcript))
-        transcripts_per_window[i] = transcripts
-        all_transcripts.extend(list(transcripts))
-    unique_transcripts = set(all_transcripts)
-    logger.info(
-        "Total number of transcripts with simultaneous breaks: %i",
-        len(unique_transcripts),
-    )
+    logger.info("Get transcript section annotations (obs, exp, OE, chisq)...")
+    ht = annotate_transcript_sections(ht, max_n_breaks=2, simul_breaks=True)
+    ht = ht.checkpoint(f"{temp_path}/simul_break_sections.ht", overwrite=True)
+    return ht
+
+
+def finalize_all_breaks_results(
+    breaks_ht: hl.Table,
+    simul_breaks_ht: hl.Table,
+    max_n_breaks: int,
+    annotations: List[str] = FINAL_ANNOTATIONS,
+) -> None:
+    """
+    Finalize all breaks results.
+
+    Finalize results for multiple breaks (first/additional breaks) and simultaneous breaks,
+    then merge results into single Table.
+
+    Also reformat Table to match desired release HT schema.
+
+    :param hl.Table breaks_ht: Input Table with multiple break results.
+    :param hl.Table simul_breaks_ht: Input Table with simultaneous breaks results.
+    :param int max_n_breaks: Largest number of breakpoints in any transcript. Used only for multiple breaks results.
+    :param List[str] annotations: List of annotations to keep from input Table.
+        Default is FINAL_ANNOTATIONS.
+    :return: None; writes Table to resource path.
+    """
+    logger.info("Finalizing multiple breaks results...")
+    breaks_ht = finalize_multiple_breaks(breaks_ht, max_n_breaks, annotations)
+
+    logger.info("Finalizing simultaneous breaks results...")
+    simul_breaks_ht = finalize_simul_breaks(simul_breaks_ht)
+    ht = breaks_ht.union(simul_breaks_ht, unify=False)
+    ht = ht.checkpoint(f"{temp_path}/breaks.ht", overwrite=True)
+
+    logger.info("Reformatting for browser release...")
+    ht = reformat_annotations_for_release(ht)
+    ht.write(breaks.path, overwrite=True)
 
 
 def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:
