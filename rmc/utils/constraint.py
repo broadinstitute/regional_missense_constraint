@@ -87,21 +87,6 @@ FINAL_ANNOTATIONS = [
 List of annotations to keep when finalizing release HT.
 """
 
-SECTION_ANNOTATIONS = [
-    "section",
-    "section_chisq",
-    "section_oe",
-    "oe_bin",
-    "section_obs",
-    "section_exp",
-    "section_bp",
-]
-"""
-List of annotations relevant to transcript sections.
-
-Used when grouping results by observed/expected (OE) bins.
-"""
-
 
 def calculate_observed(ht: hl.Table) -> hl.Table:
     """
@@ -1864,27 +1849,25 @@ def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Tab
     return ht1.annotate(**{f"{annot_str}": hl.int(hl.is_defined(ht2[ht1.locus]))})
 
 
-def get_oe_bins(
-    max_n_breaks: int,
-    build: str,
-    overwrite_clinvar_ht: bool,
-    annotations: List[str] = SECTION_ANNOTATIONS,
-) -> None:
+def get_oe_bins(ht: hl.Table, build: str, overwrite_clinvar_ht: bool,) -> None:
     """
     Group RMC results HT by obs/exp (OE) bin and annotate.
 
-    Annotations:
+    Add the following annotations:
         - Proportion coding base pairs
         - Proportion de novo missense from controls/cases
         - Proportion ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes.
 
-    .. note::
-        Currently untested on simultaneous breaks results.
+    Assumes input Table is annotated with the following annotations:
+        - `section_start`: Start position for transcript subsection
+        - `section_end`: End position for transcript subsection
+        - `section_obs`: Number of observed missense variants within transcript subsection
+        - `section_exp`: Proportion of expected missense variatns within transcript subsection
+        - `section_oe`: Observed/expected missense variation ratio within transcript subsection
 
-    :param int max_n_breaks: Largest number of breaks.
+    :param hl.Table ht: Input Table containing all breaks results.
     :param str build: Reference genome build.
     :param bool overwrite_clinvar_ht: Whether to overwrite ClinVar HT.
-    :param List[str] annotations: Annotations to keep from RMC results HT. Default is SECTION_ANNOTATIONS.
     :return: None; writes TSV with OE bins + annotations to `oe_bin_counts_tsv` resource path.
     :rtype: None
     """
@@ -1911,47 +1894,41 @@ def get_oe_bins(
     total_control = dn_controls_ht.count()
     total_case = dn_case_ht.count()
 
-    logger.info("Reading in multiple breaks HTs annotated with section information...")
-    group_hts = []
-    for i in range(1, max_n_breaks + 1):
-        path = f"{temp_path}/break_{i}_sections.ht"
-        if file_exists(path):
-            ht = hl.read_table(path)
-            ht = ht.transmute(section_bp=ht.section_end - ht.section_start)
-            ht = ht.annotate(
-                oe_bin=hl.case()
-                .when(ht.section_oe <= 0.2, "0-0.2")
-                .when((ht.section_oe > 0.2) & (ht.section_oe <= 0.4), "0.2-0.4")
-                .when((ht.section_oe > 0.4) & (ht.section_oe <= 0.6), "0.4-0.6")
-                .when((ht.section_oe > 0.6) & (ht.section_oe <= 0.8), "0.6-0.8")
-                .default("0.8-1.0")
-            )
-            ht = ht.select_globals().select(*annotations)
+    # Annotate with control and case DNM, ClinVar P/LP variants,
+    ht = check_loci_existence(ht, dn_controls_ht, "dnm_controls")
+    ht = check_loci_existence(ht, dn_case_ht, "dnm_cases")
+    ht = check_loci_existence(ht, clinvar_ht, "clinvar_path")
+    ht = ht.annotate(
+        oe_bin=hl.case()
+        .when(ht.section_oe <= 0.2, "0-0.2")
+        .when((ht.section_oe > 0.2) & (ht.section_oe <= 0.4), "0.2-0.4")
+        .when((ht.section_oe > 0.4) & (ht.section_oe <= 0.6), "0.4-0.6")
+        .when((ht.section_oe > 0.6) & (ht.section_oe <= 0.8), "0.6-0.8")
+        .default("0.8-1.0")
+    )
+    # Checkpoint HT here becuase it becomes a couple tables below
+    ht = ht.checkpoint(f"{temp_path}/breaks_oe_bin.ht", overwrite=True)
 
-            # Annotate with control and case DNM, ClinVar P/LP variants,
-            ht = check_loci_existence(ht, dn_controls_ht, "dnm_controls")
-            ht = check_loci_existence(ht, dn_case_ht, "dnm_cases")
-            ht = check_loci_existence(ht, clinvar_ht, "clinvar_path")
+    # Group HT by section to get number of base pairs per section
+    # Need to group by to avoid overcounting
+    group_ht = ht.group_by("section").aggregate(
+        start=hl.agg.take(ht.section_start, 1)[0],
+        end=hl.agg.take(ht.section_end, 1)[0],
+        obs=hl.agg.take(ht.section_obs, 1)[0],
+        exp=hl.agg.take(ht.section_exp, 1)[0],
+        chisq=hl.agg.take(ht.section_chisq, 1)[0],
+        oe=hl.agg.take(ht.section_oe, 1)[0],
+        oe_bin=hl.agg.take(ht.oe_bin, 1)[0],
+    )
+    group_ht = group_ht.checkpoint(f"{temp_path}/sections.ht", overwrite=True)
+    group_ht = group_ht.annotate(bp=group_ht.end - group_ht.start)
+    group_ht = group_ht.group_by("oe_bin").aggregate(bp_sum=hl.agg.sum(group_ht.bp))
 
-            # Group Table by oe_bin and checkpoint
-            ht = ht.group_by("oe_bin").aggregate(
-                bp=hl.agg.sum(ht.section_bp),
-                dnm_control=hl.agg.sum(ht.dnm_controls),
-                dnm_case=hl.agg.sum(ht.dnm_cases),
-                clinvar=hl.agg.sum(ht.clinvar_path),
-            )
-            ht = ht.checkpoint(
-                f"{temp_path}/break_{i}_section_grouped.ht", overwrite=True
-            )
-            group_hts.append(ht)
-
-    logger.info("Merging grouped HTs into a single HT...")
-    assess_ht = group_hts[0].union(*group_hts[1:])
-    assess_ht = assess_ht.group_by("oe_bin").aggregate(
-        bp=hl.agg.sum(assess_ht.bp),
-        dnm_controls=hl.agg.sum(assess_ht.dnm_control),
-        dnm_case=hl.agg.sum(assess_ht.dnm_case),
-        clinvar=hl.agg.sum(assess_ht.clinvar),
+    # Group HT
+    assess_ht = ht.group_by("oe_bin").aggregate(
+        dnm_controls=hl.agg.sum(ht.dnm_controls),
+        dnm_case=hl.agg.sum(ht.dnm_cases),
+        clinvar=hl.agg.sum(ht.clinvar_path),
     )
     assess_ht_count = assess_ht.count()
     if assess_ht_count != 5:
@@ -1959,7 +1936,8 @@ def get_oe_bins(
             "Expected 5 OE bins but found {assess_ht_count}. Please double check and rerun!"
         )
 
-    logger.info("Reformatting annotations on assessment HT...")
+    logger.info("Reformatting annotations on assessment HT to be proportions...")
+    assess_ht = assess_ht.annotate(bp=group_ht[assess_ht.key])
     assess_ht = assess_ht.transmute(
         bp=assess_ht.bp / total_bp,
         controls=assess_ht.dnm_controls / total_control,
