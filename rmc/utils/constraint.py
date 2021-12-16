@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Set, Tuple, Union
+from typing import Dict, List, Union
 
 import hail as hl
 
@@ -43,7 +43,6 @@ def calculate_observed(ht: hl.Table) -> hl.Table:
 
     .. note::
         Assumes input HT has been filtered using `keep_criteria`.
-
     :param hl.Table ht: Input Table.
     :return: Table annotated with observed variant counts.
     :rtype: hl.Table
@@ -61,7 +60,6 @@ def get_cumulative_mu_expr(
 
     Value is shifted by one due to the nature of `hl.scan` and needs to be corrected later.
     This function can produce the scan when searching for the first break or when searching for additional break(s).
-
     :param hl.expr.StringExpression transcript_expr: StringExpression containing transcript information.
     :param hl.expr.Float64Expression mu_expr: FloatExpression containing mutation rate probability per variant.
     :return: DictExpression containing scan expressions for cumulative mutation rate probability.
@@ -80,7 +78,6 @@ def adjust_mu_expr(
 
     This adjustment is necessary because scans are always one line behind, and we want the values to match per line.
     This function can correct the scan created when searching for the first break or when searching for additional break(s).
-
     :param hl.expr.DictExpression cumulative_mu_expr: DictExpression containing scan expressions for cumulative mutation rate probability.
     :param hl.expr.Float64Expression mu_expr: FloatExpression containing mutation rate probability per variant.
     :param hl.expr.StringExpression transcript_expr: StringExpression containing transcript information.
@@ -110,10 +107,8 @@ def translate_mu_to_exp_expr(
 
     Expected variants counts are produced per base by first calculating the fraction of probability of mutation per base,
     then multiplying that fraction by the total expected variants count for a transcript or transcript sub-section.
-
     The expected variants count for section of interest is mutation rate per SNP adjusted by location in the genome/CpG status
     (plateau model) and coverage (coverage model).
-
     :param hl.expr.DictExpression cumulative_mu_expr: DictExpression containing scan expressions for cumulative mutation rate probability.
     :param hl.expr.StringExpression transcript_expr: StringExpression containing transcript information.
     :param hl.expr.Float64Expression total_mu_expr: FloatExpression describing total sum of mutation rate probabilities per transcript.
@@ -137,7 +132,6 @@ def calculate_exp_per_transcript(
         - Expects that input table has multiple fields for mutation rate probabilities:
             `mu_snp` for mutation rate probability adjusted by coverage, and
             `raw_mu_snp` for raw mutation rate probability.
-
     :param hl.Table context_ht: Context Table.
     :param str locus_type: Locus type of input table. One of "X", "Y", or "autosomes".
         NOTE: will treat any input other than "X" or "Y" as autosomes.
@@ -192,14 +186,11 @@ def get_obs_exp_expr(
     Return observed/expected annotation based on inputs.
 
     Cap observed/expected value at 1.
-
     Function can generate observed/expected values across the entire transcript or section of a transcript depending on inputs.
     Function can also generate 'forward' (moving from smaller to larger positions") or 'reverse' (moving from larger to smaller positions)
     section obs/exp values.
-
     .. note::
         `cond_expr` should vary depending on size/direction of section being annotated.
-
     :param hl.expr.BooleanExpression cond_expr: Condition to check prior to adding obs/exp expression.
     :param hl.expr.Int64Expression obs_expr: Expression containing number of observed variants.
     :param hl.expr.Float64Expression exp_expr: Expression containing number of expected variants.
@@ -217,7 +208,6 @@ def get_cumulative_obs_expr(
 
     Value is shifted by one due to the nature of `hl.scan` and needs to be corrected later.
     This function can produce the scan when searching for the first break or when searching for additional break(s).
-
     :param hl.expr.StringExpression transcript_expr: StringExpression containing transcript information.
     :param hl.expr.Int64Expression observed_expr: Observed variants expression.
     :return: Struct containing the cumulative number of observed and expected variants.
@@ -237,11 +227,9 @@ def adjust_obs_expr(
 
     This adjustment is necessary because scans are always one line behind, and we want the values to match per line.
     This function can correct the scan created when searching for the first break or when searching for additional break(s).
-
     .. note::
         This function expects:
             - cumulative_obs_expr is a DictExpression keyed by transcript.
-
     :param hl.expr.DictExpression cumulative_obs_expr: DictExpression containing scan expression with cumulative observed counts per base.
     :param hl.expr.Int32Expression obs_expr: IntExpression with value of either 0 (no observed variant at site) or 1 (variant found in gnomAD).
     :param hl.expr.StringExpression transcript_expr: StringExpression containing transcript information.
@@ -272,10 +260,8 @@ def get_reverse_obs_exp_expr(
     The reverse counts are the counts moving from larger to smaller positions
     (backwards from the end of the transcript back to the beginning of the transcript).
     reverse value = total value - cumulative value
-
     .. note::
         This function is designed to run on one transcript at a time.
-
     :param hl.expr.Int64Expression total_obs_expr: Expression containing total number of observed variants for transcript.
     :param hl.expr.Float64Expression total_exp_expr: Expression containing total number of expected variants for transcript.
     :param hl.expr.DictExpression scan_obs_expr: Expression containing cumulative number of observed variants for transcript.
@@ -309,7 +295,6 @@ def get_fwd_exprs(
         Expects:
         - Input HT is annotated with transcript, observed, mutation rate, total mutation rate (per section),
         and total expected counts (per section).
-
     :param hl.Table ht: Input Table.
     :param str transcript_str: Name of field containing transcript information.
     :param str obs_str: Name of field containing observed variants counts.
@@ -372,7 +357,6 @@ def get_reverse_exprs(
 
     .. note::
         'Reverse' refers to moving through the transcript from larger to smaller chromosomal positions.
-
     :param hl.Table ht: Input Table.
     :param hl.expr.Int64Expression total_obs_expr: Expression containing total number of observed variants per transcript (if searching for first break)
         or per section (if searching for additional breaks).
@@ -419,7 +403,6 @@ def get_dpois_expr(
 
     All parameter values depend on the direction of calculation (forward/reverse) and
     number of breaks (searching for first break or searching for additional break).
-
     For forward null/alts, values for obs_expr and and exp_expr should be:
         - Expression containing cumulative numbers for entire transcript.
         - Expression containing cumulative numbers for section of transcript
@@ -427,7 +410,6 @@ def get_dpois_expr(
     For reverse null/alts, values for obs_expr and and exp_expr should be:
         - Reverse counts for entire transcript.
         - Reverse counts for section of transcript.
-
     For forward null/alts, values for overall_oe_expr and section_oe_expr should be:
         - Expression containing observed/expected value for entire transcript and
             expression containing observed/expected value calculated on cumulative observed and expected
@@ -439,7 +421,6 @@ def get_dpois_expr(
             (total observed - cumulative observed count).
         - Expression containing observed/expected value for section of transcript and
             expression containing reverse observed/expected value for section of transcript.
-
     For forward null/alts, cond_expr should check:
         - That the length of the obs_expr isn't 0 when searching for the first break.
         - That the length of the obs_expr is 2 when searching for a second additional break.
@@ -447,7 +428,6 @@ def get_dpois_expr(
         - That the reverse observed value for the entire transcript is defined when searching for the first break.
         - That the reverse observed value for the section between the first breakpoint and the end of the transcript
              is defined when searching for a second additional break.
-
     :param hl.expr.BooleanExpression cond_expr: Conditional expression to check before calculating null and alt values.
     :param hl.expr.Float64Expression section_oe_expr: Expression of section observed/expected value.
     :param Union[Dict[hl.expr.StringExpression, hl.expr.Int64Expression], hl.expr.Int64Expression] obs_expr: Expression containing observed variants count.
@@ -465,7 +445,6 @@ def get_section_expr(dpois_expr: hl.expr.ArrayExpression,) -> hl.expr.Float64Exp
     For example, when checking for the first break in a transcript, the transcript is broken into two sections:
     pre-breakpoint and post-breakpoint. Each section's null and alt distributions must be multiplied
     to later test the significance of the break.
-
     :param hl.expr.ArrayExpression dpois_expr: ArrayExpression that contains all section nulls or alts.
         Needs to be reduced to single float by multiplying each number in the array.
     :return: Overall section distribution.
@@ -496,7 +475,6 @@ def search_for_break(
         - reverse_obs_exp
         - total_obs
         - total_exp
-
     If searching for simultaneous breaks, expects HT to have the following fields:
         - pre_obs
         - pre_exp
@@ -507,13 +485,10 @@ def search_for_break(
         - post_obs
         - post_exp
         - post_oe
-
     Also expects:
         - multiallelic variants in input HT have been split.
         - Input HT is autosomes/PAR only, X non-PAR only, or Y non-PAR only.
-
     Returns HT filtered to lines with maximum chisq if chisq >= max_value, otherwise returns None.
-
     :param hl.Table ht: Input context Table.
     :param hl.expr.StringExpression search_field: Field of table to search. Value should be either 'transcript' or 'section'.
     :param bool simul_break: Whether this function is searching for simultaneous breaks. Default is False.
@@ -649,7 +624,6 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
     Also annotate input Table with cumulative observed, expected, and observed/expected values
     for both forward (moving from smaller to larger positions) and reverse (moving from larger to
     smaller positions) directions.
-
     Expects input Table to have the following fields:
         - locus
         - alleles
@@ -665,7 +639,6 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
     Also expects:
         - multiallelic variants in context HT have been split.
         - Global annotations contains plateau models.
-
     :param hl.Table ht: Input Table. annotated with observed and expected variants counts per transcript.
     :param float chisq_threshold: Chi-square significance threshold.
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
@@ -707,7 +680,6 @@ def get_subsection_exprs(
             - total mutation rate probability per transcript
             - total expected variant counts per transcript
         Names of annotations must match section_str, obs_str, mu_str, total_mu_str, and total_exp_str.
-
     :param hl.Table ht: Input Table.
     :param str section_str: Name of section annotation.
     :param str obs_str: Name of observed variant counts annotation.
@@ -757,7 +729,6 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
         - methylation_level
         - section
     Also assumes that Table's globals contain plateau and coverage models.
-
     :param hl.Table ht: Input Table.
     :param float chisq_threshold: Chi-square significance threshold.
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
@@ -840,7 +811,6 @@ def process_additional_breaks(
         - coverage_correction
         - transcript
     Also assumes that Table's globals contain plateau models.
-
     :param hl.Table ht: Input Table.
     :param int break_num: Number of additional break: 2 for second break, 3 for third, etc.
     :param float chisq_threshold: Chi-square significance threshold.
@@ -884,9 +854,7 @@ def search_for_two_breaks(
 
     This function searches for breaks for all possible window sizes but only keeps break sizes >= `min_window_size`.
     `min_window_size` is the number of base pairs needed, on average, to see 10 missense variants (by default).
-
     For gnomAD v2.1, `min_window_size` is 100bp.
-
     :param hl.Table ht: Input Table filtered to contain only transcripts with simultaneous breaks.
     :param int min_window_size: Smallest possible window size to search for two simultaneous breaks.
     :param bool overwrite_pos_ht: Whether to overwrite positions per transcript HT. Default is False.
@@ -1037,7 +1005,6 @@ def calculate_section_chisq(
     Create expression checking if transcript section is significantly different than the null model (no evidence of regional missense constraint).
 
     Formula is: (section obs - section exp)^2 / section exp. Taken from ExAC RMC code.
-
     :param hl.expr.Int64Expression obs_expr:
     :param hl.expr.Float64Expression exp_expr:
     :return: Transcript section chi-squared value.
@@ -1052,7 +1019,6 @@ def get_all_breakpoint_pos(ht: hl.Table) -> hl.GroupedTable:
 
     .. note::
         Assumes input Table is annotated with list of Booleans (`break_list`) showing whether site is a breakpoint.
-
     :param hl.Table ht: Input Table.
     :return: Table grouped by transcript, with all breakpoint positions annotated as a list.
     :rtype: hl.GroupedTable
@@ -1071,7 +1037,6 @@ def get_section_info(
 
     .. note::
         Assumes that the input Table is annotated with a list of breakpoint positions (`break_pos`).
-
     :param hl.Table ht: Input Table.
     :param int section_num: Transcript section number (e.g., 1 for first section, 2 for second, 3 for third, etc.).
     :param bool is_middle: Boolean for whether to get a section of the transcript between breakpoints.
@@ -1116,7 +1081,6 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
     .. note::
         Needs to be run for each break number. For example, this function needs to be run for transcripts with three breaks,
         and it needs to be run again for transcripts with four breaks.
-
     :param hl.Table ht: Input Table.
     :param int max_n_breaks: Largest number of breaks.
     :return: Table with section and section values annotated.
@@ -1163,114 +1127,6 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
     )
 
 
-def get_unique_transcripts(
-    transcript_set_1: hl.expr.SetExpression, transcript_set_2: hl.expr.SetExpression
-) -> Union[Set, hl.expr.SetExpression]:
-    """
-    Return the set of transcripts unique to `transcript_set_1`.
-
-    If the set is empty, return an empty SetExpression.
-
-    :param hl.expr.SetExpression transcript_set_1: Transcript set with desired output transcripts.
-    :param hl.expr.SetExpression transcript_set_2: Transcript set to check against.
-    :return: Set of transcripts unique to `transcript_set_1`, or empty SetExpression.
-    :rtype: Union[Set, hl.expression.SetExpression]
-    """
-    transcripts = hl.eval(transcript_set_1.difference(transcript_set_2))
-    if len(transcripts) == 0:
-        return hl.missing(hl.tset(hl.tstr))
-    return transcripts
-
-
-def finalize_multiple_breaks(
-    ht: hl.Table,
-    max_n_breaks: int,
-    annotations: List[str] = [
-        "mu_snp",
-        "observed",
-        "total_exp",
-        "total_mu",
-        "total_obs",
-        "cumulative_obs",
-        "_mu_scan",
-        "cumulative_exp",
-        "break_list",
-    ],
-) -> hl.Table:
-    """
-    Organize table of transcripts with multiple breaks.
-
-    Get number of transcripts unique to each break number and drop any extra annotations.
-    Also calculate each section's observed, expected, OE, and chi-square values.
-
-    Assumes:
-        - Table is annotated with set of transcripts per break (e.g., `break_1_transcripts`)
-
-    :param hl.Table ht: Input Table.
-    :param int max_n_breaks: Largest number of breakpoints in any transcript.
-    :param List[str] annotations: List of annotations to keep from input Table.
-        Default is ['mu_snp', 'observed', 'total_exp', 'total_mu', 'total_obs',
-                    'cumulative_obs', '_mu_scan', 'cumulative_exp','break_list'].
-    :return: Table annotated with breakpoint positions and section obs, exp, OE, chi-square values.
-    :rtype: hl.Table
-    """
-    logger.info(
-        "Fixing global annotations in HT (transcripts associated with each break number)..."
-    )
-    # Get number of transcripts UNIQUE to each break number
-    # Transcript sets in globals currently are not unique
-    # i.e., `break_1_transcripts` contains transcripts that are also present in `break_2_transcripts`
-    annot_dict = {}
-    for i in range(1, max_n_breaks + 1):
-        if i == max_n_breaks:
-            annot_dict[f"break_{i}_transcripts"] = ht[f"break_{i}_transcripts"]
-        else:
-            annot_dict[f"break_{i}_transcripts"] = get_unique_transcripts(
-                ht[f"break_{i}_transcripts"], ht[f"break_{i+1}_transcripts"]
-            )
-        if i == 1:
-            annotations.extend(["chisq", "total_null", "total_alt"])
-        else:
-            annotations.extend(
-                [f"break_{i}_chisq", f"break_{i}_null", f"break_{i}_alt"]
-            )
-
-    # Drop all globals from HT, including plateau/coverage model annotations
-    ht = ht.select_globals()
-    ht = ht.annotate_globals(**annot_dict)
-
-    logger.info("Selecting only relevant annotations from HT and checkpointing...")
-    ht = ht.select(*annotations)
-    ht = ht.transmute(
-        break_1_chisq=ht.chisq, break_1_null=ht.total_null, break_1_alt=ht.total_alt,
-    )
-    ht = ht.checkpoint(f"{temp_path}/multiple_breaks.ht", overwrite=True)
-
-    logger.info("Getting all breakpoint positions...")
-    break_ht = get_all_breakpoint_pos(ht)
-    break_ht = break_ht.checkpoint(
-        f"{temp_path}/multiple_breaks_breakpoints.ht", overwrite=True
-    )
-    ht = ht.annotate(break_pos=break_ht[ht.transcript])
-
-    logger.info("Get transcript section annotations (obs, exp, OE, chisq)...")
-    ht = annotate_transcript_sections(ht, max_n_breaks)
-    ht = ht.checkpoint(f"{temp_path}/multiple_breaks_annot.ht", overwrite=True)
-    return ht
-
-
-def finalize_simul_breaks():
-    """
-    Create table of transcripts with simultaneous breaks.
-
-    Combine transcripts from multiple temporary checkpointed Tables.
-
-    Get number of transcripts unique to each window size and drop any extra annotations.
-    Also calculate each section's observed, expected, OE, and chi-square values.
-    """
-    pass
-
-
 def constraint_flag_expr(
     obs_syn_expr: hl.expr.Int64Expression,
     obs_mis_expr: hl.expr.Int64Expression,
@@ -1287,7 +1143,6 @@ def constraint_flag_expr(
 
     Flags are designed to mark outlier transcripts, and explanation of constraint flags is in the gnomAD browser FAQ:
     https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
-
     :param hl.expr.Int64Expression obs_syn_expr: Expression containing number of observed synonymous variants in gnomAD.
     :param hl.expr.Int64Expression obs_mis_expr: Expression containing number of observed missense variants in gnomAD.
     :param hl.expr.Int64Expression obs_lof_expr: Expression containing number of observed loss-of-function (LoF) variants in gnomAD.
@@ -1326,7 +1181,6 @@ def fix_xg(
     Fix observed and expected counts for XG (gene that spans PAR and non-PAR regions on chrX).
 
     Expects that context HT is annotated with all of the fields in `groupings`.
-
     :param hl.Table context_ht: Context Table.
     :param hl.Table exome_ht: Table containing variants from gnomAD exomes.
     :param str xg_transcript: XG transcript string. Default is 'ENST00000419513'.
