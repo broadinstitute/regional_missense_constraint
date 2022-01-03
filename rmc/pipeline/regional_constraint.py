@@ -367,43 +367,46 @@ def main(args):
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
             )
-            if args.get_no_break_transcripts:
-                hl.init(log="/RMC_simul_breaks_get_transcripts.log")
-                logger.info("Reading in not one break HT...")
-                context_ht = not_one_break.ht()
-                context_ht = context_ht.drop("_obs_scan")
+            if args.get_no_break_transcripts or args.get_min_window_size:
+                hl.init(log="/RMC_simul_breaks_prep.log")
 
-                if args.remove_outlier_transcripts:
-                    outlier_transcripts = get_outlier_transcripts()
-                    context_ht = context_ht.filter(
-                        ~outlier_transcripts.contains(context_ht.transcript)
+                if args.get_no_break_transcripts:
+                    logger.info("Reading in not one break HT...")
+                    context_ht = not_one_break.ht()
+                    context_ht = context_ht.drop("_obs_scan")
+
+                    if args.remove_outlier_transcripts:
+                        outlier_transcripts = get_outlier_transcripts()
+                        context_ht = context_ht.filter(
+                            ~outlier_transcripts.contains(context_ht.transcript)
+                        )
+
+                    # Converting to list here because `hl.agg.collect_as_set` will return `frozenset`
+                    transcripts = list(
+                        context_ht.aggregate(
+                            hl.agg.collect_as_set(context_ht.transcript)
+                        )
                     )
+                    with hl.hadoop_open(args.transcript_tsv, "w") as o:
+                        for transcript in transcripts:
+                            o.write(f"{transcript}\n")
 
-                # Converting to list here because `hl.agg.collect_as_set` will return `frozenset`
-                transcripts = list(
-                    context_ht.aggregate(hl.agg.collect_as_set(context_ht.transcript))
-                )
-                with hl.hadoop_open(args.transcript_tsv, "w") as o:
-                    for transcript in transcripts:
-                        o.write(f"{transcript}\n")
-
-            if args.get_min_window_size:
-                hl.init(log="/RMC_simul_breaks_get_window_size.log")
-                # Get number of base pairs needed to observe `num` number of missense variants (on average)
-                # This number is used to determine the window size to search for constraint with simultaneous breaks
-                min_break_size = (
-                    get_avg_bases_between_mis(
-                        get_reference_genome(context_ht.locus).name,
-                        args.get_total_exome_bases,
-                        args.get_total_gnomad_missense,
+                else:
+                    # Get number of base pairs needed to observe `num` number of missense variants (on average)
+                    # This number is used to determine the window size to search for constraint with simultaneous breaks
+                    min_break_size = (
+                        get_avg_bases_between_mis(
+                            get_reference_genome(context_ht.locus).name,
+                            args.get_total_exome_bases,
+                            args.get_total_gnomad_missense,
+                        )
+                        * args.min_num_obs
                     )
-                    * args.min_num_obs
-                )
-                logger.info(
-                    "Minimum window size (window size needed to observe %i missense variants on average): %i",
-                    args.min_num_obs,
-                    min_break_size,
-                )
+                    logger.info(
+                        "Minimum window size (window size needed to observe %i missense variants on average): %i",
+                        args.min_num_obs,
+                        min_break_size,
+                    )
 
             if args.write_simul_breaks_results:
 
@@ -435,8 +438,9 @@ def main(args):
                 duplicates = {}
                 transcript_counter = ht.aggregate(hl.agg.counter(ht.transcript))
                 duplicates = {
-                     transcript: counter for transcript, counter in transcript_counter.items() 
-                     if counter > 1
+                    transcript: counter
+                    for transcript, counter in transcript_counter.items()
+                    if counter > 1
                 }
                 if len(duplicates) > 0:
                     raise DataException(
