@@ -454,7 +454,7 @@ def main(args):
                 )
                 simul_break_transcripts = hl.literal(simul_break_transcripts)
 
-                # Read in full not one break HT to get relevant observed, expected annotations
+                # Read in full not_one_break HT to get relevant observed, expected annotations
                 # (Needed downstream to calculation section chi square values)
                 context_ht = not_one_break.ht().drop("_obs_scan")
                 simul_breaks = not_one_break.filter(
