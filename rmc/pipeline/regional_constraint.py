@@ -436,9 +436,10 @@ def main(args):
                 # Run quick check to make sure no transcript appears more than once
                 duplicates = {}
                 transcript_counter = ht.aggregate(hl.agg.counter(ht.transcript))
-                duplicates = dict(
-                    filter(lambda elem: elem[1] > 1, transcript_counter.items())
-                )
+                duplicates = {
+                     transcript: counter for transcript, counter in transcript_counter.items() 
+                     if counter > 1
+                }
                 if len(duplicates) > 0:
                     raise DataException(
                         f"These transcripts are present in the simul breaks HT multiple times: {duplicates}",
