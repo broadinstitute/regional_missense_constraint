@@ -422,7 +422,7 @@ def main(args):
                 )
                 # NOTE: These tables all have a single position for each transcript
                 # i.e., these tables contain only the row with a break
-                hts = [os.path.split(f)[-1] for f in files]
+                hts = [os.path.basename(f) for f in files]
 
                 # Union all tables to create the temporary simultaneous breaks HT
                 ht = hl.read_table(hts[0]).union(*hts[1:], unify=True)
@@ -434,9 +434,10 @@ def main(args):
                 # Run quick check to make sure no transcript appears more than once
                 duplicates = {}
                 transcript_counter = ht.aggregate(hl.agg.counter(ht.transcript))
-                duplicates = dict(
-                    filter(lambda elem: elem[1] > 1, transcript_counter.items())
-                )
+                duplicates = {
+                     transcript: counter for transcript, counter in transcript_counter.items() 
+                     if counter > 1
+                }
                 if len(duplicates) > 0:
                     raise DataException(
                         f"These transcripts are present in the simul breaks HT multiple times: {duplicates}",
@@ -452,7 +453,7 @@ def main(args):
                 )
                 simul_break_transcripts = hl.literal(simul_break_transcripts)
 
-                # Read in full not one break HT to get relevant observed, expected annotations
+                # Read in full not_one_break HT to get relevant observed, expected annotations
                 # (Needed downstream to calculation section chi square values)
                 context_ht = not_one_break.ht().drop("_obs_scan")
                 simul_breaks = not_one_break.filter(
