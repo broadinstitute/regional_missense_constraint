@@ -367,8 +367,6 @@ def main(args):
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
             )
-            transcript_tsv_path = args.transcript_tsv
-
             if args.get_no_break_transcripts:
                 hl.init(log="/RMC_simul_breaks_get_transcripts.log")
                 logger.info("Reading in not one break HT...")
@@ -385,7 +383,7 @@ def main(args):
                 transcripts = list(
                     context_ht.aggregate(hl.agg.collect_as_set(context_ht.transcript))
                 )
-                with hl.hadoop_open(transcript_tsv_path, "w") as o:
+                with hl.hadoop_open(args.transcript_tsv, "w") as o:
                     for transcript in transcripts:
                         o.write(f"{transcript}\n")
 
