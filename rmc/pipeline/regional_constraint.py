@@ -424,7 +424,7 @@ def main(args):
                 )
                 # NOTE: These tables all have a single position for each transcript
                 # i.e., these tables contain only the row with a break
-                hts = [os.path.split(f)[-1] for f in files]
+                hts = [os.path.basename(f) for f in files]
 
                 # Union all tables to create the temporary simultaneous breaks HT
                 ht = hl.read_table(hts[0]).union(*hts[1:], unify=True)
