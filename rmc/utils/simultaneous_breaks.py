@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import sys
 from tqdm import tqdm
-from typing import List
+from typing import List, Tuple
 
 import hail as hl
 
@@ -83,6 +83,47 @@ def get_chunks(
     ]
 
 
+def get_section_missense_values(
+    start: int,
+    end: int,
+    total_oe: float,
+    positions: List[int],
+    cum_obs: List[int],
+    cum_exp: List[float],
+) -> Tuple[float]:
+    """
+    Get transcript missense values.
+
+    Gets observed, expected, observed/expected (OE), null distribution, and alt distribution for section of a transcript.
+
+    :param int start: Start position of section.
+    :param int end: End position of section.
+    :param float total_oe: Overall OE missense ratio for transcript.
+    :param List[int] positions: List of positions in transcript.
+    :param List[int] cum_obs: List of cumulative observed missense values in transcript.
+    :param List[float] cum_exp: List of cumulative expected missense values in transcript.
+    :return: Tuple with observed, expected, OE, null, alt values.
+    """
+    start_idx = positions.index(start)
+    end_idx = positions.index(end)
+    if start_idx == 0:
+        section_obs = cum_obs[end_idx]
+        section_exp = cum_exp[end_idx]
+    else:
+        section_obs = cum_obs[end_idx] - cum_obs[start_idx]
+        section_exp = cum_exp[end_idx] - cum_exp[start_idx]
+    section_oe = min(section_obs / section_exp, 1)
+    return (
+        # Make sure observed and OE values are floats
+        # This is so that these values can be converted into a hail literal later
+        float(section_obs),
+        section_exp,
+        float(section_oe),
+        hl.eval(hl.dpois(section_obs, section_exp * total_oe)),
+        hl.eval(hl.dpois(section_obs, section_exp * section_oe)),
+    )
+
+
 def search_for_two_breaks(
     ht: hl.GroupedTable,
     transcript: str,
@@ -130,9 +171,13 @@ def search_for_two_breaks(
                         f"{pos} is index {count} in positions but index {c2} in sorted positions"
                     )
 
-    # Cycle through all positions in transcript and create all possible subsections starting at each position
+    # Cycle through half of all positions in transcript and create all possible subsections for each position
     # These subsections used to create the two break windows
-    for count, pos in enumerate(positions):
+    # Only need to cycle through half since the subsections of the other half of the transcript will get included later
+    # when filling out the other transcript sections
+    half_idx = round(len(positions) / 2) + 1
+    half_pos = positions[:half_idx]
+    for count, pos in enumerate(half_pos):
         if count == 0:
             sections = get_chunks(
                 pos, start_pos, end_pos, positions[count + 1 :], min_window_size
@@ -146,17 +191,32 @@ def search_for_two_breaks(
 
     # Iterate over all possible transcript subsections and divide transcripts into two or three pieces
     # Store each piece as a group, where the group = (left piece, middle piece, right piece)
+    # Also store observed missense, expected missense, OE missense, null, alt distributions for section in dict
+    # dict has this structure -- subsection: (section_obs, section_exp, section_oe, null_pois, alt_pois)
+    mis_value_map = {}
     groups = []
     for chunk in sections:
-        # Check if section is most of transcript
         start, end = map(int, chunk.split("-"))
         length = end - start
+        start_idx = positions.index(start)
+        end_idx = positions.index(end)
+        mis_value_map[chunk] = get_section_missense_values(
+            start, end, total_oe, positions, cum_obs, cum_exp
+        )
+
+        # Check if section is most of transcript
         if transcript_len - length < min_window_size:
             if end == end_pos:
                 # Create transcript subsection that is to the "left" of the current subsection
                 # This subsection should be from the first position in seen in the transcript to
                 # subsection start
                 left = f"{start_pos}-{start}"
+
+                # Add section to dict with transcript sections and missense values
+                if left not in mis_value_map:
+                    mis_value_map[left] = get_section_missense_values(
+                        start_pos, start, total_oe, positions, cum_obs, cum_exp
+                    )
                 # Add None for third section because this transcript subsection only
                 # divides the transcript into two pieces
                 groups.append((chunk, left, None))
@@ -164,6 +224,10 @@ def search_for_two_breaks(
                 # Create transcript subsection that is to the "right" of the current subsection
                 # This subsection should be the subsection end pos to the last position seen in the transcript
                 right = f"{end}-{end_pos}"
+                if right not in mis_value_map:
+                    mis_value_map[right] = get_section_missense_values(
+                        end, end_pos, total_oe, positions, cum_obs, cum_exp
+                    )
                 # Add None for third section because this transcript subsection only
                 # divides the transcript into two pieces
                 groups.append((chunk, right, None))
@@ -175,8 +239,15 @@ def search_for_two_breaks(
                 if chunk2 != chunk:
                     start2, end2 = map(int, chunk2.split("-"))
                     if start2 >= end and end2 >= end:
-                        groups.append((chunk, chunk2, None))
-                        found = True
+                        if (end2 - start) == transcript_len or (
+                            end - start2
+                        ) == transcript_len:
+                            if chunk2 not in mis_value_map:
+                                mis_value_map[chunk2] = get_section_missense_values(
+                                    start2, end2, total_oe, positions, cum_obs, cum_exp
+                                )
+                            groups.append((chunk, chunk2, None))
+                            found = True
             # If the subsection doesn't have any matching pair subsections in `sections`,
             # create the matching "left" and "right" sections
             if not found:
@@ -184,14 +255,24 @@ def search_for_two_breaks(
                 left = None
                 if start != start_pos:
                     left = f"{start_pos}-{start}"
+                    if left not in mis_value_map:
+                        mis_value_map[left] = get_section_missense_values(
+                            start_pos, start, total_oe, positions, cum_obs, cum_exp
+                        )
                 if end != end_pos:
                     right = f"{end}-{end_pos}"
+                    if right not in mis_value_map:
+                        mis_value_map[right] = get_section_missense_values(
+                            end, end_pos, total_oe, positions, cum_obs, cum_exp
+                        )
                 # Add all three transcript subsections to list
                 groups.append((chunk, left, right))
 
     # Remove any redundant groups (multiples of the same matches)
     # i.e., group 1 was found twice: once when subsection 1 matched with subsection 5
     # and again when subsection 5 was matched with subsection 1
+    # This is necessary since the code above cycles through the halfway index of the positions list plus 1
+    # (to avoid missing any transcript sections)
     final_sections = []
     seen = []
     for values in groups:
@@ -199,33 +280,8 @@ def search_for_two_breaks(
             seen.append(set(values))
             final_sections.append(values)
 
-    # Create dict that has this structure:
-    # subsection: (section_obs, section_exp, section_oe, null_pois, alt_pois)
-    value_map = {}
-    for group in final_sections:
-        for section in group:
-            if not section:
-                continue
-            start, end = map(int, section.split("-"))
-            start_idx = positions.index(start)
-            end_idx = positions.index(end)
-            if start_idx == 0:
-                section_obs = cum_obs[end_idx]
-                section_exp = cum_exp[end_idx]
-            else:
-                section_obs = cum_obs[end_idx] - cum_obs[start_idx]
-                section_exp = cum_exp[end_idx] - cum_exp[start_idx]
-            section_oe = min(section_obs / section_exp, 1)
-            value_map[section] = (
-                section_obs,
-                section_exp,
-                section_oe,
-                hl.eval(hl.dpois(section_obs, section_exp * total_oe)),
-                hl.eval(hl.dpois(section_obs, section_exp * section_oe)),
-            )
-
-    # Convert dict to hail literal
-    value_map = hl.literal(value_map)
+    # Convert dict with section missense values to hail literal
+    mis_value_map = hl.literal(mis_value_map)
 
     # Convert list of transcript subsection groups into numpy ndarray
     # (this is for easy conversion into hail Table format)
@@ -234,16 +290,20 @@ def search_for_two_breaks(
     ht = hl.Table.from_pandas(df)
 
     # Multiply all null and alt distributions for each transcript subsection group
+    # Create a default value to get when HT field isn't in mis_value_map
+    # This happens for any sections that were appended as "None" (they show up as NA)
+    # This default value must be a tuple of floats
+    default_value = (1.0, 1.0, 1.0, 1.0, 1.0)
     ht = ht.annotate(
-        null=hl.if_else(
-            hl.is_defined(ht["2"]),
-            value_map[ht["0"]][3] * value_map[ht["1"]][3] * value_map[ht["2"]][3],
-            value_map[ht["0"]][3] * value_map[ht["1"]][3],
+        null=(
+            mis_value_map.get(ht["0"], default_value)[3]
+            * mis_value_map.get(ht["2"], default_value)[3]
+            * mis_value_map.get(ht["2"], default_value)[3]
         ),
-        alt=hl.if_else(
-            hl.is_defined(ht["2"]),
-            value_map[ht["0"]][4] * value_map[ht["1"]][4] * value_map[ht["2"]][4],
-            value_map[ht["0"]][4] * value_map[ht["1"]][4],
+        alt=(
+            mis_value_map.get(ht["0"], default_value)[4]
+            * mis_value_map.get(ht["2"], default_value)[4]
+            * mis_value_map.get(ht["2"], default_value)[4]
         ),
     )
 
