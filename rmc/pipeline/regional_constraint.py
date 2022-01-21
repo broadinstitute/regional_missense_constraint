@@ -386,6 +386,48 @@ def main(args):
                     total_oe=hl.agg.take(ht.overall_oe, 1)[0],
                 )
                 group_ht = group_ht.annotate_globals(min_window_size=min_window_size)
+
+                logger.info("Gathering all positions in each transcript...")
+                if (
+                    not file_exists(f"{temp_path}/pos_per_transcript.ht")
+                    or args.overwrite_pos_ht
+                ):
+                    pos_ht = ht.group_by("transcript").aggregate(
+                        positions=hl.sorted(hl.agg.collect(ht.locus.position)),
+                    )
+                    pos_ht.write(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
+                pos_ht = hl.read_table(f"{temp_path}/pos_per_transcript.ht")
+                group_ht = group_ht.annotate(positions=pos_ht[group_ht].key)
+                group_ht = group_ht.annotate(max_idx=hl.len(group_ht.positions) - 1)
+
+                if (
+                    not file_exists(f"{temp_path}/transcript.ht")
+                    or args.overwrite_transcript_ht
+                ):
+                    # Read in full context HT (not filtered to missense variants)
+                    # Want to use full context HT here to get true start and end positions of transcripts
+                    # Also filter full context HT to canonical transcripts only
+                    full_context_ht = full_context.ht()
+                    full_context_ht = process_vep(full_context_ht)
+                    full_context_ht = full_context_ht.annotate(
+                        transcript=full_context_ht.transcript_consequences.transcript_id
+                    )
+                    transcript_ht = full_context_ht.group_by(
+                        full_context_ht.transcript
+                    ).aggregate(
+                        end_pos=hl.agg.max(full_context_ht.locus.position),
+                        start_pos=hl.agg.min(full_context_ht.locus.position),
+                    )
+
+                    logger.info(
+                        "Writing transcript HT to avoid redundant calculations..."
+                    )
+                    transcript_ht.write(f"{temp_path}/transcript.ht", overwrite=True)
+
+                    group_ht = group_ht.annotate(
+                        transcript_start=transcript_ht[group_ht.key].start_pos,
+                        transcript_end=transcript_ht[group_ht.key].end_pos,
+                    )
                 group_ht.write(f"{temp_path}/not_one_break_grouped.ht", overwrite=True)
 
             if not file_exists(group_ht_path):
@@ -395,29 +437,21 @@ def main(args):
             group_ht = hl.read_table(group_ht_path)
 
             logger.info("Searching for transcripts with simultaneous breaks...")
-            break_ht = search_for_two_breaks(
-                group_ht, args.overwrite_pos_ht, args.chisq_threshold
-            )
+            group_ht = search_for_two_breaks(group_ht, args.chisq_threshold)
 
             logger.info("Writing out simultaneous breaks HT...")
+            group_ht.write(simul_break.path, overwrite=args.overwrite)
+
             # Collecting all transcripts with two simultaneous breaks
-            simul_break_transcripts = break_ht.aggregate(
-                hl.agg.collect_as_set(break_ht.transcript),
+            simul_break_transcripts = group_ht.aggregate(
+                hl.agg.collect_as_set(group_ht.transcript),
             )
             simul_break_transcripts = hl.literal(simul_break_transcripts)
-
-            # Filter context HT to transcripts with two simultaneous breaks
-            simul_break_ht = context_ht.filter(
-                simul_break_transcripts.contains(context_ht.transcript)
-            )
-
-            # Add simultaneous breaks annotations, including max chi square value and window start position
-            simul_break_ht = simul_break_ht.annotate(**break_ht[simul_break_ht.key])
-            simul_break_ht.write(simul_break.path, overwrite=args.overwrite)
 
             logger.info(
                 "Getting transcripts with no evidence of regional missense constraint..."
             )
+            context_ht = not_one_break.ht()
             context_ht = context_ht.filter(
                 ~simul_break_transcripts.contains(context_ht.transcript)
             )
@@ -492,27 +526,10 @@ def main(args):
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
             )
-            if (
-                not file_exists(f"{temp_path}/transcript.ht")
-                or args.overwrite_transcript_ht
-            ):
-                # Read in full context HT (not filtered to missense variants)
-                # Want to use full context HT here to get true start and end positions of transcripts
-                # Also filter full context HT to canonical transcripts only
-                full_context_ht = full_context.ht()
-                full_context_ht = process_vep(full_context_ht)
-                full_context_ht = full_context_ht.annotate(
-                    transcript=full_context_ht.transcript_consequences.transcript_id
+            if not file_exists(f"{temp_path}/transcript.ht"):
+                raise DataException(
+                    "Transcript HT doesn't exist. Please double check and recreate!"
                 )
-                transcript_ht = full_context_ht.group_by(
-                    full_context_ht.transcript
-                ).aggregate(
-                    end_pos=hl.agg.max(full_context_ht.locus.position),
-                    start_pos=hl.agg.min(full_context_ht.locus.position),
-                )
-
-                logger.info("Writing transcript HT to avoid redundant calculations...")
-                transcript_ht.write(f"{temp_path}/transcript.ht", overwrite=True)
 
             if args.remove_outlier_transcripts:
                 outlier_transcripts = get_outlier_transcripts()
