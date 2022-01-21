@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Union
+from typing import Dict, List, Tuple, Union
 
 import hail as hl
 
@@ -844,8 +844,7 @@ def process_additional_breaks(
 
 
 def search_for_two_breaks(
-    ht: hl.Table,
-    min_window_size: int,
+    group_ht: hl.GroupedTable,
     overwrite_pos_ht: bool = False,
     chisq_threshold: float = 13.8,
 ) -> hl.Table:
@@ -855,8 +854,9 @@ def search_for_two_breaks(
     This function searches for breaks for all possible window sizes but only keeps break sizes >= `min_window_size`.
     `min_window_size` is the number of base pairs needed, on average, to see 10 missense variants (by default).
     For gnomAD v2.1, `min_window_size` is 100bp.
-    :param hl.Table ht: Input Table filtered to contain only transcripts with simultaneous breaks.
-    :param int min_window_size: Smallest possible window size to search for two simultaneous breaks.
+
+    :param hl.GroupedTable ht: Input GroupedTable grouped by transcript with lists of cumulative observed and expected
+        missense values. HT is filtered to contain only transcripts with simultaneous breaks.
     :param bool overwrite_pos_ht: Whether to overwrite positions per transcript HT. Default is False.
     :param float chisq_threshold:  Chi-square significance threshold. Default is 13.8.
         Default is from ExAC RMC code and corresponds to a p-value of 0.999 with 2 degrees of freedom.
@@ -864,6 +864,220 @@ def search_for_two_breaks(
     :return: Table with largest simultaneous break window size annotated per transcript.
     :rtype: hl.Table
     """
+
+    def _calculate_window_chisq(
+        max_idx: int,
+        i: int,
+        j: int,
+        cum_obs: hl.expr.ArrayExpression,
+        cum_exp: hl.expr.ArrayExpression,
+        total_oe: hl.expr.Float64Expression,
+    ) -> hl.expr.Float64Expression:
+        """
+        Calculate chi square significance value for each possible simultaneous breaks window.
+
+        Chi square formula: 2 * (hl.log10(total_alt) - hl.log10(total_null))
+
+        :param int max_idx: Largest list index value.
+        :param int i: Smaller list index value corresponding to the smaller position of the two break window.
+        :param int j: Larger list index value corresponding to the larger position of the two break window.
+        :param hl.expr.ArrayExpression cum_obs: List containing cumulative observed missense values.
+        :param hl.expr.ArrayExpression cum_exp: List containing cumulative expected missense values.
+        :param expr.Float64Expression total_oe: Transcript overall observed/expected (OE) missense ratio.
+        :return: Chi square significance value.
+        """
+        return (
+            hl.case()
+            .when(
+                # Return -1 when the window spans the entire transcript
+                (i == 0) & (j == max_idx),
+                -1,
+            )
+            .when(
+                # Return -1 when index i is >= j
+                # This is because any combination where j < i will have been checked in
+                # previous iterations of the loop
+                # e.g., the transcript sections created with the indices i = 4 and j = 0
+                # were checked when the loop checked for windows created when i = 0 and j = 4
+                i >= j,
+                -1,
+            )
+            .when(
+                # If i index is the smallest position (anchored at one end of transcript),
+                # there are only two transcript subsections: [start_pos, pos[j]], (pos[j], end_pos]
+                i == 0,
+                (
+                    2
+                    * (
+                        # Create alt distribution
+                        hl.log10(
+                            # Create alt distribution for section [start_pos, pos[j]]
+                            # The missense values for this section are just the cumulative values at index j
+                            get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=get_obs_exp_expr(
+                                    True, cum_obs[j], cum_exp[j]
+                                ),
+                                obs_expr=cum_obs[j],
+                                exp_expr=cum_exp[j],
+                            )
+                            # Create alt distribution for section (pos[j], end_pos]
+                            # The missense values for this section are the cumulative values at the last index
+                            # minus the values at index j
+                            * get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=get_obs_exp_expr(
+                                    True,
+                                    (cum_obs[-1] - cum_obs[j]),
+                                    (cum_exp[-1] - cum_exp[j]),
+                                ),
+                                obs_expr=cum_obs[-1] - cum_obs[j],
+                                exp_expr=cum_exp[-1] - cum_exp[j],
+                            )
+                        )
+                        # Create null distribution
+                        - hl.log10(
+                            get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=total_oe,
+                                obs_expr=cum_obs[j],
+                                exp_expr=cum_exp[j],
+                            )
+                            * get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=total_oe,
+                                obs_expr=cum_obs[-1] - cum_obs[j],
+                                exp_expr=cum_exp[-1] - cum_exp[j],
+                            )
+                        )
+                    )
+                ),
+            )
+            .when(
+                # If j index is anchored at the largest position, there are two transcript subsections:
+                # [start_pos, pos[i]), [pos[i], end_pos]
+                j == max_idx,
+                (
+                    2
+                    * (
+                        # Create alt distribution
+                        hl.log10(
+                            # Create alt distribution for section [start_pos, pos[i])
+                            # The missense values for this section are the cumulative values at
+                            # one index smaller than index i
+                            get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=get_obs_exp_expr(
+                                    True, cum_obs[i - 1], cum_exp[i - 1]
+                                ),
+                                obs_expr=cum_obs[i - 1],
+                                exp_expr=cum_exp[i - 1],
+                            )
+                            # Create alt distribution for section [pos[i], end_pos]
+                            # The missense values for this section are the cumulative values at
+                            # the last index minus the cumulative values at index i - 1
+                            * get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=get_obs_exp_expr(
+                                    True,
+                                    (cum_obs[-1] - cum_obs[i - 1]),
+                                    (cum_exp[-1] - cum_exp[i - 1]),
+                                ),
+                                obs_expr=cum_obs[-1] - cum_obs[i - 1],
+                                exp_expr=cum_exp[-1] - cum_exp[i - 1],
+                            )
+                        )
+                        # Create null distribution
+                        - hl.log10(
+                            get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=total_oe,
+                                obs_expr=cum_obs[i - 1],
+                                exp_expr=cum_exp[i - 1],
+                            )
+                            * get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=total_oe,
+                                obs_expr=cum_obs[-1] - cum_obs[i - 1],
+                                exp_expr=cum_exp[-1] - cum_exp[i - 1],
+                            )
+                        )
+                    )
+                ),
+            )
+            .default(
+                # Neither index is the smallest or largest position,
+                # so there are three transcript subsections:
+                # [start_pos, pos[i]), [pos[i], pos[j]], (pos[j], end_pos]
+                (
+                    2
+                    * (
+                        # Create alt distribution
+                        hl.log10(
+                            # Create alt distribution for section [start_pos, pos[i])
+                            # The missense values for this section are the cumulative values at
+                            # one index smaller than index i
+                            get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=get_obs_exp_expr(
+                                    True, cum_obs[i - 1], cum_exp[i - 1]
+                                ),
+                                obs_expr=cum_obs[i - 1],
+                                exp_expr=cum_exp[i - 1],
+                            )
+                            # Create alt distribution for section [pos[i], pos[j]]
+                            # The missense values for this section are the cumulative values at index j
+                            # minus the cumulative values at index i -1
+                            * get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=get_obs_exp_expr(
+                                    True,
+                                    (cum_obs[j] - cum_obs[i - 1]),
+                                    (cum_exp[j] - cum_exp[i - 1]),
+                                ),
+                                obs_expr=cum_obs[j] - cum_obs[i - 1],
+                                exp_expr=cum_exp[j] - cum_exp[i - 1],
+                            )
+                            # Create alt distribution for section (pos[j], end_pos]
+                            # The missense values for this section are the cumulative values at the last index
+                            # minus the cumulative values at index j
+                            * get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=get_obs_exp_expr(
+                                    True,
+                                    (cum_obs[-1] - cum_obs[j]),
+                                    (cum_exp[-1] - cum_exp[j]),
+                                ),
+                                obs_expr=cum_obs[-1] - cum_obs[j],
+                                exp_expr=cum_exp[-1] - cum_exp[j],
+                            )
+                        )
+                        # Create null distribution
+                        - hl.log10(
+                            get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=total_oe,
+                                obs_expr=cum_obs[i - 1],
+                                exp_expr=cum_exp[i - 1],
+                            )
+                            * get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=total_oe,
+                                obs_expr=cum_obs[j] - cum_obs[i - 1],
+                                exp_expr=cum_exp[j] - cum_exp[i - 1],
+                            )
+                            * get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=total_oe,
+                                obs_expr=cum_obs[-1] - cum_obs[j],
+                                exp_expr=cum_exp[-1] - cum_exp[j],
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
     logger.info(
         "Creating arrays of cumulative observed and expected missense values..."
     )
