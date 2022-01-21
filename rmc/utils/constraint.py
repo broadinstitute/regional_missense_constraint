@@ -1,10 +1,8 @@
+from collections.abc import Callable
 import logging
 from typing import Dict, List, Tuple, Union
 
 import hail as hl
-
-from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
@@ -844,9 +842,7 @@ def process_additional_breaks(
 
 
 def search_for_two_breaks(
-    group_ht: hl.GroupedTable,
-    overwrite_pos_ht: bool = False,
-    chisq_threshold: float = 13.8,
+    group_ht: hl.GroupedTable, chisq_threshold: float = 13.8,
 ) -> hl.Table:
     """
     Search for windows of constraint in transcripts with simultaneous breaks.
@@ -857,7 +853,6 @@ def search_for_two_breaks(
 
     :param hl.GroupedTable ht: Input GroupedTable grouped by transcript with lists of cumulative observed and expected
         missense values. HT is filtered to contain only transcripts with simultaneous breaks.
-    :param bool overwrite_pos_ht: Whether to overwrite positions per transcript HT. Default is False.
     :param float chisq_threshold:  Chi-square significance threshold. Default is 13.8.
         Default is from ExAC RMC code and corresponds to a p-value of 0.999 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
@@ -1078,138 +1073,98 @@ def search_for_two_breaks(
             )
         )
 
-    logger.info(
-        "Creating arrays of cumulative observed and expected missense values..."
-    )
-    # Reformat cumulative obs annotation from a dict ({transcript: int}) to just an int
-    # Also reformat cumulative mu annotation from dict ({transcript: float}) to just float
-    # TODO: Fix these annotations in the code above when they're written
-    ht = ht.transmute(
-        cumulative_obs=ht.cumulative_obs[ht.transcript],
-        cumulative_mu=ht._mu_scan[ht.transcript],
-    )
-    # Also add the expected value for each position
-    ht = ht.annotate(expected=(ht.mu_snp / ht.total_mu) * ht.total_exp)
-    ht = ht.annotate(
-        # NOTE: These scans do NOT need to be inclusive per row (do not need adjusting)
-        # This is because these cumulative values are going to be used to calculate the
-        # observed and expected missense counts for the section pre-window
-        prev_obs=hl.scan.group_by(ht.transcript, hl.scan.collect(ht.cumulative_obs)),
-        prev_mu=hl.scan.group_by(ht.transcript, hl.scan.collect(ht.cumulative_mu)),
-    )
-    ht = ht.checkpoint(f"{temp_path}/simul_breaks_scan_collect.ht", overwrite=True)
-    # Translate mu to expected
-    ht = ht.annotate(
-        prev_exp=hl.if_else(
-            hl.is_missing(ht.prev_mu.get(ht.transcript)),
-            hl.empty_array(hl.tfloat64),
-            hl.map(
-                lambda x: (x / ht.total_mu) * ht.total_exp, ht.prev_mu[ht.transcript]
+    def _simul_break_loop(
+        loop_continue: Callable,
+        i: int,
+        j: int,
+        max_idx: hl.expr.Int32Expression,
+        cur_max_chisq: float,
+        cur_best_i: int,
+        cur_best_j: int,
+    ) -> Tuple[float, int, int]:
+        """
+        Iterate over each possible pair of indices in a transcript's cumulative value lists to find the optimum two break window.
+
+        :param Callable[float, int, int] loop_continue: Function to restart hail loop.
+            First argument to `hl.experimental.loop` must be a function (`_simul_break_loop` in this case),
+            and the first argument to that function must be another function.
+            Calling `loop_continue` tells hail to go back to the top of the loop with loop variables updated.
+        :param int i: Smaller list index value corresponding to the smaller position of the two break window.
+        :param int j: Larger list index value corresponding to the larger position of the two break window.
+        :param hl.expr.Int32Expression: Largest list index for transcript.
+        :param float cur_max_chisq: Current maximum chi square value.
+        :param int cur_best_i: Current best index i.
+        :param int cur_best_j: Current best index j.
+        :return: Maximum chi square significance value and optimum index pair i, j.
+        """
+        # Calculate chi squared value associated with transcript subections created using this index pair i, j
+        chisq = _calculate_window_chisq(
+            max_idx, i, j, group_ht.cum_obs, group_ht.cum_exp, group_ht.total_oe
+        )
+        return hl.if_else(
+            # At the end of the iteration through the position list
+            # (when index i is at the second to last index of the list),
+            # return the best indices.
+            # Note that this is the second to last index because all of the windows created where i is the last index
+            # were already checked in previous iterations of the loop
+            i == (max_idx - 1),
+            (cur_max_chisq, cur_best_i, cur_best_j),
+            # If we haven't reached the end of the position list with index i,
+            # continue with the loop
+            hl.if_else(
+                j == max_idx,
+                # At end of j iteration, continue to next i index
+                # Increment i by one and set j to i+2 (to avoid situations where j index is smaller than i index)
+                loop_continue(
+                    i + 1, i + 2, max_idx, cur_max_chisq, cur_best_i, cur_best_j
+                ),
+                # Check chi square value against current best chi square value
+                hl.if_else(
+                    chisq > cur_max_chisq,
+                    # If chi square value is larger than current best,
+                    # set current chi square to current best (and update indices)
+                    # before continuing to next j
+                    loop_continue(i, j + 1, max_idx, chisq, i, j),
+                    # Otherwise, continue to next j, don't modify current best indices or chi square
+                    loop_continue(
+                        i, j + 1, max_idx, cur_max_chisq, cur_best_i, cur_best_j
+                    ),
+                ),
             ),
         )
-    ).drop("prev_mu")
 
-    # Run a quick validity check that each row has the same number of values in prev_obs and prev_exp
-    mismatch_len_count = ht.aggregate(
-        hl.agg.count_where(hl.len(ht.prev_obs) != hl.len(ht.prev_exp))
-    )
-    if mismatch_len_count != 0:
-        ht = ht.filter(hl.len(ht.prev_obs) != hl.len(ht.prev_exp))
-        ht.show()
-        raise DataException(
-            f"{mismatch_len_count} lines have different scan array lengths for prev obs and prev exp!"
+    group_ht = group_ht.annotate(
+        max_break=hl.experimental.loop(
+            _simul_break_loop,
+            hl.ttuple(hl.tfloat, hl.tint, hl.tint),
+            0,
+            1,
+            group_ht.max_idx,
+            0.0,
+            0,
+            0,
         )
-
-    logger.info("Calculating null and alt distributions...")
-    ht = ht.annotate(
-        nulls=hl.zip(ht.prev_obs, ht.prev_exp).starmap(
-            lambda obs, exp: (
-                hl.dpois(obs, exp * ht.overall_oe)
-                * hl.dpois(
-                    (ht.total_obs - ht.reverse.obs - obs),
-                    (ht.total_exp - ht.reverse.exp - exp) * ht.overall_oe,
-                )
-                * hl.dpois(ht.reverse.obs, ht.reverse.exp * ht.overall_oe)
+    )
+    group_ht = group_ht.transmute(
+        max_chisq=group_ht.max_break[0],
+        start_pos=group_ht.positions[group_ht.max_break[1]],
+        end_pos=group_ht.positions[group_ht.max_break[2]],
+    )
+    # Remove rows with maximum chi square values below the threshold
+    # or rows where none of the transcript sections is the minimum window size
+    group_ht = group_ht.filter(
+        # Remove rows with maximum chi square values below the threshold
+        (group_ht.max_chisq >= chisq_threshold)
+        & (
+            (group_ht.end_pos - group_ht.start_pos > group_ht.min_window_size)
+            | (group_ht.transcript_end - group_ht.end_pos > group_ht.min_window_size)
+            | (
+                group_ht.start_pos - group_ht.transcript_start
+                > group_ht.min_window_size
             )
-        ),
-        alts=hl.zip(ht.prev_obs, ht.prev_exp).starmap(
-            lambda obs, exp: (
-                hl.dpois(obs, exp * hl.min(obs / exp, 1))
-                * hl.dpois(
-                    (ht.total_obs - ht.reverse.obs - obs),
-                    (ht.total_exp - ht.reverse.exp - exp)
-                    * hl.min(
-                        (ht.total_obs - ht.reverse.obs - obs)
-                        / (ht.total_exp - ht.reverse.exp - exp),
-                        1,
-                    ),
-                )
-                * hl.dpois(ht.reverse.obs, ht.reverse.exp * ht.reverse.reverse_obs_exp)
-            )
-        ),
-    )
-
-    logger.info("Calculating chi square values...")
-    ht = ht.annotate(
-        chi_squares=hl.zip(ht.nulls, ht.alts).starmap(
-            lambda null, alt: 2 * (hl.log10(alt) - hl.log10(null))
         )
     )
-    logger.info("Getting max chi square value for each position...")
-    ht = ht.annotate(
-        max_chisq_for_pos=hl.or_missing(
-            hl.len(ht.chi_squares) > 0, hl.max(ht.chi_squares)
-        )
-    )
-
-    logger.info("Checkpointing HT...")
-    # Checkpointing here because HT branches and becomes both group_ht and max_chisq ht below
-    ht = ht.checkpoint(f"{temp_path}/simul_breaks_ready.ht", overwrite=True)
-
-    logger.info("Getting max chi square per transcript...")
-    group_ht = ht.group_by("transcript").aggregate(
-        max_chisq_per_transcript=hl.agg.max(ht.max_chisq_for_pos)
-    )
-    group_ht = group_ht.checkpoint(
-        f"{temp_path}/simul_breaks_chisq_group.ht", overwrite=True
-    )
-    ht = ht.annotate(
-        max_chisq_per_transcript=group_ht[ht.transcript].max_chisq_per_transcript
-    )
-
-    logger.info("Checking for positions associated with maximum chi square values...")
-    max_chisq_ht = ht.filter(ht.max_chisq_for_pos == ht.max_chisq_per_transcript)
-    max_chisq_ht = max_chisq_ht.annotate(
-        chisq_index=max_chisq_ht.chi_squares.index(
-            max_chisq_ht.max_chisq_per_transcript
-        )
-    )
-
-    logger.info("Gathering all positions in each transcript...")
-    if not file_exists(f"{temp_path}/pos_per_transcript.ht") or overwrite_pos_ht:
-        pos_ht = ht.group_by("transcript").aggregate(
-            positions=hl.sorted(hl.agg.collect(ht.locus.position)),
-        )
-        pos_ht.write(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
-    pos_ht = hl.read_table(f"{temp_path}/pos_per_transcript.ht")
-
-    max_chisq_ht = max_chisq_ht.annotate(
-        pos_per_transcript=pos_ht[max_chisq_ht.transcript].positions
-    )
-    max_chisq_ht = max_chisq_ht.annotate(
-        window_start=max_chisq_ht.pos_per_transcript[max_chisq_ht.chisq_index]
-    )
-    max_chisq_ht = max_chisq_ht.filter(
-        (max_chisq_ht.max_chisq_for_pos > chisq_threshold)
-        & (max_chisq_ht.locus.position - max_chisq_ht.window_start >= min_window_size)
-    )
-    max_chisq_ht = max_chisq_ht.checkpoint(
-        f"{temp_path}/simul_breaks_max_chisq.ht", overwrite=True
-    )
-
-    ht = ht.annotate(is_break=hl.is_defined(max_chisq_ht[ht.key]))
-    ht = ht.checkpoint(f"{temp_path}/simul_breaks.ht", overwrite=True)
-    return ht
+    return group_ht
 
 
 def calculate_section_chisq(
