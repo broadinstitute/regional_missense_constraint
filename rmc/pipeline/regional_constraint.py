@@ -357,28 +357,46 @@ def main(args):
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
             )
-            logger.info("Reading in not one break HT...")
-            context_ht = not_one_break.ht()
 
-            # Get number of base pairs needed to observe `num` number of missense variants (on average)
-            # This number is used to determine the window size to search for constraint with simultaneous breaks
-            min_break_size = (
-                get_avg_bases_between_mis(
-                    get_reference_genome(context_ht.locus).name,
-                    args.get_total_exome_bases,
-                    args.get_total_gnomad_missense,
+            group_ht_path = f"{temp_path}/not_one_break_grouped.ht"
+            if args.create_grouped_ht:
+                # Get number of base pairs needed to observe `num` number of missense variants (on average)
+                # This number is used to determine the window size to search for constraint with simultaneous breaks
+                min_window_size = (
+                    get_avg_bases_between_mis(
+                        get_reference_genome(context_ht.locus).name,
+                        args.get_total_exome_bases,
+                        args.get_total_gnomad_missense,
+                    )
+                    * args.min_num_obs
                 )
-                * args.min_num_obs
-            )
-            logger.info(
-                "Minimum window size (window size needed to observe %i missense variants on average): %i",
-                args.min_num_obs,
-                min_break_size,
-            )
+                logger.info(
+                    "Minimum window size (window size needed to observe %i missense variants on average): %i",
+                    args.min_num_obs,
+                    min_window_size,
+                )
+
+                logger.info(
+                    "Creating grouped HT with lists of cumulative observed and expected missense values..."
+                )
+                ht = not_one_break.ht()
+                group_ht = ht.group_by("transcript").aggregate(
+                    cum_obs=hl.agg.collect(ht.cumulative_obs),
+                    cum_exp=hl.agg.collect(ht.cumulative_exp),
+                    total_oe=hl.agg.take(ht.overall_oe, 1)[0],
+                )
+                group_ht = group_ht.annotate_globals(min_window_size=min_window_size)
+                group_ht.write(f"{temp_path}/not_one_break_grouped.ht", overwrite=True)
+
+            if not file_exists(group_ht_path):
+                raise DataException(
+                    "Grouped HT doesn't exist. Please rerun script with --create-grouped-ht!"
+                )
+            group_ht = hl.read_table(group_ht_path)
 
             logger.info("Searching for transcripts with simultaneous breaks...")
             break_ht = search_for_two_breaks(
-                context_ht, min_break_size, args.overwrite_pos_ht, args.chisq_threshold,
+                group_ht, args.overwrite_pos_ht, args.chisq_threshold
             )
 
             logger.info("Writing out simultaneous breaks HT...")
@@ -738,6 +756,11 @@ if __name__ == "__main__":
         help="Number of observed variants. Used when determining the smallest possible window size for simultaneous breaks.",
         default=10,
         type=int,
+    )
+    simul_breaks.add_argument(
+        "--create-grouped-ht",
+        help="Create hail Table grouped by transcript with cumulative observed and expected missense values collected into lists.",
+        action="store_true",
     )
     simul_breaks.add_argument(
         "--overwrite-pos-ht",
