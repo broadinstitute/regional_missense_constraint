@@ -1,5 +1,7 @@
 import argparse
 import logging
+import os
+import subprocess
 
 import hail as hl
 
@@ -36,7 +38,6 @@ from rmc.utils.constraint import (
     GROUPINGS,
     process_additional_breaks,
     process_transcripts,
-    search_for_two_breaks,
 )
 from rmc.utils.generic import (
     filter_to_region_type,
@@ -60,11 +61,11 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
-    hl.init(log="/RMC.log")
     exac = args.exac
 
     try:
         if args.pre_process_data:
+            hl.init(log="/RMC_pre_process.log")
             # TODO: Add code to create annotations necessary for constraint_flag_expr and filter transcripts prior to running constraint
             logger.warning("Code currently only processes b37 data!")
             logger.info(
@@ -103,6 +104,7 @@ def main(args):
             logger.info("Done preprocessing files")
 
         if args.prep_for_constraint:
+            hl.init(log="/RMC_prep_for_constraint.log")
             logger.info("Reading in exome HT...")
             if exac:
                 exome_ht = filtered_exac.ht()
@@ -261,6 +263,8 @@ def main(args):
             )
 
         if args.search_for_first_break:
+            hl.init(log="/RMC_first_break.log")
+
             logger.info("Searching for transcripts with a significant break...")
             context_ht = constraint_prep.ht()
             context_ht = process_transcripts(context_ht, args.chisq_threshold)
@@ -291,6 +295,11 @@ def main(args):
             not_one_break_ht.write(not_one_break.path, overwrite=args.overwrite)
 
         if args.search_for_additional_breaks:
+            hl.init(log="/RMC_additional_breaks.log")
+
+            # Set hail flag to avoid method too large and out of memory errors
+            hl._set_flags(no_whole_stage_codegen="1")
+
             logger.info(
                 "Searching for additional breaks in transcripts with at least one significant break..."
             )
@@ -340,9 +349,12 @@ def main(args):
                     f"break_{break_num}_chisq": break_ht[context_ht.key].chisq,
                     f"break_{break_num}_null": break_ht[context_ht.key].total_null,
                     f"break_{break_num}_alt": break_ht[context_ht.key].total_alt,
-                    "break_list": break_ht[context_ht.key].break_list,
+                    "is_break": break_ht[context_ht.key].is_break,
                 }
                 context_ht = context_ht.annotate(**annot_expr)
+                context_ht = context_ht.annotate(
+                    break_list=context_ht.break_list.append(context_ht.is_break)
+                )
 
                 break_ht = break_ht.filter(transcripts.contains(break_ht.transcript))
                 break_num += 1
@@ -350,65 +362,130 @@ def main(args):
             context_ht.write(multiple_breaks.path, overwrite=args.overwrite)
 
         if args.search_for_simul_breaks:
-            logger.info("Setting hail flag to avoid method too large error...")
-            hl._set_flags(no_whole_stage_codegen="1")
 
             logger.info(
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
             )
-            logger.info("Reading in not one break HT...")
-            context_ht = not_one_break.ht()
+            if args.get_no_break_transcripts or args.get_min_window_size:
+                hl.init(log="/RMC_simul_breaks_prep.log")
 
-            # Get number of base pairs needed to observe `num` number of missense variants (on average)
-            # This number is used to determine the window size to search for constraint with simultaneous breaks
-            min_break_size = (
-                get_avg_bases_between_mis(
-                    get_reference_genome(context_ht.locus).name,
-                    args.get_total_exome_bases,
-                    args.get_total_gnomad_missense,
+                if args.get_no_break_transcripts:
+                    logger.info("Reading in not one break HT...")
+                    context_ht = not_one_break.ht()
+                    context_ht = context_ht.drop("_obs_scan")
+
+                    if args.remove_outlier_transcripts:
+                        outlier_transcripts = get_outlier_transcripts()
+                        context_ht = context_ht.filter(
+                            ~outlier_transcripts.contains(context_ht.transcript)
+                        )
+
+                    # Converting to list here because `hl.agg.collect_as_set` will return `frozenset`
+                    transcripts = list(
+                        context_ht.aggregate(
+                            hl.agg.collect_as_set(context_ht.transcript)
+                        )
+                    )
+                    with hl.hadoop_open(args.transcript_tsv, "w") as o:
+                        for transcript in transcripts:
+                            o.write(f"{transcript}\n")
+
+                else:
+                    # Get number of base pairs needed to observe `num` number of missense variants (on average)
+                    # This number is used to determine the window size to search for constraint with simultaneous breaks
+                    min_break_size = (
+                        get_avg_bases_between_mis(
+                            get_reference_genome(context_ht.locus).name,
+                            args.get_total_exome_bases,
+                            args.get_total_gnomad_missense,
+                        )
+                        * args.min_num_obs
+                    )
+                    logger.info(
+                        "Minimum window size (window size needed to observe %i missense variants on average): %i",
+                        args.min_num_obs,
+                        min_break_size,
+                    )
+
+            if args.write_simul_breaks_results:
+
+                hl.init(log="/RMC_write_simul_breaks.log")
+
+                logger.info(
+                    "Getting path to simultaneous breaks results temporary tables..."
                 )
-                * args.min_num_obs
-            )
-            logger.info(
-                "Minimum window size (window size needed to observe %i missense variants on average): %i",
-                args.min_num_obs,
-                min_break_size,
-            )
+                files = (
+                    subprocess.check_output(
+                        ["gsutil", "ls", args.simul_breaks_temp_path]
+                    )
+                    .decode("utf8")
+                    .strip()
+                    .split("\n")
+                )
+                # NOTE: These tables all have a single position for each transcript
+                # i.e., these tables contain only the row with a break
+                hts = [os.path.basename(f) for f in files]
 
-            logger.info("Searching for transcripts with simultaneous breaks...")
-            break_ht = search_for_two_breaks(
-                context_ht, min_break_size, args.overwrite_pos_ht, args.chisq_threshold,
-            )
+                # Union all tables to create the temporary simultaneous breaks HT
+                ht = hl.read_table(hts[0]).union(*hts[1:], unify=True)
+                ht = ht.checkpoint(f"{temp_path}/simul_breaks_temp.ht", overwrite=True)
 
-            logger.info("Writing out simultaneous breaks HT...")
-            # Collecting all transcripts with two simultaneous breaks
-            simul_break_transcripts = break_ht.aggregate(
-                hl.agg.collect_as_set(break_ht.transcript),
-            )
-            simul_break_transcripts = hl.literal(simul_break_transcripts)
+                # Add `break_pos` annotation (list used to finalize transcript sections later)
+                ht = ht.annotate(break_pos=[ht.window_start, ht.locus.position])
 
-            # Filter context HT to transcripts with two simultaneous breaks
-            simul_break_ht = context_ht.filter(
-                simul_break_transcripts.contains(context_ht.transcript)
-            )
+                # Run quick check to make sure no transcript appears more than once
+                duplicates = {}
+                transcript_counter = ht.aggregate(hl.agg.counter(ht.transcript))
+                duplicates = {
+                    transcript: counter
+                    for transcript, counter in transcript_counter.items()
+                    if counter > 1
+                }
+                if len(duplicates) > 0:
+                    raise DataException(
+                        f"These transcripts are present in the simul breaks HT multiple times: {duplicates}",
+                    )
 
-            # Add simultaneous breaks annotations, including max chi square value and window start position
-            simul_break_ht = simul_break_ht.annotate(**break_ht[simul_break_ht.key])
-            simul_break_ht.write(simul_break.path, overwrite=args.overwrite)
+                # Get the transcripts that have two simultaneous breaks
+                simul_break_transcripts = ht.aggregate(
+                    hl.agg.collect_as_set(ht.transcript)
+                )
+                logger.info(
+                    "Found %i transcripts with evidence of RMC...",
+                    len(simul_break_transcripts),
+                )
+                simul_break_transcripts = hl.literal(simul_break_transcripts)
 
-            logger.info(
-                "Getting transcripts with no evidence of regional missense constraint..."
-            )
-            context_ht = context_ht.filter(
-                ~simul_break_transcripts.contains(context_ht.transcript)
-            )
-            context_ht.write(no_breaks.path, overwrite=args.overwrite)
+                # Read in full not_one_break HT to get relevant observed, expected annotations
+                # (Needed downstream to calculation section chi square values)
+                context_ht = not_one_break.ht().drop("_obs_scan")
+                simul_breaks = not_one_break.filter(
+                    simul_break_transcripts.contains(not_one_break.transcript)
+                )
+                simul_breaks = simul_breaks.select(
+                    "observed", "mu_snp", "total_mu", "total_exp", "total_obs"
+                )
+                simul_breaks = simul_breaks.annotate(**ht[simul_breaks.key])
+                simul_breaks = simul_breaks.annotate(
+                    is_break=hl.is_defined(ht[simul_breaks.key])
+                )
+                simul_breaks = simul_breaks.write(simul_break.path, overwrite=True)
+
+                logger.info(
+                    "Getting transcripts with no evidence of regional missense constraint..."
+                )
+                context_ht = context_ht.filter(
+                    ~simul_break_transcripts.contains(context_ht.transcript)
+                )
+                context_ht.write(no_breaks.path, overwrite=args.overwrite)
 
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions
         # after running on gnomAD v2
         if args.fix_xg:
+            hl.init(log="/RMC_fix_XG.log")
+
             logger.info("Reading in exome HT...")
             exome_ht = filtered_exomes.ht()
 
@@ -450,16 +527,6 @@ def main(args):
                     start_pos=transcript_ht[xg.transcript].start_pos,
                     end_pos=transcript_ht[xg.transcript].end_pos,
                 )
-
-                logger.info("Searching for simultaneous breaks...")
-                xg = search_for_two_breaks(xg)
-                is_break_ht = xg.filter(xg.is_break)
-                if is_break_ht.count() == 0:
-                    logger.info("XG has no breaks!")
-                else:
-                    is_break_ht.write(
-                        f"{temp_path}/XG_simul_break.ht", overwrite=args.overwrite
-                    )
             else:
                 logger.info("XG has at least one break!")
                 is_break_ht = is_break_ht.checkpoint(
@@ -471,6 +538,8 @@ def main(args):
                 # xg = xg.annotate(break_list=[xg.is_break])
 
         if args.finalize:
+            hl.init(log="/RMC_finalize.log")
+
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
             )
@@ -724,6 +793,21 @@ if __name__ == "__main__":
         description="Options specific to running simultaneous breaks search",
     )
     simul_breaks.add_argument(
+        "--transcript-tsv",
+        help="Path to store transcripts to search for two simultaneous breaks. Path should be to a file in Google cloud storage.",
+        default=f"{temp_path}/no_break_transcripts.tsv",
+    )
+    simul_breaks.add_argument(
+        "--get-no-break-transcripts",
+        help="Get all transcripts without evidence of one significant break (to search for two simultaneous breaks.",
+        action="store_true",
+    )
+    simul_breaks.add_argument(
+        "--get-min-window-size",
+        help="Determine smallest possible window size for simultaneous breaks.",
+        action="store_true",
+    )
+    simul_breaks.add_argument(
         "--get-total-exome-bases",
         help="Get total number of bases in the exome. If not set, will pull default value from TOTAL_EXOME_BASES.",
         action="store_true",
@@ -740,9 +824,14 @@ if __name__ == "__main__":
         type=int,
     )
     simul_breaks.add_argument(
-        "--overwrite-pos-ht",
-        help="Overwrite the positions per transcript HT (HT keyed by transcript with a list of positiosn per transcript), even if it already exists.",
+        "--write-simul-breaks-results",
+        help="Write simultaneous breaks and no break transcripts HTs.",
         action="store_true",
+    )
+    simul_breaks.add_argument(
+        "--simul-breaks-temp-path",
+        help="Path to bucket with temporary simultaneous breaks results tables.",
+        default=f"{temp_path}/simul_breaks_x*.ht",
     )
     parser.add_argument(
         "--fix-xg",
@@ -771,7 +860,9 @@ if __name__ == "__main__":
         "--overwrite", help="Overwrite existing data", action="store_true"
     )
     parser.add_argument(
-        "--slack-channel", help="Send message to Slack channel/user", default="@kc"
+        "--slack-channel",
+        help="Send message to Slack channel/user",
+        default="@kc (she/her)",
     )
     args = parser.parse_args()
 
