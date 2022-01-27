@@ -27,6 +27,11 @@ processed_context = VersionedTableResource(
     },
 )
 
+gene_model = TableResource(path=f"{RESOURCE_PREFIX}/GRCh37/browser/b37_transcripts.ht")
+"""
+Table containing transcript start and stop positions displayed in the browser.
+"""
+
 
 ## Assessment related resources
 clinvar_path_mis = TableResource(
