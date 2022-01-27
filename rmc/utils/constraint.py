@@ -13,9 +13,8 @@ from rmc.resources.basics import (
     multiple_breaks,
     oe_bin_counts_tsv,
     temp_path,
-    transcript_positions,
 )
-from rmc.resources.grch37.reference_data import de_novo
+from rmc.resources.grch37.reference_data import de_novo, gene_model
 from rmc.utils.generic import (
     get_clinvar_hi_variants,
     get_coverage_correction_expr,
@@ -1519,9 +1518,9 @@ def get_transcript_start_end(ht: hl.Table) -> hl.Table:
     :param hl.Table ht: Input Table.
     :return: Table annotated with `start_pos` and `end_pos` (transcript start and end positions).
     """
-    transcript_ht = transcript_positions.ht()
+    transcript_ht = gene_model.ht()
     indexed_ht = transcript_ht[ht.transcript]
-    return ht.annotate(start_pos=indexed_ht.start_pos, end_pos=indexed_ht.end_pos)
+    return ht.annotate(start_pos=indexed_ht.start, end_pos=indexed_ht.end)
 
 
 def annotate_transcript_sections(
@@ -1879,7 +1878,7 @@ def get_oe_bins(ht: hl.Table, build: str, overwrite_clinvar_ht: bool,) -> None:
     logger.info("Reading in ClinVar, de novo missense, and transcript HTs...")
     clinvar_ht = get_clinvar_hi_variants(build, overwrite_clinvar_ht)
     dn_ht = de_novo.ht()
-    transcript_ht = transcript_positions.ht()
+    transcript_ht = gene_model.ht()
 
     # Split de novo HT into two HTs -- one for controls and one for cases
     dn_controls_ht = dn_ht.filter(dn_ht.case_control == "control")
