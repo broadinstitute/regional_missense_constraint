@@ -92,17 +92,6 @@ Context Table ready for RMC calculations.
 HT is annotated with observed and expected variant counts per base.
 """
 
-transcript_positions = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{MODEL_PREFIX}/{version}/transcript.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing transcript start and end positions.
-"""
-
 hi_genes = f"{RESOURCE_PREFIX}/HI_genes.rCNV.txt"
 """
 Path to haploinsufficient genes that cause severe disease.
