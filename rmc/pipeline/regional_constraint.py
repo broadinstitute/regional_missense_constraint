@@ -14,6 +14,7 @@ from rmc.resources.basics import (
     multiple_breaks,
     no_breaks,
     not_one_break,
+    not_one_break_grouped,
     one_break,
     simul_break,
     temp_path,
@@ -358,7 +359,6 @@ def main(args):
                 a single significant break..."
             )
 
-            group_ht_path = f"{temp_path}/not_one_break_grouped.ht"
             if args.create_grouped_ht:
                 # Make sure user didn't specify a min obs of zero
                 if args.min_num_obs == 0:
@@ -423,13 +423,13 @@ def main(args):
                         transcript_start=transcript_ht[group_ht.key].start_pos,
                         transcript_end=transcript_ht[group_ht.key].end_pos,
                     )
-                group_ht.write(f"{temp_path}/not_one_break_grouped.ht", overwrite=True)
+                group_ht.write(not_one_break_grouped.path, overwrite=True)
 
-            if not file_exists(group_ht_path):
+            if not file_exists(not_one_break_grouped.path):
                 raise DataException(
                     "Grouped HT doesn't exist. Please rerun script with --create-grouped-ht!"
                 )
-            group_ht = hl.read_table(group_ht_path)
+            group_ht = hl.read_table(group_ht)
 
             logger.info("Searching for transcripts with simultaneous breaks...")
             group_ht = search_for_two_breaks(group_ht, args.chisq_threshold)
