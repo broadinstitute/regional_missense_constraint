@@ -360,6 +360,12 @@ def main(args):
 
             group_ht_path = f"{temp_path}/not_one_break_grouped.ht"
             if args.create_grouped_ht:
+                # Make sure user didn't specify a min obs of zero
+                if args.min_num_obs == 0:
+                    raise DataException(
+                        "Minimum number of observed variants must be greater than zero!"
+                    )
+
                 # Get number of base pairs needed to observe `num` number of missense variants (on average)
                 # This number is used to determine the window size to search for constraint with simultaneous breaks
                 min_window_size = (
