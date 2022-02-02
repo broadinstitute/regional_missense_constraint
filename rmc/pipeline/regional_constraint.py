@@ -359,7 +359,7 @@ def main(args):
                 a single significant break..."
             )
 
-            if args.create_grouped_ht:
+            if not file_exists(not_one_break_grouped.path) or args.create_grouped_ht:
                 # Make sure user didn't specify a min obs of zero
                 if args.min_num_obs == 0:
                     raise DataException(
@@ -425,11 +425,7 @@ def main(args):
                     )
                 group_ht.write(not_one_break_grouped.path, overwrite=True)
 
-            if not file_exists(not_one_break_grouped.path):
-                raise DataException(
-                    "Grouped HT doesn't exist. Please rerun script with --create-grouped-ht!"
-                )
-            group_ht = hl.read_table(group_ht)
+            group_ht = not_one_break_grouped.ht()
 
             logger.info("Searching for transcripts with simultaneous breaks...")
             group_ht = search_for_two_breaks(group_ht, args.chisq_threshold)
