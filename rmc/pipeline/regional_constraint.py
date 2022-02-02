@@ -428,7 +428,7 @@ def main(args):
                         transcript_start=transcript_ht[group_ht.key].start_pos,
                         transcript_end=transcript_ht[group_ht.key].end_pos,
                     )
-                group_ht.write(f"{temp_path}/not_one_break_grouped.ht", overwrite=True)
+                group_ht.write(group_ht_path, overwrite=True)
 
             if not file_exists(group_ht_path):
                 raise DataException(
