@@ -922,15 +922,6 @@ def search_for_two_breaks(
                 -1,
             )
             .when(
-                # Return -1 when index i is >= j
-                # This is because any combination where j < i will have been checked in
-                # previous iterations of the loop
-                # e.g., the transcript sections created with the indices i = 4 and j = 0
-                # were checked when the loop checked for windows created when i = 0 and j = 4
-                i >= j,
-                -1,
-            )
-            .when(
                 # If i index is the smallest position (anchored at one end of transcript),
                 # there are only two transcript subsections: [start_pos, pos[j]], (pos[j], end_pos]
                 i == 0,
