@@ -1511,18 +1511,6 @@ def create_section_expr_array(
     ]
 
 
-def get_transcript_start_end(ht: hl.Table) -> hl.Table:
-    """
-    Annotate input Table with start and end position for each transcript.
-
-    :param hl.Table ht: Input Table.
-    :return: Table annotated with `start_pos` and `end_pos` (transcript start and end positions).
-    """
-    transcript_ht = gene_model.ht()
-    indexed_ht = transcript_ht[ht.transcript]
-    return ht.annotate(start_pos=indexed_ht.start, end_pos=indexed_ht.end)
-
-
 def annotate_transcript_sections(
     ht: hl.Table, max_n_breaks: int, simul_breaks: bool
 ) -> hl.Table:
@@ -1540,9 +1528,6 @@ def annotate_transcript_sections(
     :return: Table with section and section values annotated.
     :rtype: hl.Table
     """
-    logger.info("Annotating HT with transcript start and end positions...")
-    ht = get_transcript_start_end(ht)
-
     if simul_breaks:
         logger.info("Get section information for first section of each transcript...")
         first_ht = get_section_info(

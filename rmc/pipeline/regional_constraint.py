@@ -4,7 +4,6 @@ import logging
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 
@@ -17,7 +16,6 @@ from rmc.resources.basics import (
     one_break,
     simul_break,
     temp_path,
-    transcript_positions,
 )
 from rmc.resources.grch37.exac import filtered_exac
 from rmc.resources.grch37.gnomad import (
@@ -26,7 +24,7 @@ from rmc.resources.grch37.gnomad import (
     processed_exomes,
     prop_obs_coverage,
 )
-from rmc.resources.grch37.reference_data import processed_context
+from rmc.resources.grch37.reference_data import gene_model, processed_context
 from rmc.resources.resource_utils import GNOMAD_VER, MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
@@ -49,7 +47,6 @@ from rmc.utils.generic import (
     keep_criteria,
     process_context_ht,
     process_vep,
-    write_transcript_ht,
 )
 
 
@@ -362,14 +359,7 @@ def main(args):
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
             )
-            if (
-                not file_exists(transcript_positions.path)
-            ) or args.overwrite_transcript_ht:
-                write_transcript_ht(
-                    build=get_reference_genome(context_ht.locus).name,
-                    overwrite=args.overwrite_transcript_ht,
-                )
-            transcript_ht = transcript_positions.ht()
+            transcript_ht = gene_model.ht()
 
             context_ht = context_ht.annotate(
                 start_pos=transcript_ht[context_ht.transcript].start_pos,
