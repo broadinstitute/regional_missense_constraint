@@ -476,10 +476,7 @@ def get_section_expr(dpois_expr: hl.expr.ArrayExpression,) -> hl.expr.Float64Exp
 
 
 def search_for_break(
-    ht: hl.Table,
-    search_field: hl.str,
-    simul_break: bool = False,
-    chisq_threshold: float = 10.8,
+    ht: hl.Table, search_field: hl.str, chisq_threshold: float = 10.8,
 ) -> hl.Table:
     """
     Search for breakpoints in a transcript or within a transcript subsection.
@@ -515,7 +512,6 @@ def search_for_break(
 
     :param hl.Table ht: Input context Table.
     :param hl.expr.StringExpression search_field: Field of table to search. Value should be either 'transcript' or 'section'.
-    :param bool simul_break: Whether this function is searching for simultaneous breaks. Default is False.
     :param float chisq_threshold: Chi-square significance threshold.
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
         Default is 10.8.
@@ -527,97 +523,45 @@ def search_for_break(
         and alt (evidence of domains of missense constraint) expressions..."
     )
 
-    # Split transcript into three sections if searching for simultaneous breaks
-    if simul_break:
-        ht = ht.annotate(
-            section_nulls=[
-                # Get null expression for section of transcript pre-window
-                get_dpois_expr(
-                    cond_expr=True,
-                    section_oe_expr=ht.overall_oe,
-                    obs_expr=ht.pre_obs,
-                    exp_expr=ht.pre_exp,
-                ),
-                # Get null expression for window of constraint
-                get_dpois_expr(
-                    cond_expr=True,
-                    section_oe_expr=ht.overall_oe,
-                    obs_expr=ht.window_obs,
-                    exp_expr=ht.window_exp,
-                ),
-                # Get null expression for section of transcript post-window
-                get_dpois_expr(
-                    cond_expr=True,
-                    section_oe_expr=ht.overall_oe,
-                    obs_expr=ht.post_obs,
-                    exp_expr=ht.post_exp,
-                ),
-            ]
-        )
-        ht = ht.annotate(
-            section_alts=[
-                # Get alt expression for section of transcript pre-window
-                get_dpois_expr(
-                    cond_expr=True,
-                    section_oe_expr=ht.pre_oe,
-                    obs_expr=ht.pre_obs,
-                    exp_expr=ht.pre_exp,
-                ),
-                # Get alt expression for window of constraint
-                get_dpois_expr(
-                    cond_expr=True,
-                    section_oe_expr=ht.window_oe,
-                    obs_expr=ht.window_obs,
-                    exp_expr=ht.window_exp,
-                ),
-                # Get alt expression for section of transcript post-window
-                get_dpois_expr(
-                    cond_expr=True,
-                    section_oe_expr=ht.post_oe,
-                    obs_expr=ht.post_obs,
-                    exp_expr=ht.next_values.reverse_exp,
-                ),
-            ]
-        )
-
-    # Otherwise, split transcript only into two sections (when searching for first/additional breaks)
-    else:
-        ht = ht.annotate(
-            section_nulls=[
-                # Add forwards section null (going through positions from smaller to larger)
-                # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
-                get_dpois_expr(
-                    cond_expr=hl.len(ht.cumulative_obs) != 0,
-                    section_oe_expr=ht.overall_oe,
-                    obs_expr=ht.cumulative_obs[ht[search_field]],
-                    exp_expr=ht.cumulative_exp,
-                ),
-                # Add reverse section null (going through positions larger to smaller)
-                get_dpois_expr(
-                    cond_expr=hl.is_defined(ht.reverse.obs),
-                    section_oe_expr=ht.overall_oe,
-                    obs_expr=ht.reverse.obs,
-                    exp_expr=ht.reverse.exp,
-                ),
-            ],
-            section_alts=[
-                # Add forward section alt
-                # section_alt = stats.dpois(section_obs, section_exp*section_obs_exp)[0]
-                get_dpois_expr(
-                    cond_expr=hl.len(ht.cumulative_obs) != 0,
-                    section_oe_expr=ht.forward_oe,
-                    obs_expr=ht.cumulative_obs[ht[search_field]],
-                    exp_expr=ht.cumulative_exp,
-                ),
-                # Add reverse section alt
-                get_dpois_expr(
-                    cond_expr=hl.is_defined(ht.reverse.obs),
-                    section_oe_expr=ht.reverse_obs_exp,
-                    obs_expr=ht.reverse.obs,
-                    exp_expr=ht.reverse.exp,
-                ),
-            ],
-        )
+    # Split transcript or transcript subsection into two sections
+    # Split transcript when searching for first break
+    # Split transcript subsection when searching for additional breaks
+    ht = ht.annotate(
+        section_nulls=[
+            # Add forwards section null (going through positions from smaller to larger)
+            # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
+            get_dpois_expr(
+                cond_expr=hl.len(ht.cumulative_obs) != 0,
+                section_oe_expr=ht.overall_oe,
+                obs_expr=ht.cumulative_obs[ht[search_field]],
+                exp_expr=ht.cumulative_exp,
+            ),
+            # Add reverse section null (going through positions larger to smaller)
+            get_dpois_expr(
+                cond_expr=hl.is_defined(ht.reverse.obs),
+                section_oe_expr=ht.overall_oe,
+                obs_expr=ht.reverse.obs,
+                exp_expr=ht.reverse.exp,
+            ),
+        ],
+        section_alts=[
+            # Add forward section alt
+            # section_alt = stats.dpois(section_obs, section_exp*section_obs_exp)[0]
+            get_dpois_expr(
+                cond_expr=hl.len(ht.cumulative_obs) != 0,
+                section_oe_expr=ht.forward_oe,
+                obs_expr=ht.cumulative_obs[ht[search_field]],
+                exp_expr=ht.cumulative_exp,
+            ),
+            # Add reverse section alt
+            get_dpois_expr(
+                cond_expr=hl.is_defined(ht.reverse.obs),
+                section_oe_expr=ht.reverse_obs_exp,
+                obs_expr=ht.reverse.obs,
+                exp_expr=ht.reverse.exp,
+            ),
+        ],
+    )
 
     logger.info("Multiplying all section nulls and all section alts...")
     # Kaitlin stores all nulls/alts in section_null and section_alt and then multiplies
@@ -684,7 +628,7 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
         scan_exp_expr=ht.cumulative_exp,
     )
 
-    return search_for_break(ht, "transcript", False, chisq_threshold)
+    return search_for_break(ht, "transcript", chisq_threshold)
 
 
 def get_subsection_exprs(
@@ -766,6 +710,11 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     """
     ht = get_subsection_exprs(ht)
 
+    # Rename break_oe (each section's observed/expected value) to be overall_oe
+    # This is because the overall OE ratio used in searching for additional breaks should be
+    # transcript section OE and not transcript overall OE
+    ht = ht.transmute(overall_oe=ht.break_oe)
+
     logger.info("Splitting HT into pre and post breakpoint sections...")
     pre_ht = ht.filter(ht.section.contains("pre"))
     post_ht = ht.filter(ht.section.contains("post"))
@@ -802,16 +751,10 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
 
     logger.info("Searching for a break in each section and returning...")
     pre_ht = search_for_break(
-        pre_ht,
-        search_field="transcript",
-        simul_break=False,
-        chisq_threshold=chisq_threshold,
+        pre_ht, search_field="transcript", chisq_threshold=chisq_threshold,
     )
     post_ht = search_for_break(
-        post_ht,
-        search_field="transcript",
-        simul_break=False,
-        chisq_threshold=chisq_threshold,
+        post_ht, search_field="transcript", chisq_threshold=chisq_threshold,
     )
     # Adjust is_break annotation in both HTs
     # to prevent this function from continually finding previous significant breaks
@@ -1195,7 +1138,7 @@ def search_for_two_breaks(
     )
     return group_ht
 
-
+  
 def calculate_section_chisq(
     obs_expr: hl.expr.Int64Expression, exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:

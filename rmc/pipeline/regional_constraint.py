@@ -1,5 +1,7 @@
 import argparse
 import logging
+import os
+import subprocess
 
 import hail as hl
 
@@ -37,7 +39,6 @@ from rmc.utils.constraint import (
     GROUPINGS,
     process_additional_breaks,
     process_transcripts,
-    search_for_two_breaks,
 )
 from rmc.utils.generic import (
     filter_to_region_type,
@@ -61,11 +62,11 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
-    hl.init(log="/RMC.log")
     exac = args.exac
 
     try:
         if args.pre_process_data:
+            hl.init(log="/RMC_pre_process.log")
             # TODO: Add code to create annotations necessary for constraint_flag_expr and filter transcripts prior to running constraint
             logger.warning("Code currently only processes b37 data!")
             logger.info(
@@ -104,6 +105,7 @@ def main(args):
             logger.info("Done preprocessing files")
 
         if args.prep_for_constraint:
+            hl.init(log="/RMC_prep_for_constraint.log")
             logger.info("Reading in exome HT...")
             if exac:
                 exome_ht = filtered_exac.ht()
@@ -262,6 +264,8 @@ def main(args):
             )
 
         if args.search_for_first_break:
+            hl.init(log="/RMC_first_break.log")
+
             logger.info("Searching for transcripts with a significant break...")
             context_ht = constraint_prep.ht()
             context_ht = process_transcripts(context_ht, args.chisq_threshold)
@@ -292,6 +296,11 @@ def main(args):
             not_one_break_ht.write(not_one_break.path, overwrite=args.overwrite)
 
         if args.search_for_additional_breaks:
+            hl.init(log="/RMC_additional_breaks.log")
+
+            # Set hail flag to avoid method too large and out of memory errors
+            hl._set_flags(no_whole_stage_codegen="1")
+
             logger.info(
                 "Searching for additional breaks in transcripts with at least one significant break..."
             )
@@ -341,9 +350,12 @@ def main(args):
                     f"break_{break_num}_chisq": break_ht[context_ht.key].chisq,
                     f"break_{break_num}_null": break_ht[context_ht.key].total_null,
                     f"break_{break_num}_alt": break_ht[context_ht.key].total_alt,
-                    "break_list": break_ht[context_ht.key].break_list,
+                    "is_break": break_ht[context_ht.key].is_break,
                 }
                 context_ht = context_ht.annotate(**annot_expr)
+                context_ht = context_ht.annotate(
+                    break_list=context_ht.break_list.append(context_ht.is_break)
+                )
 
                 break_ht = break_ht.filter(transcripts.contains(break_ht.transcript))
                 break_num += 1
@@ -351,14 +363,11 @@ def main(args):
             context_ht.write(multiple_breaks.path, overwrite=args.overwrite)
 
         if args.search_for_simul_breaks:
-            logger.info("Setting hail flag to avoid method too large error...")
-            hl._set_flags(no_whole_stage_codegen="1")
 
             logger.info(
                 "Searching for two simultaneous breaks in transcripts that didn't have \
                 a single significant break..."
             )
-
             if not file_exists(not_one_break_grouped.path) or args.create_grouped_ht:
                 # Make sure user didn't specify a min obs of zero
                 if args.min_num_obs == 0:
@@ -452,6 +461,8 @@ def main(args):
         # Fixed expected counts for any genes that span PAR and non-PAR regions
         # after running on gnomAD v2
         if args.fix_xg:
+            hl.init(log="/RMC_fix_XG.log")
+
             logger.info("Reading in exome HT...")
             exome_ht = filtered_exomes.ht()
 
@@ -493,16 +504,6 @@ def main(args):
                     start_pos=transcript_ht[xg.transcript].start_pos,
                     end_pos=transcript_ht[xg.transcript].end_pos,
                 )
-
-                logger.info("Searching for simultaneous breaks...")
-                xg = search_for_two_breaks(xg)
-                is_break_ht = xg.filter(xg.is_break)
-                if is_break_ht.count() == 0:
-                    logger.info("XG has no breaks!")
-                else:
-                    is_break_ht.write(
-                        f"{temp_path}/XG_simul_break.ht", overwrite=args.overwrite
-                    )
             else:
                 logger.info("XG has at least one break!")
                 is_break_ht = is_break_ht.checkpoint(
@@ -514,6 +515,8 @@ def main(args):
                 # xg = xg.annotate(break_list=[xg.is_break])
 
         if args.finalize:
+            hl.init(log="/RMC_finalize.log")
+
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
             )
@@ -750,6 +753,21 @@ if __name__ == "__main__":
         description="Options specific to running simultaneous breaks search",
     )
     simul_breaks.add_argument(
+        "--transcript-tsv",
+        help="Path to store transcripts to search for two simultaneous breaks. Path should be to a file in Google cloud storage.",
+        default=f"{temp_path}/no_break_transcripts.tsv",
+    )
+    simul_breaks.add_argument(
+        "--get-no-break-transcripts",
+        help="Get all transcripts without evidence of one significant break (to search for two simultaneous breaks.",
+        action="store_true",
+    )
+    simul_breaks.add_argument(
+        "--get-min-window-size",
+        help="Determine smallest possible window size for simultaneous breaks.",
+        action="store_true",
+    )
+    simul_breaks.add_argument(
         "--get-total-exome-bases",
         help="Get total number of bases in the exome. If not set, will pull default value from TOTAL_EXOME_BASES.",
         action="store_true",
@@ -769,6 +787,11 @@ if __name__ == "__main__":
         "--create-grouped-ht",
         help="Create hail Table grouped by transcript with cumulative observed and expected missense values collected into lists.",
         action="store_true",
+    )
+    simul_breaks.add_argument(
+        "--simul-breaks-temp-path",
+        help="Path to bucket with temporary simultaneous breaks results tables.",
+        default=f"{temp_path}/simul_breaks_x*.ht",
     )
     parser.add_argument(
         "--fix-xg",
@@ -797,7 +820,9 @@ if __name__ == "__main__":
         "--overwrite", help="Overwrite existing data", action="store_true"
     )
     parser.add_argument(
-        "--slack-channel", help="Send message to Slack channel/user", default="@kc"
+        "--slack-channel",
+        help="Send message to Slack channel/user",
+        default="@kc (she/her)",
     )
     args = parser.parse_args()
 

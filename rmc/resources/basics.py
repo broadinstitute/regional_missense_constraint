@@ -1,7 +1,6 @@
 import hail as hl
 
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
-from gnomad_lof.constraint_utils.constraint_basics import get_old_mu_data
 from rmc.resources.resource_utils import (
     FLAGSHIP_LOF,
     GNOMAD_VER,
@@ -43,19 +42,6 @@ divergence_scores = TableResource(
 )
 """
 Table with divergence score between humans and macaques for each canonical transcript in Gencode v19.
-"""
-
-old_mutation_rate = TableResource(
-    path=f"{RESOURCE_PREFIX}/GRCh37/exac/ht/mutation_rate.ht",
-    import_func=get_old_mu_data,
-    import_args={
-        "path": MUTATION_RATE_TABLE_PATH,
-        "min_partitions": 50,
-        "impute": True,
-    },
-)
-"""
-Table with mutation rate calculated for ExAC constraint.
 """
 
 ## gnomAD resources
