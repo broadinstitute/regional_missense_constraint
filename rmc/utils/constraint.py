@@ -1113,8 +1113,10 @@ def search_for_two_breaks(
             First argument to `hl.experimental.loop` must be a function (`_simul_break_loop` in this case),
             and the first argument to that function must be another function.
             Calling `loop_continue` tells hail to go back to the top of the loop with loop variables updated.
-        :param int i: Smaller list index value corresponding to the smaller position of the two break window.
-        :param int j: Larger list index value corresponding to the larger position of the two break window.
+        :param int i: Smaller list index value. This index defines the current position of the first break.
+            It's the `i` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
+        :param int j: Larger list index value. This index defines the current position of the first break.
+            It's the `j` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
         :param hl.expr.Int32Expression: Largest list index for transcript.
         :param float cur_max_chisq: Current maximum chi square value.
         :param int cur_best_i: Current best index i.
