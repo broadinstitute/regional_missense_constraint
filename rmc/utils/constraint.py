@@ -875,7 +875,7 @@ def process_additional_breaks(
 
 
 def search_for_two_breaks(
-    group_ht: hl.GroupedTable, chisq_threshold: float = 13.8,
+    group_ht: hl.Table, chisq_threshold: float = 13.8,
 ) -> hl.Table:
     """
     Search for windows of constraint in transcripts with simultaneous breaks.
