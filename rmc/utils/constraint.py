@@ -1147,7 +1147,7 @@ def search_for_two_breaks(
             hl.if_else(
                 j == max_idx,
                 # At end of j iteration, continue to next i index
-                # Increment i by one and set j to i+2 (to avoid situations where j index is smaller than i index)
+                # Set i to i+1 and j to i+2 (so that the j index is always greater than the i index)
                 loop_continue(
                     i + 1, i + 2, max_idx, cur_max_chisq, cur_best_i, cur_best_j
                 ),
