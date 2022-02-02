@@ -384,20 +384,9 @@ def main(args):
                     cum_obs=hl.agg.collect(ht.cumulative_obs),
                     cum_exp=hl.agg.collect(ht.cumulative_exp),
                     total_oe=hl.agg.take(ht.overall_oe, 1)[0],
+                    positions=hl.sorted(hl.agg.collect(ht.locus.position)),
                 )
                 group_ht = group_ht.annotate_globals(min_window_size=min_window_size)
-
-                logger.info("Gathering all positions in each transcript...")
-                if (
-                    not file_exists(f"{temp_path}/pos_per_transcript.ht")
-                    or args.overwrite_pos_ht
-                ):
-                    pos_ht = ht.group_by("transcript").aggregate(
-                        positions=hl.sorted(hl.agg.collect(ht.locus.position)),
-                    )
-                    pos_ht.write(f"{temp_path}/pos_per_transcript.ht", overwrite=True)
-                pos_ht = hl.read_table(f"{temp_path}/pos_per_transcript.ht")
-                group_ht = group_ht.annotate(positions=pos_ht[group_ht].key)
                 group_ht = group_ht.annotate(max_idx=hl.len(group_ht.positions) - 1)
 
                 if (
@@ -777,11 +766,6 @@ if __name__ == "__main__":
     simul_breaks.add_argument(
         "--create-grouped-ht",
         help="Create hail Table grouped by transcript with cumulative observed and expected missense values collected into lists.",
-        action="store_true",
-    )
-    simul_breaks.add_argument(
-        "--overwrite-pos-ht",
-        help="Overwrite the positions per transcript HT (HT keyed by transcript with a list of positiosn per transcript), even if it already exists.",
         action="store_true",
     )
     parser.add_argument(
