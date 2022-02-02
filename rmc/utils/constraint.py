@@ -1136,7 +1136,7 @@ def search_for_two_breaks(
             # If we haven't reached the end of the position list with index i,
             # continue with the loop
             hl.if_else(
-                j == max_idx,
+                j > max_idx,
                 # At end of j iteration, continue to next i index
                 # Increment i by one and set j to i+2 (to avoid situations where j index is smaller than i index)
                 loop_continue(
