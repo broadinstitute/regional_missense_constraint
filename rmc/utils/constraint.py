@@ -884,7 +884,7 @@ def search_for_two_breaks(
     `min_window_size` is the number of base pairs needed, on average, to see 10 missense variants (by default).
     For gnomAD v2.1, `min_window_size` is 100bp.
 
-    :param hl.GroupedTable ht: Input GroupedTable grouped by transcript with lists of cumulative observed and expected
+    :param hl.Table ht: Input Table aggregated by transcript with lists of cumulative observed and expected
         missense values. HT is filtered to contain only transcripts with simultaneous breaks.
     :param float chisq_threshold:  Chi-square significance threshold. Default is 13.8.
         Default is from ExAC RMC code and corresponds to a p-value of 0.999 with 2 degrees of freedom.
