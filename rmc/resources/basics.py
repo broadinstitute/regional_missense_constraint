@@ -109,6 +109,20 @@ not_one_break = VersionedTableResource(
 """
 Table containing transcripts without one significant break.
 
+Transcripts in this table will be processed to check for two simultaneous breaks.
+"""
+
+not_one_break_grouped = VersionedTableResource(
+    default_version=GNOMAD_VER,
+    versions={
+        GNOMAD_VER: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/not_one_break_grouped.ht"
+        ),
+    },
+)
+"""
+Not one break Table grouped by transcript with observed missense, expected missense, and positions collected into lists.
+
 Input to searching for simultaneous breaks.
 """
 

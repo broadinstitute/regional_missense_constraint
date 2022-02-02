@@ -1,5 +1,6 @@
+from collections.abc import Callable
 import logging
-from typing import Dict, List, Set, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 import hail as hl
 
@@ -57,6 +58,7 @@ def get_cumulative_mu_expr(
     Return annotation with the cumulative mutation rate probability, shifted by one.
 
     Value is shifted by one due to the nature of `hl.scan` and needs to be corrected later.
+
     This function can produce the scan when searching for the first break or when searching for additional break(s).
 
     :param hl.expr.StringExpression transcript_expr: StringExpression containing transcript information.
@@ -76,6 +78,7 @@ def adjust_mu_expr(
     Adjust the scan with the cumulative number mutation rate probability.
 
     This adjustment is necessary because scans are always one line behind, and we want the values to match per line.
+
     This function can correct the scan created when searching for the first break or when searching for additional break(s).
 
     :param hl.expr.DictExpression cumulative_mu_expr: DictExpression containing scan expressions for cumulative mutation rate probability.
@@ -214,7 +217,6 @@ def get_cumulative_obs_expr(
 
     Value is shifted by one due to the nature of `hl.scan` and needs to be corrected later.
     This function can produce the scan when searching for the first break or when searching for additional break(s).
-
     :param hl.expr.StringExpression transcript_expr: StringExpression containing transcript information.
     :param hl.expr.Int64Expression observed_expr: Observed variants expression.
     :return: Struct containing the cumulative number of observed and expected variants.
@@ -233,6 +235,7 @@ def adjust_obs_expr(
     Adjust the scan with the cumulative number of observed variants.
 
     This adjustment is necessary because scans are always one line behind, and we want the values to match per line.
+
     This function can correct the scan created when searching for the first break or when searching for additional break(s).
 
     .. note::
@@ -270,9 +273,6 @@ def get_reverse_obs_exp_expr(
     (backwards from the end of the transcript back to the beginning of the transcript).
     reverse value = total value - cumulative value
 
-    .. note::
-        This function is designed to run on one transcript at a time.
-
     :param hl.expr.Int64Expression total_obs_expr: Expression containing total number of observed variants for transcript.
     :param hl.expr.Float64Expression total_exp_expr: Expression containing total number of expected variants for transcript.
     :param hl.expr.DictExpression scan_obs_expr: Expression containing cumulative number of observed variants for transcript.
@@ -303,7 +303,8 @@ def get_fwd_exprs(
 
     .. note::
         'Forward' refers to moving through the transcript from smaller to larger chromosomal positions.
-        Expects:
+
+    Expects:
         - Input HT is annotated with transcript, observed, mutation rate, total mutation rate (per section),
         and total expected counts (per section).
 
@@ -421,6 +422,7 @@ def get_dpois_expr(
         - Expression containing cumulative numbers for entire transcript.
         - Expression containing cumulative numbers for section of transcript
             between the beginning or end of the transcript and the first breakpoint.
+
     For reverse null/alts, values for obs_expr and and exp_expr should be:
         - Reverse counts for entire transcript.
         - Reverse counts for section of transcript.
@@ -430,6 +432,7 @@ def get_dpois_expr(
             expression containing observed/expected value calculated on cumulative observed and expected
             variants at each position.
         - Expression containing observed/expected value for section of transcript.
+
     For reverse null/alts, values for overall_oe_expr and section_oe_expr should be:
         - Expression containing observed/expected value for entire transcript and
             expression containing observed/expected value calculated on reverse observed variants value
@@ -440,6 +443,7 @@ def get_dpois_expr(
     For forward null/alts, cond_expr should check:
         - That the length of the obs_expr isn't 0 when searching for the first break.
         - That the length of the obs_expr is 2 when searching for a second additional break.
+
     For reverse null/alts, cond_expr should check:
         - That the reverse observed value for the entire transcript is defined when searching for the first break.
         - That the reverse observed value for the section between the first breakpoint and the end of the transcript
@@ -490,7 +494,6 @@ def search_for_break(
         - reverse_obs_exp
         - total_obs
         - total_exp
-
     If searching for simultaneous breaks, expects HT to have the following fields:
         - pre_obs
         - pre_exp
@@ -501,12 +504,11 @@ def search_for_break(
         - post_obs
         - post_exp
         - post_oe
-
     Also expects:
         - multiallelic variants in input HT have been split.
         - Input HT is autosomes/PAR only, X non-PAR only, or Y non-PAR only.
 
-    Returns HT filtered to lines with maximum chisq if chisq >= max_value, otherwise returns None.
+    Return HT filtered to lines with maximum chisq if chisq >= max_value, otherwise returns None.
 
     :param hl.Table ht: Input context Table.
     :param hl.expr.StringExpression search_field: Field of table to search. Value should be either 'transcript' or 'section'.
@@ -697,6 +699,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
         - coverage_correction
         - methylation_level
         - section
+
     Also assumes that Table's globals contain plateau and coverage models.
 
     :param hl.Table ht: Input Table.
@@ -779,6 +782,7 @@ def process_additional_breaks(
         - mu_snp
         - coverage_correction
         - transcript
+
     Also assumes that Table's globals contain plateau models.
 
     :param hl.Table ht: Input Table.
@@ -813,6 +817,328 @@ def process_additional_breaks(
     return process_sections(ht, chisq_threshold)
 
 
+def calculate_window_chisq(
+    max_idx: int,
+    i: int,
+    j: int,
+    cum_obs: hl.expr.ArrayExpression,
+    cum_exp: hl.expr.ArrayExpression,
+    total_oe: hl.expr.Float64Expression,
+) -> hl.expr.Float64Expression:
+    """
+    Calculate chi square significance value for each possible simultaneous breaks window.
+
+    Used only when calculating simultaneous breaks.
+
+    Chi square formula: 2 * (hl.log10(total_alt) - hl.log10(total_null))
+
+    :param int max_idx: Largest list index value.
+    :param int i: Smaller list index value corresponding to the smaller position of the two break window.
+    :param int j: Larger list index value corresponding to the larger position of the two break window.
+    :param hl.expr.ArrayExpression cum_obs: List containing cumulative observed missense values.
+    :param hl.expr.ArrayExpression cum_exp: List containing cumulative expected missense values.
+    :param expr.Float64Expression total_oe: Transcript overall observed/expected (OE) missense ratio.
+    :return: Chi square significance value.
+    """
+    return (
+        hl.case()
+        .when(
+            # Return -1 when the window spans the entire transcript
+            (i == 0) & (j == max_idx),
+            -1,
+        )
+        .when(
+            # If i index is the smallest position (anchored at one end of transcript),
+            # there are only two transcript subsections: [start_pos, pos[j]], (pos[j], end_pos]
+            i == 0,
+            (
+                2
+                * (
+                    # Create alt distribution
+                    hl.log10(
+                        # Create alt distribution for section [start_pos, pos[j]]
+                        # The missense values for this section are just the cumulative values at index j
+                        get_dpois_expr(
+                            cond_expr=True,
+                            section_oe_expr=get_obs_exp_expr(
+                                True, cum_obs[j], cum_exp[j]
+                            ),
+                            obs_expr=cum_obs[j],
+                            exp_expr=cum_exp[j],
+                        )
+                        # Create alt distribution for section (pos[j], end_pos]
+                        # The missense values for this section are the cumulative values at the last index
+                        # minus the values at index j
+                        * get_dpois_expr(
+                            cond_expr=True,
+                            section_oe_expr=get_obs_exp_expr(
+                                True,
+                                (cum_obs[-1] - cum_obs[j]),
+                                (cum_exp[-1] - cum_exp[j]),
+                            ),
+                            obs_expr=cum_obs[-1] - cum_obs[j],
+                            exp_expr=cum_exp[-1] - cum_exp[j],
+                        )
+                    )
+                    # Create null distribution
+                    - hl.log10(
+                        get_dpois_expr(
+                            cond_expr=True,
+                            section_oe_expr=total_oe,
+                            obs_expr=cum_obs[j],
+                            exp_expr=cum_exp[j],
+                        )
+                        * get_dpois_expr(
+                            cond_expr=True,
+                            section_oe_expr=total_oe,
+                            obs_expr=cum_obs[-1] - cum_obs[j],
+                            exp_expr=cum_exp[-1] - cum_exp[j],
+                        )
+                    )
+                )
+            ),
+        )
+        .when(
+            # If j index is anchored at the largest position, there are two transcript subsections:
+            # [start_pos, pos[i]), [pos[i], end_pos]
+            j == max_idx,
+            (
+                2
+                * (
+                    # Create alt distribution
+                    hl.log10(
+                        # Create alt distribution for section [start_pos, pos[i])
+                        # The missense values for this section are the cumulative values at
+                        # one index smaller than index i
+                        get_dpois_expr(
+                            cond_expr=True,
+                            section_oe_expr=get_obs_exp_expr(
+                                True, cum_obs[i - 1], cum_exp[i - 1]
+                            ),
+                            obs_expr=cum_obs[i - 1],
+                            exp_expr=cum_exp[i - 1],
+                        )
+                        # Create alt distribution for section [pos[i], end_pos]
+                        # The missense values for this section are the cumulative values at
+                        # the last index minus the cumulative values at index i - 1
+                        * get_dpois_expr(
+                            cond_expr=True,
+                            section_oe_expr=get_obs_exp_expr(
+                                True,
+                                (cum_obs[-1] - cum_obs[i - 1]),
+                                (cum_exp[-1] - cum_exp[i - 1]),
+                            ),
+                            obs_expr=cum_obs[-1] - cum_obs[i - 1],
+                            exp_expr=cum_exp[-1] - cum_exp[i - 1],
+                        )
+                    )
+                    # Create null distribution
+                    - hl.log10(
+                        get_dpois_expr(
+                            cond_expr=True,
+                            section_oe_expr=total_oe,
+                            obs_expr=cum_obs[i - 1],
+                            exp_expr=cum_exp[i - 1],
+                        )
+                        * get_dpois_expr(
+                            cond_expr=True,
+                            section_oe_expr=total_oe,
+                            obs_expr=cum_obs[-1] - cum_obs[i - 1],
+                            exp_expr=cum_exp[-1] - cum_exp[i - 1],
+                        )
+                    )
+                )
+            ),
+        )
+        .default(
+            # Neither index is the smallest or largest position,
+            # so there are three transcript subsections:
+            # [start_pos, pos[i]), [pos[i], pos[j]], (pos[j], end_pos]
+            (
+                2
+                * (
+                    # Create alt distribution
+                    hl.log10(
+                        # Create alt distribution for section [start_pos, pos[i])
+                        # The missense values for this section are the cumulative values at
+                        # one index smaller than index i
+                        get_dpois_expr(
+                            cond_expr=True,
+                            section_oe_expr=get_obs_exp_expr(
+                                True, cum_obs[i - 1], cum_exp[i - 1]
+                            ),
+                            obs_expr=cum_obs[i - 1],
+                            exp_expr=cum_exp[i - 1],
+                        )
+                        # Create alt distribution for section [pos[i], pos[j]]
+                        # The missense values for this section are the cumulative values at index j
+                        # minus the cumulative values at index i -1
+                        * get_dpois_expr(
+                            cond_expr=True,
+                            section_oe_expr=get_obs_exp_expr(
+                                True,
+                                (cum_obs[j] - cum_obs[i - 1]),
+                                (cum_exp[j] - cum_exp[i - 1]),
+                            ),
+                            obs_expr=cum_obs[j] - cum_obs[i - 1],
+                            exp_expr=cum_exp[j] - cum_exp[i - 1],
+                        )
+                        # Create alt distribution for section (pos[j], end_pos]
+                        # The missense values for this section are the cumulative values at the last index
+                        # minus the cumulative values at index j
+                        * get_dpois_expr(
+                            cond_expr=True,
+                            section_oe_expr=get_obs_exp_expr(
+                                True,
+                                (cum_obs[-1] - cum_obs[j]),
+                                (cum_exp[-1] - cum_exp[j]),
+                            ),
+                            obs_expr=cum_obs[-1] - cum_obs[j],
+                            exp_expr=cum_exp[-1] - cum_exp[j],
+                        )
+                    )
+                    # Create null distribution
+                    - hl.log10(
+                        get_dpois_expr(
+                            cond_expr=True,
+                            section_oe_expr=total_oe,
+                            obs_expr=cum_obs[i - 1],
+                            exp_expr=cum_exp[i - 1],
+                        )
+                        * get_dpois_expr(
+                            cond_expr=True,
+                            section_oe_expr=total_oe,
+                            obs_expr=cum_obs[j] - cum_obs[i - 1],
+                            exp_expr=cum_exp[j] - cum_exp[i - 1],
+                        )
+                        * get_dpois_expr(
+                            cond_expr=True,
+                            section_oe_expr=total_oe,
+                            obs_expr=cum_obs[-1] - cum_obs[j],
+                            exp_expr=cum_exp[-1] - cum_exp[j],
+                        )
+                    )
+                )
+            )
+        )
+    )
+
+
+def search_for_two_breaks(
+    group_ht: hl.Table, chisq_threshold: float = 13.8,
+) -> hl.Table:
+    """
+    Search for windows of constraint in transcripts with simultaneous breaks.
+
+    This function searches for breaks for all possible window sizes but only keeps break sizes >= `min_window_size`.
+    `min_window_size` is the number of base pairs needed, on average, to see 10 missense variants (by default).
+    For gnomAD v2.1, `min_window_size` is 100bp.
+
+    :param hl.Table ht: Input Table aggregated by transcript with lists of cumulative observed and expected
+        missense values. HT is filtered to contain only transcripts with simultaneous breaks.
+    :param float chisq_threshold:  Chi-square significance threshold. Default is 13.8.
+        Default is from ExAC RMC code and corresponds to a p-value of 0.999 with 2 degrees of freedom.
+        (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
+    :return: Table with largest simultaneous break window size annotated per transcript.
+    :rtype: hl.Table
+    """
+
+    def _simul_break_loop(
+        loop_continue: Callable,
+        i: int,
+        j: int,
+        max_idx: hl.expr.Int32Expression,
+        cur_max_chisq: float,
+        cur_best_i: int,
+        cur_best_j: int,
+    ) -> Tuple[float, int, int]:
+        """
+        Iterate over each possible pair of indices in a transcript's cumulative value lists to find the optimum two break window.
+
+        :param Callable[float, int, int] loop_continue: Function to restart hail loop.
+            First argument to `hl.experimental.loop` must be a function (`_simul_break_loop` in this case),
+            and the first argument to that function must be another function.
+            Calling `loop_continue` tells hail to go back to the top of the loop with loop variables updated.
+        :param int i: Smaller list index value. This index defines the current position of the first break.
+            It's the `i` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
+        :param int j: Larger list index value. This index defines the current position of the first break.
+            It's the `j` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
+        :param hl.expr.Int32Expression: Largest list index for transcript.
+        :param float cur_max_chisq: Current maximum chi square value.
+        :param int cur_best_i: Current best index i.
+        :param int cur_best_j: Current best index j.
+        :return: Maximum chi square significance value and optimum index pair i, j.
+        """
+        # Calculate chi squared value associated with transcript subections created using this index pair i, j
+        chisq = calculate_window_chisq(
+            max_idx, i, j, group_ht.cum_obs, group_ht.cum_exp, group_ht.total_oe
+        )
+        return hl.if_else(
+            # At the end of the iteration through the position list
+            # (when index i is at the second to last index of the list),
+            # return the best indices.
+            # Note that this is the second to last index because all of the windows created where i is the last index
+            # were already checked in previous iterations of the loop
+            i == (max_idx - 1),
+            (cur_max_chisq, cur_best_i, cur_best_j),
+            # If we haven't reached the end of the position list with index i,
+            # continue with the loop
+            hl.if_else(
+                j > max_idx,
+                # At end of j iteration, continue to next i index
+                # Set i to i+1 and j to i+2 (so that the j index is always greater than the i index)
+                loop_continue(
+                    i + 1, i + 2, max_idx, cur_max_chisq, cur_best_i, cur_best_j
+                ),
+                # Check chi square value against current best chi square value
+                hl.if_else(
+                    chisq > cur_max_chisq,
+                    # If chi square value is larger than current best,
+                    # set current chi square to current best (and update indices)
+                    # before continuing to next j
+                    loop_continue(i, j + 1, max_idx, chisq, i, j),
+                    # Otherwise, continue to next j, don't modify current best indices or chi square
+                    loop_continue(
+                        i, j + 1, max_idx, cur_max_chisq, cur_best_i, cur_best_j
+                    ),
+                ),
+            ),
+        )
+
+    group_ht = group_ht.annotate(
+        max_break=hl.experimental.loop(
+            _simul_break_loop,
+            hl.ttuple(hl.tfloat, hl.tint, hl.tint),
+            0,
+            1,
+            group_ht.max_idx,
+            0.0,
+            0,
+            0,
+        )
+    )
+    group_ht = group_ht.transmute(
+        max_chisq=group_ht.max_break[0],
+        start_pos=group_ht.positions[group_ht.max_break[1]],
+        end_pos=group_ht.positions[group_ht.max_break[2]],
+    )
+    # Remove rows with maximum chi square values below the threshold
+    # or rows where none of the transcript sections is the minimum window size
+    group_ht = group_ht.filter(
+        # Remove rows with maximum chi square values below the threshold
+        (group_ht.max_chisq >= chisq_threshold)
+        & (
+            (group_ht.end_pos - group_ht.start_pos > group_ht.min_window_size)
+            | (group_ht.transcript_end - group_ht.end_pos > group_ht.min_window_size)
+            | (
+                group_ht.start_pos - group_ht.transcript_start
+                > group_ht.min_window_size
+            )
+        )
+    )
+    return group_ht
+
+  
 def calculate_section_chisq(
     obs_expr: hl.expr.Int64Expression, exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
@@ -944,114 +1270,6 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
         section=hl.coalesce(*section_name_expr),
         section_chisq=hl.coalesce(*section_chisq_expr),
     )
-
-
-def get_unique_transcripts(
-    transcript_set_1: hl.expr.SetExpression, transcript_set_2: hl.expr.SetExpression
-) -> Union[Set, hl.expr.SetExpression]:
-    """
-    Return the set of transcripts unique to `transcript_set_1`.
-
-    If the set is empty, return an empty SetExpression.
-
-    :param hl.expr.SetExpression transcript_set_1: Transcript set with desired output transcripts.
-    :param hl.expr.SetExpression transcript_set_2: Transcript set to check against.
-    :return: Set of transcripts unique to `transcript_set_1`, or empty SetExpression.
-    :rtype: Union[Set, hl.expression.SetExpression]
-    """
-    transcripts = hl.eval(transcript_set_1.difference(transcript_set_2))
-    if len(transcripts) == 0:
-        return hl.missing(hl.tset(hl.tstr))
-    return transcripts
-
-
-def finalize_multiple_breaks(
-    ht: hl.Table,
-    max_n_breaks: int,
-    annotations: List[str] = [
-        "mu_snp",
-        "observed",
-        "total_exp",
-        "total_mu",
-        "total_obs",
-        "cumulative_obs",
-        "_mu_scan",
-        "cumulative_exp",
-        "break_list",
-    ],
-) -> hl.Table:
-    """
-    Organize table of transcripts with multiple breaks.
-
-    Get number of transcripts unique to each break number and drop any extra annotations.
-    Also calculate each section's observed, expected, OE, and chi-square values.
-
-    Assumes:
-        - Table is annotated with set of transcripts per break (e.g., `break_1_transcripts`)
-
-    :param hl.Table ht: Input Table.
-    :param int max_n_breaks: Largest number of breakpoints in any transcript.
-    :param List[str] annotations: List of annotations to keep from input Table.
-        Default is ['mu_snp', 'observed', 'total_exp', 'total_mu', 'total_obs',
-                    'cumulative_obs', '_mu_scan', 'cumulative_exp','break_list'].
-    :return: Table annotated with breakpoint positions and section obs, exp, OE, chi-square values.
-    :rtype: hl.Table
-    """
-    logger.info(
-        "Fixing global annotations in HT (transcripts associated with each break number)..."
-    )
-    # Get number of transcripts UNIQUE to each break number
-    # Transcript sets in globals currently are not unique
-    # i.e., `break_1_transcripts` contains transcripts that are also present in `break_2_transcripts`
-    annot_dict = {}
-    for i in range(1, max_n_breaks + 1):
-        if i == max_n_breaks:
-            annot_dict[f"break_{i}_transcripts"] = ht[f"break_{i}_transcripts"]
-        else:
-            annot_dict[f"break_{i}_transcripts"] = get_unique_transcripts(
-                ht[f"break_{i}_transcripts"], ht[f"break_{i+1}_transcripts"]
-            )
-        if i == 1:
-            annotations.extend(["chisq", "total_null", "total_alt"])
-        else:
-            annotations.extend(
-                [f"break_{i}_chisq", f"break_{i}_null", f"break_{i}_alt"]
-            )
-
-    # Drop all globals from HT, including plateau/coverage model annotations
-    ht = ht.select_globals()
-    ht = ht.annotate_globals(**annot_dict)
-
-    logger.info("Selecting only relevant annotations from HT and checkpointing...")
-    ht = ht.select(*annotations)
-    ht = ht.transmute(
-        break_1_chisq=ht.chisq, break_1_null=ht.total_null, break_1_alt=ht.total_alt,
-    )
-    ht = ht.checkpoint(f"{temp_path}/multiple_breaks.ht", overwrite=True)
-
-    logger.info("Getting all breakpoint positions...")
-    break_ht = get_all_breakpoint_pos(ht)
-    break_ht = break_ht.checkpoint(
-        f"{temp_path}/multiple_breaks_breakpoints.ht", overwrite=True
-    )
-    ht = ht.annotate(break_pos=break_ht[ht.transcript])
-
-    logger.info("Get transcript section annotations (obs, exp, OE, chisq)...")
-    ht = annotate_transcript_sections(ht, max_n_breaks)
-    ht = ht.checkpoint(f"{temp_path}/multiple_breaks_annot.ht", overwrite=True)
-    return ht
-
-
-def finalize_simul_breaks():
-    """
-    Create table of transcripts with simultaneous breaks.
-
-    Combine transcripts from multiple temporary checkpointed Tables.
-
-    Get number of transcripts unique to each window size and drop any extra annotations.
-    Also calculate each section's observed, expected, OE, and chi-square values.
-    """
-    pass
 
 
 def constraint_flag_expr(
