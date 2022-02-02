@@ -875,7 +875,7 @@ def process_additional_breaks(
 
 
 def search_for_two_breaks(
-    group_ht: hl.GroupedTable, chisq_threshold: float = 13.8,
+    group_ht: hl.Table, chisq_threshold: float = 13.8,
 ) -> hl.Table:
     """
     Search for windows of constraint in transcripts with simultaneous breaks.
@@ -884,7 +884,7 @@ def search_for_two_breaks(
     `min_window_size` is the number of base pairs needed, on average, to see 10 missense variants (by default).
     For gnomAD v2.1, `min_window_size` is 100bp.
 
-    :param hl.GroupedTable ht: Input GroupedTable grouped by transcript with lists of cumulative observed and expected
+    :param hl.Table ht: Input Table aggregated by transcript with lists of cumulative observed and expected
         missense values. HT is filtered to contain only transcripts with simultaneous breaks.
     :param float chisq_threshold:  Chi-square significance threshold. Default is 13.8.
         Default is from ExAC RMC code and corresponds to a p-value of 0.999 with 2 degrees of freedom.
@@ -1138,7 +1138,7 @@ def search_for_two_breaks(
             hl.if_else(
                 j > max_idx,
                 # At end of j iteration, continue to next i index
-                # Increment i by one and set j to i+2 (to avoid situations where j index is smaller than i index)
+                # Set i to i+1 and j to i+2 (so that the j index is always greater than the i index)
                 loop_continue(
                     i + 1, i + 2, max_idx, cur_max_chisq, cur_best_i, cur_best_j
                 ),
