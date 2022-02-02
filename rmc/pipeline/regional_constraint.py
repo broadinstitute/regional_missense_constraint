@@ -361,7 +361,7 @@ def main(args):
             group_ht_path = f"{temp_path}/not_one_break_grouped.ht"
             if args.create_grouped_ht:
                 # Get number of base pairs needed to observe `num` number of missense variants (on average)
-                # This number is used to determine the window size to search for constraint with simultaneous breaks
+                # This number is used to determine the min_window_size - which is the smallest allowed distance between simultaneous breaks. 
                 min_window_size = (
                     get_avg_bases_between_mis(
                         get_reference_genome(context_ht.locus).name,
