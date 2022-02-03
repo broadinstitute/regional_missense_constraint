@@ -1073,6 +1073,13 @@ def search_for_two_breaks(
         chisq = calculate_window_chisq(
             max_idx, i, j, group_ht.cum_obs, group_ht.cum_exp, group_ht.total_oe
         )
+
+        # Update current best indices and chi square if new chi square (calculated above)
+        # is better than the current stored value (`cur_max_chisq`)
+        cur_best_i = hl.if_else(chisq > cur_max_chisq, i, cur_best_i)
+        cur_best_j = hl.if_else(chisq > cur_max_chisq, j, cur_best_j)
+        cur_max_chisq = hl.max(chisq, cur_max_chisq)
+
         return hl.if_else(
             # At the end of the iteration through the position list
             # (when index i is at the second to last index of the list),
@@ -1084,24 +1091,15 @@ def search_for_two_breaks(
             # If we haven't reached the end of the position list with index i,
             # continue with the loop
             hl.if_else(
-                j > max_idx,
+                j == max_idx,
                 # At end of j iteration, continue to next i index
                 # Set i to i+1 and j to i+2 (so that the j index is always greater than the i index)
                 loop_continue(
                     i + 1, i + 2, max_idx, cur_max_chisq, cur_best_i, cur_best_j
                 ),
-                # Check chi square value against current best chi square value
-                hl.if_else(
-                    chisq > cur_max_chisq,
-                    # If chi square value is larger than current best,
-                    # set current chi square to current best (and update indices)
-                    # before continuing to next j
-                    loop_continue(i, j + 1, max_idx, chisq, i, j),
-                    # Otherwise, continue to next j, don't modify current best indices or chi square
-                    loop_continue(
-                        i, j + 1, max_idx, cur_max_chisq, cur_best_i, cur_best_j
-                    ),
-                ),
+                # Otherwise, if j hasn't gotten to the maximum index,
+                # continue to the next j value for current i
+                loop_continue(i, j + 1, max_idx, cur_max_chisq, cur_best_i, cur_best_j),
             ),
         )
 
@@ -1138,7 +1136,7 @@ def search_for_two_breaks(
     )
     return group_ht
 
-  
+
 def calculate_section_chisq(
     obs_expr: hl.expr.Int64Expression, exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
