@@ -1076,8 +1076,8 @@ def search_for_two_breaks(
 
         # Update current best indices and chi square if new chi square (calculated above)
         # is better than the current stored value (`cur_max_chisq`)
-        cur_best_i = hl.if_else(chisq > cur_max_chisq, i, cur_best_i,)
-        cur_best_j = hl.if_else(chisq > cur_max_chisq, j, cur_best_j,)
+        cur_best_i = hl.if_else(chisq > cur_max_chisq, i, cur_best_i)
+        cur_best_j = hl.if_else(chisq > cur_max_chisq, j, cur_best_j)
         cur_max_chisq = hl.max(chisq, cur_max_chisq)
 
         return hl.if_else(
