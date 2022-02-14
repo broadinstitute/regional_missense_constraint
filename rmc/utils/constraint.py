@@ -874,10 +874,10 @@ def calculate_window_chisq(
                             section_oe_expr=get_obs_exp_expr(
                                 True,
                                 (cum_obs[-1] - cum_obs[j]),
-                                (cum_exp[-1] - cum_exp[j]),
+                                hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                             ),
                             obs_expr=cum_obs[-1] - cum_obs[j],
-                            exp_expr=cum_exp[-1] - cum_exp[j],
+                            exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                         )
                     )
                     # Create null distribution
@@ -892,7 +892,7 @@ def calculate_window_chisq(
                             cond_expr=True,
                             section_oe_expr=total_oe,
                             obs_expr=cum_obs[-1] - cum_obs[j],
-                            exp_expr=cum_exp[-1] - cum_exp[j],
+                            exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                         )
                     )
                 )
@@ -926,10 +926,10 @@ def calculate_window_chisq(
                             section_oe_expr=get_obs_exp_expr(
                                 True,
                                 (cum_obs[-1] - cum_obs[i - 1]),
-                                (cum_exp[-1] - cum_exp[i - 1]),
+                                hl.max(cum_exp[-1] - cum_exp[i - 1], 1e-09),
                             ),
                             obs_expr=cum_obs[-1] - cum_obs[i - 1],
-                            exp_expr=cum_exp[-1] - cum_exp[i - 1],
+                            exp_expr=hl.max(cum_exp[-1] - cum_exp[i - 1], 1e-09),
                         )
                     )
                     # Create null distribution
@@ -944,7 +944,7 @@ def calculate_window_chisq(
                             cond_expr=True,
                             section_oe_expr=total_oe,
                             obs_expr=cum_obs[-1] - cum_obs[i - 1],
-                            exp_expr=cum_exp[-1] - cum_exp[i - 1],
+                            exp_expr=hl.max(cum_exp[-1] - cum_exp[i - 1], 1e-09),
                         )
                     )
                 )
@@ -978,10 +978,10 @@ def calculate_window_chisq(
                             section_oe_expr=get_obs_exp_expr(
                                 True,
                                 (cum_obs[j] - cum_obs[i - 1]),
-                                (cum_exp[j] - cum_exp[i - 1]),
+                                hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
                             ),
                             obs_expr=cum_obs[j] - cum_obs[i - 1],
-                            exp_expr=cum_exp[j] - cum_exp[i - 1],
+                            exp_expr=hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
                         )
                         # Create alt distribution for section (pos[j], end_pos]
                         # The missense values for this section are the cumulative values at the last index
@@ -991,10 +991,10 @@ def calculate_window_chisq(
                             section_oe_expr=get_obs_exp_expr(
                                 True,
                                 (cum_obs[-1] - cum_obs[j]),
-                                (cum_exp[-1] - cum_exp[j]),
+                                hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                             ),
                             obs_expr=cum_obs[-1] - cum_obs[j],
-                            exp_expr=cum_exp[-1] - cum_exp[j],
+                            exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                         )
                     )
                     # Create null distribution
@@ -1009,13 +1009,13 @@ def calculate_window_chisq(
                             cond_expr=True,
                             section_oe_expr=total_oe,
                             obs_expr=cum_obs[j] - cum_obs[i - 1],
-                            exp_expr=cum_exp[j] - cum_exp[i - 1],
+                            exp_expr=hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
                         )
                         * get_dpois_expr(
                             cond_expr=True,
                             section_oe_expr=total_oe,
                             obs_expr=cum_obs[-1] - cum_obs[j],
-                            exp_expr=cum_exp[-1] - cum_exp[j],
+                            exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                         )
                     )
                 )
@@ -1076,6 +1076,17 @@ def search_for_two_breaks(
 
         # Update current best indices and chi square if new chi square (calculated above)
         # is better than the current stored value (`cur_max_chisq`)
+        """cur_best_i = hl.if_else(
+            ~hl.is_nan(chisq) & (chisq > cur_max_chisq),
+            i,
+            cur_best_i
+        )
+        cur_best_j = hl.if_else(
+            ~hl.is_nan(chisq) & (chisq > cur_max_chisq),
+            j,
+            cur_best_j
+        )
+        cur_max_chisq = hl.nanmax(chisq, cur_max_chisq)"""
         cur_best_i = hl.if_else(chisq > cur_max_chisq, i, cur_best_i)
         cur_best_j = hl.if_else(chisq > cur_max_chisq, j, cur_best_j)
         cur_max_chisq = hl.max(chisq, cur_max_chisq)
@@ -1115,6 +1126,7 @@ def search_for_two_breaks(
             0,
         )
     )
+    group_ht = group_ht.checkpoint(f"{temp_path}/all_simul_results.ht", overwrite=True)
     group_ht = group_ht.transmute(
         max_chisq=group_ht.max_break[0],
         start_pos=group_ht.positions[group_ht.max_break[1]],
