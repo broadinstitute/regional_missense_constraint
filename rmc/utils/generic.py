@@ -480,7 +480,7 @@ def get_clinvar_hi_variants(build: str, overwrite: bool) -> hl.Table:
     else:
         from gnomad.resources.grch38.reference_data import clinvar
 
-    if not file_exists(clinvar_ht_path) and not overwrite:
+    if not file_exists(clinvar_ht_path) or overwrite:
         logger.info("Reading in ClinVar HT...")
         clinvar_ht = clinvar.ht()
         clinvar_ht = filter_to_clinvar_pathogenic(clinvar_ht)
