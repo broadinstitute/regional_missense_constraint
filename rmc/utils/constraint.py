@@ -1444,7 +1444,17 @@ def get_section_info(
     :return: Table containing transcript and new section obs, exp, and chi square annotations.
     """
     logger.info("Getting info for section of transcript between two breakpoints...")
-    if is_middle:
+    if is_first:
+        logger.info(
+            "Getting info for first section of transcript (up to and including smallest breakpoint pos)..."
+        )
+        ht = ht.filter(ht.locus.position <= ht.break_pos[0])
+        ht = ht.annotate(
+            # Start position is transcript start if this is the first section
+            section_start_pos=ht.start_pos,
+            section_end_pos=ht.break_pos[0],
+        )
+    elif is_middle:
         ht = ht.filter(
             (ht.locus.position > ht.break_pos[indices[0]])
             & (ht.locus.position <= ht.break_pos[indices[1]])
@@ -1458,27 +1468,16 @@ def get_section_info(
         )
 
     else:
-        if is_first:
-            logger.info(
-                "Getting info for first section of transcript (up to and including smallest breakpoint pos)..."
-            )
-            ht = ht.filter(ht.locus.position <= ht.break_pos[0])
-            ht = ht.annotate(
-                # Start position is transcript start if this is the first section
-                section_start_pos=ht.start_pos,
-                section_end_pos=ht.break_pos[0],
-            )
-        else:
-            logger.info(
-                "Getting info for last section of transcript (after largest breakpoint pos)..."
-            )
-            ht = ht.filter(ht.locus.position > ht.break_pos[-1])
-            ht = ht.annotate(
-                # Get last position from break_pos list and add 1 since it isn't included in the region
-                # Use the transcript end position as the end position since this is the last section
-                section_start_pos=ht.break_pos[-1] + 1,
-                section_end_pos=ht.end_pos,
-            )
+        logger.info(
+            "Getting info for last section of transcript (after largest breakpoint pos)..."
+        )
+        ht = ht.filter(ht.locus.position > ht.break_pos[-1])
+        ht = ht.annotate(
+            # Get last position from break_pos list and add 1 since it isn't included in the region
+            # Use the transcript end position as the end position since this is the last section
+            section_start_pos=ht.break_pos[-1] + 1,
+            section_end_pos=ht.end_pos,
+        )
 
     ht = ht.annotate(section=hl.format("%s_%s", ht.transcript, str(section_num)))
     ht = get_subsection_exprs(
