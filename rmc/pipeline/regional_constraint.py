@@ -459,8 +459,9 @@ def main(args):
                 group_ht.write(not_one_break_grouped_path, overwrite=True)
 
             ht = hl.read_table(not_one_break_grouped_path)
-            transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
-            logger.info("Found %i transcripts", len(transcripts))
+            print(ht.count())
+            # transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
+            # logger.info("Found %i transcripts", len(transcripts))
             ht.describe()
 
             logger.info("Searching for transcripts with simultaneous breaks...")
@@ -479,18 +480,35 @@ def main(args):
             # ht.write("gs://regional_missense_constraint/temp/simul_split_test.ht", overwrite=args.overwrite)
 
             # ht_head = ht.head(9229)
-            # ht_tail = ht.tail(9230)
             # ht_head = search_for_two_breaks(ht_head, args.chisq_threshold)
             # logger.info("Writing out first 9229 rows...")
             # ht_head = ht_head.checkpoint("gs://gnomad-tmp/kc/simul_breaks_9229.ht", overwrite=args.overwrite)
 
-            # ht_tail = search_for_two_breaks(ht_tail, args.chisq_threshold)
-            # logger.info("Writing out last 9230 rows...")
-            # ht_tail = ht_tail.checkpoint("gs://gnomad-tmp/kc/simul_breaks_9229.ht", overwrite=args.overwrite)
+            logger.info("Getting last 9230 rows...")
+            ht_9230 = ht.tail(9230)
+            ht_4615_1 = ht_9230.head(4615)
+            ht_4615_2 = ht_9230.tail(4615)
 
-            # logger.info("Joining and writing...")
-            # ht = ht_head.union(ht_tail)
-            # ht.write("gs://regional_missense_constraint/temp/simul_split_test.ht", overwrite=args.overwrite)
+            ht_4615_1 = search_for_two_breaks(ht_4615_1, args.chisq_threshold)
+            logger.info("Writing out first 4615 of last 9230 rows...")
+            ht_4615_1 = ht_4615_1.checkpoint(
+                "gs://gnomad-tmp/kc/simul_breaks_4615_1.ht", overwrite=args.overwrite
+            )
+
+            ht_4615_2 = search_for_two_breaks(ht_4615_2, args.chisq_threshold)
+            logger.info("Writing out second 4615 of last 9230 rows...")
+            ht_4615_2 = ht_4615_2.checkpoint(
+                "gs://gnomad-tmp/kc/simul_breaks_4615_2.ht", overwrite=args.overwrite
+            )
+
+            logger.info("Joining and writing...")
+            ht_head = hl.read_table("gs://gnomad-tmp/kc/simul_breaks_9229.ht")
+            ht_tail = ht_4615_1.union(ht_4615_1)
+            ht = ht_head.union(ht_tail)
+            ht.write(
+                "gs://regional_missense_constraint/temp/simul_split_test.ht",
+                overwrite=args.overwrite,
+            )
 
             # logger.info("Writing out simultaneous breaks HT...")
             # simul_path = "gs://regional_missense_constraint/temp/simul_test.ht"
