@@ -1510,9 +1510,7 @@ def create_section_expr_array(
     ]
 
 
-def annotate_transcript_sections(
-    ht: hl.Table, max_n_breaks: int, simul_breaks: bool
-) -> hl.Table:
+def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int,) -> hl.Table:
     """
     Annotate each transcript section with observed, expected, OE, and section chi square values.
 
@@ -1522,58 +1520,36 @@ def annotate_transcript_sections(
 
     :param hl.Table ht: Input Table.
     :param int max_n_breaks: Largest number of breaks.
-    :param bool simul_breaks: True if  input Table contains two simultaneous breaks transcripts.
-        False if input Table contains first/additional breaks transcripts/
     :return: Table with section and section values annotated.
     :rtype: hl.Table
     """
-    if simul_breaks:
-        logger.info("Get section information for first section of each transcript...")
-        first_ht = get_section_info(
-            ht, section_num=1, is_middle=False, indices=None, is_first=True
-        )
+    logger.info("Get section information for first section of each transcript...")
+    count = 1
+    section_ht = get_section_info(
+        ht, section_num=count, is_middle=False, indices=None, is_first=True
+    )
 
-        logger.info("Get section information for middle section of each transcript...")
-        middle_ht = get_section_info(
-            ht, section_num=2, is_middle=True, indices=(0, 1), is_first=False,
-        )
-
-        logger.info("Get section information for last section of each transcript...")
-        last_ht = get_section_info(
-            ht, section_num=3, is_middle=False, indices=None, is_first=False
-        )
-
-        logger.info("Joining section HTs...")
-        ht = first_ht.join(middle_ht, how="outer").join(last_ht, how="outer")
-
-    else:
-        logger.info("Get section information for first section of each transcript...")
-        count = 1
-        section_ht = get_section_info(
-            ht, section_num=count, is_middle=False, indices=None, is_first=True
-        )
-
-        # Check sections between breakpoint positions
-        while count <= max_n_breaks:
-            if count == 1:
-                # One break transcripts only get divided into two sections
-                # Thus, increment counter and continue
-                count += 1
-                continue
-            else:
-                temp_ht = get_section_info(
-                    ht,
-                    section_num=count,
-                    is_middle=True,
-                    indices=(count - 2, count - 1),
-                    is_first=False,
-                )
-                section_ht = section_ht.join(temp_ht, how="outer")
-                count += 1
-        end_ht = get_section_info(
-            ht, section_num=count, is_middle=False, indices=None, is_first=False
-        )
-        ht = section_ht.join(end_ht, how="outer")
+    # Check sections between breakpoint positions
+    while count <= max_n_breaks:
+        if count == 1:
+            # One break transcripts only get divided into two sections
+            # Thus, increment counter and continue
+            count += 1
+            continue
+        else:
+            temp_ht = get_section_info(
+                ht,
+                section_num=count,
+                is_middle=True,
+                indices=(count - 2, count - 1),
+                is_first=False,
+            )
+            section_ht = section_ht.join(temp_ht, how="outer")
+            count += 1
+    end_ht = get_section_info(
+        ht, section_num=count, is_middle=False, indices=None, is_first=False
+    )
+    ht = section_ht.join(end_ht, how="outer")
 
     logger.info(
         "Merging section string, start, end, obs, exp, and chi square expressions..."
@@ -1748,7 +1724,7 @@ def finalize_multiple_breaks(
         # Filter HT to transcripts associated with this break only
         # and annotate section information
         temp_ht = ht.filter(transcripts.contains(ht.transcript))
-        temp_ht = annotate_transcript_sections(temp_ht, i, simul_breaks=False)
+        temp_ht = annotate_transcript_sections(temp_ht, i)
 
         # Add section oe
         # Do not cap section oe value here (this is for browser display)
@@ -1777,7 +1753,7 @@ def finalize_simul_breaks(ht: hl.Table) -> hl.Table:
     :rtype: hl.Table
     """
     logger.info("Get transcript section annotations (obs, exp, OE, chisq)...")
-    ht = annotate_transcript_sections(ht, max_n_breaks=2, simul_breaks=True)
+    ht = annotate_transcript_sections(ht, max_n_breaks=2)
     ht = ht.checkpoint(f"{temp_path}/simul_break_sections.ht", overwrite=True)
     return ht
 
