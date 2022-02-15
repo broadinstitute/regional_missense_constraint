@@ -1594,7 +1594,40 @@ def get_unique_transcripts_per_break(
         - Assumes input Table is annotated with list containing booleans for whether that locus is a breakpoint
         (`break_list`).
 
-    :param hl.Table: Input Table.
+    :param hl.Table: Input Table. Example schema:
+        ---------------------------------------
+        Row fields:
+            'locus': locus<grch37>
+            'transcript': str
+            'mu_snp': float64
+            'observed': int32
+            'total_exp': float64
+            'total_mu': float64
+            'total_obs': int64
+            'max_chisq': float64
+            'break_list': array<bool>
+            'break_1_null': float64
+            'break_1_alt': float64
+            'break_1_chisq': float64
+            'break_2_chisq': float64
+            'break_2_max_chisq': float64
+            'break_2_null': float64
+            'break_2_alt': float64
+            'break_3_chisq': float64
+            'break_3_max_chisq': float64
+            'break_3_null': float64
+            'break_3_alt': float64
+            'break_4_chisq': float64
+            'break_4_max_chisq': float64
+            'break_4_null': float64
+            'break_4_alt': float64
+            'break_5_chisq': float64
+            'break_5_max_chisq': float64
+            'break_5_null': float64
+            'break_5_alt': float64
+        ----------------------------------------
+        Key: ['locus', 'transcript']
+        ----------------------------------------
     :param int max_n_breaks: Largest number of breaks.
     :return: Dictionary with break number (key) and set of transcripts unique to that break number or empty SetExpression (value).
     :rtype: Dict[int, Union[Set[str], hl.expr.SetExpression]]
