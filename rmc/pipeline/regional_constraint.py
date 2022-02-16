@@ -489,21 +489,38 @@ def main(args):
             ht_4615_1 = ht_9230.head(4615)
             ht_4615_2 = ht_9230.tail(4615)
 
-            ht_4615_1 = search_for_two_breaks(ht_4615_1, args.chisq_threshold)
-            logger.info("Writing out first 4615 of last 9230 rows...")
-            ht_4615_1 = ht_4615_1.checkpoint(
-                "gs://gnomad-tmp/kc/simul_breaks_4615_1.ht", overwrite=args.overwrite
+            # ht_4615_1 = search_for_two_breaks(ht_4615_1, args.chisq_threshold)
+            # logger.info("Writing out first 4615 of last 9230 rows...")
+            # ht_4615_1 = ht_4615_1.checkpoint(
+            #    "gs://gnomad-tmp/kc/simul_breaks_4615_1.ht", overwrite=args.overwrite
+            # )
+            # ht_4615_2 = search_for_two_breaks(ht_4615_2, args.chisq_threshold)
+            # logger.info("Writing out second 4615 of last 9230 rows...")
+            # ht_4615_2 = ht_4615_2.checkpoint(
+            #    "gs://gnomad-tmp/kc/simul_breaks_4615_2.ht", overwrite=args.overwrite
+            # )
+
+            logger.info("Splitting up last 4615 of last 9230 rows...")
+            ht_2307 = ht_4615_2.head(2307)
+            ht_2308 = ht_4615_2.tail(2308)
+
+            logger.info("Working on 2307...")
+            ht_2307 = search_for_two_breaks(ht_2307, args.chisq_threshold)
+            ht_2307 = ht_2307.checkpoint(
+                "gs://gnomad-tmp/kc/simul_breaks_2307.ht", overwrite=args.overwrite
             )
 
-            ht_4615_2 = search_for_two_breaks(ht_4615_2, args.chisq_threshold)
-            logger.info("Writing out second 4615 of last 9230 rows...")
-            ht_4615_2 = ht_4615_2.checkpoint(
-                "gs://gnomad-tmp/kc/simul_breaks_4615_2.ht", overwrite=args.overwrite
+            logger.info("Working on 2308...")
+            ht_2308 = search_for_two_breaks(ht_2308, args.chisq_threshold)
+            ht_2308 = ht_2308.checkpoint(
+                "gs://gnomad-tmp/kc/simul_breaks_2308.ht", overwrite=args.overwrite
             )
 
             logger.info("Joining and writing...")
             ht_head = hl.read_table("gs://gnomad-tmp/kc/simul_breaks_9229.ht")
-            ht_tail = ht_4615_1.union(ht_4615_1)
+            ht_4615_1 = hl.read_table("gs://gnomad-tmp/kc/simul_breaks_4615_1.ht")
+            # ht_tail = ht_4615_1.union(ht_4615_1)
+            ht_tail = ht_4615_1.union(ht_2307).union(ht_2308)
             ht = ht_head.union(ht_tail)
             ht.write(
                 "gs://regional_missense_constraint/temp/simul_split_test.ht",
