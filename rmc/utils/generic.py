@@ -462,14 +462,16 @@ def get_outlier_transcripts() -> hl.expr.SetExpression:
 
 
 ## Assessment utils
-def get_clinvar_hi_variants(build: str, overwrite: bool) -> hl.Table:
+def import_clinvar_hi_variants(build: str, overwrite: bool) -> None:
     """
-    Read in ClinVar HT and filter to pathogenic/likely pathogenic missense variants in haploinsufficient genes.
+    Import ClinVar HT and filter to pathogenic/likely pathogenic missense variants in haploinsufficient genes.
+
+    .. note::
+        This function currently only works for build GRCh37.
 
     :param str build: Reference genome build; must be one of BUILDS.
     :param bool overwrite: Whether to overwrite ClinVar HT.
-    :return: Table with P/LP missense variants in HI genes.
-    :rtype: hl.Table
+    :return: None; writes HT to resource path.
     """
     if build not in BUILDS:
         raise DataException(f"Build must be one of {BUILDS}.")
@@ -479,6 +481,10 @@ def get_clinvar_hi_variants(build: str, overwrite: bool) -> hl.Table:
         clinvar_ht_path = grch37.clinvar_path_mis.path
     else:
         from gnomad.resources.grch38.reference_data import clinvar
+
+        raise DataException(
+            "RMC Clinvar HT path has not been prepared for build 38 yet!"
+        )
 
     if not file_exists(clinvar_ht_path) or overwrite:
         logger.info("Reading in ClinVar HT...")
@@ -504,16 +510,13 @@ def get_clinvar_hi_variants(build: str, overwrite: bool) -> hl.Table:
         logger.info("Getting gene information from ClinVar HT...")
         clinvar_ht = clinvar_ht.annotate(gene=clinvar_ht.info.GENEINFO.split(":")[0])
         clinvar_ht = clinvar_ht.filter(hi_gene_set.contains(clinvar_ht.gene))
-        clinvar_ht.write(clinvar_ht_path, overwrite=overwrite)
-
-    clinvar_ht = hl.read_table(clinvar_ht_path)
-    logger.info(
-        "Number of variants after filtering to HI genes: %i", clinvar_ht.count()
-    )
-    return clinvar_ht
+        clinvar_ht = clinvar_ht.checkpoint(clinvar_ht_path, overwrite=overwrite)
+        logger.info(
+            "Number of variants after filtering to HI genes: %i", clinvar_ht.count()
+        )
 
 
-def import_de_novo_variants() -> None:
+def import_de_novo_variants(build: str, overwrite: bool) -> None:
     """
     Import de novo missense variants.
 
@@ -522,11 +525,16 @@ def import_de_novo_variants() -> None:
 
     :return: None; writes HT to resource path.
     """
-    import grch37.de_novo_tsv as tsv_path
-    import grch37.de_novo.path as ht_path
+    if build not in BUILDS:
+        raise DataException(f"Build must be one of {BUILDS}.")
+    if build == "GRCh37":
+        import grch37.de_novo_tsv as tsv_path
+        import grch37.de_novo.path as ht_path
+    else:
+        raise DataException("De novo TSV does not exist for GRCh38!")
 
     dn_ht = hl.import_table(tsv_path, impute=True)
     dn_ht = dn_ht.transmute(locus=hl.locus(dn_ht.chrom, dn_ht.pos))
     dn_ht = dn_ht.key_by("locus")
     dn_ht = dn_ht.select("case_control")
-    dn_ht.write(ht_path, overwrite=True)
+    dn_ht.write(ht_path, overwrite=overwrite)

@@ -14,11 +14,12 @@ from rmc.resources.basics import (
     oe_bin_counts_tsv,
     temp_path,
 )
-from rmc.resources.grch37.reference_data import de_novo, gene_model
+from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo, gene_model
 from rmc.utils.generic import (
-    get_clinvar_hi_variants,
     get_coverage_correction_expr,
     get_outlier_transcripts,
+    import_clinvar_hi_variants,
+    import_de_novo_variants,
 )
 
 
@@ -1779,7 +1780,7 @@ def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Tab
     return ht1.annotate(**{f"{annot_str}": hl.int(hl.is_defined(ht2[ht1.locus]))})
 
 
-def get_oe_bins(ht: hl.Table, build: str, overwrite_clinvar_ht: bool,) -> None:
+def get_oe_bins(ht: hl.Table, build: str) -> None:
     """
     Group RMC results HT by obs/exp (OE) bin and annotate.
 
@@ -1797,7 +1798,6 @@ def get_oe_bins(ht: hl.Table, build: str, overwrite_clinvar_ht: bool,) -> None:
 
     :param hl.Table ht: Input Table containing all breaks results.
     :param str build: Reference genome build.
-    :param bool overwrite_clinvar_ht: Whether to overwrite ClinVar HT.
     :return: None; writes TSV with OE bins + annotations to `oe_bin_counts_tsv` resource path.
     :rtype: None
     """
@@ -1807,7 +1807,12 @@ def get_oe_bins(ht: hl.Table, build: str, overwrite_clinvar_ht: bool,) -> None:
         )
 
     logger.info("Reading in ClinVar, de novo missense, and transcript HTs...")
-    clinvar_ht = get_clinvar_hi_variants(build, overwrite_clinvar_ht)
+    if not file_exists(clinvar_path_mis.path):
+        import_clinvar_hi_variants(build="GRCh37", overwrite=True)
+    if not file_exists(de_novo.path):
+        import_de_novo_variants(build="GRCh37", overwrite=True)
+
+    clinvar_ht = clinvar_path_mis.ht()
     dn_ht = de_novo.ht()
     transcript_ht = gene_model.ht()
 
