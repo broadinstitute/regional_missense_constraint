@@ -1074,6 +1074,9 @@ def search_for_two_breaks(
             max_idx, i, j, group_ht.cum_obs, group_ht.cum_exp, group_ht.total_oe
         )
 
+        # Have hail print transcript out to log (to debug why code is slow)
+        # chisq = hl._console_log(group_ht.transcript, chisq)
+
         # Update current best indices and chi square if new chi square (calculated above)
         # is better than the current stored value (`cur_max_chisq`)
         """cur_best_i = hl.if_else(
@@ -1120,7 +1123,8 @@ def search_for_two_breaks(
             hl.ttuple(hl.tfloat, hl.tint, hl.tint),
             0,
             1,
-            group_ht.max_idx,
+            # Have hail log transcript at start of each loop
+            hl._console_log(group_ht.transcript, group_ht.max_idx),
             0.0,
             0,
             0,
