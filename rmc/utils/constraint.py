@@ -1412,10 +1412,30 @@ def get_all_breakpoint_pos(ht: hl.Table) -> hl.GroupedTable:
     """
     Get all breakpoint positions per transcript.
 
-    .. note::
-        Assumes input Table is annotated with list of Booleans (`break_list`) showing whether site is a breakpoint.
-
     :param hl.Table ht: Input Table.
+            Example schema (truncated at two breaks for space reasons):
+            ----------------------------------------
+            Row fields:
+                'locus': locus<GRCh37>
+                'transcript': str
+                'mu_snp': float64
+                'observed': int32
+                'total_exp': float64
+                'total_mu': float64
+                'total_obs': int64
+                'max_chisq': float64
+                'break_list': array<bool>
+                'break_1_null': float64
+                'break_1_alt': float64
+                'break_1_chisq': float64
+                'break_2_chisq': float64
+                'break_2_max_chisq': float64
+                'break_2_null': float64
+                'break_2_alt': float64
+                'break_pos': array<int32>
+            ----------------------------------------
+            Key: ['locus', 'transcript']
+            ----------------------------------------
     :return: Table grouped by transcript, with all breakpoint positions annotated as a list.
     :rtype: hl.GroupedTable
     """
@@ -1545,28 +1565,7 @@ def get_unique_transcripts_per_break(
         - Assumes input Table is annotated with list containing booleans for whether that locus is a breakpoint
         (`break_list`).
 
-    :param hl.Table: Input Table. Example schema (truncated at two breaks for space reasons):
-        ---------------------------------------
-        Row fields:
-            'locus': locus<grch37>
-            'transcript': str
-            'mu_snp': float64
-            'observed': int32
-            'total_exp': float64
-            'total_mu': float64
-            'total_obs': int64
-            'max_chisq': float64
-            'break_list': array<bool>
-            'break_1_null': float64
-            'break_1_alt': float64
-            'break_1_chisq': float64
-            'break_2_chisq': float64
-            'break_2_max_chisq': float64
-            'break_2_null': float64
-            'break_2_alt': float64
-        ----------------------------------------
-        Key: ['locus', 'transcript']
-        ----------------------------------------
+    :param hl.Table: Input Table.
     :param int max_n_breaks: Largest number of breaks.
     :return: Dictionary with break number (key) and set of transcripts unique to that break number or empty SetExpression (value).
     :rtype: Dict[int, Union[Set[str], hl.expr.SetExpression]]
@@ -1648,7 +1647,28 @@ def finalize_multiple_breaks(
     Assumes:
         - Table is annotated with set of transcripts per break (e.g., `break_1_transcripts`)
 
-    :param hl.Table ht: Input Table.
+    :param hl.Table ht: Input Table. Example schema (truncated at two breaks for space reasons):
+        ---------------------------------------
+        Row fields:
+            'locus': locus<grch37>
+            'transcript': str
+            'mu_snp': float64
+            'observed': int32
+            'total_exp': float64
+            'total_mu': float64
+            'total_obs': int64
+            'max_chisq': float64
+            'break_list': array<bool>
+            'break_1_null': float64
+            'break_1_alt': float64
+            'break_1_chisq': float64
+            'break_2_chisq': float64
+            'break_2_max_chisq': float64
+            'break_2_null': float64
+            'break_2_alt': float64
+        ----------------------------------------
+        Key: ['locus', 'transcript']
+        ----------------------------------------
     :param int max_n_breaks: Largest number of breakpoints in any transcript.
     :param List[str] annotations: List of annotations to keep from input Table.
         Default is FINAL_ANNOTATIONS.
