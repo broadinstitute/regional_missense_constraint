@@ -1491,28 +1491,6 @@ def get_section_info(
     )
 
 
-def create_section_expr_array(
-    ht: hl.Table, annot_str: str, max_n_breaks: int
-) -> hl.expr.ArrayExpression:
-    """
-    Combine desired section annotation expressions into a single array.
-
-    For example, if the input Table has the section annotations:
-    'section_exp_1', 'section_exp_2', 'section_exp_3',
-    this function will combine them into this array:
-    ['section_exp_1', 'section_exp_2', 'section_exp_3']
-
-    :param hl.Table ht: Input Table.
-    :param str annot_str: Name of annotation.
-    :param int max_n_breaks: Largest number of breaks.
-    :return: ArrayExpression containing section annotations.
-    :rtype: hl.expr.ArrayExpression
-    """
-    return [ht[annot_str]] + [
-        ht[f"{annot_str}_{count}"] for count in range(1, max_n_breaks + 1)
-    ]
-
-
 def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int,) -> hl.Table:
     """
     Annotate each transcript section with observed, expected, OE, and section chi square values.
@@ -1549,35 +1527,7 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int,) -> hl.Table:
             section_ht = section_ht.union(temp_ht)
             count += 1
     end_ht = get_section_info(ht, section_num=count, section_type="last", indices=None,)
-    ht = section_ht.union(end_ht)
-
-    logger.info(
-        "Merging section string, start, end, obs, exp, and chi square expressions..."
-    )
-    section_name_expr = create_section_expr_array(ht, "section", max_n_breaks)
-    section_start_expr = create_section_expr_array(
-        ht, "section_start_pos", max_n_breaks
-    )
-    section_end_expr = create_section_expr_array(ht, "section_end_pos", max_n_breaks)
-    section_obs_expr = create_section_expr_array(ht, "section_obs", max_n_breaks)
-    section_exp_expr = create_section_expr_array(ht, "section_exp", max_n_breaks)
-    section_chisq_expr = create_section_expr_array(ht, "section_chisq", max_n_breaks)
-    # Return the first non-missing value in each section expression array
-    # Each row in the table should only have one non-missing value in this array
-    # (the non-missing value will correspond to the section of the transcript the row belongs to)
-    # For example, if a transcript has two sections, and a row belongs to the first section,
-    # then it will have a non-missing value for ONLY the first value in each section expression array
-    # (each section array will look like this: [some value, missing])
-    # This coalesce is to flatten the arrays into a single annotation for each section and take only
-    # the value relevant to each row
-    return ht.select(
-        section=hl.coalesce(*section_name_expr),
-        section_start=hl.coalesce(*section_start_expr),
-        section_end=hl.coalesce(*section_end_expr),
-        section_obs=hl.coalesce(*section_obs_expr),
-        section_exp=hl.coalesce(*section_exp_expr),
-        section_chisq=hl.coalesce(*section_chisq_expr),
-    )
+    return section_ht.union(end_ht)
 
 
 def get_unique_transcripts_per_break(
