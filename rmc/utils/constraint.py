@@ -1547,7 +1547,7 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int,) -> hl.Table:
             )
             section_ht = section_ht.union(temp_ht)
             count += 1
-    end_ht = get_section_info(ht, section_num=count, section_type="last", indices=None,)
+    end_ht = get_section_info(ht, section_num=count, section_type="last", indices=None)
     return section_ht.union(end_ht)
 
 
