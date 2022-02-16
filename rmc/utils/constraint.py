@@ -1425,7 +1425,7 @@ def get_all_breakpoint_pos(ht: hl.Table) -> hl.GroupedTable:
 
 
 def get_section_info(
-    ht: hl.Table, section_num: int, is_middle: bool, indices: Tuple[int], is_first: bool
+    ht: hl.Table, section_num: int, section_type: str, indices: Tuple[int],
 ) -> hl.Table:
     """
     Get the number of observed variants, number of expected variants, and chi square value for transcript section.
@@ -1436,15 +1436,18 @@ def get_section_info(
 
     :param hl.Table ht: Input Table.
     :param int section_num: Transcript section number (e.g., 1 for first section, 2 for second, 3 for third, etc.).
-    :param bool is_middle: Boolean for whether to get a section of the transcript between breakpoints.
+    :param str section_type: Transcript section type. Must be one of 'first', 'middle', or 'end'.
     :param Tuple[int] indices: List of indices pointing to breakpoints.
-        Relevant only if is_middle is True.
-    :param bool is_first: Boolean for whether to get the first section of the transcript.
-        Relevant only if is_middle is False.
     :return: Table containing transcript and new section obs, exp, and chi square annotations.
     """
+    assert section_type in {
+        "first",
+        "middle",
+        "last",
+    }, "section_type must be one of 'first', 'middle', 'last'!"
+
     logger.info("Getting info for section of transcript between two breakpoints...")
-    if is_first:
+    if section_type == "first":
         logger.info(
             "Getting info for first section of transcript (up to and including smallest breakpoint pos)..."
         )
@@ -1454,7 +1457,7 @@ def get_section_info(
             section_start_pos=ht.start_pos,
             section_end_pos=ht.break_pos[0],
         )
-    elif is_middle:
+    elif section_type == "middle":
         ht = ht.filter(
             (ht.locus.position > ht.break_pos[indices[0]])
             & (ht.locus.position <= ht.break_pos[indices[1]])
@@ -1526,7 +1529,7 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int,) -> hl.Table:
     logger.info("Get section information for first section of each transcript...")
     count = 1
     section_ht = get_section_info(
-        ht, section_num=count, is_middle=False, indices=None, is_first=True
+        ht, section_num=count, section_type="first", indices=None,
     )
 
     # Check sections between breakpoint positions
@@ -1540,15 +1543,12 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int,) -> hl.Table:
             temp_ht = get_section_info(
                 ht,
                 section_num=count,
-                is_middle=True,
+                section_type="middle",
                 indices=(count - 2, count - 1),
-                is_first=False,
             )
             section_ht = section_ht.join(temp_ht, how="outer")
             count += 1
-    end_ht = get_section_info(
-        ht, section_num=count, is_middle=False, indices=None, is_first=False
-    )
+    end_ht = get_section_info(ht, section_num=count, section_type="last", indices=None,)
     ht = section_ht.join(end_ht, how="outer")
 
     logger.info(
@@ -1594,7 +1594,7 @@ def get_unique_transcripts_per_break(
         - Assumes input Table is annotated with list containing booleans for whether that locus is a breakpoint
         (`break_list`).
 
-    :param hl.Table: Input Table. Example schema:
+    :param hl.Table: Input Table. Example schema (truncated at two breaks for space reasons):
         ---------------------------------------
         Row fields:
             'locus': locus<grch37>
@@ -1613,18 +1613,6 @@ def get_unique_transcripts_per_break(
             'break_2_max_chisq': float64
             'break_2_null': float64
             'break_2_alt': float64
-            'break_3_chisq': float64
-            'break_3_max_chisq': float64
-            'break_3_null': float64
-            'break_3_alt': float64
-            'break_4_chisq': float64
-            'break_4_max_chisq': float64
-            'break_4_null': float64
-            'break_4_alt': float64
-            'break_5_chisq': float64
-            'break_5_max_chisq': float64
-            'break_5_null': float64
-            'break_5_alt': float64
         ----------------------------------------
         Key: ['locus', 'transcript']
         ----------------------------------------
