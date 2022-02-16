@@ -1546,10 +1546,10 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int,) -> hl.Table:
                 section_type="middle",
                 indices=(count - 2, count - 1),
             )
-            section_ht = section_ht.join(temp_ht, how="outer")
+            section_ht = section_ht.union(temp_ht)
             count += 1
     end_ht = get_section_info(ht, section_num=count, section_type="last", indices=None,)
-    ht = section_ht.join(end_ht, how="outer")
+    ht = section_ht.union(end_ht)
 
     logger.info(
         "Merging section string, start, end, obs, exp, and chi square expressions..."
