@@ -481,6 +481,7 @@ def import_clinvar_hi_variants(build: str, overwrite: bool) -> None:
         clinvar_ht_path = grch37.clinvar_path_mis.path
     else:
         from gnomad.resources.grch38.reference_data import clinvar
+        raise DataException("ClinVar files currently only exist for GRCh37!")
 
         raise DataException(
             "RMC Clinvar HT path has not been prepared for build 38 yet!"

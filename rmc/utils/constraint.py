@@ -1862,7 +1862,7 @@ def get_oe_bins(ht: hl.Table, build: str) -> None:
         .when((ht.section_oe > 0.6) & (ht.section_oe <= 0.8), "0.6-0.8")
         .default("0.8-1.0")
     )
-    # Checkpoint HT here becuase it becomes a couple tables below
+    # Checkpoint HT here because it becomes a couple tables below
     ht = ht.checkpoint(f"{temp_path}/breaks_oe_bin.ht", overwrite=True)
 
     # Group HT by section to get number of base pairs per section
@@ -1889,7 +1889,7 @@ def get_oe_bins(ht: hl.Table, build: str) -> None:
     assess_ht_count = assess_ht.count()
     if assess_ht_count != 5:
         raise DataException(
-            "Expected 5 OE bins but found {assess_ht_count}. Please double check and rerun!"
+            f"Expected 5 OE bins but found {assess_ht_count}. Please double check and rerun!"
         )
 
     logger.info("Reformatting annotations on assessment HT to be proportions...")
