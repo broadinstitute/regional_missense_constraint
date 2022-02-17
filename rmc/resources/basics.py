@@ -1,7 +1,6 @@
 import hail as hl
 
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
-from gnomad_lof.constraint_utils.constraint_basics import get_old_mu_data
 from rmc.resources.resource_utils import (
     CURRENT_VERSION,
     FLAGSHIP_LOF,
@@ -43,19 +42,6 @@ divergence_scores = TableResource(
 )
 """
 Table with divergence score between humans and macaques for each canonical transcript in Gencode v19.
-"""
-
-old_mutation_rate = TableResource(
-    path=f"{RESOURCE_PREFIX}/GRCh37/exac/ht/mutation_rate.ht",
-    import_func=get_old_mu_data,
-    import_args={
-        "path": MUTATION_RATE_TABLE_PATH,
-        "min_partitions": 50,
-        "impute": True,
-    },
-)
-"""
-Table with mutation rate calculated for ExAC constraint.
 """
 
 ## gnomAD resources
@@ -123,6 +109,20 @@ not_one_break = VersionedTableResource(
 )
 """
 Table containing transcripts without one significant break.
+
+Transcripts in this table will be processed to check for two simultaneous breaks.
+"""
+
+not_one_break_grouped = VersionedTableResource(
+    default_version=GNOMAD_VER,
+    versions={
+        GNOMAD_VER: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/not_one_break_grouped.ht"
+        ),
+    },
+)
+"""
+Not one break Table grouped by transcript with observed missense, expected missense, and positions collected into lists.
 
 Input to searching for simultaneous breaks.
 """
