@@ -1888,7 +1888,7 @@ def get_oe_bins(ht: hl.Table, build: str) -> None:
     assess_ht_count = assess_ht.count()
     if assess_ht_count != 5:
         raise DataException(
-            "Expected 5 OE bins but found {assess_ht_count}. Please double check and rerun!"
+            f"Expected 5 OE bins but found {assess_ht_count}. Please double check and rerun!"
         )
 
     logger.info("Reformatting annotations on assessment HT to be proportions...")
