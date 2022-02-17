@@ -6,7 +6,6 @@ import subprocess
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 
@@ -28,7 +27,7 @@ from rmc.resources.grch37.gnomad import (
     processed_exomes,
     prop_obs_coverage,
 )
-from rmc.resources.grch37.reference_data import full_context, processed_context
+from rmc.resources.grch37.reference_data import gene_model, processed_context
 from rmc.resources.resource_utils import GNOMAD_VER, MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
@@ -321,9 +320,6 @@ def main(args):
                 break_ht = process_additional_breaks(
                     break_ht, break_num, args.chisq_threshold
                 )
-                break_ht = break_ht.annotate(
-                    break_list=break_ht.break_list.append(break_ht.is_break)
-                )
                 break_ht = break_ht.checkpoint(
                     f"{temp_path}/break_{break_num}.ht", overwrite=True
                 )
@@ -348,6 +344,7 @@ def main(args):
                 context_ht = context_ht.annotate_globals(**globals_annot_expr)
                 annot_expr = {
                     f"break_{break_num}_chisq": break_ht[context_ht.key].chisq,
+                    f"break_{break_num}_max_chisq": break_ht[context_ht.key].max_chisq,
                     f"break_{break_num}_null": break_ht[context_ht.key].total_null,
                     f"break_{break_num}_alt": break_ht[context_ht.key].total_alt,
                     "is_break": break_ht[context_ht.key].is_break,
@@ -374,6 +371,11 @@ def main(args):
                     raise DataException(
                         "Minimum number of observed variants must be greater than zero!"
                     )
+
+                logger.info(
+                    "Getting start and end positions and total size for each transcript..."
+                )
+                transcript_ht = gene_model.ht()
 
                 # Get number of base pairs needed to observe `num` number of missense variants (on average)
                 # This number is used to determine the min_window_size - which is the smallest allowed distance between simultaneous breaks.
@@ -403,35 +405,10 @@ def main(args):
                 )
                 group_ht = group_ht.annotate_globals(min_window_size=min_window_size)
                 group_ht = group_ht.annotate(max_idx=hl.len(group_ht.positions) - 1)
-
-                if (
-                    not file_exists(f"{temp_path}/transcript.ht")
-                    or args.overwrite_transcript_ht
-                ):
-                    # Read in full context HT (not filtered to missense variants)
-                    # Want to use full context HT here to get true start and end positions of transcripts
-                    # Also filter full context HT to canonical transcripts only
-                    full_context_ht = full_context.ht()
-                    full_context_ht = process_vep(full_context_ht)
-                    full_context_ht = full_context_ht.annotate(
-                        transcript=full_context_ht.transcript_consequences.transcript_id
-                    )
-                    transcript_ht = full_context_ht.group_by(
-                        full_context_ht.transcript
-                    ).aggregate(
-                        end_pos=hl.agg.max(full_context_ht.locus.position),
-                        start_pos=hl.agg.min(full_context_ht.locus.position),
-                    )
-
-                    logger.info(
-                        "Writing transcript HT to avoid redundant calculations..."
-                    )
-                    transcript_ht.write(f"{temp_path}/transcript.ht", overwrite=True)
-
-                    group_ht = group_ht.annotate(
-                        transcript_start=transcript_ht[group_ht.key].start_pos,
-                        transcript_end=transcript_ht[group_ht.key].end_pos,
-                    )
+                group_ht = group_ht.annotate(
+                    transcript_start=transcript_ht[group_ht.key].start_pos,
+                    transcript_end=transcript_ht[group_ht.key].end_pos,
+                )
                 group_ht.write(not_one_break_grouped.path, overwrite=True)
 
             group_ht = not_one_break_grouped.ht()
