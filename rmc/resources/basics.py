@@ -153,7 +153,7 @@ SetExpression containing transcripts with >= 10,000 possible missense positions.
 
 simul_break_temp = f"{temp_path}/simul_breaks/"
 """
-Bucket to store temporary results for simultaneous results
+Bucket to store temporary results for simultaneous results.
 """
 
 simul_break = VersionedTableResource(
