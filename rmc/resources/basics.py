@@ -141,6 +141,16 @@ multiple_breaks = VersionedTableResource(
 Table containing transcripts with multiple breaks.
 """
 
+simul_break_under_10k = f"{MODEL_PREFIX}/{GNOMAD_VER}/transcripts_under_10k.he"
+"""
+SetExpression containing transcripts with < 10,000 possible missense positions.
+"""
+
+simul_break_over_10k = f"{MODEL_PREFIX}/{GNOMAD_VER}/transcripts_over_10k.he"
+"""
+SetExpression containing transcripts with >= 10,000 possible missense positions.
+"""
+
 simul_break = VersionedTableResource(
     default_version=GNOMAD_VER,
     versions={

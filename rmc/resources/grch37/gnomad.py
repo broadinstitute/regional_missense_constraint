@@ -48,7 +48,7 @@ Calculated using `get_proportion_observed`.
 
 Contains multiple mutation rate annotations:
 	- mu_snp: Raw mutation rate calculated using gnomAD v2 genomes.
-	- mu_agg: `mu_snp` multiplied by the number of times the variant was seen in the context HT (`possible_variants`). 
+	- mu_agg: `mu_snp` multiplied by the number of times the variant was seen in the context HT (`possible_variants`).
 	- adjusted_mutation_rate: `mu_agg` corrected with plateau model.
 	- mu: `mu_agg` multipled by coverage correction.
 """
@@ -57,13 +57,13 @@ constraint_ht = VersionedTableResource(
     default_version=GNOMAD_VER,
     versions={
         GNOMAD_VER: TableResource(
-            path=f"{FLAGSHIP_LOF}/standard/constraint_standard.ht"
+            path="gs://gcp-public-data--gnomad/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_transcript.ht"
         )
     },
 )
 """
 Table with total observed and expected variant counts per transcript.
 
-Calculated as part of gnomAD LoF release for v2.1.1. 
+Calculated as part of gnomAD LoF release for v2.1.1.
 Observed variants count is annotated as `obs_mis` and expected variants count is annotated as `exp_mis`.
 """
