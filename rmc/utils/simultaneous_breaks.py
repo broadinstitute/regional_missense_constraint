@@ -134,7 +134,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        "This script searches for regional missense constraint in gnomAD"
+        "This regional missense constraint script two simultaneous breaks in transcripts without evidence of a single significant break."
     )
     parser.add_argument(
         "--chisq-threshold",
@@ -142,7 +142,22 @@ if __name__ == "__main__":
         type=float,
         default=9.2,
     )
-    min_window_group = parser.add_mutually_exclusive_group()
+    parser.add_argument(
+        "--overwrite", help="Overwrite existing data.", action="store_true"
+    )
+    parser.add_argument(
+        "--slack-channel",
+        help="Send message to Slack channel/user.",
+        default="@kc (she/her)",
+    )
+
+    # Create subparsers for each step
+    subparsers = parser.add_subparsers()
+    create_grouped_ht = subparsers.add_parser(
+        "create-grouped-ht",
+        help="Create hail Table grouped by transcript with cumulative observed and expected missense values collected into lists.",
+    )
+    min_window_group = create_grouped_ht.add_mutually_exclusive_group()
     min_window_group.add_argument(
         "--min-window-size",
         help="Smallest possible window size for simultaneous breaks. Determined by running --get-min-window-size.",
@@ -153,32 +168,23 @@ if __name__ == "__main__":
         help="Determine smallest possible window size for simultaneous breaks.",
         action="store_true",
     )
-    parser.add_argument(
+    create_grouped_ht.add_argument(
         "--get-total-exome-bases",
         help="Get total number of bases in the exome. If not set, will pull default value from TOTAL_EXOME_BASES.",
         action="store_true",
     )
-    parser.add_argument(
+    create_grouped_ht.add_argument(
         "--get-total-gnomad-missense",
         help="Get total number of missense variants in gnomAD. If not set, will pull default value from TOTAL_GNOMAD_MISSENSE.",
         action="store_true",
     )
-    parser.add_argument(
+    create_grouped_ht.add_argument(
         "--min-num-obs",
         help="Number of observed variants. Used when determining the smallest possible window size for simultaneous breaks.",
         default=10,
         type=int,
     )
-    parser.add_argument(
-        "--create-grouped-ht",
-        help="Create hail Table grouped by transcript with cumulative observed and expected missense values collected into lists.",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--slack-channel",
-        help="Send message to Slack channel/user",
-        default="@kc (she/her)",
-    )
+
     args = parser.parse_args()
 
     if args.slack_channel:
