@@ -1130,7 +1130,6 @@ def search_for_two_breaks(
             0,
         )
     )
-    group_ht = group_ht.checkpoint(f"{temp_path}/all_simul_results.ht", overwrite=True)
     group_ht = group_ht.transmute(
         max_chisq=group_ht.max_break[0],
         start_pos=group_ht.positions[group_ht.max_break[1]],
