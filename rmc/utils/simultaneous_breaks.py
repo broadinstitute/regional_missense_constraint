@@ -1,5 +1,7 @@
 import argparse
 import logging
+import os
+import subprocess
 
 import hail as hl
 
@@ -13,10 +15,12 @@ from rmc.resources.basics import (
     not_one_break,
     not_one_break_grouped,
     simul_break_over_10k,
+    simul_break_temp,
     simul_break_under_10k,
 )
 from rmc.resources.grch37.reference_data import gene_model
 from rmc.slack_creds import slack_token
+from rmc.utils.constraint import search_for_two_breaks
 from rmc.utils.generic import get_avg_bases_between_mis
 
 
@@ -31,7 +35,7 @@ logger.setLevel(logging.INFO)
 def main(args):
     """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
     try:
-        if args.prepare_batches:
+        if args.command == "create_grouped_ht":
             hl.init(log="/search_for_two_breaks_prep_batches.log")
 
             if not file_exists(not_one_break_grouped.path) or args.create_grouped_ht:
@@ -104,7 +108,7 @@ def main(args):
                 )
                 group_ht.write(not_one_break_grouped.path, overwrite=True)
 
-            ht = hl.read_table(not_one_break_grouped.path)
+            ht = not_one_break_grouped.ht()
             logger.info(
                 "Annotating HT with length of cumulative observed list annotation..."
             )
@@ -126,6 +130,75 @@ def main(args):
             )
             hl.experimental.write_expression(under_10k, simul_break_under_10k)
             hl.experimental.write_expression(over_10k, simul_break_over_10k)
+
+        if args.command == "run-batches":
+            hl.init(log="/search_for_two_breaks_run_batches.log")
+            logger.info("Checking for output from any previous runs...")
+            success_file_path = f"{simul_break_temp}/success_files"
+            success_files = (
+                subprocess.check_output(["gsutil", "ls", success_file_path])
+                .decode("utf8")
+                .strip()
+                .split("\n")
+            )
+            tsvs = [os.path.split(f)[-1] for f in success_files if f.endswith(".tsv")]
+            if tsvs:
+                for tsv in tsvs:
+                    with hl.hadoop_open(tsv) as t:
+                        for line in t:
+                            transcript = line.strip()
+                            if transcript not in successful_transcripts:
+                                successful_transcripts.append(transcript)
+                successful_transcripts = set(successful_transcripts)
+
+            if args.under_10k:
+                transcripts = hl.eval(
+                    hl.experimental.read_expression(simul_break_under_10k)
+                )
+                if tsvs:
+                    transcripts_to_run = transcripts.difference(successful_transcripts)
+                else:
+                    transcripts_to_run = transcripts
+                logger.info(
+                    "Found %i transcripts to search...", len(transcripts_to_run)
+                )
+
+                group_size = args.group_size
+                transcript_groups = [
+                    transcripts_to_run[x : x + group_size]
+                    for x in range(0, len(transcripts_to_run), group_size)
+                ]
+                ht = not_one_break_grouped.ht()
+                temp_hts = []
+                for count, group in enumerate(transcript_groups):
+                    logger.info("Working on transcript group number: %i", count)
+                    temp_ht = ht.filter(hl.literal(group).contains(ht.transcript))
+                    temp_ht = search_for_two_breaks(temp_ht, args.chisq_threshold)
+                    temp_ht = temp_ht.checkpoint(
+                        f"{simul_break_temp}/hts/simul_break_group{count}.ht",
+                        overwrite=args.overwrite,
+                    )
+                    temp_hts.append(temp_ht)
+                    with hl.hadoop_open(
+                        f"{success_file_path}/group{count}.tsv", "w"
+                    ) as o:
+                        o.write("\n".split(group) + "\n")
+
+                logger.info("Joining and writing...")
+                ht = temp_hts[0].union(*temp_hts[1:])
+                ht.write(
+                    f"{simul_break_temp}/under_10k/under_10k.ht",
+                    overwrite=args.overwrite,
+                )
+
+            elif args.over_10k:
+                transcripts = hl.eval(
+                    hl.experimental.read_expression(simul_break_over_10k)
+                )
+            else:
+                raise DataException(
+                    "Must specify if transcript sizes are --under-10k or --over-10k!"
+                )
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -152,7 +225,10 @@ if __name__ == "__main__":
     )
 
     # Create subparsers for each step
-    subparsers = parser.add_subparsers()
+    # Need to specify `dest` to be able to check which subparser is being invoked
+    # `dest`: https://docs.python.org/3/library/argparse.html#dest
+    subparsers = parser.add_subparsers(title="command", dest="command")
+
     create_grouped_ht = subparsers.add_parser(
         "create-grouped-ht",
         help="Create hail Table grouped by transcript with cumulative observed and expected missense values collected into lists.",
@@ -183,6 +259,27 @@ if __name__ == "__main__":
         help="Number of observed variants. Used when determining the smallest possible window size for simultaneous breaks.",
         default=10,
         type=int,
+    )
+
+    run_batches = subparsers.add_parser(
+        "run-batches", help="Run batches of transcripts using Hail Batch."
+    )
+    transcript_size = run_batches.add_mutually_exclusive_group()
+    transcript_size.add_argument(
+        "--under-10k",
+        help="Transcripts in batch should have <10,000 possible missense positions.",
+        action="store_true",
+    )
+    transcript_size.add_argument(
+        "--over-10k",
+        help="Transcripts in batch should have >=10,000 possible missense positions.",
+        action="store_true",
+    )
+    run_batches.add_argument(
+        "--group-size",
+        help="Number of transcripts to include in each group of transcripts to be submitted to Hail Batch. Default is 100.",
+        type=int,
+        default=100,
     )
 
     args = parser.parse_args()
