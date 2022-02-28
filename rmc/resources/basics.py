@@ -151,6 +151,11 @@ simul_break_over_10k = f"{MODEL_PREFIX}/{GNOMAD_VER}/transcripts_over_10k.he"
 SetExpression containing transcripts with >= 10,000 possible missense positions.
 """
 
+simul_break_temp = f"{temp_path}/simul_breaks/"
+"""
+Bucket to store temporary results for simultaneous results
+"""
+
 simul_break = VersionedTableResource(
     default_version=GNOMAD_VER,
     versions={
