@@ -14,9 +14,9 @@ from rmc.resources.basics import (
     LOGGING_PATH,
     not_one_break,
     not_one_break_grouped,
-    simul_break_over_10k,
+    simul_break_over_5k,
     simul_break_temp,
-    simul_break_under_10k,
+    simul_break_under_5k,
 )
 from rmc.resources.grch37.reference_data import gene_model
 from rmc.slack_creds import slack_token
@@ -118,18 +118,16 @@ def main(args):
             ht = ht.annotate(list_len=hl.len(ht.cum_obs))
 
             logger.info(
-                "Splitting transcripts into two categories: list length < 10k and list length >= 10k..."
+                "Splitting transcripts into two categories: list length < 5k and list length >= 5k..."
             )
-            under_10k = ht.aggregate(
-                hl.agg.filter(ht.list_len < 10000, hl.agg.collect_as_set(ht.transcript))
+            under_5k = ht.aggregate(
+                hl.agg.filter(ht.list_len < 5000, hl.agg.collect_as_set(ht.transcript))
             )
-            over_10k = ht.aggregate(
-                hl.agg.filter(
-                    ht.list_len >= 10000, hl.agg.collect_as_set(ht.transcript)
-                )
+            over_5k = ht.aggregate(
+                hl.agg.filter(ht.list_len >= 5000, hl.agg.collect_as_set(ht.transcript))
             )
-            hl.experimental.write_expression(under_10k, simul_break_under_10k)
-            hl.experimental.write_expression(over_10k, simul_break_over_10k)
+            hl.experimental.write_expression(under_5k, simul_break_under_5k)
+            hl.experimental.write_expression(over_5k, simul_break_over_5k)
 
         if args.command == "run-batches":
             hl.init(log="/search_for_two_breaks_run_batches.log")
@@ -151,9 +149,9 @@ def main(args):
                                 successful_transcripts.append(transcript)
                 successful_transcripts = set(successful_transcripts)
 
-            if args.under_10k:
+            if args.under_5k:
                 transcripts = hl.eval(
-                    hl.experimental.read_expression(simul_break_under_10k)
+                    hl.experimental.read_expression(simul_break_under_5k)
                 )
                 if tsvs:
                     transcripts_to_run = transcripts.difference(successful_transcripts)
@@ -187,17 +185,17 @@ def main(args):
                 logger.info("Joining and writing...")
                 ht = temp_hts[0].union(*temp_hts[1:])
                 ht.write(
-                    f"{simul_break_temp}/under_10k/under_10k.ht",
+                    f"{simul_break_temp}/under_5k/under_5k.ht",
                     overwrite=args.overwrite,
                 )
 
-            elif args.over_10k:
+            elif args.over_5k:
                 transcripts = hl.eval(
-                    hl.experimental.read_expression(simul_break_over_10k)
+                    hl.experimental.read_expression(simul_break_over_5k)
                 )
             else:
                 raise DataException(
-                    "Must specify if transcript sizes are --under-10k or --over-10k!"
+                    "Must specify if transcript sizes are --under-5k or --over-5k!"
                 )
 
     finally:
@@ -266,13 +264,13 @@ if __name__ == "__main__":
     )
     transcript_size = run_batches.add_mutually_exclusive_group()
     transcript_size.add_argument(
-        "--under-10k",
-        help="Transcripts in batch should have <10,000 possible missense positions.",
+        "--under-5k",
+        help="Transcripts in batch should have <5,000 possible missense positions.",
         action="store_true",
     )
     transcript_size.add_argument(
-        "--over-10k",
-        help="Transcripts in batch should have >=10,000 possible missense positions.",
+        "--over-5k",
+        help="Transcripts in batch should have >=5,000 possible missense positions.",
         action="store_true",
     )
     run_batches.add_argument(
