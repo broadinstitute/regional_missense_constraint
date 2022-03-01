@@ -6,6 +6,7 @@ import subprocess
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 
@@ -37,7 +38,7 @@ def main(args):
         if args.command == "create_grouped_ht":
             hl.init(log="/search_for_two_breaks_prep_batches.log")
 
-            if args.create_grouped_ht:
+            if not file_exists(not_one_break_grouped.path) or args.create_grouped_ht:
                 if args.min_num_obs == 0:
                     # Make sure user didn't specify a min obs of 0
                     raise DataException(
