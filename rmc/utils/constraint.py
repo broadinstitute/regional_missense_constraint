@@ -6,7 +6,10 @@ import hail as hl
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
-from rmc.resources.basics import temp_path
+from rmc.resources.basics import (
+    not_one_break_grouped,
+    temp_path,
+)
 from rmc.utils.generic import get_coverage_correction_expr
 
 
@@ -817,6 +820,54 @@ def process_additional_breaks(
     return process_sections(ht, chisq_threshold)
 
 
+def group_not_one_break_ht(
+    ht: hl.Table, transcript_ht: hl.Table, min_window_size: int
+) -> None:
+    """
+    Group HT with transcripts that don't have a single significant break by transcript and collect annotations into lists.
+
+    This creates the input to the two simultaneous breaks search (`search_for_two_breaks`).
+
+    .. note::
+        Expects that input Table is keyed by locus and transcript.
+        This is *required*, as the function expects that loci are sorted in the input Table.
+
+    :param hl.Table ht: Input Table with transcript that didn't have a single significant break.
+    :param hl.Table transcript_ht: Table with start and end positions per transcript.
+    :param int min_window_size: Minimum window size for two simultaneous breaks search.
+    :return: None; writes Table grouped by transcript with cumulative observed, expected missense counts
+        and all positions collected into lists to resource path.
+    """
+    # Aggregating values into a struct here to force the positions and observed, expected missense values to stay sorted
+    # `hl.agg.collect` does not guarantee order: https://hail.is/docs/0.2/aggregators.html#hail.expr.aggregators.collect
+    group_ht = ht.group_by("transcript").aggregate(
+        values=hl.sorted(
+            hl.agg.collect(
+                hl.struct(
+                    locus=ht.locus,
+                    cum_exp=ht.cumulative_exp,
+                    cum_obs=ht.cumulative_obs,
+                    positions=ht.locus.position,
+                ),
+            ),
+            key=lambda x: x.locus,
+        ),
+        total_oe=hl.agg.take(ht.overall_oe, 1)[0],
+    )
+    group_ht = group_ht.annotate_globals(min_window_size=min_window_size)
+    group_ht = group_ht.annotate(max_idx=hl.len(group_ht.values.positions) - 1)
+    group_ht = group_ht.annotate(
+        transcript_start=transcript_ht[group_ht.key].start,
+        transcript_end=transcript_ht[group_ht.key].stop,
+    )
+    group_ht = group_ht.transmute(
+        cum_obs=group_ht.values.cum_obs,
+        cum_exp=group_ht.values.cum_exp,
+        positions=group_ht.values.positions,
+    )
+    group_ht.write(not_one_break_grouped.path, overwrite=True)
+
+
 def calculate_window_chisq(
     max_idx: int,
     i: int,
@@ -1079,17 +1130,6 @@ def search_for_two_breaks(
 
         # Update current best indices and chi square if new chi square (calculated above)
         # is better than the current stored value (`cur_max_chisq`)
-        """cur_best_i = hl.if_else(
-            ~hl.is_nan(chisq) & (chisq > cur_max_chisq),
-            i,
-            cur_best_i
-        )
-        cur_best_j = hl.if_else(
-            ~hl.is_nan(chisq) & (chisq > cur_max_chisq),
-            j,
-            cur_best_j
-        )
-        cur_max_chisq = hl.nanmax(chisq, cur_max_chisq)"""
         cur_best_i = hl.if_else(chisq > cur_max_chisq, i, cur_best_i)
         cur_best_j = hl.if_else(chisq > cur_max_chisq, j, cur_best_j)
         cur_max_chisq = hl.max(chisq, cur_max_chisq)

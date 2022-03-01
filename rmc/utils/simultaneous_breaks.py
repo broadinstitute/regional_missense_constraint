@@ -6,7 +6,6 @@ import subprocess
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 
@@ -20,7 +19,7 @@ from rmc.resources.basics import (
 )
 from rmc.resources.grch37.reference_data import gene_model
 from rmc.slack_creds import slack_token
-from rmc.utils.constraint import search_for_two_breaks
+from rmc.utils.constraint import group_not_one_break_ht, search_for_two_breaks
 from rmc.utils.generic import get_avg_bases_between_mis
 
 
@@ -38,23 +37,16 @@ def main(args):
         if args.command == "create_grouped_ht":
             hl.init(log="/search_for_two_breaks_prep_batches.log")
 
-            if not file_exists(not_one_break_grouped.path) or args.create_grouped_ht:
-                logger.info("Creating grouped version of not one break HT...")
-                ht = not_one_break.ht()
-
+            if args.create_grouped_ht:
                 if args.min_num_obs == 0:
                     # Make sure user didn't specify a min obs of 0
                     raise DataException(
                         "Minimum number of observed variants must be greater than zero!"
                     )
 
-                logger.info(
-                    "Getting start and end positions and total size for each transcript..."
-                )
-                transcript_ht = gene_model.ht()
-
                 # Get number of base pairs needed to observe `num` number of missense variants (on average)
                 # This number is used to determine the min_window_size - which is the smallest allowed distance between simultaneous breaks
+                ht = not_one_break.ht()
                 min_window_size = (
                     (
                         get_avg_bases_between_mis(
@@ -76,37 +68,11 @@ def main(args):
                 logger.info(
                     "Creating grouped HT with lists of cumulative observed and expected missense values..."
                 )
-                # Aggregating values into a struct here to force the positions and observed, expected missense values to stay sorted
-                # `hl.agg.collect` does not guarantee order: https://hail.is/docs/0.2/aggregators.html#hail.expr.aggregators.collect
-                # not_one_break HT is keyed by locus and transcript, so these values are sorted in the input HT
-                group_ht = ht.group_by("transcript").aggregate(
-                    values=hl.sorted(
-                        hl.agg.collect(
-                            hl.struct(
-                                locus=ht.locus,
-                                cum_exp=ht.cumulative_exp,
-                                cum_obs=ht.cumulative_obs,
-                                positions=ht.locus.position,
-                            ),
-                        ),
-                        key=lambda x: x.locus,
-                    ),
-                    total_oe=hl.agg.take(ht.overall_oe, 1)[0],
+                group_not_one_break_ht(
+                    ht=ht,
+                    transcript_ht=gene_model.ht(),
+                    min_window_size=min_window_size,
                 )
-                group_ht = group_ht.annotate_globals(min_window_size=min_window_size)
-                group_ht = group_ht.annotate(
-                    max_idx=hl.len(group_ht.values.positions) - 1
-                )
-                group_ht = group_ht.annotate(
-                    transcript_start=transcript_ht[group_ht.key].start,
-                    transcript_end=transcript_ht[group_ht.key].stop,
-                )
-                group_ht = group_ht.transmute(
-                    cum_obs=group_ht.values.cum_obs,
-                    cum_exp=group_ht.values.cum_exp,
-                    positions=group_ht.values.positions,
-                )
-                group_ht.write(not_one_break_grouped.path, overwrite=True)
 
             ht = not_one_break_grouped.ht()
             logger.info(
