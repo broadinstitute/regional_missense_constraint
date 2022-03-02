@@ -5,7 +5,6 @@ import hail as hl
 
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
-from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
@@ -19,7 +18,6 @@ from rmc.resources.basics import (
 from rmc.resources.grch37.reference_data import gene_model
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import group_not_one_break_ht, search_for_two_breaks
-from rmc.utils.generic import get_avg_bases_between_mis
 
 
 logging.basicConfig(
@@ -44,34 +42,17 @@ def main(args):
                         "Minimum number of observed variants must be greater than zero!"
                     )
 
-                # Get number of base pairs needed to observe `num` number of missense variants (on average)
-                # This number is used to determine the min_window_size - which is the smallest allowed distance between simultaneous breaks
-                ht = not_one_break.ht()
-                min_window_size = (
-                    (
-                        get_avg_bases_between_mis(
-                            get_reference_genome(ht.locus).name,
-                            args.get_total_exome_bases,
-                            args.get_total_gnomad_missense,
-                        )
-                        * args.min_num_obs
-                    )
-                    if args.get_min_window_size
-                    else args.min_window_size
-                )
-                logger.info(
-                    "Minimum window size (window size needed to observe %i missense variants on average): %i",
-                    args.min_num_obs,
-                    min_window_size,
-                )
-
                 logger.info(
                     "Creating grouped HT with lists of cumulative observed and expected missense values..."
                 )
                 group_not_one_break_ht(
-                    ht=ht,
+                    ht=not_one_break.ht(),
                     transcript_ht=gene_model.ht(),
-                    min_window_size=min_window_size,
+                    get_min_window_size=args.get_min_window_size,
+                    get_total_exome_bases=args.get_total_exome_bases,
+                    get_total_gnomad_missense=args.get_total_gnomad_missense,
+                    min_window_size=args.min_window_size,
+                    min_num_obs=args.min_num_obs,
                 )
 
             ht = not_one_break_grouped.ht()

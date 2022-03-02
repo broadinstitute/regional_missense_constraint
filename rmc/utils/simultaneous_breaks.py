@@ -1,15 +1,34 @@
 """This script contains functions used to search for two simultaneous breaks."""
 from collections.abc import Callable
-from typing import Tuple
+import logging
+from typing import Optional, Tuple
 
 import hail as hl
 
+from gnomad.utils.reference_genome import get_reference_genome
+from gnomad.resources.resource_utils import DataException
+
 from rmc.resources.basics import not_one_break_grouped
 from rmc.utils.constraint import get_dpois_expr, get_obs_exp_expr
+from rmc.utils.generic import get_avg_bases_between_mis
+
+
+logging.basicConfig(
+    format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
+    datefmt="%m/%d/%Y %I:%M:%S %p",
+)
+logger = logging.getLogger("search_for_two_breaks_utils")
+logger.setLevel(logging.INFO)
 
 
 def group_not_one_break_ht(
-    ht: hl.Table, transcript_ht: hl.Table, min_window_size: int,
+    ht: hl.Table,
+    transcript_ht: hl.Table,
+    get_min_window_size: bool = True,
+    get_total_exome_bases: bool = False,
+    get_total_gnomad_missense: bool = False,
+    min_window_size: Optional[int] = None,
+    min_num_obs: Optional[int] = None,
 ) -> None:
     """
     Group HT with transcripts that don't have a single significant break by transcript and collect annotations into lists.
@@ -22,10 +41,56 @@ def group_not_one_break_ht(
 
     :param hl.Table ht: Input Table with transcript that didn't have a single significant break.
     :param hl.Table transcript_ht: Table with start and end positions per transcript.
-    :param int min_window_size: Minimum window size for two simultaneous breaks search.
+    :param bool get_min_window_size: Determine minimum window size for two simultaneous breaks search.
+        Default is True. Must be True if min_window_size is None.
+    :param bool get_total_exome_bases: Get total number of bases in the exome.
+        If True, will pull default value from TOTAL_EXOME_BASES (in basics.py).
+        Default is False.
+    :param bool get_total_gnomad_missense: Get total number of missense variants in gnomAD.
+        If True, will pull default value from TOTAL_GNOMAD_MISSENSE (in basics.py).
+        Default is False.
+    :param Optional[int] min_window_size: Minimum window size for two simultaneous breaks search.
+        Must be specified if get_min_window_size is False.
+        Default is None.
+    :param Optional[int] min_num_obs: Number of observed variants. Used when determining the smallest possible window size.
+        Must be specified if get_min_window_size is False.
+        Default is None.
     :return: None; writes Table grouped by transcript with cumulative observed, expected missense counts
         and all positions collected into lists to resource path.
     """
+    if not get_min_window_size and not min_num_obs:
+        raise DataException(
+            "min_num_obs must be specified if get_min_window_size is True!"
+        )
+    if not min_window_size and not get_min_window_size:
+        raise DataException(
+            "min_window_size must be specified if get_min_window_size is False!"
+        )
+    if get_min_window_size and min_window_size:
+        logger.warning(
+            "get_min_window_size is True but min_window_size was also specified. Proceeding with specified min_window_size value..."
+        )
+
+    # Get number of base pairs needed to observe `num` number of missense variants (on average)
+    # This number is used to determine the min_window_size - which is the smallest allowed distance between simultaneous breaks
+    min_window_size = (
+        (
+            get_avg_bases_between_mis(
+                get_reference_genome(ht.locus).name,
+                get_total_exome_bases,
+                get_total_gnomad_missense,
+            )
+            * min_num_obs
+        )
+        if get_min_window_size
+        else min_window_size
+    )
+    logger.info(
+        "Minimum window size (window size needed to observe %i missense variants on average): %i",
+        min_num_obs,
+        min_window_size,
+    )
+
     # Aggregating values into a struct here to force the positions and observed, expected missense values to stay sorted
     # `hl.agg.collect` does not guarantee order: https://hail.is/docs/0.2/aggregators.html#hail.expr.aggregators.collect
     group_ht = ht.group_by("transcript").aggregate(
