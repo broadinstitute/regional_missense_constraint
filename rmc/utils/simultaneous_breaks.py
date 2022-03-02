@@ -248,18 +248,17 @@ def process_transcript_group(
             j_max_idx=hl.min(ht.j + 500, ht.list_len - 1),
         )
         ht = ht.annotate(
-            start_idx=hl.struct(
-                i_start=ht.start_idx.i_start,
-                j_start=hl.if_else(
-                    ht.start_idx.i_start == ht.start_idx.j_start,
-                    ht.start_idx.j_start + 1,
-                    ht.start_idx.j_start,
-                ),
-            )
+            j=hl.if_else(
+                ht.start_idx.i_start == ht.start_idx.j_start,
+                ht.start_idx.j_start + 1,
+                ht.start_idx.j_start,
+            ),
         )
         n_rows = ht.count()
         ht.write(temp_ht_path, overwrite=True)
         ht = hl.read_table(temp_ht_path, _n_partitions=n_rows)
+    else:
+        ht = ht.annotate(i=0, j=0, i_max_idx=ht.max_idx, j_max_idx=ht.max_idx,)
 
     ht = search_for_two_breaks(ht, chisq_threshold)
     ht.write(
@@ -503,7 +502,8 @@ def search_for_two_breaks(
         loop_continue: Callable,
         i: int,
         j: int,
-        max_idx: hl.expr.Int32Expression,
+        max_idx_i: hl.expr.Int32Expression,
+        max_idx_j: hl.expr.Int32Expression,
         cur_max_chisq: float,
         cur_best_i: int,
         cur_best_j: int,
@@ -519,7 +519,8 @@ def search_for_two_breaks(
             It's the `i` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
         :param int j: Larger list index value. This index defines the current position of the first break.
             It's the `j` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
-        :param hl.expr.Int32Expression: Largest list index for transcript.
+        :param hl.expr.Int32Expression max_idx_i: Largest list index for smaller list index value.
+        :param hl.expr.Int32Expression max_idx_j: Largest list index for larger list index value.
         :param float cur_max_chisq: Current maximum chi square value.
         :param int cur_best_i: Current best index i.
         :param int cur_best_j: Current best index j.
@@ -527,7 +528,12 @@ def search_for_two_breaks(
         """
         # Calculate chi squared value associated with transcript subections created using this index pair i, j
         chisq = calculate_window_chisq(
-            max_idx, i, j, group_ht.cum_obs, group_ht.cum_exp, group_ht.total_oe
+            group_ht.max_idx,
+            i,
+            j,
+            group_ht.cum_obs,
+            group_ht.cum_exp,
+            group_ht.total_oe,
         )
 
         # Update current best indices and chi square if new chi square (calculated above)
@@ -540,22 +546,36 @@ def search_for_two_breaks(
             # At the end of the iteration through the position list
             # (when index i is at the second to last index of the list),
             # return the best indices.
-            # Note that this is the second to last index because all of the windows created where i is the last index
+            # Note that this is the second to last index (max_idx_i - 1) because all of the windows created where i is the last index
             # were already checked in previous iterations of the loop
-            i == (max_idx - 1),
+            i == (max_idx_i - 1),
             (cur_max_chisq, cur_best_i, cur_best_j),
             # If we haven't reached the end of the position list with index i,
             # continue with the loop
             hl.if_else(
-                j == max_idx,
+                j == max_idx_j,
                 # At end of j iteration, continue to next i index
                 # Set i to i+1 and j to i+2 (so that the j index is always greater than the i index)
                 loop_continue(
-                    i + 1, i + 2, max_idx, cur_max_chisq, cur_best_i, cur_best_j
+                    i + 1,
+                    i + 2,
+                    max_idx_i,
+                    max_idx_j,
+                    cur_max_chisq,
+                    cur_best_i,
+                    cur_best_j,
                 ),
                 # Otherwise, if j hasn't gotten to the maximum index,
                 # continue to the next j value for current i
-                loop_continue(i, j + 1, max_idx, cur_max_chisq, cur_best_i, cur_best_j),
+                loop_continue(
+                    i,
+                    j + 1,
+                    max_idx_i,
+                    max_idx_j,
+                    cur_max_chisq,
+                    cur_best_i,
+                    cur_best_j,
+                ),
             ),
         )
 
@@ -563,10 +583,10 @@ def search_for_two_breaks(
         max_break=hl.experimental.loop(
             _simul_break_loop,
             hl.ttuple(hl.tfloat, hl.tint, hl.tint),
-            0,
-            1,
-            # Have hail log transcript at start of each loop
-            hl._console_log(group_ht.transcript, group_ht.max_idx),
+            group_ht.i,
+            group_ht.j,
+            group_ht.i_max_idx,
+            group_ht.j_max_idx,
             0.0,
             0,
             0,
