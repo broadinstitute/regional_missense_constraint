@@ -12,6 +12,7 @@ from rmc.resources.basics import (
     not_one_break,
     not_one_break_grouped,
     simul_break_over_threshold,
+    simul_break_temp,
     simul_break_under_threshold,
 )
 from rmc.resources.grch37.reference_data import gene_model
@@ -19,7 +20,6 @@ from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import (
     check_for_successful_transcripts,
     group_not_one_break_ht,
-    search_for_two_breaks,
     split_transcripts_by_len,
 )
 
@@ -68,6 +68,8 @@ def main(args):
             )
 
         if args.command == "run-batches":
+            import hailtop.batch as hb
+
             logger.warning("This step should be run locally!")
             hl.init(log="search_for_two_breaks_run_batches.log")
 
@@ -92,6 +94,28 @@ def main(args):
                 )
             )
             logger.info("Found %i transcripts to search...", len(transcripts_to_run))
+
+            logger.info("Setting up batch parameters...")
+            backend = hb.ServiceBackend(
+                billing_project=args.billing_project,
+                remote_tmpdir=args.batch_bucket,
+                google_project=args.google_project,
+            )
+            b = hb.Batch(
+                name="simul_breaks",
+                backend=backend,
+                default_memory=args.batch_memory,
+                default_cpu=args.batch_cpu,
+                default_storage=args.batch_storage,
+                default_python_image=args.docker_image,
+            )
+
+            if args.under_threshold:
+                group_size = args.group_size
+                transcript_groups = [
+                    transcripts_to_run[x : x + group_size]
+                    for x in range(0, len(transcripts_to_run), group_size)
+                ]
 
     finally:
         logger.info("Copying hail log to logging bucket...")

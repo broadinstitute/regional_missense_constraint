@@ -180,7 +180,7 @@ def check_for_successful_transcripts(transcripts: List[str]) -> List[str]:
     for transcript in transcripts:
         transcript_success_map[
             transcript
-        ] = f"{success_file_path}/{transcript}_success.txt"
+        ] = f"{success_file_path}/{transcript}_success.tsv"
     success_tsvs_exist = parallel_file_exists(list(transcript_success_map.values()))
 
     transcripts_to_run = []
@@ -188,6 +188,88 @@ def check_for_successful_transcripts(transcripts: List[str]) -> List[str]:
         if not success_tsvs_exist[transcript_success_map[transcript]]:
             transcripts_to_run.append(transcript)
     return transcripts_to_run
+
+
+def process_transcript_group(
+    ht_path: str,
+    transcript_group: List[str],
+    over_threshold: bool,
+    output_ht_path: str,
+    output_tsv_path: str,
+    temp_ht_path: Optional[str] = None,
+    chisq_threshold: float = 9.2,
+    split_window_size: int = 500,
+) -> None:
+    """
+    Run two simultaneous breaks search on a group of transcripts.
+
+    Designed for use with Hail Batch.
+
+    :param str ht_path: Path to input Table (Table written using `group_not_one_break_ht`).
+    :param List[str] transcript_group: List of transcripts to process.
+    :param bool over_threshold: Whether input transcripts have more
+        possible missense variants than threshold specified in `run_simultaneous_breaks`.
+    :param str output_ht_path: Path to output results Table.
+    :param str output_tsv_path: Path to success TSV bucket.
+    :param Optional[str] temp_ht_path: Path to temporary Table. Required only if over_thresold is True.
+    :param float chisq_threshold: Chi-square significance threshold. Default is 9.2.
+        This value corresponds to a p-value of 0.99 with 2 degrees of freedom.
+        (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
+        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.999.
+    :param int split_window_size: Window size to search for transcripts that have more
+        possible missense variants than threshold. Only used if over_threshold is True.
+    :return: None; processes Table and writes to path. Also writes success TSV to path.
+    """
+    ht = hl.read_table(ht_path)
+    ht = ht.filter(hl.literal(transcript_group).contains(ht.transcript))
+
+    if over_threshold:
+        # If transcripts longer than threshold, split transcripts into multiple rows
+        # Each row has a window to search
+        # E.g., if a transcript has 1000 possible missense variants, and the `split_window_size` is 500,
+        # then this section will split that transcript into 9 rows, with the following windows:
+        # [i_start=0, j_start=0], [i_start=0, j_start=500], [i_start=0, j_start=1000],
+        # [i_start=500, j_start=0], [i_start=500, j_start=500], [i_start=500, j_start=1000],
+        # [i_start=1000, j_start=0], [i_start=1000, j_start=500], [i_start=1000, j_start=1000]
+        ht = ht.annotate(
+            start_idx=hl.flatmap(
+                lambda i: hl.map(
+                    lambda j: hl.struct(i_start=i, j_start=j),
+                    hl.range(0, ht.list_len, split_window_size),
+                ),
+                hl.range(0, ht.list_len, split_window_size),
+            )
+        )
+        ht = ht.annotate(i=ht.start_idx.i_start, j=ht.start_idx.j_start)
+        ht = ht._key_by_assert_sorted("transcript", "i", "j")
+        ht = ht.filter(ht.j >= ht.i)
+        ht = ht.annotate(
+            i_max_idx=hl.min(ht.i + 500, ht.list_len - 1),
+            j_max_idx=hl.min(ht.j + 500, ht.list_len - 1),
+        )
+        ht = ht.annotate(
+            start_idx=hl.struct(
+                i_start=ht.start_idx.i_start,
+                j_start=hl.if_else(
+                    ht.start_idx.i_start == ht.start_idx.j_start,
+                    ht.start_idx.j_start + 1,
+                    ht.start_idx.j_start,
+                ),
+            )
+        )
+        n_rows = ht.count()
+        ht.write(temp_ht_path, overwrite=True)
+        ht = hl.read_table(temp_ht_path, _n_partitions=n_rows)
+
+    ht = search_for_two_breaks(ht, chisq_threshold)
+    ht.write(
+        output_ht_path, overwrite=True,
+    )
+
+    for transcript in transcript_group:
+        success_tsv_path = f"{output_tsv_path}/{transcript}.tsv"
+        with hl.hadoop_open(success_tsv_path, "w") as o:
+            o.write(f"{transcript}\n")
 
 
 def calculate_window_chisq(
