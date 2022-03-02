@@ -1,5 +1,6 @@
 import argparse
 import logging
+from tqdm import tqdm
 
 import hail as hl
 
@@ -20,6 +21,7 @@ from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import (
     check_for_successful_transcripts,
     group_not_one_break_ht,
+    process_transcript_group,
     split_transcripts_by_len,
 )
 
@@ -111,11 +113,33 @@ def main(args):
             )
 
             if args.under_threshold:
-                group_size = args.group_size
                 transcript_groups = [
-                    transcripts_to_run[x : x + group_size]
-                    for x in range(0, len(transcripts_to_run), group_size)
+                    transcripts_to_run[x : x + args.group_size]
+                    for x in range(0, len(transcripts_to_run), args.group_size)
                 ]
+                split_window_size = None
+            else:
+                split_window_size = args.group_size
+                transcript_groups = transcripts_to_run
+
+            count = 1
+            for group in tqdm(transcript_groups, unit="transcript group"):
+                logger.info("Working on group number %s...", count)
+                job_name = f'group{count}{"over" if args.over_threshold else "under"}'
+                j = b.new_python_job(name=job_name)
+                j.call(
+                    process_transcript_group,
+                    not_one_break_grouped.path,
+                    group,
+                    args.over_threshold,
+                    f"{simul_break_temp}/hts/simul_break_{job_name}.ht",
+                    f"{simul_break_temp}/success_files",
+                    f"{simul_break_temp}/temp.ht",
+                    args.chisq_threshold,
+                    split_window_size,
+                )
+
+            b.run(wait=False)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -213,7 +237,11 @@ if __name__ == "__main__":
     )
     run_batches.add_argument(
         "--group-size",
-        help="Number of transcripts to include in each group of transcripts to be submitted to Hail Batch. Default is 100.",
+        help="""
+        Number of transcripts to include in each group of transcripts to be submitted to Hail Batch if --under-threshold.
+        Size of windows to split transcripts if --over-threshold.
+        Default is 100.
+        """,
         type=int,
         default=100,
     )
