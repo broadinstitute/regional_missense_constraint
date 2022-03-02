@@ -1,16 +1,18 @@
 """This script contains functions used to search for two simultaneous breaks."""
 from collections.abc import Callable
 import logging
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import hail as hl
 
+from gnomad.utils.file_utils import parallel_file_exists
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.resources.resource_utils import DataException
 
 from rmc.resources.basics import (
     not_one_break_grouped,
     simul_break_over_threshold,
+    simul_break_temp,
     simul_break_under_threshold,
 )
 from rmc.utils.constraint import get_dpois_expr, get_obs_exp_expr
@@ -160,6 +162,32 @@ def split_transcripts_by_len(ht: hl.Table, transcript_len_threshold: int) -> Non
     )
     hl.experimental.write_expression(under_threshold, simul_break_under_threshold)
     hl.experimental.write_expression(over_threshold, simul_break_over_threshold)
+
+
+def check_for_successful_transcripts(transcripts: List[str]) -> List[str]:
+    """
+    Check if any transcripts have been previously searched by searching for success TSV existence.
+
+    .. note::
+        This step needs to be run locally due to permissions involved with `parallel_file_exists`.
+
+    :param List[str] transcripts: List of transcripts to check.
+    :return: List of transcripts didn't have success TSVs and therefore still need to be processed.
+    """
+    logger.info("Checking if any transcripts have already been searched...")
+    success_file_path = f"{simul_break_temp}/success_files"
+    transcript_success_map = {}
+    for transcript in transcripts:
+        transcript_success_map[
+            transcript
+        ] = f"{success_file_path}/{transcript}_success.txt"
+    success_tsvs_exist = parallel_file_exists(list(transcript_success_map.values()))
+
+    transcripts_to_run = []
+    for transcript in transcripts:
+        if not success_tsvs_exist[transcript_success_map[transcript]]:
+            transcripts_to_run.append(transcript)
+    return transcripts_to_run
 
 
 def calculate_window_chisq(

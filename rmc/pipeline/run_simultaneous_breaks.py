@@ -4,7 +4,7 @@ import logging
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists, parallel_file_exists
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
@@ -12,12 +12,12 @@ from rmc.resources.basics import (
     not_one_break,
     not_one_break_grouped,
     simul_break_over_threshold,
-    simul_break_temp,
     simul_break_under_threshold,
 )
 from rmc.resources.grch37.reference_data import gene_model
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import (
+    check_for_successful_transcripts,
     group_not_one_break_ht,
     search_for_two_breaks,
     split_transcripts_by_len,
@@ -76,33 +76,21 @@ def main(args):
                 raise DataException(
                     "Must specify if transcript sizes are --under-threshold or --over-threshold!"
                 )
-            transcripts = (
-                list(
-                    hl.eval(
-                        hl.experimental.read_expression(simul_break_under_threshold)
+            transcripts_to_run = check_for_successful_transcripts(
+                transcripts=(
+                    list(
+                        hl.eval(
+                            hl.experimental.read_expression(simul_break_under_threshold)
+                        )
+                    )
+                    if args.under_threshold
+                    else list(
+                        hl.eval(
+                            hl.experimental.read_expression(simul_break_over_threshold)
+                        )
                     )
                 )
-                if args.under_threshold
-                else list(
-                    hl.eval(hl.experimental.read_expression(simul_break_over_threshold))
-                )
             )
-
-            logger.info("Checking if any transcripts have already been searched...")
-            success_file_path = f"{simul_break_temp}/success_files"
-            transcript_success_map = {}
-            for transcript in transcripts:
-                transcript_success_map[
-                    transcript
-                ] = f"{success_file_path}/{transcript}_success.txt"
-            success_tsvs_exist = parallel_file_exists(
-                list(transcript_success_map.values())
-            )
-
-            transcripts_to_run = []
-            for transcript in transcripts:
-                if not success_tsvs_exist[transcript_success_map[transcript]]:
-                    transcripts_to_run.append(transcript)
             logger.info("Found %i transcripts to search...", len(transcripts_to_run))
 
     finally:
