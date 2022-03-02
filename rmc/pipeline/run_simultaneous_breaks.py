@@ -36,7 +36,11 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
+    if not args.command:
+        raise DataException("Please specify command for this script!")
+
     try:
+
         if args.command == "create-grouped-ht":
             logger.warning("This step should be run in Dataproc!")
             hl.init(log="/search_for_two_breaks_create_grouped_ht.log")
