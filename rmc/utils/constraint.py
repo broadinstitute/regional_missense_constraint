@@ -1,4 +1,3 @@
-from collections.abc import Callable
 import logging
 from typing import Dict, List, Tuple, Union
 
@@ -6,10 +5,7 @@ import hail as hl
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
-from rmc.resources.basics import (
-    not_one_break_grouped,
-    temp_path,
-)
+from rmc.resources.basics import temp_path
 from rmc.utils.generic import get_coverage_correction_expr
 
 
@@ -820,54 +816,6 @@ def process_additional_breaks(
     return process_sections(ht, chisq_threshold)
 
 
-def group_not_one_break_ht(
-    ht: hl.Table, transcript_ht: hl.Table, min_window_size: int
-) -> None:
-    """
-    Group HT with transcripts that don't have a single significant break by transcript and collect annotations into lists.
-
-    This creates the input to the two simultaneous breaks search (`search_for_two_breaks`).
-
-    .. note::
-        Expects that input Table is keyed by locus and transcript.
-        This is *required*, as the function expects that loci are sorted in the input Table.
-
-    :param hl.Table ht: Input Table with transcript that didn't have a single significant break.
-    :param hl.Table transcript_ht: Table with start and end positions per transcript.
-    :param int min_window_size: Minimum window size for two simultaneous breaks search.
-    :return: None; writes Table grouped by transcript with cumulative observed, expected missense counts
-        and all positions collected into lists to resource path.
-    """
-    # Aggregating values into a struct here to force the positions and observed, expected missense values to stay sorted
-    # `hl.agg.collect` does not guarantee order: https://hail.is/docs/0.2/aggregators.html#hail.expr.aggregators.collect
-    group_ht = ht.group_by("transcript").aggregate(
-        values=hl.sorted(
-            hl.agg.collect(
-                hl.struct(
-                    locus=ht.locus,
-                    cum_exp=ht.cumulative_exp,
-                    cum_obs=ht.cumulative_obs,
-                    positions=ht.locus.position,
-                ),
-            ),
-            key=lambda x: x.locus,
-        ),
-        total_oe=hl.agg.take(ht.overall_oe, 1)[0],
-    )
-    group_ht = group_ht.annotate_globals(min_window_size=min_window_size)
-    group_ht = group_ht.annotate(max_idx=hl.len(group_ht.values.positions) - 1)
-    group_ht = group_ht.annotate(
-        transcript_start=transcript_ht[group_ht.key].start,
-        transcript_end=transcript_ht[group_ht.key].stop,
-    )
-    group_ht = group_ht.transmute(
-        cum_obs=group_ht.values.cum_obs,
-        cum_exp=group_ht.values.cum_exp,
-        positions=group_ht.values.positions,
-    )
-    group_ht.write(not_one_break_grouped.path, overwrite=True)
-
-
 def calculate_window_chisq(
     max_idx: int,
     i: int,
@@ -1073,123 +1021,6 @@ def calculate_window_chisq(
             )
         )
     )
-
-
-def search_for_two_breaks(
-    group_ht: hl.Table, chisq_threshold: float = 13.8,
-) -> hl.Table:
-    """
-    Search for windows of constraint in transcripts with simultaneous breaks.
-
-    This function searches for breaks for all possible window sizes but only keeps break sizes >= `min_window_size`.
-    `min_window_size` is the number of base pairs needed, on average, to see 10 missense variants (by default).
-    For gnomAD v2.1, `min_window_size` is 100bp.
-
-    :param hl.Table ht: Input Table aggregated by transcript with lists of cumulative observed and expected
-        missense values. HT is filtered to contain only transcripts with simultaneous breaks.
-    :param float chisq_threshold:  Chi-square significance threshold. Default is 13.8.
-        Default is from ExAC RMC code and corresponds to a p-value of 0.999 with 2 degrees of freedom.
-        (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
-    :return: Table with largest simultaneous break window size annotated per transcript.
-    :rtype: hl.Table
-    """
-
-    def _simul_break_loop(
-        loop_continue: Callable,
-        i: int,
-        j: int,
-        max_idx: hl.expr.Int32Expression,
-        cur_max_chisq: float,
-        cur_best_i: int,
-        cur_best_j: int,
-    ) -> Tuple[float, int, int]:
-        """
-        Iterate over each possible pair of indices in a transcript's cumulative value lists to find the optimum two break window.
-
-        :param Callable[float, int, int] loop_continue: Function to restart hail loop.
-            First argument to `hl.experimental.loop` must be a function (`_simul_break_loop` in this case),
-            and the first argument to that function must be another function.
-            Calling `loop_continue` tells hail to go back to the top of the loop with loop variables updated.
-        :param int i: Smaller list index value. This index defines the current position of the first break.
-            It's the `i` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
-        :param int j: Larger list index value. This index defines the current position of the first break.
-            It's the `j` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
-        :param hl.expr.Int32Expression: Largest list index for transcript.
-        :param float cur_max_chisq: Current maximum chi square value.
-        :param int cur_best_i: Current best index i.
-        :param int cur_best_j: Current best index j.
-        :return: Maximum chi square significance value and optimum index pair i, j.
-        """
-        # Calculate chi squared value associated with transcript subections created using this index pair i, j
-        chisq = calculate_window_chisq(
-            max_idx, i, j, group_ht.cum_obs, group_ht.cum_exp, group_ht.total_oe
-        )
-
-        # Have hail print transcript out to log (to debug why code is slow)
-        # chisq = hl._console_log(group_ht.transcript, chisq)
-
-        # Update current best indices and chi square if new chi square (calculated above)
-        # is better than the current stored value (`cur_max_chisq`)
-        cur_best_i = hl.if_else(chisq > cur_max_chisq, i, cur_best_i)
-        cur_best_j = hl.if_else(chisq > cur_max_chisq, j, cur_best_j)
-        cur_max_chisq = hl.max(chisq, cur_max_chisq)
-
-        return hl.if_else(
-            # At the end of the iteration through the position list
-            # (when index i is at the second to last index of the list),
-            # return the best indices.
-            # Note that this is the second to last index because all of the windows created where i is the last index
-            # were already checked in previous iterations of the loop
-            i == (max_idx - 1),
-            (cur_max_chisq, cur_best_i, cur_best_j),
-            # If we haven't reached the end of the position list with index i,
-            # continue with the loop
-            hl.if_else(
-                j == max_idx,
-                # At end of j iteration, continue to next i index
-                # Set i to i+1 and j to i+2 (so that the j index is always greater than the i index)
-                loop_continue(
-                    i + 1, i + 2, max_idx, cur_max_chisq, cur_best_i, cur_best_j
-                ),
-                # Otherwise, if j hasn't gotten to the maximum index,
-                # continue to the next j value for current i
-                loop_continue(i, j + 1, max_idx, cur_max_chisq, cur_best_i, cur_best_j),
-            ),
-        )
-
-    group_ht = group_ht.annotate(
-        max_break=hl.experimental.loop(
-            _simul_break_loop,
-            hl.ttuple(hl.tfloat, hl.tint, hl.tint),
-            0,
-            1,
-            # Have hail log transcript at start of each loop
-            hl._console_log(group_ht.transcript, group_ht.max_idx),
-            0.0,
-            0,
-            0,
-        )
-    )
-    group_ht = group_ht.transmute(
-        max_chisq=group_ht.max_break[0],
-        start_pos=group_ht.positions[group_ht.max_break[1]],
-        end_pos=group_ht.positions[group_ht.max_break[2]],
-    )
-    # Remove rows with maximum chi square values below the threshold
-    # or rows where none of the transcript sections is the minimum window size
-    group_ht = group_ht.filter(
-        # Remove rows with maximum chi square values below the threshold
-        (group_ht.max_chisq >= chisq_threshold)
-        & (
-            (group_ht.end_pos - group_ht.start_pos > group_ht.min_window_size)
-            | (group_ht.transcript_end - group_ht.end_pos > group_ht.min_window_size)
-            | (
-                group_ht.start_pos - group_ht.transcript_start
-                > group_ht.min_window_size
-            )
-        )
-    )
-    return group_ht
 
 
 def calculate_section_chisq(
