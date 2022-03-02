@@ -11,9 +11,9 @@ from rmc.resources.basics import (
     LOGGING_PATH,
     not_one_break,
     not_one_break_grouped,
-    simul_break_over_5k,
+    simul_break_over_threshold,
     simul_break_temp,
-    simul_break_under_5k,
+    simul_break_under_threshold,
 )
 from rmc.resources.grch37.reference_data import gene_model
 from rmc.slack_creds import slack_token
@@ -31,7 +31,7 @@ logger.setLevel(logging.INFO)
 def main(args):
     """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
     try:
-        if args.command == "create_grouped_ht":
+        if args.command == "create-grouped-ht":
             logger.warning("This step should be run in Dataproc!")
             hl.init(log="/search_for_two_breaks_prep_batches.log")
 
@@ -55,6 +55,7 @@ def main(args):
                     min_num_obs=args.min_num_obs,
                 )
 
+        if args.command == "create-batches":
             ht = not_one_break_grouped.ht()
             logger.info(
                 "Annotating HT with length of cumulative observed list annotation..."
@@ -65,30 +66,46 @@ def main(args):
             ht = ht.annotate(list_len=hl.len(ht.cum_obs))
 
             logger.info(
-                "Splitting transcripts into two categories: list length < 5k and list length >= 5k..."
+                "Splitting transcripts into two categories: list length < %i and list length >= %i...",
+                args.transcript_len_threshold,
+                args.transcript_len_threshold,
             )
-            under_5k = ht.aggregate(
-                hl.agg.filter(ht.list_len < 5000, hl.agg.collect_as_set(ht.transcript))
+            under_threshold = ht.aggregate(
+                hl.agg.filter(
+                    ht.list_len < args.transcript_len_threshold,
+                    hl.agg.collect_as_set(ht.transcript),
+                )
             )
-            over_5k = ht.aggregate(
-                hl.agg.filter(ht.list_len >= 5000, hl.agg.collect_as_set(ht.transcript))
+            over_threshold = ht.aggregate(
+                hl.agg.filter(
+                    ht.list_len >= args.transcript_len_threshold,
+                    hl.agg.collect_as_set(ht.transcript),
+                )
             )
-            hl.experimental.write_expression(under_5k, simul_break_under_5k)
-            hl.experimental.write_expression(over_5k, simul_break_over_5k)
+            hl.experimental.write_expression(
+                under_threshold, simul_break_under_threshold
+            )
+            hl.experimental.write_expression(over_threshold, simul_break_over_threshold)
 
         if args.command == "run-batches":
             logger.warning("This step should be run locally!")
             hl.init(log="search_for_two_breaks_run_batches.log")
 
             logger.info("Importing SetExpression with transcripts...")
-            if not args.under_5k and not args.over_5k:
+            if not args.under_threshold and not args.over_threshold:
                 raise DataException(
-                    "Must specify if transcript sizes are --under-5k or --over-5k!"
+                    "Must specify if transcript sizes are --under-threshold or --over-threshold!"
                 )
             transcripts = (
-                list(hl.eval(hl.experimental.read_expression(simul_break_under_5k)))
-                if args.under_5k
-                else list(hl.eval(hl.experimental.read_expression(simul_break_over_5k)))
+                list(
+                    hl.eval(
+                        hl.experimental.read_expression(simul_break_under_threshold)
+                    )
+                )
+                if args.under_threshold
+                else list(
+                    hl.eval(hl.experimental.read_expression(simul_break_over_threshold))
+                )
             )
 
             logger.info("Checking if any transcripts have already been searched...")
@@ -165,8 +182,19 @@ if __name__ == "__main__":
     create_grouped_ht.add_argument(
         "--min-num-obs",
         help="Number of observed variants. Used when determining the smallest possible window size for simultaneous breaks.",
-        default=10,
         type=int,
+        default=10,
+    )
+
+    create_batches = subparsers.add_parser(
+        "create-batches",
+        help="Create batches of transcripts to run through search for two breaks code.",
+    )
+    create_batches.add_argument(
+        "--transcript-len-threshold",
+        help="Cutoff for number of possible missense positions in transcript. Used to create batches of transcripts.",
+        type=int,
+        default=5000,
     )
 
     run_batches = subparsers.add_parser(
@@ -174,13 +202,13 @@ if __name__ == "__main__":
     )
     transcript_size = run_batches.add_mutually_exclusive_group()
     transcript_size.add_argument(
-        "--under-5k",
-        help="Transcripts in batch should have <5,000 possible missense positions.",
+        "--under-threshold",
+        help="Transcripts in batch should have less than --transcript-len-threshold possible missense positions.",
         action="store_true",
     )
     transcript_size.add_argument(
-        "--over-5k",
-        help="Transcripts in batch should have >=5,000 possible missense positions.",
+        "--over-threshold",
+        help="Transcripts in batch should have --transcript-len-threshold possible missense positions.",
         action="store_true",
     )
     run_batches.add_argument(

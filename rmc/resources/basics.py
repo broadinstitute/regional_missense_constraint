@@ -141,14 +141,14 @@ multiple_breaks = VersionedTableResource(
 Table containing transcripts with multiple breaks.
 """
 
-simul_break_under_5k = f"{MODEL_PREFIX}/{GNOMAD_VER}/transcripts_under_5k.he"
+simul_break_under_threshold = f"{MODEL_PREFIX}/{GNOMAD_VER}/transcripts_under_5k.he"
 """
-SetExpression containing transcripts with < 5,000 possible missense positions.
+SetExpression containing transcripts with fewer possible missense positions than cutoff specified in `run_simultaneous_breaks.py`.
 """
 
-simul_break_over_5k = f"{MODEL_PREFIX}/{GNOMAD_VER}/transcripts_over_5k.he"
+simul_break_over_threshold = f"{MODEL_PREFIX}/{GNOMAD_VER}/transcripts_over_5k.he"
 """
-SetExpression containing transcripts with >= 5,000 possible missense positions.
+SetExpression containing transcripts with greater than or equal to the cutoff for possible missense positions.
 """
 
 simul_break_temp = f"{temp_path}/simul_breaks/"
