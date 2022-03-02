@@ -8,7 +8,11 @@ import hail as hl
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.resources.resource_utils import DataException
 
-from rmc.resources.basics import not_one_break_grouped
+from rmc.resources.basics import (
+    not_one_break_grouped,
+    simul_break_over_threshold,
+    simul_break_under_threshold,
+)
 from rmc.utils.constraint import get_dpois_expr, get_obs_exp_expr
 from rmc.utils.generic import get_avg_bases_between_mis
 
@@ -119,6 +123,43 @@ def group_not_one_break_ht(
         positions=group_ht.values.positions,
     )
     group_ht.write(not_one_break_grouped.path, overwrite=True)
+
+
+def split_transcripts_by_len(ht: hl.Table, transcript_len_threshold: int) -> None:
+    """
+    Split transcripts based on the specified number of possible missense variants.
+
+    This is necessary because transcripts with more possible missense variants take longer to run through `hl.experimental.loop`.
+
+    :param hl.Table ht: Input Table (Table written using `group_not_one_break_ht`).
+    :param int transcript_len_threshold: Possible number of missense variants cutoff.
+    :return: None; writes SetExpressions to resource paths (`simul_break_under_threshold`, `simul_break_over_threshold`).
+    """
+    logger.info("Annotating HT with length of cumulative observed list annotation...")
+    # This length is the number of positions with possible missense variants that need to be searched
+    # Not using transcript size here because transcript size
+    # doesn't necessarily reflect the number of positions that need to be searched
+    ht = ht.annotate(list_len=hl.len(ht.cum_obs))
+
+    logger.info(
+        "Splitting transcripts into two categories: list length < %i and list length >= %i...",
+        transcript_len_threshold,
+        transcript_len_threshold,
+    )
+    under_threshold = ht.aggregate(
+        hl.agg.filter(
+            ht.list_len < transcript_len_threshold,
+            hl.agg.collect_as_set(ht.transcript),
+        )
+    )
+    over_threshold = ht.aggregate(
+        hl.agg.filter(
+            ht.list_len >= transcript_len_threshold,
+            hl.agg.collect_as_set(ht.transcript),
+        )
+    )
+    hl.experimental.write_expression(under_threshold, simul_break_under_threshold)
+    hl.experimental.write_expression(over_threshold, simul_break_over_threshold)
 
 
 def calculate_window_chisq(

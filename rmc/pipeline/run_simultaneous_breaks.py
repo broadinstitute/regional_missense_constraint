@@ -17,7 +17,11 @@ from rmc.resources.basics import (
 )
 from rmc.resources.grch37.reference_data import gene_model
 from rmc.slack_creds import slack_token
-from rmc.utils.constraint import group_not_one_break_ht, search_for_two_breaks
+from rmc.utils.simultaneous_breaks import (
+    group_not_one_break_ht,
+    search_for_two_breaks,
+    split_transcripts_by_len,
+)
 
 
 logging.basicConfig(
@@ -33,7 +37,7 @@ def main(args):
     try:
         if args.command == "create-grouped-ht":
             logger.warning("This step should be run in Dataproc!")
-            hl.init(log="/search_for_two_breaks_prep_batches.log")
+            hl.init(log="/search_for_two_breaks_create_grouped_ht.log")
 
             if not file_exists(not_one_break_grouped.path) or args.create_grouped_ht:
                 if args.min_num_obs == 0:
@@ -55,37 +59,13 @@ def main(args):
                     min_num_obs=args.min_num_obs,
                 )
 
-        if args.command == "create-batches":
-            ht = not_one_break_grouped.ht()
-            logger.info(
-                "Annotating HT with length of cumulative observed list annotation..."
+        if args.command == "split-transcripts":
+            logger.warning("This step should be run in Dataproc!")
+            hl.init(log="/search_for_two_breaks_split_Transcripts.log")
+            split_transcripts_by_len(
+                ht=not_one_break_grouped.ht(),
+                transcript_len_threshold=args.transcript_len_threshold,
             )
-            # This length is the number of positions with possible missense variants that need to be searched
-            # Not using transcript size here because transcript size
-            # doesn't necessarily reflect the number of positions that need to be searched
-            ht = ht.annotate(list_len=hl.len(ht.cum_obs))
-
-            logger.info(
-                "Splitting transcripts into two categories: list length < %i and list length >= %i...",
-                args.transcript_len_threshold,
-                args.transcript_len_threshold,
-            )
-            under_threshold = ht.aggregate(
-                hl.agg.filter(
-                    ht.list_len < args.transcript_len_threshold,
-                    hl.agg.collect_as_set(ht.transcript),
-                )
-            )
-            over_threshold = ht.aggregate(
-                hl.agg.filter(
-                    ht.list_len >= args.transcript_len_threshold,
-                    hl.agg.collect_as_set(ht.transcript),
-                )
-            )
-            hl.experimental.write_expression(
-                under_threshold, simul_break_under_threshold
-            )
-            hl.experimental.write_expression(over_threshold, simul_break_over_threshold)
 
         if args.command == "run-batches":
             logger.warning("This step should be run locally!")
@@ -156,7 +136,10 @@ if __name__ == "__main__":
 
     create_grouped_ht = subparsers.add_parser(
         "create-grouped-ht",
-        help="Create hail Table grouped by transcript with cumulative observed and expected missense values collected into lists.",
+        help="""
+        Create hail Table grouped by transcript with cumulative observed and expected missense values collected into lists.
+        This step should be run in Dataproc.
+        """,
     )
     min_window_group = create_grouped_ht.add_mutually_exclusive_group()
     min_window_group.add_argument(
@@ -186,11 +169,15 @@ if __name__ == "__main__":
         default=10,
     )
 
-    create_batches = subparsers.add_parser(
-        "create-batches",
-        help="Create batches of transcripts to run through search for two breaks code.",
+    split_transcripts = subparsers.add_parser(
+        "split-transcripts",
+        help="""
+        Split transcripts based on number of possible missense positions.
+        This is used to create batches of transcripts to run through search for two breaks code.
+        This step should be run in Dataproc.
+        """,
     )
-    create_batches.add_argument(
+    split_transcripts.add_argument(
         "--transcript-len-threshold",
         help="Cutoff for number of possible missense positions in transcript. Used to create batches of transcripts.",
         type=int,
@@ -198,7 +185,8 @@ if __name__ == "__main__":
     )
 
     run_batches = subparsers.add_parser(
-        "run-batches", help="Run batches of transcripts using Hail Batch."
+        "run-batches",
+        help="Run batches of transcripts using Hail Batch. This step should be run locally.",
     )
     transcript_size = run_batches.add_mutually_exclusive_group()
     transcript_size.add_argument(
