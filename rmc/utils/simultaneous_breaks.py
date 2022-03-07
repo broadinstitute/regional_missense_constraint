@@ -5,7 +5,7 @@ from typing import List, Optional, Tuple
 
 import hail as hl
 
-from gnomad.utils.file_utils import parallel_file_exists
+from gnomad.utils.file_utils import file_exists, parallel_file_exists
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.resources.resource_utils import DataException
 
@@ -164,7 +164,9 @@ def split_transcripts_by_len(ht: hl.Table, transcript_len_threshold: int) -> Non
     hl.experimental.write_expression(over_threshold, simul_break_over_threshold)
 
 
-def check_for_successful_transcripts(transcripts: List[str]) -> List[str]:
+def check_for_successful_transcripts(
+    transcripts: List[str], in_parallel: bool = True
+) -> List[str]:
     """
     Check if any transcripts have been previously searched by searching for success TSV existence.
 
@@ -172,21 +174,31 @@ def check_for_successful_transcripts(transcripts: List[str]) -> List[str]:
         This step needs to be run locally due to permissions involved with `parallel_file_exists`.
 
     :param List[str] transcripts: List of transcripts to check.
+    :param bool in_parallel: Whether to check if successful file exist in parallel.
+        If True, must be run locally and not in Dataproc. Default is True.
     :return: List of transcripts didn't have success TSVs and therefore still need to be processed.
     """
     logger.info("Checking if any transcripts have already been searched...")
     success_file_path = f"{simul_break_temp}/success_files"
     transcript_success_map = {}
+    transcripts_to_run = []
     for transcript in transcripts:
         transcript_success_map[
             transcript
         ] = f"{success_file_path}/{transcript}_success.tsv"
-    success_tsvs_exist = parallel_file_exists(list(transcript_success_map.values()))
 
-    transcripts_to_run = []
-    for transcript in transcripts:
-        if not success_tsvs_exist[transcript_success_map[transcript]]:
-            transcripts_to_run.append(transcript)
+    if in_parallel:
+        # Use parallel_file_exists if in_parallel is set to True
+        success_tsvs_exist = parallel_file_exists(list(transcript_success_map.values()))
+        for transcript in transcripts:
+            if not success_tsvs_exist[transcript_success_map[transcript]]:
+                transcripts_to_run.append(transcript)
+    else:
+        # Otherwise, use file_exists
+        for transcript in transcripts:
+            if not file_exists(transcript_success_map[transcript]):
+                transcripts_to_run.append(transcript)
+
     return transcripts_to_run
 
 
