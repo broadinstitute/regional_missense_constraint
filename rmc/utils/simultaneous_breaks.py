@@ -223,7 +223,8 @@ def process_transcript_group(
         possible missense variants than threshold specified in `run_simultaneous_breaks`.
     :param str output_ht_path: Path to output results Table.
     :param str output_tsv_path: Path to success TSV bucket.
-    :param Optional[str] temp_ht_path: Path to temporary Table. Required only if over_thresold is True.
+    :param Optional[str] temp_ht_path: Path to bucket to store temporary Tables.
+        Used only if over_thresold is True.
     :param float chisq_threshold: Chi-square significance threshold. Default is 9.2.
         This value corresponds to a p-value of 0.99 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
@@ -267,15 +268,30 @@ def process_transcript_group(
             ),
         )
         n_rows = ht.count()
-        ht.write(temp_ht_path, overwrite=True)
-        ht = hl.read_table(temp_ht_path, _n_partitions=n_rows)
+        ht.write(f"{temp_ht_path}/{transcript_group[0]}_prep.ht", overwrite=True)
+        ht = hl.read_table(
+            f"{temp_ht_path}/{transcript_group[0]}_prep.ht", _n_partitions=n_rows
+        )
     else:
-        ht = ht.annotate(i=0, j=0, i_max_idx=ht.max_idx, j_max_idx=ht.max_idx,)
+        # Add i,j, i_max_idx, j_max_idx annotations
+        # (these are expected by `search_for_two_breaks`)
+        ht = ht.annotate(i=0, j=0, i_max_idx=ht.max_idx, j_max_idx=ht.max_idx)
 
+    # Search for two simultaneous breaks
     ht = search_for_two_breaks(ht, chisq_threshold)
-    ht.write(
-        output_ht_path, overwrite=True,
-    )
+
+    # If over threshold, checkpoint HT and check if there were any breaks
+    if over_threshold:
+        ht = ht.checkpoint(
+            f"{temp_ht_path}/{transcript_group[0]}_res.ht", overwrite=True
+        )
+        # If any rows had a significant breakpoint,
+        # find the one "best" breakpoint (breakpoint with largest chi square value)
+        if ht.count() > 0:
+            max_chisq = ht.aggregate(hl.agg.max(ht.max_chisq))
+            ht = ht.filter(ht.max_chisq == max_chisq)
+
+    ht.write(output_ht_path, overwrite=True)
 
     for transcript in transcript_group:
         success_tsv_path = f"{output_tsv_path}/{transcript}.tsv"
