@@ -253,6 +253,7 @@ def process_transcript_group(
                 hl.range(0, ht.list_len, split_window_size),
             )
         )
+        ht = ht.explode("start_idx")
         ht = ht.annotate(i=ht.start_idx.i_start, j=ht.start_idx.j_start)
         ht = ht._key_by_assert_sorted("transcript", "i", "j")
         ht = ht.filter(ht.j >= ht.i)
@@ -261,10 +262,12 @@ def process_transcript_group(
             j_max_idx=hl.min(ht.j + 500, ht.list_len - 1),
         )
         ht = ht.annotate(
-            j=hl.if_else(
-                ht.start_idx.i_start == ht.start_idx.j_start,
-                ht.start_idx.j_start + 1,
-                ht.start_idx.j_start,
+            start_idx=ht.start_idx.annotate(
+                j_start=hl.if_else(
+                    ht.start_idx.i_start == ht.start_idx.j_start,
+                    ht.start_idx.j_start + 1,
+                    ht.start_idx.j_start,
+                ),
             ),
         )
         n_rows = ht.count()
@@ -273,9 +276,13 @@ def process_transcript_group(
             f"{temp_ht_path}/{transcript_group[0]}_prep.ht", _n_partitions=n_rows
         )
     else:
-        # Add i,j, i_max_idx, j_max_idx annotations
+        # Add start_idx struct with i_start, j_start, i_max_idx, j_max_idx annotations
         # (these are expected by `search_for_two_breaks`)
-        ht = ht.annotate(i=0, j=0, i_max_idx=ht.max_idx, j_max_idx=ht.max_idx)
+        ht = ht.annotate(
+            start_idx=hl.struct(i_start=0, j_start=0),
+            i_max_idx=ht.max_idx,
+            j_max_idx=ht.max_idx,
+        )
 
     # Search for two simultaneous breaks
     ht = search_for_two_breaks(ht, chisq_threshold)
