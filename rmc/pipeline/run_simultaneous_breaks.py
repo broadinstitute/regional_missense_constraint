@@ -29,7 +29,7 @@ from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import (
     check_for_successful_transcripts,
     group_not_one_break_ht,
-    # process_transcript_group,
+    process_transcript_group,
     split_transcripts_by_len,
 )
 
@@ -469,7 +469,7 @@ def search_for_two_breaks(
     return group_ht
 
 
-def process_transcript_group(
+def process_transcript_group_old(
     ht_path: str,
     transcript_group: List[str],
     over_threshold: bool,
@@ -599,6 +599,9 @@ def main(args):
             )
 
         if args.command == "run-batches":
+            import hailtop.batch as hb
+
+            logger.warning("This step should be run locally!")
             hl.init(log="search_for_two_breaks_run_batches.log")
 
             logger.info("Importing SetExpression with transcripts...")
@@ -621,20 +624,17 @@ def main(args):
                         )
                     )
                 ),
-                in_parallel=args.under_threshold,
             )
             logger.info("Found %i transcripts to search...", len(transcripts_to_run))
 
-            if args.under_threshold:
-                import hailtop.batch as hb
+            logger.info("Setting up batch parameters...")
+            backend = hb.ServiceBackend(
+                billing_project=args.billing_project,
+                remote_tmpdir=args.batch_bucket,
+                google_project=args.google_project,
+            )
 
-                logger.warning("This step should be run locally!")
-                logger.info("Setting up batch parameters...")
-                backend = hb.ServiceBackend(
-                    billing_project=args.billing_project,
-                    remote_tmpdir=args.batch_bucket,
-                    google_project=args.google_project,
-                )
+            if args.under_threshold:
                 b = hb.Batch(
                     name="simul_breaks",
                     backend=backend,
@@ -670,21 +670,35 @@ def main(args):
                     )
                     count += 1
 
-                b.run(wait=False)
             else:
-                logger.warning("This step should be run in Dataproc!")
-                transcript_groups = [[transcript] for transcript in transcripts_to_run]
+                b = hb.Batch(
+                    name="simul_breaks",
+                    backend=backend,
+                    default_python_image=args.docker_image,
+                )
+                j = b.new_python_job(name=job_name)
+                # NOTE: Don't use batch memory or cpu options when specifying _machine_type
+                j._machine_type = "n1-highmem-32"
+                j._preemptible = True
+                j.storage("100Gi")
+
+                # transcript_groups = [[transcript] for transcript in transcripts_to_run]
+                transcript_groups = [["ENST00000301030"]]
                 for group in transcript_groups:
-                    process_transcript_group(
-                        ht_path=not_one_break_grouped.path,
-                        transcript_group=group,
-                        over_threshold=True,
-                        output_ht_path=f"{simul_break_temp}/hts/simul_break_{group[0]}.ht",
-                        output_tsv_path=f"{simul_break_temp}/success_files",
-                        temp_ht_path=simul_break_temp,
-                        chisq_threshold=args.chisq_threshold,
-                        split_window_size=args.group_size,
+                    j = b.new_python_job(name=group[0])
+                    j.call(
+                        process_transcript_group,
+                        not_one_break_grouped.path,
+                        group,
+                        args.over_threshold,
+                        f"{simul_break_temp}/hts/simul_break_{job_name}.ht",
+                        f"{simul_break_temp}/success_files",
+                        f"{simul_break_temp}",
+                        args.chisq_threshold,
+                        args.group_size,
                     )
+
+            b.run(wait=False)
 
     finally:
         # Don't copy log if running hail batch because copy_log only operates on files in gcloud
@@ -825,9 +839,14 @@ if __name__ == "__main__":
     )
     run_batches.add_argument(
         "--docker-image",
-        help="Docker image to provide to hail batch. Must have dill, hail, and python installed.",
-        # default="gcr.io/broad-mpg-gnomad/rmc:20220304",
-        default="gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220302",
+        help="""
+        Docker image to provide to hail batch. Must have dill, hail, and python installed.
+        If running with --over-threshold, Docker image must also contain this line:
+        `ENV PYSPARK_SUBMIT_ARGS="--driver-memory 8g --executor-memory 8g pyspark-shell"`
+        to make sure the job allocates memory correctly.
+        """,
+        default="gcr.io/broad-mpg-gnomad/rmc:20220304",
+        # default="gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220302",
     )
 
     args = parser.parse_args()
