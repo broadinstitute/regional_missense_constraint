@@ -826,9 +826,8 @@ if __name__ == "__main__":
     run_batches.add_argument(
         "--docker-image",
         help="Docker image to provide to hail batch. Must have dill, hail, and python installed.",
-        default="gcr.io/broad-mpg-gnomad/rmc:20220304",
-        # default="us.gcr.io/broad-mpg-gnomad/rmc@sha256:cf6d4c38d754709268ac8005e3286b6c09f52c454036a5ecf264c6a556f94752",
-        # default="gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220302"
+        # default="gcr.io/broad-mpg-gnomad/rmc:20220304",
+        default="gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220302",
     )
 
     args = parser.parse_args()
