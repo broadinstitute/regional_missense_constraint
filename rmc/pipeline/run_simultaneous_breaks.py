@@ -18,6 +18,7 @@ too interdependent (would have to copy the entire repo into the Dockerfile).
 """
 import argparse
 import logging
+import subprocess
 from tqdm import tqdm
 
 from collections.abc import Callable
@@ -31,8 +32,10 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
     LOGGING_PATH,
+    no_breaks,
     not_one_break,
     not_one_break_grouped,
+    simul_break,
     simul_break_over_threshold,
     simul_break_temp,
     simul_break_under_threshold,
@@ -686,6 +689,66 @@ def main(args):
 
             b.run(wait=False)
 
+        if args.command == "verify-transcripts":
+            logger.warning("This step should be run locally!")
+            hl.init(log="search_for_two_breaks_verify_transcripts.log")
+
+            logger.info("Verifying that all transcripts were processed...")
+            transcripts = list(
+                hl.eval(
+                    hl.experimental.read_expression(simul_break_under_threshold).union(
+                        hl.experimental.read_expression(simul_break_over_threshold)
+                    )
+                )
+            )
+            missing_transcripts = check_for_successful_transcripts(transcripts)
+            if len(missing_transcripts) > 0:
+                logger.error(missing_transcripts)
+                raise DataException(
+                    f"{len(missing_transcripts)} are missing! Please rerun."
+                )
+
+        if args.command == "merge-hts":
+            logger.warning("This step should be run in Dataproc!")
+            hl.init(log="/search_for_two_breaks_merge_hts.log")
+
+            logger.info("Collecting all HT paths...")
+            intermediate_hts = []
+            ht_bucket = f"{simul_break_temp}/hts/"
+            temp_ht_paths = (
+                subprocess.check_output(["gsutil", "ls", ht_bucket])
+                .decode("utf8")
+                .strip()
+                .split("\n")
+            )
+            for ht_path in temp_ht_paths:
+                ht_path = ht_path.strip("/")
+                temp = hl.read_table(ht_path)
+                intermediate_hts.append(temp)
+
+            ht = intermediate_hts[0].union(*intermediate_hts[1:])
+            ht = ht.checkpoint(simul_break.path, overwrite=args.overwrite)
+            logger.info("Wrote simultaneous breaks HT with %i lines", ht.count())
+
+            # Collect all transcripts with two simultaneous breaks
+            simul_break_transcripts = ht.aggregate(
+                hl.agg.collect_as_set(ht.transcript),
+            )
+            logger.info(
+                "%i transcripts had two simultaneous breaks",
+                len(simul_break_transcripts),
+            )
+            simul_break_transcripts = hl.literal(simul_break_transcripts)
+
+            logger.info(
+                "Getting transcripts with no evidence of regional missense constraint..."
+            )
+            context_ht = not_one_break.ht()
+            context_ht = context_ht.filter(
+                ~simul_break_transcripts.contains(context_ht.transcript)
+            )
+            context_ht.write(no_breaks.path, overwrite=args.overwrite)
+
     finally:
         # Don't copy log if running hail batch because copy_log only operates on files in gcloud
         if args.command != "run-batches":
@@ -833,6 +896,16 @@ if __name__ == "__main__":
         """,
         default="gcr.io/broad-mpg-gnomad/rmc:20220304",
         # default="gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220302",
+    )
+
+    verify_transcripts = subparsers.add_parser(
+        "verify-transcripts",
+        help="Verify that all transcripts were processed using hail Batch. This step should be run locally.",
+    )
+
+    merge_hts = subparsers.add_parser(
+        "merge-hts",
+        help="Merge all intermediate result Tables into a single Table. This step should be run in Dataproc.",
     )
 
     args = parser.parse_args()
