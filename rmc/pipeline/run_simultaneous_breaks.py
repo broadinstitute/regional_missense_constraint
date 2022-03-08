@@ -62,14 +62,7 @@ def get_obs_exp_expr(
     """
     Return observed/expected annotation based on inputs.
 
-    Cap observed/expected value at 1.
-
-    Function can generate observed/expected values across the entire transcript or section of a transcript depending on inputs.
-    Function can also generate 'forward' (moving from smaller to larger positions") or 'reverse' (moving from larger to smaller positions)
-    section obs/exp values.
-
-    .. note::
-        `cond_expr` should vary depending on size/direction of section being annotated.
+    Typically imported from `constraint.py`. See `constraint.py` for full docstring.
 
     :param hl.expr.BooleanExpression cond_expr: Condition to check prior to adding obs/exp expression.
     :param hl.expr.Int64Expression obs_expr: Expression containing number of observed variants.
@@ -94,39 +87,7 @@ def get_dpois_expr(
     """
     Calculate null and alt values in preparation for chi-squared test to find significant breaks.
 
-    All parameter values depend on the direction of calculation (forward/reverse) and
-    number of breaks (searching for first break or searching for additional break).
-
-    For forward null/alts, values for obs_expr and and exp_expr should be:
-        - Expression containing cumulative numbers for entire transcript.
-        - Expression containing cumulative numbers for section of transcript
-            between the beginning or end of the transcript and the first breakpoint.
-
-    For reverse null/alts, values for obs_expr and and exp_expr should be:
-        - Reverse counts for entire transcript.
-        - Reverse counts for section of transcript.
-
-    For forward null/alts, values for overall_oe_expr and section_oe_expr should be:
-        - Expression containing observed/expected value for entire transcript and
-            expression containing observed/expected value calculated on cumulative observed and expected
-            variants at each position.
-        - Expression containing observed/expected value for section of transcript.
-
-    For reverse null/alts, values for overall_oe_expr and section_oe_expr should be:
-        - Expression containing observed/expected value for entire transcript and
-            expression containing observed/expected value calculated on reverse observed variants value
-            (total observed - cumulative observed count).
-        - Expression containing observed/expected value for section of transcript and
-            expression containing reverse observed/expected value for section of transcript.
-
-    For forward null/alts, cond_expr should check:
-        - That the length of the obs_expr isn't 0 when searching for the first break.
-        - That the length of the obs_expr is 2 when searching for a second additional break.
-
-    For reverse null/alts, cond_expr should check:
-        - That the reverse observed value for the entire transcript is defined when searching for the first break.
-        - That the reverse observed value for the section between the first breakpoint and the end of the transcript
-             is defined when searching for a second additional break.
+    Typically imported from `constraint.py`. See `constraint.py` for full docstring.
 
     :param hl.expr.BooleanExpression cond_expr: Conditional expression to check before calculating null and alt values.
     :param hl.expr.Float64Expression section_oe_expr: Expression of section observed/expected value.
