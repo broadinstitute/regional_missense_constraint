@@ -2,6 +2,19 @@
 This script calls various functions to run the simultaneous two break search.
 
 This search is done in transcripts that did not have one significant breakpoint.
+
+Note that a couple functions have been copied into this script from `constraint.py`:
+- `get_obs_exp_expr`
+- `get_dpois_expr`
+
+Note also that a couple functions are contained within this script and not within `simultaneous_breaks.py`:
+- `calculate_window_chisq`
+- `search_for_two_breaks`
+- `process_transcript_groups`
+
+This is because python imports do not work in Hail Batch PythonJobs unless
+the python scripts are included within the provided Dockerfile, and the scripts within the RMC repo are
+too interdependent (would have to copy the entire repo into the Dockerfile).
 """
 import argparse
 import logging
@@ -29,7 +42,6 @@ from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import (
     check_for_successful_transcripts,
     group_not_one_break_ht,
-    process_transcript_group,
     split_transcripts_by_len,
 )
 
@@ -469,7 +481,7 @@ def search_for_two_breaks(
     return group_ht
 
 
-def process_transcript_group_old(
+def process_transcript_group(
     ht_path: str,
     transcript_group: List[str],
     over_threshold: bool,
@@ -499,7 +511,6 @@ def process_transcript_group_old(
         possible missense variants than threshold. Only used if over_threshold is True.
     :return: None; processes Table and writes to path. Also writes success TSV to path.
     """
-    # from simultaneous_breaks import search_for_two_breaks
     ht = hl.read_table(ht_path)
     ht = ht.filter(hl.literal(transcript_group).contains(ht.transcript))
 
@@ -537,21 +548,35 @@ def process_transcript_group_old(
                 ),
             ),
         )
-        ht.describe()
         n_rows = ht.count()
-        ht.write(temp_ht_path, overwrite=True)
-        ht = hl.read_table(temp_ht_path, _n_partitions=n_rows)
+        ht.write(f"{temp_ht_path}/{transcript_group[0]}_prep.ht", overwrite=True)
+        ht = hl.read_table(
+            f"{temp_ht_path}/{transcript_group[0]}_prep.ht", _n_partitions=n_rows
+        )
     else:
+        # Add start_idx struct with i_start, j_start, i_max_idx, j_max_idx annotations
+        # (these are expected by `search_for_two_breaks`)
         ht = ht.annotate(
             start_idx=hl.struct(i_start=0, j_start=0),
             i_max_idx=ht.max_idx,
             j_max_idx=ht.max_idx,
         )
 
+    # Search for two simultaneous breaks
     ht = search_for_two_breaks(ht, chisq_threshold)
-    ht.write(
-        output_ht_path, overwrite=True,
-    )
+
+    # If over threshold, checkpoint HT and check if there were any breaks
+    if over_threshold:
+        ht = ht.checkpoint(
+            f"{temp_ht_path}/{transcript_group[0]}_res.ht", overwrite=True
+        )
+        # If any rows had a significant breakpoint,
+        # find the one "best" breakpoint (breakpoint with largest chi square value)
+        if ht.count() > 0:
+            max_chisq = ht.aggregate(hl.agg.max(ht.max_chisq))
+            ht = ht.filter(ht.max_chisq == max_chisq)
+
+    ht.write(output_ht_path, overwrite=True)
 
     for transcript in transcript_group:
         success_tsv_path = f"{output_tsv_path}/{transcript}.tsv"
