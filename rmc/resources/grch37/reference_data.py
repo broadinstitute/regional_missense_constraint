@@ -44,6 +44,7 @@ ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient gene
 de_novo_tsv = f"{RESOURCE_PREFIX}/GRCh37/reference_data/fordist_KES_combined_asc_dd_dnms_2020_04_21_annotated.txt"
 """
 De novo missense variants from 31,058 cases with developmental disorders, 6,430 cases with autism spectrum disorders, and 2,179 controls.
+
 Controls are the siblings of the autism cases.
 Samples are from:
 Kaplanis et al. (Evidence for 28 genetic disorders discovered by combining healthcare and research data.)

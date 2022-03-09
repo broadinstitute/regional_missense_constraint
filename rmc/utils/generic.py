@@ -5,6 +5,7 @@ import hail as hl
 
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
+from gnomad.utils.filtering import filter_to_clinvar_pathogenic
 
 from gnomad_lof.constraint_utils.constraint_basics import (
     add_most_severe_csq_to_tc_within_ht,
@@ -19,6 +20,7 @@ from rmc.resources.basics import (
     ACID_NAMES_PATH,
     CODON_TABLE_PATH,
     DIVERGENCE_SCORES_TSV_PATH,
+    hi_genes,
     mutation_rate,
     MUTATION_RATE_TABLE_PATH,
     TOTAL_EXOME_BASES,
@@ -234,6 +236,9 @@ def get_avg_bases_between_mis(
     total_bases = TOTAL_EXOME_BASES[build]
 
     if get_total_exome_bases:
+        if build not in BUILDS:
+            raise DataException(f"Build must be one of {BUILDS}.")
+
         logger.info(
             "Getting total number of bases in the exome from full context HT..."
         )
@@ -454,3 +459,83 @@ def get_outlier_transcripts() -> hl.expr.SetExpression:
     return constraint_transcript_ht.aggregate(
         hl.agg.collect_as_set(constraint_transcript_ht.transcript), _localize=False,
     )
+
+
+## Assessment utils
+def import_clinvar_hi_variants(build: str, overwrite: bool) -> None:
+    """
+    Import ClinVar HT and filter to pathogenic/likely pathogenic missense variants in haploinsufficient genes.
+
+    .. note::
+        This function currently only works for build GRCh37.
+
+    :param str build: Reference genome build; must be one of BUILDS.
+    :param bool overwrite: Whether to overwrite ClinVar HT.
+    :return: None; writes HT to resource path.
+    """
+    if build not in BUILDS:
+        raise DataException(f"Build must be one of {BUILDS}.")
+    if build == "GRCh37":
+        from gnomad.resources.grch37.reference_data import clinvar
+
+        clinvar_ht_path = grch37.clinvar_path_mis.path
+    else:
+        from gnomad.resources.grch38.reference_data import clinvar
+        raise DataException("ClinVar files currently only exist for GRCh37!")
+
+        raise DataException(
+            "RMC Clinvar HT path has not been prepared for build 38 yet!"
+        )
+
+    if not file_exists(clinvar_ht_path) or overwrite:
+        logger.info("Reading in ClinVar HT...")
+        clinvar_ht = clinvar.ht()
+        clinvar_ht = filter_to_clinvar_pathogenic(clinvar_ht)
+
+        logger.info("Filtering to missense variants...")
+        clinvar_ht = clinvar_ht.annotate(mc=clinvar_ht.info.MC)
+        clinvar_ht = clinvar_ht.filter(
+            clinvar_ht.mc.any(lambda x: x.contains("missense_variant"))
+        )
+        logger.info(
+            "Number of variants after filtering to missense: %i", clinvar_ht.count()
+        )
+
+        logger.info("Filtering to variants in haploinsufficient genes...")
+        # File header is '#gene'
+        hi_ht = hl.import_table(hi_genes)
+        hi_gene_set = hi_ht.aggregate(
+            hl.agg.collect_as_set(hi_ht["#gene"]), _localize=False
+        )
+
+        logger.info("Getting gene information from ClinVar HT...")
+        clinvar_ht = clinvar_ht.annotate(gene=clinvar_ht.info.GENEINFO.split(":")[0])
+        clinvar_ht = clinvar_ht.filter(hi_gene_set.contains(clinvar_ht.gene))
+        clinvar_ht = clinvar_ht.checkpoint(clinvar_ht_path, overwrite=overwrite)
+        logger.info(
+            "Number of variants after filtering to HI genes: %i", clinvar_ht.count()
+        )
+
+
+def import_de_novo_variants(build: str, overwrite: bool) -> None:
+    """
+    Import de novo missense variants.
+
+    .. note::
+        These files currently only exist for build GRCh37.
+
+    :return: None; writes HT to resource path.
+    """
+    if build not in BUILDS:
+        raise DataException(f"Build must be one of {BUILDS}.")
+    if build == "GRCh37":
+        import grch37.de_novo_tsv as tsv_path
+        import grch37.de_novo.path as ht_path
+    else:
+        raise DataException("De novo TSV does not exist for GRCh38!")
+
+    dn_ht = hl.import_table(tsv_path, impute=True)
+    dn_ht = dn_ht.transmute(locus=hl.locus(dn_ht.chrom, dn_ht.pos))
+    dn_ht = dn_ht.key_by("locus")
+    dn_ht = dn_ht.select("case_control")
+    dn_ht.write(ht_path, overwrite=overwrite)

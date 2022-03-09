@@ -2,10 +2,8 @@ BUILDS = ["GRCh37", "GRCh38"]
 FLAGSHIP_LOF = "gs://gnomad-public-requester-pays/papers/2019-flagship-lof/v1.0"
 RMC_PREFIX = "gs://regional_missense_constraint"
 RESOURCE_PREFIX = "gs://regional_missense_constraint/resources"
-GNOMAD_VER = "2.1.1"
-GNOMAD_VERS = ["2.1.1"]
-UKBB_VER = 5
-UKBB_VERS = [5]
+CURRENT_VERSION = "2.1.1"
+GNOMAD_VERSIONS = ["2.1.1"]
 
 
 DATA_SOURCE = "broad"

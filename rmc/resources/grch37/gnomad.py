@@ -1,6 +1,6 @@
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
 
-from rmc.resources.resource_utils import FLAGSHIP_LOF, GNOMAD_VER, RESOURCE_PREFIX
+from rmc.resources.resource_utils import CURRENT_VERSION, FLAGSHIP_LOF, RESOURCE_PREFIX
 
 
 ## Konrad's resources
@@ -54,7 +54,7 @@ Contains multiple mutation rate annotations:
 """
 
 constraint_ht = VersionedTableResource(
-    default_version=GNOMAD_VER,
+    default_version=CURRENT_VERSION,
     versions={
         GNOMAD_VER: TableResource(
             path="gs://gcp-public-data--gnomad/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_transcript.ht"
