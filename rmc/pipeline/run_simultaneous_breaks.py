@@ -666,15 +666,14 @@ def main(args):
                     backend=backend,
                     default_python_image=args.docker_image,
                 )
-                # NOTE: Don't use batch memory or cpu options when specifying _machine_type
-                j._machine_type = "n1-highmem-32"
-                j._preemptible = True
-                j.storage("100Gi")
-
                 # transcript_groups = [[transcript] for transcript in transcripts_to_run]
                 transcript_groups = [["ENST00000301030"]]
                 for group in transcript_groups:
                     j = b.new_python_job(name=group[0])
+                    # NOTE: Don't use batch memory or cpu options when specifying _machine_type
+                    j._machine_type = "n1-highmem-32"
+                    j._preemptible = True
+                    j.storage("100Gi")
                     j.call(
                         process_transcript_group,
                         not_one_break_grouped.path,
