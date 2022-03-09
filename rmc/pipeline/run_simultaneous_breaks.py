@@ -623,7 +623,7 @@ def main(args):
             )
             logger.info("Found %i transcripts to search...", len(transcripts_to_run))
 
-            logger.info("Setting up batch parameters...")
+            logger.info("Setting up Batch parameters...")
             backend = hb.ServiceBackend(
                 billing_project=args.billing_project,
                 remote_tmpdir=args.batch_bucket,
@@ -698,23 +698,26 @@ def main(args):
 
             b.run(wait=False)
 
-        if args.command == "run-ttn":
+        if args.command == "run-batches-dataproc":
             logger.warning(
-                "This step should be run in Dataproc (on a highmem autoscaling cluster)!"
+                "This step should be run in Dataproc on an autoscaling cluster!"
             )
-            hl.init(log="/search_for_two_breaks_run_TTN.log")
+            hl.init(log="/search_for_two_breaks_run_batches_dataproc.log")
+            transcript_groups = [
+                [transcript] for transcript in args.dataproc_transcripts.split(",")
+            ]
 
-            logger.info("Searching for two simultaneous breaks in TTN...")
-            process_transcript_group(
-                ht_path=not_one_break_grouped.path,
-                transcript_group=[args.ttn],
-                over_threshold=True,
-                output_ht_path=f"{simul_break_temp}/hts/simul_break_TTN.ht",
-                output_tsv_path=f"{simul_break_temp}/success_files",
-                temp_ht_path=f"{simul_break_temp}",
-                chisq_threshold=args.chisq_threshold,
-                split_window_size=args.group_size,
-            )
+            for group in transcript_groups:
+                process_transcript_group(
+                    ht_path=not_one_break_grouped.path,
+                    transcript_group=group,
+                    over_threshold=True,
+                    output_ht_path=f"{simul_break_temp}/hts/simul_break_{group[0]}.ht",
+                    output_tsv_path=f"{simul_break_temp}/success_files",
+                    temp_ht_path=f"{simul_break_temp}",
+                    chisq_threshold=args.chisq_threshold,
+                    split_window_size=args.group_size,
+                )
 
         if args.command == "verify-transcripts":
             logger.warning("This step should be run locally!")
@@ -937,7 +940,7 @@ if __name__ == "__main__":
     run_batches.add_argument(
         "--docker-image",
         help="""
-        Docker image to provide to hail batch. Must have dill, hail, and python installed.
+        Docker image to provide to hail Batch. Must have dill, hail, and python installed.
         If running with --over-threshold, Docker image must also contain this line:
         `ENV PYSPARK_SUBMIT_ARGS="--driver-memory 8g --executor-memory 8g pyspark-shell"`
         to make sure the job allocates memory correctly.
@@ -946,13 +949,19 @@ if __name__ == "__main__":
         # default="gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220302",
     )
 
-    run_ttn = subparsers.add_parser(
-        "run-ttn",
+    run_batches_dataproc = subparsers.add_parser(
+        "run-batches-dataproc",
         help="""
-        Process TTN.
-        This step should be run in Dataproc on a large autoscaling cluster
-        (highmem-8, up to 100 preemptibles).
+        Run batches of transcripts using Google Cloud Dataproc.
+        This should only be used for transcripts that are over --transcript-len-threshold if they are too slow or getting preempted in
+        hail Batch. All transcripts under --transcript-len-threshold should be run in hail Batch.
+
+        If using this step to run TTN, use a large autoscaling cluster (highmem-8, scales to 100 preemptibles).
+        (This step should be run in Dataproc.)
         """,
+    )
+    run_batches_dataproc.add_argument(
+        "--dataproc-transcripts", help="Comma separated list of transcript IDs to run."
     )
 
     verify_transcripts = subparsers.add_parser(
