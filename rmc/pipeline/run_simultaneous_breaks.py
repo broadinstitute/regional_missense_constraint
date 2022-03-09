@@ -666,7 +666,6 @@ def main(args):
                     backend=backend,
                     default_python_image=args.docker_image,
                 )
-                j = b.new_python_job(name=job_name)
                 # NOTE: Don't use batch memory or cpu options when specifying _machine_type
                 j._machine_type = "n1-highmem-32"
                 j._preemptible = True
