@@ -681,7 +681,7 @@ def main(args):
                         not_one_break_grouped.path,
                         group,
                         args.over_threshold,
-                        f"{simul_break_temp}/hts/simul_break_{job_name}.ht",
+                        f"{simul_break_temp}/hts/simul_break_{group[0]}.ht",
                         f"{simul_break_temp}/success_files",
                         f"{simul_break_temp}",
                         args.chisq_threshold,
