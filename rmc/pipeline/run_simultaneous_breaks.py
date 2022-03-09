@@ -500,8 +500,8 @@ def process_transcript_group(
         ht = ht._key_by_assert_sorted("transcript", "i", "j")
         ht = ht.filter(ht.j >= ht.i)
         ht = ht.annotate(
-            i_max_idx=hl.min(ht.i + 500, ht.list_len - 1),
-            j_max_idx=hl.min(ht.j + 500, ht.list_len - 1),
+            i_max_idx=hl.min(ht.i + split_window_size, ht.list_len - 1),
+            j_max_idx=hl.min(ht.j + split_window_size, ht.list_len - 1),
         )
         ht = ht.annotate(
             start_idx=ht.start_idx.annotate(
