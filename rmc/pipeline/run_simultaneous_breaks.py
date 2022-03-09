@@ -678,6 +678,11 @@ def main(args):
                 transcript_groups = [["ENST00000301030"]]
                 for group in transcript_groups:
                     j = b.new_python_job(name=group[0])
+                    if args.use_custom_machine:
+                        j = b.new_python_job(name=job_name)
+                        j._machine_type = "n1-highmem-32"
+                        j._preemptible = True
+                        j.storage("100Gi")
                     j.call(
                         process_transcript_group,
                         "gs://gnomad-tmp/kc/test_100_over5k.ht",
