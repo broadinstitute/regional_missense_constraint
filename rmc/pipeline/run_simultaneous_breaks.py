@@ -514,8 +514,9 @@ def process_transcript_group(
         )
         n_rows = ht.count()
         ht = ht.repartition(n_rows)
-        ht.write(f"{temp_ht_path}/{transcript_group[0]}_prep.ht", overwrite=True)
-        ht = hl.read_table(f"{temp_ht_path}/{transcript_group[0]}_prep.ht")
+        ht = ht.checkpoint(
+            f"{temp_ht_path}/{transcript_group[0]}_prep.ht", overwrite=True
+        )
     else:
         # Add start_idx struct with i_start, j_start, i_max_idx, j_max_idx annotations
         # (these are expected by `search_for_two_breaks`)
