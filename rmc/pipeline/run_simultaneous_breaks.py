@@ -594,6 +594,12 @@ def main(args):
             logger.warning("This step should be run locally!")
             hl.init(log="search_for_two_breaks_run_batches.log")
 
+            # Make sure custom machine wasn't specified with under threshold
+            if args.under_threshold and args.use_custom_machine:
+                raise DataException(
+                    "Do not specify --use-custom-machine when transcripts are --under-threshold size!"
+                )
+
             logger.info("Importing SetExpression with transcripts...")
             if not args.under_threshold and not args.over_threshold:
                 raise DataException(
@@ -624,7 +630,13 @@ def main(args):
                 google_project=args.google_project,
             )
 
-            if args.under_threshold:
+            if args.use_custom_machine:
+                b = hb.Batch(
+                    name="simul_breaks",
+                    backend=backend,
+                    default_python_image=args.docker_image,
+                )
+            else:
                 b = hb.Batch(
                     name="simul_breaks",
                     backend=backend,
@@ -634,6 +646,7 @@ def main(args):
                     default_python_image=args.docker_image,
                 )
 
+            if args.under_threshold:
                 transcript_groups = [
                     transcripts_to_run[x : x + args.group_size]
                     for x in range(0, len(transcripts_to_run), args.group_size)
@@ -661,22 +674,14 @@ def main(args):
                     count += 1
 
             else:
-                b = hb.Batch(
-                    name="simul_breaks",
-                    backend=backend,
-                    default_python_image=args.docker_image,
-                )
                 # transcript_groups = [[transcript] for transcript in transcripts_to_run]
                 transcript_groups = [["ENST00000301030"]]
                 for group in transcript_groups:
                     j = b.new_python_job(name=group[0])
-                    # NOTE: Don't use batch memory or cpu options when specifying _machine_type
-                    j._machine_type = "n1-highmem-32"
-                    j._preemptible = True
-                    j.storage("100Gi")
                     j.call(
                         process_transcript_group,
-                        not_one_break_grouped.path,
+                        "gs://gnomad-tmp/kc/test_100_over5k.ht",
+                        # not_one_break_grouped.path,
                         group,
                         args.over_threshold,
                         f"{simul_break_temp}/hts/simul_break_{group[0]}.ht",
@@ -902,6 +907,11 @@ if __name__ == "__main__":
         "--google-project",
         help="Google cloud project provided to hail batch for storage objects access.",
         default="broad-mpg-gnomad",
+    )
+    run_batches.add_argument(
+        "--use-custom-machine",
+        help="Use custom machine for hail batch rather than setting batch memory, cpu, and storage. Only necessary if --over-threshold.",
+        action="store_true",
     )
     run_batches.add_argument(
         "--batch-memory",
