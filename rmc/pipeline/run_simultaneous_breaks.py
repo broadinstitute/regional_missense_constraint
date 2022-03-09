@@ -585,6 +585,7 @@ def main(args):
             split_transcripts_by_len(
                 ht=not_one_break_grouped.ht(),
                 transcript_len_threshold=args.transcript_len_threshold,
+                ttn_id=args.ttn,
             )
 
         if args.command == "run-batches":
@@ -689,6 +690,24 @@ def main(args):
 
             b.run(wait=False)
 
+        if args.command == "run-ttn":
+            logger.warning(
+                "This step should be run in Dataproc (on a highmem autoscaling cluster)!"
+            )
+            hl.init(log="/search_for_two_breaks_run_TTN.log")
+
+            logger.info("Searching for two simultaneous breaks in TTN...")
+            process_transcript_group(
+                ht_path=not_one_break_grouped.path,
+                transcript_group=[args.ttn],
+                over_threshold=True,
+                output_ht_path=f"{simul_break_temp}/hts/simul_break_TTN.ht",
+                output_tsv_path=f"{simul_break_temp}/success_files",
+                temp_ht_path=f"{simul_break_temp}",
+                chisq_threshold=args.chisq_threshold,
+                split_window_size=args.group_size,
+            )
+
         if args.command == "verify-transcripts":
             logger.warning("This step should be run locally!")
             hl.init(log="search_for_two_breaks_verify_transcripts.log")
@@ -707,6 +726,17 @@ def main(args):
                 raise DataException(
                     f"{len(missing_transcripts)} are missing! Please rerun."
                 )
+
+            # Check if TTN was run and print a warning if it wasn't
+            # TTN ID isn't included in `simul_break_under_threshold` or `simul_break_over_threshold`
+            # It needs to be run separately due to its size
+            logger.info("Checking if TTN was processed...")
+            ttn_missing = check_for_successful_transcripts(transcripts=[args.ttn])
+            if len(ttn_missing) > 0:
+                logger.warning(
+                    "TTN wasn't processed successfully. Double check whether this is expected!"
+                )
+            logger.info("Done searching for transcript success TSVS!")
 
         if args.command == "merge-hts":
             logger.warning("This step should be run in Dataproc!")
@@ -750,8 +780,8 @@ def main(args):
             context_ht.write(no_breaks.path, overwrite=args.overwrite)
 
     finally:
-        # Don't copy log if running hail batch because copy_log only operates on files in gcloud
-        if args.command != "run-batches":
+        # Don't copy log if running locally because copy_log only operates on files in gcloud
+        if args.command != "run-batches" and args.command != "verify-transcripts":
             logger.info("Copying hail log to logging bucket...")
             hl.copy_log(LOGGING_PATH)
 
@@ -773,6 +803,11 @@ if __name__ == "__main__":
         "--slack-channel",
         help="Send message to Slack channel/user.",
         default="@kc (she/her)",
+    )
+    parser.add_argument(
+        "--TTN",
+        help="TTN transcript ID. TTN is so large that it needs to be treated separately.",
+        default="ENST00000589042",
     )
 
     # Create subparsers for each step
@@ -896,6 +931,11 @@ if __name__ == "__main__":
         """,
         default="gcr.io/broad-mpg-gnomad/rmc:20220304",
         # default="gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220302",
+    )
+
+    run_ttn = subparsers.add_parser(
+        "run-ttn",
+        help="Process TTN. This step should be run in Dataproc on a large autoscaling cluster.",
     )
 
     verify_transcripts = subparsers.add_parser(

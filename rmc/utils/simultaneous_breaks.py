@@ -125,7 +125,9 @@ def group_not_one_break_ht(
     group_ht.write(not_one_break_grouped.path, overwrite=True)
 
 
-def split_transcripts_by_len(ht: hl.Table, transcript_len_threshold: int) -> None:
+def split_transcripts_by_len(
+    ht: hl.Table, transcript_len_threshold: int, ttn_id: str
+) -> None:
     """
     Split transcripts based on the specified number of possible missense variants.
 
@@ -133,6 +135,7 @@ def split_transcripts_by_len(ht: hl.Table, transcript_len_threshold: int) -> Non
 
     :param hl.Table ht: Input Table (Table written using `group_not_one_break_ht`).
     :param int transcript_len_threshold: Possible number of missense variants cutoff.
+    :param str ttn_id: TTN transcript ID. TTN is large and needs to be processed separately.
     :return: None; writes SetExpressions to resource paths (`simul_break_under_threshold`, `simul_break_over_threshold`).
     """
     logger.info("Annotating HT with length of cumulative observed list annotation...")
@@ -158,6 +161,11 @@ def split_transcripts_by_len(ht: hl.Table, transcript_len_threshold: int) -> Non
             hl.agg.collect_as_set(ht.transcript),
         )
     )
+    if over_threshold.contains(ttn_id):
+        logger.warning(
+            "TTN is present in input transcripts! It will need to be run separately."
+        )
+        over_threshold = over_threshold.remove(ttn_id)
     hl.experimental.write_expression(under_threshold, simul_break_under_threshold)
     hl.experimental.write_expression(over_threshold, simul_break_over_threshold)
 
