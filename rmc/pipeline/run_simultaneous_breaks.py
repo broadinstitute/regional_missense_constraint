@@ -10,7 +10,7 @@ Note that a couple functions have been copied into this script from `constraint.
 Note also that a couple functions are contained within this script and not within `simultaneous_breaks.py`:
 - `calculate_window_chisq`
 - `search_for_two_breaks`
-- `process_transcript_groups`
+- `process_transcript_group`
 
 This is because python imports do not work in Hail Batch PythonJobs unless
 the python scripts are included within the provided Dockerfile, and the scripts within the RMC repo are
@@ -513,10 +513,9 @@ def process_transcript_group(
             ),
         )
         n_rows = ht.count()
+        ht = ht.repartition(n_rows)
         ht.write(f"{temp_ht_path}/{transcript_group[0]}_prep.ht", overwrite=True)
-        ht = hl.read_table(
-            f"{temp_ht_path}/{transcript_group[0]}_prep.ht", _n_partitions=n_rows
-        )
+        ht = hl.read_table(f"{temp_ht_path}/{transcript_group[0]}_prep.ht")
     else:
         # Add start_idx struct with i_start, j_start, i_max_idx, j_max_idx annotations
         # (these are expected by `search_for_two_breaks`)
