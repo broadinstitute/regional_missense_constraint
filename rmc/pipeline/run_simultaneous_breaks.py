@@ -948,7 +948,11 @@ if __name__ == "__main__":
 
     run_ttn = subparsers.add_parser(
         "run-ttn",
-        help="Process TTN. This step should be run in Dataproc on a large autoscaling cluster.",
+        help="""
+        Process TTN.
+        This step should be run in Dataproc on a large autoscaling cluster
+        (highmem-8, up to 100 preemptibles).
+        """,
     )
 
     verify_transcripts = subparsers.add_parser(
