@@ -941,12 +941,14 @@ if __name__ == "__main__":
         "--docker-image",
         help="""
         Docker image to provide to hail Batch. Must have dill, hail, and python installed.
+        Suggested image with --under-threshold: gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220302.
+
         If running with --over-threshold, Docker image must also contain this line:
         `ENV PYSPARK_SUBMIT_ARGS="--driver-memory 8g --executor-memory 8g pyspark-shell"`
         to make sure the job allocates memory correctly.
+        Default image (gcr.io/broad-mpg-gnomad/rmc:20220304) has this line.
         """,
         default="gcr.io/broad-mpg-gnomad/rmc:20220304",
-        # default="gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220302",
     )
 
     run_batches_dataproc = subparsers.add_parser(
