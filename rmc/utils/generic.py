@@ -433,13 +433,15 @@ def get_plateau_model(
 
 
 ## Outlier transcript util
-def get_outlier_transcripts() -> hl.expr.SetExpression:
+def get_outlier_transcripts(keep: bool = False) -> hl.expr.SetExpression:
     """
     Read in LoF constraint HT results to get set of outlier transcripts.
 
     Transcripts are removed for the reasons detailed here:
     https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
 
+    :param bool keep: Whether to filter LoF constraint HT to transcripts to keep (if keep is True),
+        or transcripts to remove (if keep is False). Default is False.
     :return: Set of outlier transcripts.
     :rtype: hl.expr.SetExpression
     """
@@ -453,11 +455,18 @@ def get_outlier_transcripts() -> hl.expr.SetExpression:
     constraint_transcript_ht = constraint_transcript_ht.filter(
         constraint_transcript_ht.canonical
     ).select("constraint_flag")
-    constraint_transcript_ht = constraint_transcript_ht.filter(
-        hl.len(constraint_transcript_ht.constraint_flag) > 0
-    )
-    return constraint_transcript_ht.aggregate(
-        hl.agg.collect_as_set(constraint_transcript_ht.transcript), _localize=False,
+    if keep:
+        constraint_transcript_ht = constraint_transcript_ht.filter(
+            hl.len(constraint_transcript_ht.constraint_flag) == 0
+        )
+    else:
+        constraint_transcript_ht = constraint_transcript_ht.filter(
+            hl.len(constraint_transcript_ht.constraint_flag) > 0
+        )
+    return hl.literal(
+        constraint_transcript_ht.aggregate(
+            hl.agg.collect_as_set(constraint_transcript_ht.transcript),
+        )
     )
 
 
@@ -481,11 +490,8 @@ def import_clinvar_hi_variants(build: str, overwrite: bool) -> None:
         clinvar_ht_path = grch37.clinvar_path_mis.path
     else:
         from gnomad.resources.grch38.reference_data import clinvar
-        raise DataException("ClinVar files currently only exist for GRCh37!")
 
-        raise DataException(
-            "RMC Clinvar HT path has not been prepared for build 38 yet!"
-        )
+        raise DataException("ClinVar files currently only exist for GRCh37!")
 
     if not file_exists(clinvar_ht_path) or overwrite:
         logger.info("Reading in ClinVar HT...")
