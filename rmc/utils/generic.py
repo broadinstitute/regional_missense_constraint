@@ -42,23 +42,22 @@ logger.setLevel(logging.INFO)
 
 
 ## Resources from Kaitlin
-def get_codon_lookup() -> Dict[str, str]:
+def get_codon_lookup() -> hl.expr.DictExpression:
     """
     Read in codon lookup table and return as dictionary (key: codon, value: amino acid).
 
     .. note::
         This is only necessary for testing on ExAC and should be replaced with VEP annotations.
 
-    :return: Dictionary of codon translation.
-    :rtype: Dict[str, str]
+    :return: DictExpression of codon translation.
     """
     codon_lookup = {}
     with hl.hadoop_open(CODON_TABLE_PATH) as c:
         c.readline()
         for line in c:
-            line = line.strip().split(" ")
+            line = line.strip().split()
             codon_lookup[line[0]] = line[1]
-    return codon_lookup
+    return hl.literal(codon_lookup)
 
 
 def get_acid_names() -> Dict[str, str]:
