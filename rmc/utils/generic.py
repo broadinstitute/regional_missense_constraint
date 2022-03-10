@@ -144,9 +144,6 @@ def process_context_ht(
     else:
         ht = grch38.full_context.ht()
 
-    # `prepare_ht` annotates HT with: ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
-    ht = prepare_ht(ht, trimers)
-
     logger.info(
         "Filtering to canonical transcripts and annotating with most severe consequence...",
     )
