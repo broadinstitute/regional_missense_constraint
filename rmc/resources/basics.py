@@ -184,6 +184,20 @@ Table containing all transcripts with evidence of regional missense constraint.
 Contains transcripts with one or additional breaks plus simultaneous breaks results.
 """
 
+amino_acids_oe = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{MODEL_PREFIX}/{version}/amino_acid_oe.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table containing all possible amino acid substitutions and their missense OE ratio.
+
+Input to missense badness calculations.
+"""
+
+
 oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/oe_bin.tsv"
 """
 TSV with RMC regions grouped by obs/exp (OE) bin.
