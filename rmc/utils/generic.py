@@ -3,6 +3,7 @@ from typing import Dict, Tuple
 
 import hail as hl
 
+from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.filtering import filter_to_clinvar_pathogenic
@@ -29,7 +30,7 @@ from rmc.resources.basics import (
 from rmc.resources.grch37.gnomad import constraint_ht, filtered_exomes
 import rmc.resources.grch37.reference_data as grch37
 import rmc.resources.grch38.reference_data as grch38
-from rmc.resources.resource_utils import BUILDS, GNOMAD_VER, MISSENSE
+from rmc.resources.resource_utils import BUILDS, CURRENT_VERSION, MISSENSE
 
 
 logging.basicConfig(
@@ -113,7 +114,11 @@ def get_divergence_scores() -> Dict[str, float]:
 
 ## Functions to process reference genome related resources
 def process_context_ht(
-    build: str, trimers: bool = True, missense_str: str = MISSENSE,
+    build: str,
+    trimers: bool = True,
+    filter_to_missense: bool = True,
+    missense_str: str = MISSENSE,
+    add_annotations: bool = True,
 ) -> hl.Table:
     """
     Prepare context HT (SNPs only, annotated with VEP) for regional missense constraint calculations.
@@ -126,7 +131,11 @@ def process_context_ht(
 
     :param str build: Reference genome build; must be one of BUILDS.
     :param bool trimers: Whether to filter to trimers or heptamers. Default is True.
-    :return: Context HT filtered to missense variants in canonical transcripts and annotated with mutation rate, CpG status, and methylation level.
+    :param bool filter_to_missnese: Whether to filter Table to missense variants only. Default is True.
+    :param bool add_annotations: Whether to add mutation rate, CpG status, and methylation level annotations.
+        Default is True.
+    :return: Context HT filtered to canonical transcripts and optionally filtered to missense variants with
+        mutation rate, CpG status, and methylation level annotations.
     :rtype: hl.Table
     """
     if build not in BUILDS:
@@ -134,7 +143,7 @@ def process_context_ht(
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     if build == "GRCh37":
-        ht = grch37.full_context.ht()
+        ht = vep_context.ht()
     else:
         ht = grch38.full_context.ht()
 
@@ -142,27 +151,32 @@ def process_context_ht(
     ht = prepare_ht(ht, trimers)
 
     logger.info(
-        "Filtering to canonical transcripts, annotating with most severe consequence, and filtering to %s...",
-        missense_str,
+        "Filtering to canonical transcripts and annotating with most severe consequence...",
     )
-    ht = process_vep(ht, filter_csq=True, csq=missense_str)
+    if filter_to_missense:
+        logger.info("Filtering to %s...", missense_str)
+        ht = process_vep(ht, filter_csq=True, csq=missense_str)
+    else:
+        ht = process_vep(ht)
 
-    logger.info("Annotating with mutation rate...")
-    # Mutation rate HT is keyed by context, ref, alt, methylation level
-    mu_ht = mutation_rate.ht().select("mu_snp")
-    ht, grouping = annotate_constraint_groupings(ht)
-    ht = ht.select(
-        "context",
-        "ref",
-        "alt",
-        "methylation_level",
-        "exome_coverage",
-        "cpg",
-        "transition",
-        "variant_type",
-        *grouping,
-    )
-    return annotate_with_mu(ht, mu_ht)
+    if add_annotations:
+        logger.info("Annotating with mutation rate...")
+        # Mutation rate HT is keyed by context, ref, alt, methylation level
+        mu_ht = mutation_rate.ht().select("mu_snp")
+        ht, grouping = annotate_constraint_groupings(ht)
+        ht = ht.select(
+            "context",
+            "ref",
+            "alt",
+            "methylation_level",
+            "exome_coverage",
+            "cpg",
+            "transition",
+            "variant_type",
+            *grouping,
+        )
+        return annotate_with_mu(ht, mu_ht)
+    return ht
 
 
 ## Functions for obs/exp related resources
@@ -181,7 +195,7 @@ def get_exome_bases(build: str) -> int:
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     if build == "GRCh37":
-        ht = grch37.full_context.ht()
+        ht = vep_context.ht()
     else:
         ht = grch38.full_context.ht()
 
@@ -232,7 +246,7 @@ def get_avg_bases_between_mis(
     :return: Average number of bases between observed missense variants, rounded to the nearest integer,
     :rtype: int
     """
-    total_variants = TOTAL_GNOMAD_MISSENSE[GNOMAD_VER]
+    total_variants = TOTAL_GNOMAD_MISSENSE[CURRENT_VERSION]
     total_bases = TOTAL_EXOME_BASES[build]
 
     if get_total_exome_bases:

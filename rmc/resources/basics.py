@@ -69,7 +69,7 @@ constraint_prep = VersionedTableResource(
         version: TableResource(
             path=f"{MODEL_PREFIX}/{version}/context_obs_exp_annot.ht"
         )
-        for version in GNOMAD_VERSIONS
+        for version in CURRENT_VERSIONSIONS
     },
 )
 """
@@ -91,7 +91,7 @@ one_break = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
         version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/one_break.ht")
-        for version in GNOMAD_VERSIONS
+        for version in CURRENT_VERSIONSIONS
     },
 )
 """
@@ -104,7 +104,7 @@ not_one_break = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
         version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/not_one_break.ht")
-        for version in GNOMAD_VERSIONS
+        for version in CURRENT_VERSIONSIONS
     },
 )
 """
@@ -114,10 +114,10 @@ Transcripts in this table will be processed to check for two simultaneous breaks
 """
 
 not_one_break_grouped = VersionedTableResource(
-    default_version=GNOMAD_VER,
+    default_version=CURRENT_VERSION,
     versions={
-        GNOMAD_VER: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/not_one_break_grouped.ht"
+        CURRENT_VERSION: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/not_one_break_grouped.ht"
         ),
     },
 )
@@ -131,7 +131,7 @@ multiple_breaks = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
         version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/multiple_breaks.ht")
-        for version in GNOMAD_VERSIONS
+        for version in CURRENT_VERSIONSIONS
     },
 )
 """
@@ -142,7 +142,7 @@ simul_break = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
         version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/simul_break.ht")
-        for version in GNOMAD_VERSIONS
+        for version in CURRENT_VERSIONSIONS
     },
 )
 """
@@ -153,7 +153,7 @@ breaks = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
         version: TableResource(path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/breaks.ht")
-        for version in GNOMAD_VERSIONS
+        for version in CURRENT_VERSIONSIONS
     },
 )
 """
@@ -164,7 +164,7 @@ no_breaks = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
         version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/no_breaks.ht")
-        for version in GNOMAD_VERSIONS
+        for version in CURRENT_VERSIONSIONS
     },
 )
 """
