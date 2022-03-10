@@ -105,10 +105,7 @@ def get_divergence_scores() -> Dict[str, float]:
         d.readline()
         for line in d:
             transcript, score = line.strip().split("\t")
-            try:
-                div_scores[transcript.split(".")[0]] = float(score)
-            except:
-                continue
+            div_scores[transcript.split(".")[0]] = float(score)
     return div_scores
 
 
@@ -130,7 +127,7 @@ def process_context_ht(
         `trimers` needs to be True for gnomAD v2.
 
     :param str build: Reference genome build; must be one of BUILDS.
-    :param bool trimers: Whether to filter to trimers or heptamers. Default is True.
+    :param bool trimers: Whether to filter to trimers (if set to True) or heptamers. Default is True.
     :param bool filter_to_missnese: Whether to filter Table to missense variants only. Default is True.
     :param bool add_annotations: Whether to add mutation rate, CpG status, and methylation level annotations.
         Default is True.
@@ -160,6 +157,9 @@ def process_context_ht(
         ht = process_vep(ht)
 
     if add_annotations:
+        # `prepare_ht` annotates HT with: ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
+        ht = prepare_ht(ht, trimers)
+
         logger.info("Annotating with mutation rate...")
         # Mutation rate HT is keyed by context, ref, alt, methylation level
         mu_ht = mutation_rate.ht().select("mu_snp")
