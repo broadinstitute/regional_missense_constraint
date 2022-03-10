@@ -3,6 +3,7 @@ from typing import Dict, Tuple
 
 import hail as hl
 
+from gnomad.resources.grch37.gnomad import coverage, public_release
 from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
@@ -173,6 +174,32 @@ def process_context_ht(
         )
         return annotate_with_mu(ht, mu_ht)
     return ht
+
+
+def filter_context_using_gnomad(
+    context_ht: hl.Table, gnomad_data_type: str = "exomes", adj_freq_index: int = 0
+) -> hl.Table:
+    """
+    Filter VEP context Table to sites that aren't seen in gnomAD or are rare in gnomAD.
+
+    :param hl.Table context_ht: VEP context Table.
+    :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
+        Default is "exomes".
+    :param adj_freq_index: Index of frequency array that contains global population filtered calculated on
+        high quality (adj) genotypes. Default is 0.
+    :return: Filtered VEP context Table.
+    """
+    gnomad = public_release(gnomad_data_type).ht().select_globals()
+    gnomad_cov = coverage(gnomad_data_type).ht()
+    gnomad = gnomad.select(
+        ac=gnomad.freq[adj_freq_index].AC,
+        af=gnomad.freq[adj_freq_index].AF,
+        pass_filters=hl.len(gnomad.filters) == 0,
+        exome_coverage=gnomad_cov[gnomad.locus].median,
+    )
+    # Filter to sites not seen in gnomAD or to rare sites in gnomAD
+    gnomad_join = gnomad[context_ht.key]
+    return context_ht.filter(hl.is_missing(gnomad_join) | keep_criteria(gnomad_join))
 
 
 ## Functions for obs/exp related resources
