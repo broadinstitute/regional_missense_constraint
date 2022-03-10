@@ -69,7 +69,7 @@ constraint_prep = VersionedTableResource(
         version: TableResource(
             path=f"{MODEL_PREFIX}/{version}/context_obs_exp_annot.ht"
         )
-        for version in CURRENT_VERSIONSIONS
+        for version in GNOMAD_VERSIONS
     },
 )
 """
@@ -91,7 +91,7 @@ one_break = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
         version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/one_break.ht")
-        for version in CURRENT_VERSIONSIONS
+        for version in GNOMAD_VERSIONS
     },
 )
 """
@@ -104,7 +104,7 @@ not_one_break = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
         version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/not_one_break.ht")
-        for version in CURRENT_VERSIONSIONS
+        for version in GNOMAD_VERSIONS
     },
 )
 """
@@ -131,7 +131,7 @@ multiple_breaks = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
         version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/multiple_breaks.ht")
-        for version in CURRENT_VERSIONSIONS
+        for version in GNOMAD_VERSIONS
     },
 )
 """
@@ -142,7 +142,7 @@ simul_break = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
         version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/simul_break.ht")
-        for version in CURRENT_VERSIONSIONS
+        for version in GNOMAD_VERSIONS
     },
 )
 """
@@ -153,7 +153,7 @@ breaks = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
         version: TableResource(path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/breaks.ht")
-        for version in CURRENT_VERSIONSIONS
+        for version in GNOMAD_VERSIONS
     },
 )
 """
@@ -164,11 +164,24 @@ no_breaks = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
         version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/no_breaks.ht")
-        for version in CURRENT_VERSIONSIONS
+        for version in GNOMAD_VERSIONS
     },
 )
 """
 Table containing transcripts with no significant breaks.
+"""
+
+rmc_results = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/rmc_results.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table containing all transcripts with evidence of regional missense constraint.
+
+Contains transcripts with one or additional breaks plus simultaneous breaks results.
 """
 
 oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/oe_bin.tsv"
