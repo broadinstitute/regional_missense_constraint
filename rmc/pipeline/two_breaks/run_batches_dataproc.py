@@ -27,7 +27,7 @@ logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
     datefmt="%m/%d/%Y %I:%M:%S %p",
 )
-logger = logging.getLogger("search_for_two_breaks")
+logger = logging.getLogger("run_batches_dataproc")
 logger.setLevel(logging.INFO)
 
 
