@@ -878,7 +878,7 @@ if __name__ == "__main__":
 
     run_batches = subparsers.add_parser(
         "run-batches",
-        help="Run batches of transcripts using Hail Batch. This step should be run locally.",
+        help="Run batches of transcripts using Hail Batch. This step should be run locally since it submits jobs to Hail Batch.",
     )
     transcript_size = run_batches.add_mutually_exclusive_group(required=True)
     transcript_size.add_argument(
