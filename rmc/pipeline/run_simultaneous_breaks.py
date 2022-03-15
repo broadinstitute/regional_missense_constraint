@@ -664,6 +664,7 @@ def main(args):
                 for group in transcript_groups:
                     j = b.new_python_job(name=group[0])
                     if args.use_custom_machine:
+                        # NOTE: you do not specify memory and cpu when specifying a custom machine
                         j = b.new_python_job(name=job_name)
                         j._machine_type = "n1-highmem-32"
                         j._preemptible = True
