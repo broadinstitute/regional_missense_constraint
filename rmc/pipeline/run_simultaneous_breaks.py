@@ -880,7 +880,7 @@ if __name__ == "__main__":
         "run-batches",
         help="Run batches of transcripts using Hail Batch. This step should be run locally.",
     )
-    transcript_size = run_batches.add_mutually_exclusive_group()
+    transcript_size = run_batches.add_mutually_exclusive_group(required=True)
     transcript_size.add_argument(
         "--under-threshold",
         help="Transcripts in batch should have less than --transcript-len-threshold possible missense positions.",
