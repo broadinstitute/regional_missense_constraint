@@ -550,8 +550,6 @@ def process_transcript_group(
 
 def main(args):
     """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
-    if not args.command:
-        raise DataException("Please specify command for this script!")
 
     try:
 
