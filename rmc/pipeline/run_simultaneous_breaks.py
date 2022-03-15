@@ -908,7 +908,11 @@ if __name__ == "__main__":
     )
     run_batches.add_argument(
         "--use-custom-machine",
-        help="Use custom large machine for hail batch rather than setting batch memory, cpu, and storage. Only necessary if --over-threshold.",
+        help="""
+        Use custom large machine for hail batch rather than setting batch memory, cpu, and storage.
+        Used when the batch defaults are not enough and jobs run into out of memory errors.
+        Only necessary if --over-threshold.
+        """,
         action="store_true",
     )
     run_batches.add_argument(
