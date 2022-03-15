@@ -888,7 +888,7 @@ if __name__ == "__main__":
     )
     transcript_size.add_argument(
         "--over-threshold",
-        help="Transcripts in batch should have more than --transcript-len-threshold possible missense positions.",
+        help="Transcripts in batch should greater than or equal to --transcript-len-threshold possible missense positions.",
         action="store_true",
     )
     run_batches.add_argument(
