@@ -599,11 +599,6 @@ def main(args):
                 )
 
             logger.info("Importing SetExpression with transcripts...")
-            if not args.under_threshold and not args.over_threshold:
-                raise DataException(
-                    "Must specify if transcript sizes are --under-threshold or --over-threshold!"
-                )
-
             transcripts_to_run = check_for_successful_transcripts(
                 transcripts=(
                     list(
