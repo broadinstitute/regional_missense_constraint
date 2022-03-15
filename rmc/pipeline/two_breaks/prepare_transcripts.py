@@ -79,7 +79,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        "This regional missense constraint script searches for two simultaneous breaks in transcripts without evidence of a single significant break."
+        "This regional missense constraint script prepares the input Table and transcripts for the two simultaneous breaks search."
     )
     parser.add_argument(
         "--overwrite", help="Overwrite existing data.", action="store_true"
