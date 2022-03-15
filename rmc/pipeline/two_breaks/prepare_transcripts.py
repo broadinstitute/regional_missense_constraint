@@ -38,9 +38,8 @@ logger.setLevel(logging.INFO)
 
 
 def main(args):
-    """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
+    """Prepare input Table and transcripts for two simultaneous breaks search."""
     try:
-
         if args.command == "create-grouped-ht":
             hl.init(log="/search_for_two_breaks_create_grouped_ht.log")
 
