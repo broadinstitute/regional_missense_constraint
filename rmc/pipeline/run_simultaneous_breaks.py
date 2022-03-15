@@ -550,8 +550,6 @@ def process_transcript_group(
 
 def main(args):
     """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
-    if not args.command:
-        raise DataException("Please specify command for this script!")
 
     try:
 
@@ -601,11 +599,6 @@ def main(args):
                 )
 
             logger.info("Importing SetExpression with transcripts...")
-            if not args.under_threshold and not args.over_threshold:
-                raise DataException(
-                    "Must specify if transcript sizes are --under-threshold or --over-threshold!"
-                )
-
             transcripts_to_run = check_for_successful_transcripts(
                 transcripts=(
                     list(
@@ -799,7 +792,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        "This regional missense constraint script two simultaneous breaks in transcripts without evidence of a single significant break."
+        "This regional missense constraint script searches for two simultaneous breaks in transcripts without evidence of a single significant break."
     )
     parser.add_argument(
         "--chisq-threshold",
@@ -824,7 +817,7 @@ if __name__ == "__main__":
     # Create subparsers for each step
     # Need to specify `dest` to be able to check which subparser is being invoked
     # `dest`: https://docs.python.org/3/library/argparse.html#dest
-    subparsers = parser.add_subparsers(title="command", dest="command")
+    subparsers = parser.add_subparsers(title="command", dest="command", required=True)
 
     create_grouped_ht = subparsers.add_parser(
         "create-grouped-ht",
@@ -878,9 +871,9 @@ if __name__ == "__main__":
 
     run_batches = subparsers.add_parser(
         "run-batches",
-        help="Run batches of transcripts using Hail Batch. This step should be run locally.",
+        help="Run batches of transcripts using Hail Batch. This step should be run locally since it submits jobs to Hail Batch.",
     )
-    transcript_size = run_batches.add_mutually_exclusive_group()
+    transcript_size = run_batches.add_mutually_exclusive_group(required=True)
     transcript_size.add_argument(
         "--under-threshold",
         help="Transcripts in batch should have less than --transcript-len-threshold possible missense positions.",

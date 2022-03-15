@@ -46,7 +46,8 @@ RUN apt-get update \
     libssl-dev \
     openssl \
     python-smbus \
-    python3 python-pip
+    python3 \
+    python-pip
 
 # Upgrade pip to latest version
 RUN python3 -m pip install --upgrade pip
