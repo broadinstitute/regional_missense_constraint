@@ -824,7 +824,7 @@ if __name__ == "__main__":
     # Create subparsers for each step
     # Need to specify `dest` to be able to check which subparser is being invoked
     # `dest`: https://docs.python.org/3/library/argparse.html#dest
-    subparsers = parser.add_subparsers(title="command", dest="command")
+    subparsers = parser.add_subparsers(title="command", dest="command", required=True)
 
     create_grouped_ht = subparsers.add_parser(
         "create-grouped-ht",
