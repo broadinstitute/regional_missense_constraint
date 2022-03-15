@@ -142,7 +142,7 @@ def split_transcripts_by_len(
     # This length is the number of positions with possible missense variants that need to be searched
     # Not using transcript size here because transcript size
     # doesn't necessarily reflect the number of positions that need to be searched
-    ht = ht.annotate(list_len=hl.len(ht.cum_obs))
+    ht = ht.annotate(missense_list_len=hl.len(ht.cum_obs))
 
     logger.info(
         "Splitting transcripts into two categories: list length < %i and list length >= %i...",
@@ -151,13 +151,13 @@ def split_transcripts_by_len(
     )
     under_threshold = ht.aggregate(
         hl.agg.filter(
-            ht.list_len < transcript_len_threshold,
+            ht.missense_list_len < transcript_len_threshold,
             hl.agg.collect_as_set(ht.transcript),
         )
     )
     over_threshold = ht.aggregate(
         hl.agg.filter(
-            ht.list_len >= transcript_len_threshold,
+            ht.missense_list_len >= transcript_len_threshold,
             hl.agg.collect_as_set(ht.transcript),
         )
     )

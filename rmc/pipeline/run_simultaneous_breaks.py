@@ -490,18 +490,19 @@ def process_transcript_group(
             start_idx=hl.flatmap(
                 lambda i: hl.map(
                     lambda j: hl.struct(i_start=i, j_start=j),
-                    hl.range(0, ht.list_len, split_window_size),
+                    hl.range(0, ht.missense_list_len, split_window_size),
                 ),
-                hl.range(0, ht.list_len, split_window_size),
+                hl.range(0, ht.missense_list_len, split_window_size),
             )
         )
+        # Remove rows where j_start is smaller than i_start
+        ht = ht.filter(ht.start_idx.j_start >= ht.start_idx.i_start)
         ht = ht.explode("start_idx")
         ht = ht.annotate(i=ht.start_idx.i_start, j=ht.start_idx.j_start)
         ht = ht._key_by_assert_sorted("transcript", "i", "j")
-        ht = ht.filter(ht.j >= ht.i)
         ht = ht.annotate(
-            i_max_idx=hl.min(ht.i + split_window_size, ht.list_len - 1),
-            j_max_idx=hl.min(ht.j + split_window_size, ht.list_len - 1),
+            i_max_idx=hl.min(ht.i + split_window_size, ht.missense_list_len - 1),
+            j_max_idx=hl.min(ht.j + split_window_size, ht.missense_list_len - 1),
         )
         ht = ht.annotate(
             start_idx=ht.start_idx.annotate(
@@ -550,7 +551,6 @@ def process_transcript_group(
 
 def main(args):
     """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
-
     try:
 
         if args.command == "create-grouped-ht":
@@ -911,7 +911,7 @@ if __name__ == "__main__":
     )
     run_batches.add_argument(
         "--use-custom-machine",
-        help="Use custom machine for hail batch rather than setting batch memory, cpu, and storage. Only necessary if --over-threshold.",
+        help="Use custom large machine for hail batch rather than setting batch memory, cpu, and storage. Only necessary if --over-threshold.",
         action="store_true",
     )
     run_batches.add_argument(
