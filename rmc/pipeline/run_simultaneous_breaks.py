@@ -622,22 +622,11 @@ def main(args):
                 remote_tmpdir=args.batch_bucket,
                 google_project=args.google_project,
             )
-
-            if args.use_custom_machine:
-                b = hb.Batch(
-                    name="simul_breaks",
-                    backend=backend,
-                    default_python_image=args.docker_image,
-                )
-            else:
-                b = hb.Batch(
-                    name="simul_breaks",
-                    backend=backend,
-                    default_memory=args.batch_memory,
-                    default_cpu=args.batch_cpu,
-                    default_storage=args.batch_storage,
-                    default_python_image=args.docker_image,
-                )
+            b = hb.Batch(
+                name="simul_breaks",
+                backend=backend,
+                default_python_image=args.docker_image,
+            )
 
             if args.under_threshold:
                 transcript_groups = [
@@ -653,6 +642,9 @@ def main(args):
                         f'group{count}{"over" if args.over_threshold else "under"}'
                     )
                     j = b.new_python_job(name=job_name)
+                    j.memory(args.batch_memory)
+                    j.cpu(args.batch_cpu)
+                    j.storage(args.batch_storage)
                     j.call(
                         process_transcript_group,
                         not_one_break_grouped.path,
@@ -676,6 +668,10 @@ def main(args):
                         j._machine_type = "n1-highmem-32"
                         j._preemptible = True
                         j.storage("100Gi")
+                    else:
+                        j.memory(args.batch_memory)
+                        j.cpu(args.batch_cpu)
+                        j.storage(args.batch_storage)
                     j.call(
                         process_transcript_group,
                         "gs://gnomad-tmp/kc/test_100_over5k.ht",
