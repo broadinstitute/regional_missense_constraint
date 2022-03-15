@@ -486,6 +486,9 @@ def process_transcript_group(
         # [i_start=0, j_start=0], [i_start=0, j_start=500], [i_start=0, j_start=1000],
         # [i_start=500, j_start=0], [i_start=500, j_start=500], [i_start=500, j_start=1000],
         # [i_start=1000, j_start=0], [i_start=1000, j_start=500], [i_start=1000, j_start=1000]
+        # The only windows that should be kept and processed are:
+        # [i_start=0, j_start=0], [i_start=0, j_start=500], [i_start=0, j_start=1000],
+        # [i_start=500, j_start=1000]
         ht = ht.annotate(
             start_idx=hl.flatmap(
                 lambda i: hl.map(
@@ -495,8 +498,11 @@ def process_transcript_group(
                 hl.range(0, ht.missense_list_len, split_window_size),
             )
         )
-        # Remove rows where j_start is smaller than i_start
-        ht = ht.filter(ht.start_idx.j_start >= ht.start_idx.i_start)
+        # Remove rows where j_start is smaller than i_start unless i_start and j_start are both 0
+        ht = ht.filter(
+            ((ht.start_idx.j_start == 0) & (ht.start_idx.i_start == 0))
+            | (ht.start_idx.j_start > ht.start_idx.i_start)
+        )
         ht = ht.explode("start_idx")
         ht = ht.annotate(i=ht.start_idx.i_start, j=ht.start_idx.j_start)
         ht = ht._key_by_assert_sorted("transcript", "i", "j")
