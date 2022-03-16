@@ -596,7 +596,7 @@ def process_transcript_group(
         # [i_start=1000, j_start=0], [i_start=1000, j_start=500], [i_start=1000, j_start=1000]
         # The only windows that should be kept and processed are:
         # [i_start=0, j_start=0], [i_start=0, j_start=500], [i_start=0, j_start=1000],
-        # [i_start=500, j_start=1000]
+        # [i_start=500, j_start=500], [i_start=500, j_start=1000]
         ht = ht.annotate(
             start_idx=hl.flatmap(
                 lambda i: hl.map(
