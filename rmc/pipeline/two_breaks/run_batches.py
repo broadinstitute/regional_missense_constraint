@@ -637,7 +637,11 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        "This regional missense constraint script searches for two simultaneous breaks in transcripts without evidence of a single significant break."
+        description="""
+        This regional missense constraint script searches for two simultaneous breaks in transcripts without evidence
+        of a single significant break.
+        """,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
         "--chisq-threshold",
