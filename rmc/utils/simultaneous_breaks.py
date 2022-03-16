@@ -128,7 +128,7 @@ def group_not_one_break_ht(
 
 
 def split_transcripts_by_len(
-    ht: hl.Table, transcript_len_threshold: int, ttn_id: str
+    ht: hl.Table, transcript_len_threshold: int, ttn_id: str, overwrite: bool,
 ) -> None:
     """
     Split transcripts based on the specified number of possible missense variants.
@@ -138,6 +138,7 @@ def split_transcripts_by_len(
     :param hl.Table ht: Input Table (Table written using `group_not_one_break_ht`).
     :param int transcript_len_threshold: Possible number of missense variants cutoff.
     :param str ttn_id: TTN transcript ID. TTN is large and needs to be processed separately.
+    :param bool overwrite: Whether to overwrite existing SetExpressions.
     :return: None; writes SetExpressions to resource paths (`simul_break_under_threshold`, `simul_break_over_threshold`).
     """
     logger.info("Annotating HT with length of cumulative observed list annotation...")
@@ -163,13 +164,19 @@ def split_transcripts_by_len(
             hl.agg.collect_as_set(ht.transcript),
         )
     )
-    if over_threshold.contains(ttn_id):
+    if ttn_id in list(over_threshold):
         logger.warning(
             "TTN is present in input transcripts! It will need to be run separately."
         )
-        over_threshold = over_threshold.remove(ttn_id)
-    hl.experimental.write_expression(under_threshold, simul_break_under_threshold)
-    hl.experimental.write_expression(over_threshold, simul_break_over_threshold)
+        over_threshold = list(over_threshold)
+        over_threshold.remove(ttn_id)
+        over_threshold = set(over_threshold)
+    hl.experimental.write_expression(
+        under_threshold, simul_break_under_threshold, overwrite
+    )
+    hl.experimental.write_expression(
+        over_threshold, simul_break_over_threshold, overwrite
+    )
 
 
 def check_for_successful_transcripts(
@@ -585,6 +592,7 @@ def process_transcript_group(
     """
     ht = hl.read_table(ht_path)
     ht = ht.filter(hl.literal(transcript_group).contains(ht.transcript))
+    ht = ht.annotate(missense_list_len=hl.len(ht.cum_obs))
 
     if over_threshold:
         # If transcripts longer than threshold, split transcripts into multiple rows

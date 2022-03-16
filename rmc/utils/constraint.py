@@ -1,7 +1,10 @@
 import logging
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Set, Tuple, Union
 
 import hail as hl
+
+from gnomad.utils.file_utils import file_exists
+from gnomad.resources.resource_utils import DataException
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 

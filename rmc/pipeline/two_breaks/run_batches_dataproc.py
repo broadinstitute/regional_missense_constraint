@@ -92,10 +92,8 @@ if __name__ == "__main__":
         "--group-size",
         help="""
         Number of transcripts to include in each group of transcripts to be run.
-        Default is 50.
         """,
         type=int,
-        default=50,
     )
     parser.add_argument(
         "--window-size",

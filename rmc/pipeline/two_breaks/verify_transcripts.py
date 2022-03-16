@@ -79,7 +79,7 @@ if __name__ == "__main__":
         default="@kc (she/her)",
     )
     parser.add_argument(
-        "--TTN",
+        "--ttn",
         help="TTN transcript ID. TTN is so large that it needs to be treated separately.",
         default="ENST00000589042",
     )

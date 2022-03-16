@@ -65,11 +65,12 @@ def main(args):
 
         if args.command == "split-transcripts":
             logger.warning("This step should be run in Dataproc!")
-            hl.init(log="/search_for_two_breaks_split_Transcripts.log")
+            hl.init(log="/search_for_two_breaks_split_transcripts.log")
             split_transcripts_by_len(
                 ht=not_one_break_grouped.ht(),
                 transcript_len_threshold=args.transcript_len_threshold,
                 ttn_id=args.ttn,
+                overwrite=args.overwrite,
             )
 
     finally:
@@ -144,6 +145,11 @@ if __name__ == "__main__":
         help="Cutoff for number of possible missense positions in transcript. Used to create batches of transcripts.",
         type=int,
         default=5000,
+    )
+    split_transcripts.add_argument(
+        "--ttn",
+        help="TTN transcript ID. TTN is so large that it needs to be treated separately.",
+        default="ENST00000589042",
     )
     args = parser.parse_args()
 
