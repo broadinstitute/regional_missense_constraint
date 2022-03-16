@@ -114,10 +114,10 @@ Transcripts in this table will be processed to check for two simultaneous breaks
 """
 
 not_one_break_grouped = VersionedTableResource(
-    default_version=GNOMAD_VER,
+    default_version=CURRENT_VERSION,
     versions={
-        GNOMAD_VER: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{GNOMAD_VER}/not_one_break_grouped.ht"
+        CURRENT_VERSION: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/not_one_break_grouped.ht"
         ),
     },
 )
@@ -138,12 +138,14 @@ multiple_breaks = VersionedTableResource(
 Table containing transcripts with multiple breaks.
 """
 
-simul_break_under_threshold = f"{MODEL_PREFIX}/{GNOMAD_VER}/transcripts_under_5k.he"
+simul_break_under_threshold = (
+    f"{MODEL_PREFIX}/{CURRENT_VERSION}/transcripts_under_5k.he"
+)
 """
 SetExpression containing transcripts with fewer possible missense positions than cutoff specified in `run_simultaneous_breaks.py`.
 """
 
-simul_break_over_threshold = f"{MODEL_PREFIX}/{GNOMAD_VER}/transcripts_over_5k.he"
+simul_break_over_threshold = f"{MODEL_PREFIX}/{CURRENT_VERSION}/transcripts_over_5k.he"
 """
 SetExpression containing transcripts with greater than or equal to the cutoff for possible missense positions.
 """
