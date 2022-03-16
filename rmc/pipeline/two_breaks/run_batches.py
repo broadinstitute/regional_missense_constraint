@@ -608,7 +608,6 @@ def main(args):
     else:
         transcript_groups = [[transcript] for transcript in transcripts_to_run]
         for group in transcript_groups:
-            j = b.new_python_job(name=group[0])
             if args.use_custom_machine:
                 # NOTE: you do not specify memory and cpu when specifying a custom machine
                 j = b.new_python_job(name=job_name)
@@ -616,6 +615,7 @@ def main(args):
                 j._preemptible = True
                 j.storage("100Gi")
             else:
+                j = b.new_python_job(name=group[0])
                 j.memory(args.batch_memory)
                 j.cpu(args.batch_cpu)
                 j.storage(args.batch_storage)
