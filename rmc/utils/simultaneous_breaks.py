@@ -592,6 +592,7 @@ def process_transcript_group(
     """
     ht = hl.read_table(ht_path)
     ht = ht.filter(hl.literal(transcript_group).contains(ht.transcript))
+    ht = ht.annotate(missense_list_len=hl.len(ht.cum_obs))
 
     if over_threshold:
         # If transcripts longer than threshold, split transcripts into multiple rows
