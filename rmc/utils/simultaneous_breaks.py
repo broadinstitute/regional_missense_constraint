@@ -589,7 +589,7 @@ def process_transcript_group(
     if over_threshold:
         # If transcripts longer than threshold, split transcripts into multiple rows
         # Each row has a window to search
-        # E.g., if a transcript has 1000 possible missense variants, and the `split_window_size` is 500,
+        # E.g., if a transcript has 1003 possible missense variants, and the `split_window_size` is 500,
         # then this section will split that transcript into 9 rows, with the following windows:
         # [i_start=0, j_start=0], [i_start=0, j_start=500], [i_start=0, j_start=1000],
         # [i_start=500, j_start=0], [i_start=500, j_start=500], [i_start=500, j_start=1000],
