@@ -56,8 +56,8 @@ Contains multiple mutation rate annotations:
 constraint_ht = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
-        CURRENT_VERSION: TableResource(
-            path=f"{FLAGSHIP_LOF}/standard/constraint_standard.ht"
+        GNOMAD_VER: TableResource(
+            path="gs://gcp-public-data--gnomad/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_transcript.ht"
         )
     },
 )
