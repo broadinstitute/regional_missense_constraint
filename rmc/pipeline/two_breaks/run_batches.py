@@ -488,8 +488,10 @@ def process_transcript_group(
                 hl.range(0, ht.missense_list_len, split_window_size),
             )
         )
-        # Remove rows where j_start is smaller than i_start
-        ht = ht.filter(ht.start_idx.j_start >= ht.start_idx.i_start)
+        # Remove entries in `start_idx` struct where j_start is smaller than i_start
+        ht = ht.annotate(
+            start_idx=hl.filter(lambda x: x.j_start >= x.i_start, ht.start_idx)
+        )
         ht = ht.explode("start_idx")
         ht = ht.annotate(i=ht.start_idx.i_start, j=ht.start_idx.j_start)
         ht = ht._key_by_assert_sorted("transcript", "i", "j")
