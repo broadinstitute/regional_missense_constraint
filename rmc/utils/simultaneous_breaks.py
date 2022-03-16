@@ -163,11 +163,12 @@ def split_transcripts_by_len(
             hl.agg.collect_as_set(ht.transcript),
         )
     )
-    if over_threshold.contains(ttn_id):
+    if ttn_id in list(over_threshold):
         logger.warning(
             "TTN is present in input transcripts! It will need to be run separately."
         )
-        over_threshold = over_threshold.remove(ttn_id)
+        over_threshold.remove(ttn_id)
+        over_threshold = set(over_threshold)
     hl.experimental.write_expression(under_threshold, simul_break_under_threshold)
     hl.experimental.write_expression(over_threshold, simul_break_over_threshold)
 
