@@ -70,6 +70,7 @@ def main(args):
                 ht=not_one_break_grouped.ht(),
                 transcript_len_threshold=args.transcript_len_threshold,
                 ttn_id=args.ttn,
+                overwrite=args.overwrite,
             )
 
     finally:
