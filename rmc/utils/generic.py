@@ -29,7 +29,7 @@ from rmc.resources.basics import (
 from rmc.resources.grch37.gnomad import constraint_ht, filtered_exomes
 import rmc.resources.grch37.reference_data as grch37
 import rmc.resources.grch38.reference_data as grch38
-from rmc.resources.resource_utils import BUILDS, GNOMAD_VER, MISSENSE
+from rmc.resources.resource_utils import BUILDS, CURRENT_VERSION, MISSENSE
 
 
 logging.basicConfig(
@@ -232,7 +232,7 @@ def get_avg_bases_between_mis(
     :return: Average number of bases between observed missense variants, rounded to the nearest integer,
     :rtype: int
     """
-    total_variants = TOTAL_GNOMAD_MISSENSE[GNOMAD_VER]
+    total_variants = TOTAL_GNOMAD_MISSENSE[CURRENT_VERSION]
     total_bases = TOTAL_EXOME_BASES[build]
 
     if get_total_exome_bases:
@@ -481,6 +481,7 @@ def import_clinvar_hi_variants(build: str, overwrite: bool) -> None:
         clinvar_ht_path = grch37.clinvar_path_mis.path
     else:
         from gnomad.resources.grch38.reference_data import clinvar
+
         raise DataException("ClinVar files currently only exist for GRCh37!")
 
         raise DataException(
