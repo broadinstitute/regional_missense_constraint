@@ -606,11 +606,8 @@ def process_transcript_group(
                 hl.range(0, ht.missense_list_len, split_window_size),
             )
         )
-        # Remove rows where j_start is smaller than i_start unless i_start and j_start are both 0
-        ht = ht.filter(
-            ((ht.start_idx.j_start == 0) & (ht.start_idx.i_start == 0))
-            | (ht.start_idx.j_start > ht.start_idx.i_start)
-        )
+        # Remove rows where j_start is smaller than i_start
+        ht = ht.filter(ht.start_idx.j_start >= ht.start_idx.i_start)
         ht = ht.explode("start_idx")
         ht = ht.annotate(i=ht.start_idx.i_start, j=ht.start_idx.j_start)
         ht = ht._key_by_assert_sorted("transcript", "i", "j")
@@ -618,6 +615,7 @@ def process_transcript_group(
             i_max_idx=hl.min(ht.i + split_window_size, ht.missense_list_len - 1),
             j_max_idx=hl.min(ht.j + split_window_size, ht.missense_list_len - 1),
         )
+        # Adjust j_start in rows where j_start is the same as i_start
         ht = ht.annotate(
             start_idx=ht.start_idx.annotate(
                 j_start=hl.if_else(
