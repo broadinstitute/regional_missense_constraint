@@ -43,10 +43,22 @@ def main(args):
             .strip()
             .split("\n")
         )
+        ht_count = 0
         for ht_path in temp_ht_paths:
             ht_path = ht_path.strip("/")
-            temp = hl.read_table(ht_path)
-            intermediate_hts.append(temp)
+            if ht_path.endswith("ht"):
+                ht_count += 1
+                logger.info("Working on %s", ht_path)
+                temp = hl.read_table(ht_path)
+                if temp.count() > 0:
+                    # Tables containing transcripts that are over the transcript length threshold are keyed by transcript, i, j
+                    # Tables containing transcripts that are under the length threshold are keyed only by transcript
+                    # Rekey all tables here and select only the required fields to ensure the union on line 61 is able to work
+                    # Use `.key_by_assert_sorted` to avoid shuffling on this rekey
+                    temp = temp._key_by_assert_sorted("transcript")
+                    temp = temp.select("max_chisq", "start_pos", "end_pos")
+                    intermediate_hts.append(temp)
+        logger.info("Found %i HTs and appended %i", ht_count, len(intermediate_hts))
 
         ht = intermediate_hts[0].union(*intermediate_hts[1:])
         ht = ht.checkpoint(simul_break.path, overwrite=args.overwrite)
