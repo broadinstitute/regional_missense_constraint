@@ -58,6 +58,8 @@ def main(args):
                     temp = temp._key_by_assert_sorted("transcript")
                     temp = temp.select("max_chisq", "start_pos", "end_pos")
                     intermediate_hts.append(temp)
+                else:
+                    logger.warning("%s had 0 rows", ht_path)
         logger.info("Found %i HTs and appended %i", ht_count, len(intermediate_hts))
 
         ht = intermediate_hts[0].union(*intermediate_hts[1:])
