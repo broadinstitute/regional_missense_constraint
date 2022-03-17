@@ -198,9 +198,7 @@ def check_for_successful_transcripts(
     transcript_success_map = {}
     transcripts_to_run = []
     for transcript in transcripts:
-        transcript_success_map[
-            transcript
-        ] = f"{success_file_path}/{transcript}_success.tsv"
+        transcript_success_map[transcript] = f"{success_file_path}/{transcript}.tsv"
 
     if in_parallel:
         # Use parallel_file_exists if in_parallel is set to True
