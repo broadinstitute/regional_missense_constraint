@@ -194,7 +194,7 @@ def check_for_successful_transcripts(
     :return: List of transcripts didn't have success TSVs and therefore still need to be processed.
     """
     logger.info("Checking if any transcripts have already been searched...")
-    success_file_path = f"{simul_break_temp}success_files"
+    success_file_path = f"{simul_break_temp}/success_files"
     transcript_success_map = {}
     transcripts_to_run = []
     for transcript in transcripts:

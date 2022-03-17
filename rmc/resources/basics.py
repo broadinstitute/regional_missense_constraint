@@ -150,7 +150,7 @@ simul_break_over_threshold = f"{MODEL_PREFIX}/{CURRENT_VERSION}/transcripts_over
 SetExpression containing transcripts with greater than or equal to the cutoff for possible missense positions.
 """
 
-simul_break_temp = f"{temp_path}/simul_breaks/"
+simul_break_temp = f"{temp_path}/simul_breaks"
 """
 Bucket to store temporary results for simultaneous results.
 """
