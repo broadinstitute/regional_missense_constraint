@@ -13,6 +13,8 @@ import logging
 
 import hail as hl
 
+from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
@@ -56,6 +58,11 @@ def main(args):
                 if args.ttn
                 else f"{simul_break_temp}/hts/simul_break_dataproc_{counter}.ht"
             )
+            if file_exists(output_ht):
+                raise DataException(
+                    f"Output already exists at {output_ht}! Double check before running script again."
+                )
+
             process_transcript_group(
                 ht_path=not_one_break_grouped.path,
                 transcript_group=group,
