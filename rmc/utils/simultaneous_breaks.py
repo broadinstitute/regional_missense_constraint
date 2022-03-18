@@ -669,7 +669,7 @@ def process_transcript_group(
                 transcript_max_chisq=hl.agg.max(ht.max_chisq)
             )
             ht = ht.annotate(transcript_max_chisq=group_ht.transcript_max_chisq)
-            ht = ht.filter(ht.max_chisq == group_ht.transcript_max_chisq)
+            ht = ht.filter(ht.max_chisq == ht.transcript_max_chisq)
 
     ht.write(output_ht_path, overwrite=True)
 
