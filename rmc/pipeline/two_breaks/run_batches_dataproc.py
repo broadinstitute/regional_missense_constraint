@@ -122,8 +122,8 @@ if __name__ == "__main__":
     )
     transcript_ids.add_argument(
         "--ttn",
-        help="TTN transcript ID. TTN is so large that it needs to be treated separately.",
-        default="ENST00000589042",
+        help="Run TTN. TTN is so large that it needs to be treated separately.",
+        action="store_true",
     )
 
     args = parser.parse_args()
