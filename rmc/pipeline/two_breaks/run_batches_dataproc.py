@@ -55,7 +55,7 @@ def main(args):
         for counter, group in enumerate(transcript_groups):
             output_ht = (
                 f"{simul_break_temp}/hts/simul_break_dataproc_ttn.ht"
-                if args.ttn
+                if args.run_ttn
                 else f"{simul_break_temp}/hts/simul_break_dataproc_{counter}.ht"
             )
             if file_exists(output_ht):
