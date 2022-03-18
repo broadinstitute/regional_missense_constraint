@@ -67,7 +67,7 @@ def main(args):
         logger.info("Wrote simultaneous breaks HT with %i lines", ht.count())
 
         # Collect all transcripts with two simultaneous breaks
-        simul_break_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript),)
+        simul_break_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
         logger.info(
             "%i transcripts had two simultaneous breaks", len(simul_break_transcripts),
         )
