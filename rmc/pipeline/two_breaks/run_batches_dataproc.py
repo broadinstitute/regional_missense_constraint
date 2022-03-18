@@ -72,6 +72,7 @@ def main(args):
                 temp_ht_path=f"{simul_break_temp}",
                 chisq_threshold=args.chisq_threshold,
                 split_window_size=args.window_size,
+                read_if_exists=args.read_if_exists,
             )
 
     finally:
@@ -129,6 +130,11 @@ if __name__ == "__main__":
         "--ttn-id",
         help="TTN transcript ID. TTN is so large that it needs to be treated separately.",
         default="ENST00000589042",
+    )
+    parser.add_argument(
+        "--read_if_exists",
+        help="Use temporary Tables if they already exist.",
+        action="store_true",
     )
 
     args = parser.parse_args()
