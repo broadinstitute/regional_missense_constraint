@@ -132,7 +132,7 @@ if __name__ == "__main__":
         default="ENST00000589042",
     )
     parser.add_argument(
-        "--read_if_exists",
+        "--read-if-exists",
         help="Use temporary Tables if they already exist.",
         action="store_true",
     )
