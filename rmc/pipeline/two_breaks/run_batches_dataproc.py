@@ -38,8 +38,8 @@ def main(args):
     try:
         logger.warning("This step should be run on an autoscaling cluster!")
         hl.init(log="/search_for_two_breaks_run_batches_dataproc.log")
-        if args.ttn:
-            transcript_groups = [[args.ttn]]
+        if args.run_ttn:
+            transcript_groups = [[args.ttn_id]]
         else:
             transcripts_to_run = args.transcripts_to_run.split(",")
             if args.group_size:
@@ -121,9 +121,14 @@ if __name__ == "__main__":
         "--transcripts-to-run", help="Comma separated list of transcript IDs to run."
     )
     transcript_ids.add_argument(
-        "--ttn",
+        "--run-ttn",
         help="Run TTN. TTN is so large that it needs to be treated separately.",
         action="store_true",
+    )
+    parser.add_argument(
+        "--ttn-id",
+        help="TTN transcript ID. TTN is so large that it needs to be treated separately.",
+        default="ENST00000589042",
     )
 
     args = parser.parse_args()
