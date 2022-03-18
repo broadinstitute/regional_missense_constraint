@@ -658,8 +658,11 @@ def process_transcript_group(
         # If any rows had a significant breakpoint,
         # find the one "best" breakpoint (breakpoint with largest chi square value)
         if ht.count() > 0:
-            max_chisq = ht.aggregate(hl.agg.max(ht.max_chisq))
-            ht = ht.filter(ht.max_chisq == max_chisq)
+            group_ht = ht.group_by("transcript").aggregate(
+                transcript_max_chisq=hl.agg.max(ht.max_chisq)
+            )
+            ht = ht.annotate(transcript_max_chisq=group_ht.transcript_max_chisq)
+            ht = ht.filter(ht.max_chisq == group_ht.transcript_max_chisq)
 
     ht.write(output_ht_path, overwrite=True)
 
