@@ -480,6 +480,9 @@ def search_for_two_breaks(
             group_ht.total_oe,
         )
 
+        # Make sure chi square isn't NAN
+        chisq = hl.nanmax(chisq, -1)
+
         # Update current best indices and chi square if new chi square (calculated above)
         # is better than the current stored value (`cur_max_chisq`)
         cur_best_i = hl.if_else(chisq > cur_max_chisq, i, cur_best_i)
