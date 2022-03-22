@@ -24,7 +24,7 @@ from rmc.resources.grch37.gnomad import (
     prop_obs_coverage,
 )
 from rmc.resources.grch37.reference_data import processed_context
-from rmc.resources.resource_utils import GNOMAD_VER, MISSENSE
+from rmc.resources.resource_utils import CURRENT_VERSION, MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     calculate_exp_per_transcript,
@@ -522,7 +522,7 @@ def main(args):
                 ~total_rmc_transcripts.contains(context_ht.transcript)
             )
 
-            if GNOMAD_VER == "2.1.1":
+            if CURRENT_VERSION == "2.1.1":
                 logger.info("Reading in XG HT (one-off fix in v2.1.1)...")
                 xg_ht = hl.read_table(f"{temp_path}/XG.ht").select(
                     "total_mu",
