@@ -136,10 +136,15 @@ def calculate_window_chisq(
                         get_dpois_expr(
                             cond_expr=True,
                             section_oe_expr=get_obs_exp_expr(
-                                True, cum_obs[j], cum_exp[j]
+                                # Make sure the expected value is NOT 0 here
+                                # When running this code on gnomAD v2, found that some transcripts have expected values of 0
+                                # which broke the chi square calculation
+                                True,
+                                cum_obs[j],
+                                hl.max(cum_exp[j], 1e-09),
                             ),
                             obs_expr=cum_obs[j],
-                            exp_expr=cum_exp[j],
+                            exp_expr=hl.max(cum_exp[j], 1e-09),
                         )
                         # Create alt distribution for section (pos[j], end_pos]
                         # The missense values for this section are the cumulative values at the last index
@@ -161,7 +166,8 @@ def calculate_window_chisq(
                             cond_expr=True,
                             section_oe_expr=total_oe,
                             obs_expr=cum_obs[j],
-                            exp_expr=cum_exp[j],
+                            # Make sure expected value is NOT 0
+                            exp_expr=hl.max(cum_exp[j], 1e-09),
                         )
                         * get_dpois_expr(
                             cond_expr=True,
