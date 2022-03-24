@@ -244,7 +244,8 @@ def get_obs_exp_expr(
     """
     Return observed/expected annotation based on inputs.
 
-    Cap observed/expected value at 1.
+    Cap observed/expected (OE) value at 1. This is to avoid pulling out regions that are enriched for missense variation.
+    Code in this pipeline is looking for missense constraint, so regions with an OE >= 1.0 can be grouped together.
 
     Function can generate observed/expected values across the entire transcript or section of a transcript depending on inputs.
     Function can also generate 'forward' (moving from smaller to larger positions") or 'reverse' (moving from larger to smaller positions)

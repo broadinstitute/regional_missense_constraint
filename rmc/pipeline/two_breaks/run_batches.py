@@ -63,6 +63,8 @@ def get_obs_exp_expr(
     :return: Observed/expected expression.
     :rtype: hl.expr.Float64Expression
     """
+    # Cap the o/e ratio at 1 to avoid pulling out regions that are enriched for missense variation
+    # Code is looking for missense constraint, so regions with a ratio of >= 1.0 can be grouped together
     return hl.or_missing(cond_expr, hl.min(obs_expr / exp_expr, 1))
 
 
