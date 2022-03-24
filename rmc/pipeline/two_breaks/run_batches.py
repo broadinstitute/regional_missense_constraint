@@ -125,6 +125,8 @@ def calculate_window_chisq(
         .when(
             # If i index is the smallest position (anchored at one end of transcript),
             # there are only two transcript subsections: [start_pos, pos[j]], (pos[j], end_pos]
+            # This is the same chi square calculation as the single break search
+            # (TODO: think about whether to keep this calculation or remove and just return -1 here)
             i == 0,
             (
                 2
@@ -182,6 +184,8 @@ def calculate_window_chisq(
         .when(
             # If j index is anchored at the largest position, there are two transcript subsections:
             # [start_pos, pos[i]), [pos[i], end_pos]
+            # This is the same chi square calculation as the single break search
+            # (TODO: think about whether to keep this calculation or remove and just return -1 here)
             j == max_idx,
             (
                 2
