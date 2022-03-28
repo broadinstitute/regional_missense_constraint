@@ -459,6 +459,7 @@ def process_transcript_group(
     temp_ht_path: Optional[str] = None,
     chisq_threshold: float = 9.2,
     split_window_size: int = 500,
+    read_if_exists: bool = False,
 ) -> None:
     """
     Run two simultaneous breaks search on a group of transcripts.
@@ -478,10 +479,15 @@ def process_transcript_group(
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.999.
     :param int split_window_size: Window size to search for transcripts that have more
         possible missense variants than threshold. Only used if over_threshold is True.
+    :param bool read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
+        Only applies to Table that is input to `search_for_two_breaks`
+        (`f"{temp_ht_path}/{transcript_group[0]}_prep.ht"`).
+        Default is False.
     :return: None; processes Table and writes to path. Also writes success TSV to path.
     """
     ht = hl.read_table(ht_path)
     ht = ht.filter(hl.literal(transcript_group).contains(ht.transcript))
+    ht = ht.annotate(missense_list_len=hl.len(ht.cum_obs))
 
     if over_threshold:
         # If transcripts longer than threshold, split transcripts into multiple rows
@@ -527,7 +533,9 @@ def process_transcript_group(
         n_rows = ht.count()
         ht = ht.repartition(n_rows)
         ht = ht.checkpoint(
-            f"{temp_ht_path}/{transcript_group[0]}_prep.ht", overwrite=True
+            f"{temp_ht_path}/{transcript_group[0]}_prep.ht",
+            overwrite=not read_if_exists,
+            _read_if_exists=read_if_exists,
         )
     else:
         # Add start_idx struct with i_start, j_start, i_max_idx, j_max_idx annotations
@@ -549,8 +557,13 @@ def process_transcript_group(
         # If any rows had a significant breakpoint,
         # find the one "best" breakpoint (breakpoint with largest chi square value)
         if ht.count() > 0:
-            max_chisq = ht.aggregate(hl.agg.max(ht.max_chisq))
-            ht = ht.filter(ht.max_chisq == max_chisq)
+            group_ht = ht.group_by("transcript").aggregate(
+                transcript_max_chisq=hl.agg.max(ht.max_chisq)
+            )
+            ht = ht.annotate(
+                transcript_max_chisq=group_ht[ht.transcript].transcript_max_chisq
+            )
+            ht = ht.filter(ht.max_chisq == ht.transcript_max_chisq)
 
     ht.write(output_ht_path, overwrite=True)
 
