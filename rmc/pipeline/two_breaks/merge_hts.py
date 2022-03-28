@@ -9,6 +9,7 @@ import subprocess
 
 import hail as hl
 
+from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
@@ -27,6 +28,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger("merge_hts")
 logger.setLevel(logging.INFO)
+
+
+ANNOTATIONS = {"max_chisq", "start_pos", "end_pos"}
+"""
+Set of annotations added during two simultaneous breaks search.
+
+`max_chisq`: Chi square value associated with two breaks.
+`start_pos`: Start position of two break window.
+`end_pos`: End position of two break window.
+"""
 
 
 def main(args):
@@ -55,9 +66,14 @@ def main(args):
                     # Tables containing transcripts that are under the length threshold are keyed only by transcript
                     # Rekey all tables here and select only the required fields to ensure the union on line 61 is able to work
                     # A normal `.key_by` should work here, since transcripts are already part of the key fields
-                    # (see hhttps://github.com/hail-is/hail/blob/master/hail/src/main/scala/is/hail/expr/ir/TableIR.scala#L812)
+                    # (see https://github.com/hail-is/hail/blob/master/hail/src/main/scala/is/hail/expr/ir/TableIR.scala#L812)
                     # However, using `.key_by_assert_sorted` to explicitly avoid shuffling on this rekey
                     temp = temp._key_by_assert_sorted("transcript")
+                    row_fields = set(temp.row)
+                    if len(ANNOTATIONS.intersection(row_fields)) < 3:
+                        raise DataException(
+                            f"The following fields are missing from the temp table: {ANNOTATIONS.difference(row_fields)}!"
+                        )
                     temp = temp.select("max_chisq", "start_pos", "end_pos")
                     intermediate_hts.append(temp)
                 else:
