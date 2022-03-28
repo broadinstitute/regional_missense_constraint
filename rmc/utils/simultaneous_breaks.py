@@ -216,9 +216,9 @@ def check_for_successful_transcripts(
 
 
 def calculate_window_chisq(
-    max_idx: int,
-    i: int,
-    j: int,
+    max_idx: hl.expr.Int32Expression,
+    i: hl.expr.Int32Expression,
+    j: hl.expr.Int32Expression,
     cum_obs: hl.expr.ArrayExpression,
     cum_exp: hl.expr.ArrayExpression,
     total_oe: hl.expr.Float64Expression,
@@ -230,9 +230,9 @@ def calculate_window_chisq(
 
     Chi square formula: 2 * (hl.log10(total_alt) - hl.log10(total_null))
 
-    :param int max_idx: Largest list index value.
-    :param int i: Smaller list index value corresponding to the smaller position of the two break window.
-    :param int j: Larger list index value corresponding to the larger position of the two break window.
+    :param hl.expr.Int32Expression max_idx: Largest list index value.
+    :param hl.expr.Int32Expression i: Smaller list index value corresponding to the smaller position of the two break window.
+    :param hl.expr.Int32Expression j: Larger list index value corresponding to the larger position of the two break window.
     :param hl.expr.ArrayExpression cum_obs: List containing cumulative observed missense values.
     :param hl.expr.ArrayExpression cum_exp: List containing cumulative expected missense values.
     :param expr.Float64Expression total_oe: Transcript overall observed/expected (OE) missense ratio.
@@ -456,8 +456,8 @@ def search_for_two_breaks(
         loop_continue: Callable,
         i: int,
         j: int,
-        max_idx_i: hl.expr.Int32Expression,
-        max_idx_j: hl.expr.Int32Expression,
+        max_idx_i: int,
+        max_idx_j: int,
         cur_max_chisq: float,
         cur_best_i: int,
         cur_best_j: int,
@@ -473,8 +473,8 @@ def search_for_two_breaks(
             It's the `i` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
         :param int j: Larger list index value. This index defines the current position of the second break.
             It's the `j` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
-        :param hl.expr.Int32Expression max_idx_i: Largest list index for smaller list index value.
-        :param hl.expr.Int32Expression max_idx_j: Largest list index for larger list index value.
+        :param int max_idx_i: Largest list index for smaller list index value.
+        :param int max_idx_j: Largest list index for larger list index value.
         :param float cur_max_chisq: Current maximum chi square value.
         :param int cur_best_i: Current best index i.
         :param int cur_best_j: Current best index j.
