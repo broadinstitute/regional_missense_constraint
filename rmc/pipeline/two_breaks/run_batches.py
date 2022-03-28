@@ -321,12 +321,12 @@ def search_for_two_breaks(
     `min_window_size` is the number of base pairs needed, on average, to see 10 missense variants (by default).
     For gnomAD v2.1, `min_window_size` is 100bp.
 
-    :param hl.Table ht: Input Table aggregated by transcript with lists of cumulative observed and expected
+    :param hl.Table group_ht: Input Table aggregated by transcript with lists of cumulative observed and expected
         missense values. HT is filtered to contain only transcripts with simultaneous breaks.
     :param float chisq_threshold:  Chi-square significance threshold. Default is 9.2.
-        This value corresponds to a p-value of 0.99 with 2 degrees of freedom.
+        This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
-        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.999.
+        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
     :return: Table with largest simultaneous break window size annotated per transcript.
     :rtype: hl.Table
     """
@@ -474,9 +474,9 @@ def process_transcript_group(
     :param str output_tsv_path: Path to success TSV bucket.
     :param Optional[str] temp_ht_path: Path to temporary Table. Required only if over_thresold is True.
     :param float chisq_threshold: Chi-square significance threshold. Default is 9.2.
-        This value corresponds to a p-value of 0.99 with 2 degrees of freedom.
+        This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
-        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.999.
+        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
     :param int split_window_size: Window size to search for transcripts that have more
         possible missense variants than threshold. Only used if over_threshold is True.
     :param bool read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
