@@ -350,7 +350,7 @@ def search_for_two_breaks(
             Calling `loop_continue` tells hail to go back to the top of the loop with loop variables updated.
         :param int i: Smaller list index value. This index defines the current position of the first break.
             It's the `i` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
-        :param int j: Larger list index value. This index defines the current position of the first break.
+        :param int j: Larger list index value. This index defines the current position of the second break.
             It's the `j` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
         :param hl.expr.Int32Expression max_idx_i: Largest list index for smaller list index value.
         :param hl.expr.Int32Expression max_idx_j: Largest list index for larger list index value.
@@ -359,7 +359,7 @@ def search_for_two_breaks(
         :param int cur_best_j: Current best index j.
         :return: Maximum chi square significance value and optimum index pair i, j.
         """
-        # Calculate chi squared value associated with transcript subections created using this index pair i, j
+        # Calculate chi squared value associated with transcript subsections created using this index pair i, j
         chisq = calculate_window_chisq(
             group_ht.max_idx,
             i,
@@ -472,7 +472,7 @@ def process_transcript_group(
         possible missense variants than threshold specified in `run_simultaneous_breaks`.
     :param str output_ht_path: Path to output results Table.
     :param str output_tsv_path: Path to success TSV bucket.
-    :param Optional[str] temp_ht_path: Path to temporary Table. Required only if over_thresold is True.
+    :param Optional[str] temp_ht_path: Path to temporary Table. Required only if over_threshold is True.
     :param float chisq_threshold: Chi-square significance threshold. Default is 9.2.
         This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
