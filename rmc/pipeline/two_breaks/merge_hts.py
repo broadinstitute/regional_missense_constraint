@@ -64,7 +64,7 @@ def main(args):
                 if temp.count() > 0:
                     # Tables containing transcripts that are over the transcript length threshold are keyed by transcript, i, j
                     # Tables containing transcripts that are under the length threshold are keyed only by transcript
-                    # Rekey all tables here and select only the required fields to ensure the union on line 61 is able to work
+                    # Rekey all tables here and select only the required fields to ensure the union on line 83 is able to work
                     # A normal `.key_by` should work here, since transcripts are already part of the key fields
                     # (see https://github.com/hail-is/hail/blob/master/hail/src/main/scala/is/hail/expr/ir/TableIR.scala#L812)
                     # However, using `.key_by_assert_sorted` to explicitly avoid shuffling on this rekey
