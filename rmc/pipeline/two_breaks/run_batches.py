@@ -252,7 +252,9 @@ def calculate_window_chisq(
                         get_dpois_expr(
                             cond_expr=True,
                             section_oe_expr=get_obs_exp_expr(
-                                True, cum_obs[i - 1], hl.max(cum_exp[i - 1], 1e-09),
+                                True,
+                                cum_obs[i - 1],
+                                hl.max(cum_exp[i - 1], 1e-09),
                             ),
                             obs_expr=cum_obs[i - 1],
                             exp_expr=hl.max(cum_exp[i - 1], 1e-09),
@@ -312,7 +314,8 @@ def calculate_window_chisq(
 
 
 def search_for_two_breaks(
-    group_ht: hl.Table, chisq_threshold: float = 9.2,
+    group_ht: hl.Table,
+    chisq_threshold: float = 9.2,
 ) -> hl.Table:
     """
     Search for windows of constraint in transcripts with simultaneous breaks.
@@ -474,9 +477,9 @@ def process_transcript_group(
     :param str output_tsv_path: Path to success TSV bucket.
     :param Optional[str] temp_ht_path: Path to temporary Table. Required only if over_threshold is True.
     :param float chisq_threshold: Chi-square significance threshold. Default is 9.2.
-        This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
+        This value corresponds to a p-value of 0.99 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
-        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
+        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.999.
     :param int split_window_size: Window size to search for transcripts that have more
         possible missense variants than threshold. Only used if over_threshold is True.
     :param bool read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
@@ -487,7 +490,6 @@ def process_transcript_group(
     """
     ht = hl.read_table(ht_path)
     ht = ht.filter(hl.literal(transcript_group).contains(ht.transcript))
-    ht = ht.annotate(missense_list_len=hl.len(ht.cum_obs))
 
     if over_threshold:
         # If transcripts longer than threshold, split transcripts into multiple rows
@@ -504,9 +506,9 @@ def process_transcript_group(
             start_idx=hl.flatmap(
                 lambda i: hl.map(
                     lambda j: hl.struct(i_start=i, j_start=j),
-                    hl.range(0, ht.missense_list_len, split_window_size),
+                    hl.range(0, ht.max_idx + 1, split_window_size),
                 ),
-                hl.range(0, ht.missense_list_len, split_window_size),
+                hl.range(0, ht.max_idx + 1, split_window_size),
             )
         )
         # Remove entries in `start_idx` struct where j_start is smaller than i_start
@@ -517,8 +519,8 @@ def process_transcript_group(
         ht = ht.annotate(i=ht.start_idx.i_start, j=ht.start_idx.j_start)
         ht = ht._key_by_assert_sorted("transcript", "i", "j")
         ht = ht.annotate(
-            i_max_idx=hl.min(ht.i + split_window_size, ht.missense_list_len - 1),
-            j_max_idx=hl.min(ht.j + split_window_size, ht.missense_list_len - 1),
+            i_max_idx=hl.min(ht.i + split_window_size, ht.max_idx),
+            j_max_idx=hl.min(ht.j + split_window_size, ht.max_idx),
         )
         # Adjust j_start in rows where j_start is the same as i_start
         ht = ht.annotate(
@@ -541,7 +543,7 @@ def process_transcript_group(
         # Add start_idx struct with i_start, j_start, i_max_idx, j_max_idx annotations
         # (these are expected by `search_for_two_breaks`)
         ht = ht.annotate(
-            start_idx=hl.struct(i_start=0, j_start=0),
+            start_idx=hl.struct(i_start=0, j_start=1),
             i_max_idx=ht.max_idx,
             j_max_idx=ht.max_idx,
         )
@@ -611,7 +613,9 @@ def main(args):
         google_project=args.google_project,
     )
     b = hb.Batch(
-        name="simul_breaks", backend=backend, default_python_image=args.docker_image,
+        name="simul_breaks",
+        backend=backend,
+        default_python_image=args.docker_image,
     )
 
     if args.under_threshold:
