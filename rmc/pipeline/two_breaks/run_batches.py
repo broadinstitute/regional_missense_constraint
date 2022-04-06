@@ -338,6 +338,7 @@ def search_for_two_breaks(
         loop_continue: Callable,
         i: int,
         j: int,
+        start_idx_j: int,
         max_idx_i: int,
         max_idx_j: int,
         cur_max_chisq: float,
@@ -355,6 +356,7 @@ def search_for_two_breaks(
             It's the `i` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
         :param int j: Larger list index value. This index defines the current position of the second break.
             It's the `j` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
+        :param int start_idx_j: Smallest list index for larger list index value `j`.
         :param int max_idx_i: Largest list index for smaller list index value.
         :param int max_idx_j: Largest list index for larger list index value.
         :param float cur_max_chisq: Current maximum chi square value.
@@ -395,10 +397,16 @@ def search_for_two_breaks(
             hl.if_else(
                 j == max_idx_j,
                 # At end of j iteration, continue to next i index
-                # Set i to i+1 and j to i+2 (so that the j index is always greater than the i index)
+                # Set i to i + 1
+                # and set j to the larger value between i + 2 and start index value for j
+                # This is to avoid redundant work in larger transcripts; e.g.:
+                # start_idx_i = 0, start_idx_j = 50 ->
+                # using `hl.max()` here means that j will be reset to 50 rather than 2 on the second
+                # iteration of the loop will restart at 50
+                # Note that the j index should always be larger than the i index
                 loop_continue(
                     i + 1,
-                    i + 2,
+                    hl.max(i + 2, start_idx_j),
                     max_idx_i,
                     max_idx_j,
                     cur_max_chisq,
@@ -424,6 +432,7 @@ def search_for_two_breaks(
             _simul_break_loop,
             hl.ttuple(hl.tfloat, hl.tint, hl.tint),
             group_ht.start_idx.i_start,
+            group_ht.start_idx.j_start,
             group_ht.start_idx.j_start,
             group_ht.i_max_idx,
             group_ht.j_max_idx,
