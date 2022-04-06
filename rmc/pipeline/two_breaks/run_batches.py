@@ -372,7 +372,7 @@ def search_for_two_breaks(
             group_ht.total_oe,
         )
 
-        # Make sure chi square isn't NAN
+        # Make sure chi square isn't NaN
         chisq = hl.nanmax(chisq, -1)
 
         # Update current best indices and chi square if new chi square (calculated above)
@@ -382,12 +382,10 @@ def search_for_two_breaks(
         cur_max_chisq = hl.max(chisq, cur_max_chisq)
 
         return hl.if_else(
-            # At the end of the iteration through the position list
-            # (when index i is at the second to last index of the list),
-            # return the best indices.
-            # Note that this is the second to last index (max_idx_i - 1) because all of the windows created where i is the last index
-            # were already checked in previous iterations of the loop
-            i == (max_idx_i - 1),
+            # Return the best indices at the end of the iteration through the position list
+            # Note that max_idx_i has been adjusted to be ht.max_idx - 1 (or i + window_size - 1):
+            # see note in `process_transcript_group`
+            i == max_idx_i,
             (cur_max_chisq, cur_best_i, cur_best_j),
             # If we haven't reached the end of the position list with index i,
             # continue with the loop
@@ -519,7 +517,12 @@ def process_transcript_group(
         ht = ht.annotate(i=ht.start_idx.i_start, j=ht.start_idx.j_start)
         ht = ht._key_by_assert_sorted("transcript", "i", "j")
         ht = ht.annotate(
-            i_max_idx=hl.min(ht.i + split_window_size, ht.max_idx),
+            # i_max_idx needs to be adjusted here to be one smaller than the max
+            # This is because we don't need to check the situation where i is the last index in a list
+            # For example, if the transcript has 1003 possible missense variants,
+            # (1002 is the largest list index)
+            # we don't need to check the scenario where i = 1002
+            i_max_idx=hl.min(ht.i + split_window_size - 1, ht.max_idx - 1),
             j_max_idx=hl.min(ht.j + split_window_size, ht.max_idx),
         )
         # Adjust j_start in rows where j_start is the same as i_start
@@ -544,7 +547,8 @@ def process_transcript_group(
         # (these are expected by `search_for_two_breaks`)
         ht = ht.annotate(
             start_idx=hl.struct(i_start=0, j_start=1),
-            i_max_idx=ht.max_idx,
+            # Adjusting i_max_idx here to be ht.max_idx - 1 (see note above)
+            i_max_idx=ht.max_idx - 1,
             j_max_idx=ht.max_idx,
         )
 
