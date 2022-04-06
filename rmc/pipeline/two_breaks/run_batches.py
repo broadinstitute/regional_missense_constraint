@@ -522,7 +522,7 @@ def process_transcript_group(
             # For example, if the transcript has 1003 possible missense variants,
             # (1002 is the largest list index)
             # we don't need to check the scenario where i = 1002
-            i_max_idx=hl.min(ht.i + split_window_size - 1, ht.max_idx - 1),
+            i_max_idx=hl.min(ht.i + split_window_size, ht.max_idx) - 1,
             j_max_idx=hl.min(ht.j + split_window_size, ht.max_idx),
         )
         # Adjust j_start in rows where j_start is the same as i_start
