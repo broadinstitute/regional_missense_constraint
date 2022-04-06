@@ -519,7 +519,7 @@ def process_transcript_group(
         ht = ht.annotate(i=ht.start_idx.i_start, j=ht.start_idx.j_start)
         ht = ht._key_by_assert_sorted("transcript", "i", "j")
         ht = ht.annotate(
-            i_max_idx=hl.min(ht.i + split_window_size, ht.max_idx),
+            i_max_idx=hl.min(ht.i + split_window_size, ht.max_idx) - 1,
             j_max_idx=hl.min(ht.j + split_window_size, ht.max_idx),
         )
         # Adjust j_start in rows where j_start is the same as i_start
