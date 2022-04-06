@@ -324,10 +324,10 @@ def calculate_window_chisq(
                         get_dpois_expr(
                             cond_expr=True,
                             section_oe_expr=get_obs_exp_expr(
-                                True, cum_obs[i - 1], cum_exp[i - 1]
+                                True, cum_obs[i - 1], hl.max(cum_exp[i - 1], 1e-09)
                             ),
                             obs_expr=cum_obs[i - 1],
-                            exp_expr=cum_exp[i - 1],
+                            exp_expr=hl.max(cum_exp[i - 1], 1e-09),
                         )
                         # Create alt distribution for section [pos[i], end_pos]
                         # The missense values for this section are the cumulative values at
@@ -349,7 +349,7 @@ def calculate_window_chisq(
                             cond_expr=True,
                             section_oe_expr=total_oe,
                             obs_expr=cum_obs[i - 1],
-                            exp_expr=cum_exp[i - 1],
+                            exp_expr=hl.max(cum_exp[i - 1], 1e-09),
                         )
                         * get_dpois_expr(
                             cond_expr=True,
@@ -509,7 +509,10 @@ def search_for_two_breaks(
             # Return the best indices at the end of the iteration through the position list
             # Note that max_idx_i has been adjusted to be ht.max_idx - 1 (or i + window_size - 1):
             # see note in `process_transcript_group`
-            i == max_idx_i,
+            # Also note that j needs to be checked here to ensure that j is also at the end of its loop
+            # (This check is necessary when transcripts have been split into multiple i, j windows
+            # across multiple rows)
+            (i == max_idx_i & j == max_idx_j),
             (cur_max_chisq, cur_best_i, cur_best_j),
             # If we haven't reached the end of the position list with index i,
             # continue with the loop
