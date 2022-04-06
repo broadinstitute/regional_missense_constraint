@@ -82,12 +82,17 @@ def main(args):
 
         ht = intermediate_hts[0].union(*intermediate_hts[1:])
         ht = ht.checkpoint(simul_break.path, overwrite=args.overwrite)
+        if ht.count() == 0:
+            raise DataException(
+                "Output Table has 0 rows. Please double check the temp tables!"
+            )
         logger.info("Wrote simultaneous breaks HT with %i lines", ht.count())
 
         # Collect all transcripts with two simultaneous breaks
         simul_break_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
         logger.info(
-            "%i transcripts had two simultaneous breaks", len(simul_break_transcripts),
+            "%i transcripts had two simultaneous breaks",
+            len(simul_break_transcripts),
         )
         simul_break_transcripts = hl.literal(simul_break_transcripts)
 
