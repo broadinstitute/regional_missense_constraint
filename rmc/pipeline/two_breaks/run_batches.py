@@ -544,7 +544,7 @@ def process_transcript_group(
         # (these are expected by `search_for_two_breaks`)
         ht = ht.annotate(
             start_idx=hl.struct(i_start=0, j_start=1),
-            i_max_idx=ht.max_idx,
+            i_max_idx=ht.max_idx - 1,
             j_max_idx=ht.max_idx,
         )
 
