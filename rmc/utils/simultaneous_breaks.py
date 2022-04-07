@@ -514,7 +514,7 @@ def search_for_two_breaks(
             # Also note that j needs to be checked here to ensure that j is also at the end of its loop
             # (This check is necessary when transcripts have been split into multiple i, j windows
             # across multiple rows)
-            (i == max_idx_i & j == max_idx_j),
+            (i == max_idx_i) & (j == max_idx_j),
             (cur_max_chisq, cur_best_i, cur_best_j),
             # If we haven't reached the end of the position list with index i,
             # continue with the loop
@@ -531,6 +531,7 @@ def search_for_two_breaks(
                 loop_continue(
                     i + 1,
                     hl.max(i + 2, start_idx_j),
+                    start_idx_j,
                     max_idx_i,
                     max_idx_j,
                     cur_max_chisq,
@@ -542,6 +543,7 @@ def search_for_two_breaks(
                 loop_continue(
                     i,
                     j + 1,
+                    start_idx_j,
                     max_idx_i,
                     max_idx_j,
                     cur_max_chisq,
