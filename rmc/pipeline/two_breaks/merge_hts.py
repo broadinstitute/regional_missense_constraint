@@ -80,12 +80,12 @@ def main(args):
                     logger.warning("%s had 0 rows", ht_path)
         logger.info("Found %i HTs and appended %i", ht_count, len(intermediate_hts))
 
+        if len(intermediate_hts) == 0:
+            raise DataException(
+                "All temp tables had 0 rows. Please double check the temp tables!"
+            )
         ht = intermediate_hts[0].union(*intermediate_hts[1:])
         ht = ht.checkpoint(simul_break.path, overwrite=args.overwrite)
-        if ht.count() == 0:
-            raise DataException(
-                "Output Table has 0 rows. Please double check the temp tables!"
-            )
         logger.info("Wrote simultaneous breaks HT with %i lines", ht.count())
 
         # Collect all transcripts with two simultaneous breaks
