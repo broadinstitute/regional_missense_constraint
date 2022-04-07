@@ -63,6 +63,8 @@ def get_obs_exp_expr(
     :return: Observed/expected expression.
     :rtype: hl.expr.Float64Expression
     """
+    # Cap the o/e ratio at 1 to avoid pulling out regions that are enriched for missense variation
+    # Code is looking for missense constraint, so regions with a ratio of >= 1.0 can be grouped together
     return hl.or_missing(cond_expr, hl.min(obs_expr / exp_expr, 1))
 
 
@@ -93,9 +95,9 @@ def get_dpois_expr(
 
 
 def calculate_window_chisq(
-    max_idx: int,
-    i: int,
-    j: int,
+    max_idx: hl.expr.Int32Expression,
+    i: hl.expr.Int32Expression,
+    j: hl.expr.Int32Expression,
     cum_obs: hl.expr.ArrayExpression,
     cum_exp: hl.expr.ArrayExpression,
     total_oe: hl.expr.Float64Expression,
@@ -107,9 +109,9 @@ def calculate_window_chisq(
 
     Chi square formula: 2 * (hl.log10(total_alt) - hl.log10(total_null))
 
-    :param int max_idx: Largest list index value.
-    :param int i: Smaller list index value corresponding to the smaller position of the two break window.
-    :param int j: Larger list index value corresponding to the larger position of the two break window.
+    :param hl.expr.Int32Expression max_idx: Largest list index value.
+    :param hl.expr.Int32Expression i: Smaller list index value corresponding to the smaller position of the two break window.
+    :param hl.expr.Int32Expression j: Larger list index value corresponding to the larger position of the two break window.
     :param hl.expr.ArrayExpression cum_obs: List containing cumulative observed missense values.
     :param hl.expr.ArrayExpression cum_exp: List containing cumulative expected missense values.
     :param expr.Float64Expression total_oe: Transcript overall observed/expected (OE) missense ratio.
@@ -125,6 +127,8 @@ def calculate_window_chisq(
         .when(
             # If i index is the smallest position (anchored at one end of transcript),
             # there are only two transcript subsections: [start_pos, pos[j]], (pos[j], end_pos]
+            # This is the same chi square calculation as the single break search
+            # (TODO: think about whether to keep this calculation or remove and just return -1 here)
             i == 0,
             (
                 2
@@ -136,10 +140,15 @@ def calculate_window_chisq(
                         get_dpois_expr(
                             cond_expr=True,
                             section_oe_expr=get_obs_exp_expr(
-                                True, cum_obs[j], cum_exp[j]
+                                # Make sure the expected value is NOT 0 here
+                                # When running this code on gnomAD v2, found that some transcripts have expected values of 0
+                                # which broke the chi square calculation
+                                True,
+                                cum_obs[j],
+                                hl.max(cum_exp[j], 1e-09),
                             ),
                             obs_expr=cum_obs[j],
-                            exp_expr=cum_exp[j],
+                            exp_expr=hl.max(cum_exp[j], 1e-09),
                         )
                         # Create alt distribution for section (pos[j], end_pos]
                         # The missense values for this section are the cumulative values at the last index
@@ -161,7 +170,8 @@ def calculate_window_chisq(
                             cond_expr=True,
                             section_oe_expr=total_oe,
                             obs_expr=cum_obs[j],
-                            exp_expr=cum_exp[j],
+                            # Make sure expected value is NOT 0
+                            exp_expr=hl.max(cum_exp[j], 1e-09),
                         )
                         * get_dpois_expr(
                             cond_expr=True,
@@ -176,6 +186,8 @@ def calculate_window_chisq(
         .when(
             # If j index is anchored at the largest position, there are two transcript subsections:
             # [start_pos, pos[i]), [pos[i], end_pos]
+            # This is the same chi square calculation as the single break search
+            # (TODO: think about whether to keep this calculation or remove and just return -1 here)
             j == max_idx,
             (
                 2
@@ -188,10 +200,12 @@ def calculate_window_chisq(
                         get_dpois_expr(
                             cond_expr=True,
                             section_oe_expr=get_obs_exp_expr(
-                                True, cum_obs[i - 1], cum_exp[i - 1]
+                                True, 
+                                cum_obs[i - 1], 
+                                hl.max(cum_exp[i - 1], 1e-09)
                             ),
                             obs_expr=cum_obs[i - 1],
-                            exp_expr=cum_exp[i - 1],
+                            exp_expr=hl.max(cum_exp[i - 1], 1e-09),
                         )
                         # Create alt distribution for section [pos[i], end_pos]
                         # The missense values for this section are the cumulative values at
@@ -213,7 +227,7 @@ def calculate_window_chisq(
                             cond_expr=True,
                             section_oe_expr=total_oe,
                             obs_expr=cum_obs[i - 1],
-                            exp_expr=cum_exp[i - 1],
+                            exp_expr=hl.max(cum_exp[i - 1], 1e-09),
                         )
                         * get_dpois_expr(
                             cond_expr=True,
@@ -240,10 +254,12 @@ def calculate_window_chisq(
                         get_dpois_expr(
                             cond_expr=True,
                             section_oe_expr=get_obs_exp_expr(
-                                True, cum_obs[i - 1], cum_exp[i - 1]
+                                True,
+                                cum_obs[i - 1],
+                                hl.max(cum_exp[i - 1], 1e-09),
                             ),
                             obs_expr=cum_obs[i - 1],
-                            exp_expr=cum_exp[i - 1],
+                            exp_expr=hl.max(cum_exp[i - 1], 1e-09),
                         )
                         # Create alt distribution for section [pos[i], pos[j]]
                         # The missense values for this section are the cumulative values at index j
@@ -278,7 +294,7 @@ def calculate_window_chisq(
                             cond_expr=True,
                             section_oe_expr=total_oe,
                             obs_expr=cum_obs[i - 1],
-                            exp_expr=cum_exp[i - 1],
+                            exp_expr=hl.max(cum_exp[i - 1], 1e-09),
                         )
                         * get_dpois_expr(
                             cond_expr=True,
@@ -300,7 +316,8 @@ def calculate_window_chisq(
 
 
 def search_for_two_breaks(
-    group_ht: hl.Table, chisq_threshold: float = 9.2,
+    group_ht: hl.Table,
+    chisq_threshold: float = 9.2,
 ) -> hl.Table:
     """
     Search for windows of constraint in transcripts with simultaneous breaks.
@@ -309,12 +326,12 @@ def search_for_two_breaks(
     `min_window_size` is the number of base pairs needed, on average, to see 10 missense variants (by default).
     For gnomAD v2.1, `min_window_size` is 100bp.
 
-    :param hl.Table ht: Input Table aggregated by transcript with lists of cumulative observed and expected
+    :param hl.Table group_ht: Input Table aggregated by transcript with lists of cumulative observed and expected
         missense values. HT is filtered to contain only transcripts with simultaneous breaks.
     :param float chisq_threshold:  Chi-square significance threshold. Default is 9.2.
-        This value corresponds to a p-value of 0.99 with 2 degrees of freedom.
+        This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
-        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.999.
+        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
     :return: Table with largest simultaneous break window size annotated per transcript.
     :rtype: hl.Table
     """
@@ -323,8 +340,9 @@ def search_for_two_breaks(
         loop_continue: Callable,
         i: int,
         j: int,
-        max_idx_i: hl.expr.Int32Expression,
-        max_idx_j: hl.expr.Int32Expression,
+        start_idx_j: int,
+        max_idx_i: int,
+        max_idx_j: int,
         cur_max_chisq: float,
         cur_best_i: int,
         cur_best_j: int,
@@ -338,16 +356,17 @@ def search_for_two_breaks(
             Calling `loop_continue` tells hail to go back to the top of the loop with loop variables updated.
         :param int i: Smaller list index value. This index defines the current position of the first break.
             It's the `i` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
-        :param int j: Larger list index value. This index defines the current position of the first break.
+        :param int j: Larger list index value. This index defines the current position of the second break.
             It's the `j` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
-        :param hl.expr.Int32Expression max_idx_i: Largest list index for smaller list index value.
-        :param hl.expr.Int32Expression max_idx_j: Largest list index for larger list index value.
+        :param int start_idx_j: Smallest list index for larger list index value `j`.
+        :param int max_idx_i: Largest list index for smaller list index value.
+        :param int max_idx_j: Largest list index for larger list index value.
         :param float cur_max_chisq: Current maximum chi square value.
         :param int cur_best_i: Current best index i.
         :param int cur_best_j: Current best index j.
         :return: Maximum chi square significance value and optimum index pair i, j.
         """
-        # Calculate chi squared value associated with transcript subections created using this index pair i, j
+        # Calculate chi squared value associated with transcript subsections created using this index pair i, j
         chisq = calculate_window_chisq(
             group_ht.max_idx,
             i,
@@ -357,6 +376,9 @@ def search_for_two_breaks(
             group_ht.total_oe,
         )
 
+        # Make sure chi square isn't NaN
+        chisq = hl.nanmax(chisq, -1)
+
         # Update current best indices and chi square if new chi square (calculated above)
         # is better than the current stored value (`cur_max_chisq`)
         cur_best_i = hl.if_else(chisq > cur_max_chisq, i, cur_best_i)
@@ -364,22 +386,29 @@ def search_for_two_breaks(
         cur_max_chisq = hl.max(chisq, cur_max_chisq)
 
         return hl.if_else(
-            # At the end of the iteration through the position list
-            # (when index i is at the second to last index of the list),
-            # return the best indices.
-            # Note that this is the second to last index (max_idx_i - 1) because all of the windows created where i is the last index
-            # were already checked in previous iterations of the loop
-            i == (max_idx_i - 1),
+            # Return the best indices at the end of the iteration through the position list
+            # Note that max_idx_i has been adjusted to be ht.max_idx - 1 (or i + window_size - 1):
+            # see note in `process_transcript_group`
+            # Also note that j needs to be checked here to ensure that j is also at the end of its loop
+            # (This check is necessary when transcripts have been split into multiple i, j windows
+            # across multiple rows)
+            (i == max_idx_i & j == max_idx_j),
             (cur_max_chisq, cur_best_i, cur_best_j),
             # If we haven't reached the end of the position list with index i,
             # continue with the loop
             hl.if_else(
                 j == max_idx_j,
                 # At end of j iteration, continue to next i index
-                # Set i to i+1 and j to i+2 (so that the j index is always greater than the i index)
+                # Set i to i + 1
+                # and set j to the larger value between i + 2 and start index value for j
+                # This is to avoid redundant work in larger transcripts; e.g.:
+                # start_idx_i = 0, start_idx_j = 50 ->
+                # using `hl.max()` here means that j will be reset to 50 rather than 2 on the second
+                # iteration of the loop will restart at 50
+                # Note that the j index should always be larger than the i index
                 loop_continue(
                     i + 1,
-                    i + 2,
+                    hl.max(i + 2, start_idx_j),
                     max_idx_i,
                     max_idx_j,
                     cur_max_chisq,
@@ -405,6 +434,7 @@ def search_for_two_breaks(
             _simul_break_loop,
             hl.ttuple(hl.tfloat, hl.tint, hl.tint),
             group_ht.start_idx.i_start,
+            group_ht.start_idx.j_start,
             group_ht.start_idx.j_start,
             group_ht.i_max_idx,
             group_ht.j_max_idx,
@@ -444,6 +474,7 @@ def process_transcript_group(
     temp_ht_path: Optional[str] = None,
     chisq_threshold: float = 9.2,
     split_window_size: int = 500,
+    read_if_exists: bool = False,
 ) -> None:
     """
     Run two simultaneous breaks search on a group of transcripts.
@@ -456,13 +487,17 @@ def process_transcript_group(
         possible missense variants than threshold specified in `run_simultaneous_breaks`.
     :param str output_ht_path: Path to output results Table.
     :param str output_tsv_path: Path to success TSV bucket.
-    :param Optional[str] temp_ht_path: Path to temporary Table. Required only if over_thresold is True.
+    :param Optional[str] temp_ht_path: Path to temporary Table. Required only if over_threshold is True.
     :param float chisq_threshold: Chi-square significance threshold. Default is 9.2.
-        This value corresponds to a p-value of 0.99 with 2 degrees of freedom.
+        This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
-        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.999.
+        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
     :param int split_window_size: Window size to search for transcripts that have more
         possible missense variants than threshold. Only used if over_threshold is True.
+    :param bool read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
+        Only applies to Table that is input to `search_for_two_breaks`
+        (`f"{temp_ht_path}/{transcript_group[0]}_prep.ht"`).
+        Default is False.
     :return: None; processes Table and writes to path. Also writes success TSV to path.
     """
     ht = hl.read_table(ht_path)
@@ -483,9 +518,9 @@ def process_transcript_group(
             start_idx=hl.flatmap(
                 lambda i: hl.map(
                     lambda j: hl.struct(i_start=i, j_start=j),
-                    hl.range(0, ht.missense_list_len, split_window_size),
+                    hl.range(0, ht.max_idx + 1, split_window_size),
                 ),
-                hl.range(0, ht.missense_list_len, split_window_size),
+                hl.range(0, ht.max_idx + 1, split_window_size),
             )
         )
         # Remove entries in `start_idx` struct where j_start is smaller than i_start
@@ -496,8 +531,13 @@ def process_transcript_group(
         ht = ht.annotate(i=ht.start_idx.i_start, j=ht.start_idx.j_start)
         ht = ht._key_by_assert_sorted("transcript", "i", "j")
         ht = ht.annotate(
-            i_max_idx=hl.min(ht.i + split_window_size, ht.missense_list_len - 1),
-            j_max_idx=hl.min(ht.j + split_window_size, ht.missense_list_len - 1),
+            # i_max_idx needs to be adjusted here to be one smaller than the max
+            # This is because we don't need to check the situation where i is the last index in a list
+            # For example, if the transcript has 1003 possible missense variants,
+            # (1002 is the largest list index)
+            # we don't need to check the scenario where i = 1002
+            i_max_idx=hl.min(ht.i + split_window_size, ht.max_idx) - 1,
+            j_max_idx=hl.min(ht.j + split_window_size, ht.max_idx),
         )
         # Adjust j_start in rows where j_start is the same as i_start
         ht = ht.annotate(
@@ -512,14 +552,17 @@ def process_transcript_group(
         n_rows = ht.count()
         ht = ht.repartition(n_rows)
         ht = ht.checkpoint(
-            f"{temp_ht_path}/{transcript_group[0]}_prep.ht", overwrite=True
+            f"{temp_ht_path}/{transcript_group[0]}_prep.ht",
+            overwrite=not read_if_exists,
+            _read_if_exists=read_if_exists,
         )
     else:
         # Add start_idx struct with i_start, j_start, i_max_idx, j_max_idx annotations
         # (these are expected by `search_for_two_breaks`)
         ht = ht.annotate(
-            start_idx=hl.struct(i_start=0, j_start=0),
-            i_max_idx=ht.max_idx,
+            start_idx=hl.struct(i_start=0, j_start=1),
+            # Adjusting i_max_idx here to be ht.max_idx - 1 (see note above)
+            i_max_idx=ht.max_idx - 1,
             j_max_idx=ht.max_idx,
         )
 
@@ -534,8 +577,13 @@ def process_transcript_group(
         # If any rows had a significant breakpoint,
         # find the one "best" breakpoint (breakpoint with largest chi square value)
         if ht.count() > 0:
-            max_chisq = ht.aggregate(hl.agg.max(ht.max_chisq))
-            ht = ht.filter(ht.max_chisq == max_chisq)
+            group_ht = ht.group_by("transcript").aggregate(
+                transcript_max_chisq=hl.agg.max(ht.max_chisq)
+            )
+            ht = ht.annotate(
+                transcript_max_chisq=group_ht[ht.transcript].transcript_max_chisq
+            )
+            ht = ht.filter(ht.max_chisq == ht.transcript_max_chisq)
 
     ht.write(output_ht_path, overwrite=True)
 
@@ -583,7 +631,9 @@ def main(args):
         google_project=args.google_project,
     )
     b = hb.Batch(
-        name="simul_breaks", backend=backend, default_python_image=args.docker_image,
+        name="simul_breaks",
+        backend=backend,
+        default_python_image=args.docker_image,
     )
 
     if args.under_threshold:

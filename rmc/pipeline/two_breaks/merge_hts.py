@@ -9,6 +9,7 @@ import subprocess
 
 import hail as hl
 
+from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
@@ -29,6 +30,16 @@ logger = logging.getLogger("merge_hts")
 logger.setLevel(logging.INFO)
 
 
+ANNOTATIONS = {"max_chisq", "start_pos", "end_pos"}
+"""
+Set of annotations added during two simultaneous breaks search.
+
+`max_chisq`: Chi square value associated with two breaks.
+`start_pos`: Start position of two break window.
+`end_pos`: End position of two break window.
+"""
+
+
 def main(args):
     """Merge all simultaneous breaks intermediate results into single Table."""
     try:
@@ -43,19 +54,45 @@ def main(args):
             .strip()
             .split("\n")
         )
+        ht_count = 0
         for ht_path in temp_ht_paths:
             ht_path = ht_path.strip("/")
-            temp = hl.read_table(ht_path)
-            intermediate_hts.append(temp)
+            if ht_path.endswith("ht"):
+                ht_count += 1
+                logger.info("Working on %s", ht_path)
+                temp = hl.read_table(ht_path)
+                if temp.count() > 0:
+                    # Tables containing transcripts that are over the transcript length threshold are keyed by transcript, i, j
+                    # Tables containing transcripts that are under the length threshold are keyed only by transcript
+                    # Rekey all tables here and select only the required fields to ensure the union on line 83 is able to work
+                    # A normal `.key_by` should work here, since transcripts are already part of the key fields
+                    # (see https://github.com/hail-is/hail/blob/master/hail/src/main/scala/is/hail/expr/ir/TableIR.scala#L812)
+                    # However, using `.key_by_assert_sorted` to explicitly avoid shuffling on this rekey
+                    temp = temp._key_by_assert_sorted("transcript")
+                    row_fields = set(temp.row)
+                    if len(ANNOTATIONS.intersection(row_fields)) < 3:
+                        raise DataException(
+                            f"The following fields are missing from the temp table: {ANNOTATIONS.difference(row_fields)}!"
+                        )
+                    temp = temp.select("max_chisq", "start_pos", "end_pos")
+                    intermediate_hts.append(temp)
+                else:
+                    logger.warning("%s had 0 rows", ht_path)
+        logger.info("Found %i HTs and appended %i", ht_count, len(intermediate_hts))
 
+        if len(intermediate_hts) == 0:
+            raise DataException(
+                "All temp tables had 0 rows. Please double check the temp tables!"
+            )
         ht = intermediate_hts[0].union(*intermediate_hts[1:])
         ht = ht.checkpoint(simul_break.path, overwrite=args.overwrite)
         logger.info("Wrote simultaneous breaks HT with %i lines", ht.count())
 
         # Collect all transcripts with two simultaneous breaks
-        simul_break_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript),)
+        simul_break_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
         logger.info(
-            "%i transcripts had two simultaneous breaks", len(simul_break_transcripts),
+            "%i transcripts had two simultaneous breaks",
+            len(simul_break_transcripts),
         )
         simul_break_transcripts = hl.literal(simul_break_transcripts)
 

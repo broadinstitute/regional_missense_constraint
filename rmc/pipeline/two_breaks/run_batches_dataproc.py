@@ -13,6 +13,8 @@ import logging
 
 import hail as hl
 
+from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
@@ -36,27 +38,41 @@ def main(args):
     try:
         logger.warning("This step should be run on an autoscaling cluster!")
         hl.init(log="/search_for_two_breaks_run_batches_dataproc.log")
-        transcripts_to_run = args.transcripts_to_run.split(",")
-        if args.group_size:
-            logger.info("Splitting transcripts into groups of %i", args.group_size)
-            transcript_groups = [
-                transcripts_to_run[x : x + args.group_size]
-                for x in range(0, len(transcripts_to_run), args.group_size)
-            ]
+        if args.run_ttn:
+            transcript_groups = [[args.ttn_id]]
         else:
-            logger.info("Running transcripts one at a time...")
-            transcript_groups = [[transcript] for transcript in transcripts_to_run]
+            transcripts_to_run = args.transcripts_to_run.split(",")
+            if args.group_size:
+                logger.info("Splitting transcripts into groups of %i", args.group_size)
+                transcript_groups = [
+                    transcripts_to_run[x : x + args.group_size]
+                    for x in range(0, len(transcripts_to_run), args.group_size)
+                ]
+            else:
+                logger.info("Running transcripts one at a time...")
+                transcript_groups = [[transcript] for transcript in transcripts_to_run]
 
         for counter, group in enumerate(transcript_groups):
+            output_ht = (
+                f"{simul_break_temp}/hts/simul_break_dataproc_ttn.ht"
+                if args.run_ttn
+                else f"{simul_break_temp}/hts/simul_break_dataproc_{counter}.ht"
+            )
+            if file_exists(output_ht):
+                raise DataException(
+                    f"Output already exists at {output_ht}! Double check before running script again."
+                )
+
             process_transcript_group(
                 ht_path=not_one_break_grouped.path,
                 transcript_group=group,
                 over_threshold=True,
-                output_ht_path=f"{simul_break_temp}/hts/simul_break_dataproc_{counter}.ht",
+                output_ht_path=output_ht,
                 output_tsv_path=f"{simul_break_temp}/success_files",
                 temp_ht_path=f"{simul_break_temp}",
                 chisq_threshold=args.chisq_threshold,
                 split_window_size=args.window_size,
+                read_if_exists=args.read_if_exists,
             )
 
     finally:
@@ -101,8 +117,24 @@ if __name__ == "__main__":
         type=int,
         default=500,
     )
-    parser.add_argument(
+    transcript_ids = parser.add_mutually_exclusive_group()
+    transcript_ids.add_argument(
         "--transcripts-to-run", help="Comma separated list of transcript IDs to run."
+    )
+    transcript_ids.add_argument(
+        "--run-ttn",
+        help="Run TTN. TTN is so large that it needs to be treated separately.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--ttn-id",
+        help="TTN transcript ID. TTN is so large that it needs to be treated separately.",
+        default="ENST00000589042",
+    )
+    parser.add_argument(
+        "--read-if-exists",
+        help="Use temporary Tables if they already exist.",
+        action="store_true",
     )
 
     args = parser.parse_args()
