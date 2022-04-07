@@ -489,7 +489,7 @@ def process_transcript_group(
     :param str output_tsv_path: Path to success TSV bucket.
     :param Optional[str] temp_ht_path: Path to temporary Table. Required only if over_threshold is True.
     :param float chisq_threshold: Chi-square significance threshold. Default is 9.2.
-        This value corresponds to a p-value of 0.99 with 2 degrees of freedom.
+        This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
     :param int split_window_size: Window size to search for transcripts that have more
