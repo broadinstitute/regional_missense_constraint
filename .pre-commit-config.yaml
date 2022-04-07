@@ -7,10 +7,9 @@ repos:
       - id: end-of-file-fixer
       - id: trailing-whitespace
   - repo: https://github.com/psf/black
-    rev: 22.1.0
+    rev: 22.3.0
     hooks:
       - id: black
-        additional_dependencies: ['click==8.0.4']
         language_version: python3
         files: rmc
   - repo: https://github.com/pycqa/pydocstyle
