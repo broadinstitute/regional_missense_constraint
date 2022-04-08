@@ -200,7 +200,9 @@ def calculate_window_chisq(
                         get_dpois_expr(
                             cond_expr=True,
                             section_oe_expr=get_obs_exp_expr(
-                                True, cum_obs[i - 1], hl.max(cum_exp[i - 1], 1e-09)
+                                True,
+                                cum_obs[i - 1],
+                                hl.max(cum_exp[i - 1], 1e-09),
                             ),
                             obs_expr=cum_obs[i - 1],
                             exp_expr=hl.max(cum_exp[i - 1], 1e-09),
