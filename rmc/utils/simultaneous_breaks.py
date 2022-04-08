@@ -530,7 +530,7 @@ def search_for_two_breaks(
                 # Note that the j index should always be larger than the i index
                 loop_continue(
                     i + 1,
-                    hl.max(i + 2, start_idx_j),
+                    hl.min(hl.max(i + 2, start_idx_j), max_idx_j),
                     start_idx_j,
                     max_idx_i,
                     max_idx_j,
