@@ -22,6 +22,7 @@ from rmc.resources.grch37.gnomad import (
     filtered_exomes,
     processed_exomes,
     prop_obs_coverage,
+    VEP_VERSION,
 )
 from rmc.resources.grch37.reference_data import processed_context
 from rmc.resources.resource_utils import CURRENT_VERSION, MISSENSE
@@ -79,7 +80,7 @@ def main(args):
             )
 
             logger.info("Preprocessing reference fasta (context) HT...")
-            context_ht = process_context_ht("GRCh37", args.trimers)
+            context_ht = process_context_ht("GRCh37", args.vep_version, args.trimers)
 
             logger.info(
                 "Filtering context HT to all sites not found in gnomAD exomes + all rare, covered sites in gnomAD"
@@ -136,7 +137,9 @@ def main(args):
             )
             context_ht = context_ht.annotate(
                 coverage_correction=get_coverage_correction_expr(
-                    context_ht.exome_coverage, coverage_model, args.high_cov_cutoff,
+                    context_ht.exome_coverage,
+                    coverage_model,
+                    args.high_cov_cutoff,
                 )
             )
 
@@ -161,13 +164,19 @@ def main(args):
 
                 logger.info("Calculating expected values per transcript...")
                 exp_ht = calculate_exp_per_transcript(
-                    context_auto_ht, locus_type="autosomes", groupings=GROUPINGS,
+                    context_auto_ht,
+                    locus_type="autosomes",
+                    groupings=GROUPINGS,
                 )
                 exp_x_ht = calculate_exp_per_transcript(
-                    context_x_ht, locus_type="X", groupings=GROUPINGS,
+                    context_x_ht,
+                    locus_type="X",
+                    groupings=GROUPINGS,
                 )
                 exp_y_ht = calculate_exp_per_transcript(
-                    context_y_ht, locus_type="Y", groupings=GROUPINGS,
+                    context_y_ht,
+                    locus_type="Y",
+                    groupings=GROUPINGS,
                 )
                 exp_ht = exp_ht.union(exp_x_ht).union(exp_y_ht)
 
@@ -595,6 +604,11 @@ if __name__ == "__main__":
         "This script searches for regional missense constraint in gnomAD"
     )
     parser.add_argument(
+        "--vep-version",
+        help="VEP version used to annotate full context Table.",
+        default=VEP_VERSION,
+    )
+    parser.add_argument(
         "--trimers", help="Use trimers instead of heptamers", action="store_true"
     )
     parser.add_argument(
@@ -647,7 +661,9 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--xg-transcript", help="Transcript ID for XG", default="ENST00000419513",
+        "--xg-transcript",
+        help="Transcript ID for XG",
+        default="ENST00000419513",
     )
     parser.add_argument(
         "--finalize",
