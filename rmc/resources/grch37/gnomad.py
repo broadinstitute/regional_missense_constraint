@@ -20,13 +20,6 @@ filtered_exomes = TableResource(
 """
 Processed gnomAD exomes Table filtered to missense variants only.
 """
-processed_genomes = TableResource(path=f"{FLAGSHIP_MODEL_PREFIX}/genomes_processed.ht")
-"""
-Processed gnomAD genomes Table.
-
-Dropped colocated variants in vep annotation and removed all non-pass variants.
-Also annotated with context Table (sequence context, transcript information, most severe consequence).
-"""
 
 prop_obs_coverage = TableResource(
     path=f"{FLAGSHIP_MODEL_PREFIX}/prop_observed_by_coverage_no_common_pass_filtered_bins.ht"
