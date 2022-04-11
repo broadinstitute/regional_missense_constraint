@@ -6,15 +6,6 @@ CURRENT_VERSION = "2.1.1"
 GNOMAD_VERSIONS = ["2.1.1"]
 
 
-DATA_SOURCE = "broad"
-"""
-Source of UKBB sequencing data.
-
-Original options were 'regeneron' or 'broad', but the data source will always be 'broad' for
-anything larger than the 100K callset.
-"""
-
-
 MISSENSE = "missense_variant"
 """
 String representing missense variant VEP annotation.

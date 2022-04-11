@@ -1,11 +1,9 @@
-import hail as hl
-
 from gnomad.resources.resource_utils import (
     TableResource,
     VersionedTableResource,
 )
 
-from rmc.resources.resource_utils import FLAGSHIP_LOF, RESOURCE_PREFIX
+from rmc.resources.resource_utils import RESOURCE_PREFIX
 
 
 ## Reference genome related resources
