@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Tuple
+from typing import Dict, Set, Tuple
 
 import hail as hl
 
@@ -457,15 +457,14 @@ def get_plateau_model(
 
 
 ## Outlier transcript util
-def get_outlier_transcripts() -> hl.expr.SetExpression:
+def get_outlier_transcripts() -> Set[str]:
     """
-    Read in LoF constraint HT results to get set of outlier transcripts.
+    Read in loss-of-function (LoF) constraint Table results to get set of outlier transcripts.
 
     Transcripts are removed for the reasons detailed here:
     https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
 
     :return: Set of outlier transcripts.
-    :rtype: hl.expr.SetExpression
     """
     logger.warning(
         "Assumes LoF constraint has been separately calculated and that constraint HT exists..."
@@ -482,7 +481,6 @@ def get_outlier_transcripts() -> hl.expr.SetExpression:
     )
     return constraint_transcript_ht.aggregate(
         hl.agg.collect_as_set(constraint_transcript_ht.transcript),
-        _localize=False,
     )
 
 
@@ -529,8 +527,9 @@ def import_clinvar_hi_variants(build: str, overwrite: bool) -> None:
         # File header is '#gene'
         hi_ht = hl.import_table(hi_genes)
         hi_gene_set = hi_ht.aggregate(
-            hl.agg.collect_as_set(hi_ht["#gene"]), _localize=False
+            hl.agg.collect_as_set(hi_ht["#gene"]),
         )
+        hi_gene_set = hl.literal(hi_gene_set)
 
         logger.info("Getting gene information from ClinVar HT...")
         clinvar_ht = clinvar_ht.annotate(gene=clinvar_ht.info.GENEINFO.split(":")[0])
