@@ -106,14 +106,36 @@ def get_divergence_scores() -> Dict[str, float]:
             transcript, score = line.strip().split("\t")
             try:
                 div_scores[transcript.split(".")[0]] = float(score)
-            except:
+            except LookupError:
                 continue
     return div_scores
 
 
 ## Functions to process reference genome related resources
+def get_context_ht(build: str, vep_version: str) -> hl.Table:
+    """
+    Read in SNPs-only, VEP annotated context Table based on input build and version.
+
+    :param str build: Reference genome build; must be one of BUILDS.
+    :param str vep_version: VEP version.
+    :return: VEP context Table.
+    """
+    if build not in BUILDS:
+        raise DataException(f"Build must be one of {BUILDS}.")
+
+    if build == "GRCh37":
+        from gnomad.resources.grch37.reference_data import vep_context
+    else:
+        from gnomad.resources.grch38.reference_data import vep_context
+
+    return vep_context.ht(version=vep_version)
+
+
 def process_context_ht(
-    build: str, trimers: bool = True, missense_str: str = MISSENSE,
+    build: str,
+    vep_version: str,
+    trimers: bool = True,
+    missense_str: str = MISSENSE,
 ) -> hl.Table:
     """
     Prepare context HT (SNPs only, annotated with VEP) for regional missense constraint calculations.
@@ -125,6 +147,7 @@ def process_context_ht(
         `trimers` needs to be True for gnomAD v2.
 
     :param str build: Reference genome build; must be one of BUILDS.
+    :param str vep_version: VEP version.
     :param bool trimers: Whether to filter to trimers or heptamers. Default is True.
     :return: Context HT filtered to missense variants in canonical transcripts and annotated with mutation rate, CpG status, and methylation level.
     :rtype: hl.Table
@@ -133,10 +156,7 @@ def process_context_ht(
         raise DataException(f"Build must be one of {BUILDS}.")
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
-    if build == "GRCh37":
-        ht = grch37.full_context.ht()
-    else:
-        ht = grch38.full_context.ht()
+    ht = get_context_ht(build, vep_version)
 
     # `prepare_ht` annotates HT with: ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
     ht = prepare_ht(ht, trimers)
@@ -181,9 +201,13 @@ def get_exome_bases(build: str) -> int:
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     if build == "GRCh37":
-        ht = grch37.full_context.ht()
+        from gnomad.resources.grch37.reference_data import vep_context
+
+        ht = vep_context.ht(version=grch37.VEP_VERSION)
     else:
-        ht = grch38.full_context.ht()
+        from gnomad.resources.grch38.reference_data import vep_context
+
+        ht = vep_context.ht(version=grch38.VEP_VERSION)
 
     logger.info("Filtering to canonical transcripts...")
     ht = fast_filter_vep(
@@ -457,7 +481,8 @@ def get_outlier_transcripts() -> hl.expr.SetExpression:
         hl.len(constraint_transcript_ht.constraint_flag) > 0
     )
     return constraint_transcript_ht.aggregate(
-        hl.agg.collect_as_set(constraint_transcript_ht.transcript), _localize=False,
+        hl.agg.collect_as_set(constraint_transcript_ht.transcript),
+        _localize=False,
     )
 
 
@@ -482,10 +507,8 @@ def import_clinvar_hi_variants(build: str, overwrite: bool) -> None:
     else:
         from gnomad.resources.grch38.reference_data import clinvar
 
-        raise DataException("ClinVar files currently only exist for GRCh37!")
-
         raise DataException(
-            "RMC Clinvar HT path has not been prepared for build 38 yet!"
+            "RMC Clinvar HT path has not been prepared for build 38 yet. ClinVar files currently only exist for GRCh37!"
         )
 
     if not file_exists(clinvar_ht_path) or overwrite:

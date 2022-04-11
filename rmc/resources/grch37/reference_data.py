@@ -4,19 +4,15 @@ from gnomad.resources.resource_utils import (
     TableResource,
     VersionedTableResource,
 )
+
 from rmc.resources.resource_utils import FLAGSHIP_LOF, RESOURCE_PREFIX
 
 
 ## Reference genome related resources
-full_context = VersionedTableResource(
-    default_version="20181129",
-    versions={
-        "20181129": TableResource(
-            path=f"{FLAGSHIP_LOF}/context/Homo_sapiens_assembly19.fasta.snps_only.vep_20181129.ht",
-        )
-        # NOTE: no import_func necessary for this (will not need to update until we switch to MANE transcripts)
-    },
-)
+VEP_VERSION = 85
+"""
+VEP version used to annotate full context Table.
+"""
 
 processed_context = VersionedTableResource(
     default_version="v1",

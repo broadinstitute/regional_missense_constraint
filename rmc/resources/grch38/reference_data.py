@@ -9,9 +9,12 @@ from gnomad.resources.resource_utils import (
 from rmc.resources.resource_utils import RESOURCE_PREFIX
 
 ## Reference genome related resources
-full_context = VersionedTableResource(
-    default_version="101", versions={"101": vep_context.versions["101"]},
-)
+VEP_VERSION = 101
+"""
+VEP version used to annotate full context Table.
+
+NOTE: Currently 101, but expect this will change for v4.
+"""
 
 processed_context = VersionedTableResource(
     default_version="101",
