@@ -85,6 +85,7 @@ def main(args):
                 "All temp tables had 0 rows. Please double check the temp tables!"
             )
         ht = intermediate_hts[0].union(*intermediate_hts[1:])
+        ht = ht.annotate_globals(chisq_threshold=args.chisq_threshold)
         ht = ht.checkpoint(simul_break.path, overwrite=args.overwrite)
         logger.info("Wrote simultaneous breaks HT with %i lines", ht.count())
 
@@ -114,6 +115,16 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="This regional missense constraint script merges all intermediate simultaneous breaks results Tables into a single Table.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--chisq-threshold",
+        help="""
+        Chi-square significance threshold used to determine simultaneous break window.
+        Value should be 9.2 (p-value of 0.01).
+        See: https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
+        """,
+        type=float,
+        default=9.2,
     )
     parser.add_argument(
         "--overwrite", help="Overwrite existing data.", action="store_true"

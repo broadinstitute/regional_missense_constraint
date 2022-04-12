@@ -270,31 +270,28 @@ def main(args):
             hl.init(log="/RMC_first_break.log")
 
             logger.info("Searching for transcripts with a significant break...")
-            context_ht = constraint_prep.ht()
-            context_ht = process_transcripts(context_ht, args.chisq_threshold)
-            context_ht = context_ht.checkpoint(
-                f"{temp_path}/first_break.ht", overwrite=True
-            )
+            ht = constraint_prep.ht()
+            ht = process_transcripts(ht, args.chisq_threshold)
+            ht = ht.checkpoint(f"{temp_path}/first_break.ht", overwrite=True)
 
             logger.info(
                 "Filtering HT to transcripts with one significant break and writing..."
             )
-            is_break_ht = context_ht.filter(context_ht.is_break)
+            is_break_ht = ht.filter(ht.is_break)
             transcripts = is_break_ht.aggregate(
                 hl.agg.collect_as_set(is_break_ht.transcript)
             )
-            one_break_ht = context_ht.filter(
-                hl.literal(transcripts).contains(context_ht.transcript)
-            )
+            one_break_ht = ht.filter(hl.literal(transcripts).contains(ht.transcript))
             one_break_ht = one_break_ht.annotate_globals(
-                break_1_transcripts=transcripts
+                break_1_transcripts=transcripts,
+                chisq_threshold=args.chisq_threshold,
             )
             one_break_ht.write(one_break.path, overwrite=args.overwrite)
 
             logger.info(
                 "Filtering HT to transcripts without a significant break and writing..."
             )
-            not_one_break_ht = context_ht.anti_join(one_break_ht)
+            not_one_break_ht = ht.anti_join(one_break_ht)
             not_one_break_ht = not_one_break_ht.drop("values")
             not_one_break_ht.write(not_one_break.path, overwrite=args.overwrite)
 
@@ -307,11 +304,11 @@ def main(args):
             logger.info(
                 "Searching for additional breaks in transcripts with at least one significant break..."
             )
-            context_ht = one_break.ht()
+            ht = one_break.ht()
 
             # Add break_list annotation to context HT
-            context_ht = context_ht.annotate(break_list=[context_ht.is_break])
-            break_ht = context_ht
+            ht = ht.annotate(break_list=[ht.is_break])
+            break_ht = ht
 
             # Start break number counter at 2
             break_num = 2
@@ -353,15 +350,14 @@ def main(args):
                     f"break_{break_num}_alt": break_ht[context_ht.key].total_alt,
                     "is_break": break_ht[context_ht.key].is_break,
                 }
-                context_ht = context_ht.annotate(**annot_expr)
-                context_ht = context_ht.annotate(
-                    break_list=context_ht.break_list.append(context_ht.is_break)
-                )
+                ht = ht.annotate(**annot_expr)
+                ht = ht.annotate(break_list=ht.break_list.append(ht.is_break))
 
                 break_ht = break_ht.filter(transcripts.contains(break_ht.transcript))
                 break_num += 1
 
-            context_ht.write(multiple_breaks.path, overwrite=args.overwrite)
+            ht = ht.annotate_globals(chisq_threshold=args.chisq_threshold)
+            ht.write(multiple_breaks.path, overwrite=args.overwrite)
 
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions
@@ -423,6 +419,7 @@ def main(args):
         if args.finalize:
             hl.init(log="/RMC_finalize.log")
 
+            # TODO: Add chi square thresholds to output HT globals
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
             )
