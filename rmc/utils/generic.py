@@ -49,7 +49,6 @@ def get_codon_lookup() -> Dict[str, str]:
         This is only necessary for testing on ExAC and should be replaced with VEP annotations.
 
     :return: Dictionary of codon translation.
-    :rtype: Dict[str, str]
     """
     codon_lookup = {}
     with hl.hadoop_open(CODON_TABLE_PATH) as c:
@@ -65,7 +64,6 @@ def get_acid_names() -> Dict[str, str]:
     Read in amino acid table and stores as dict (key: 3 letter name, value: (long name, one letter name).
 
     :return: Dictionary of amino acid names.
-    :rtype: Dict[str, str]
     """
     acid_map = {}
     with hl.hadoop_open(ACID_NAMES_PATH) as a:
@@ -81,7 +79,6 @@ def get_mutation_rate() -> Dict[str, Tuple[str, float]]:
     Read in mutation rate table and store as dict.
 
     :return: Dictionary of mutation rate information (key: context, value: (alt, mu_snp)).
-    :rtype: Dict[str, Tuple[str, float]].
     """
     mu = {}
     # from    n_kmer  p_any_snp_given_kmer    mu_kmer to      count_snp       p_snp_given_kmer        mu_snp
@@ -97,7 +94,6 @@ def get_divergence_scores() -> Dict[str, float]:
     Read in divergence score file and store as dict (key: transcript, value: score).
 
     :return: Divergence score dict.
-    :rtype: Dict[str, float]
     """
     div_scores = {}
     with hl.hadoop_open(DIVERGENCE_SCORES_TSV_PATH) as d:
@@ -204,7 +200,6 @@ def get_exome_bases(build: str) -> int:
 
     :param str build: Reference genome build; must be one of BUILDS.
     :return: Number of bases in the exome.
-    :rtype: int
     """
     if build not in BUILDS:
         raise DataException(f"Build must be one of {BUILDS}.")
@@ -264,7 +259,6 @@ def get_avg_bases_between_mis(
     :param bool get_total_gnomad_missense: Boolean for whether to recount total number of missense variants in gnomAD.
         If False, will use value from `TOTAL_GNOMAD_MISSENSE`. Default is False.
     :return: Average number of bases between observed missense variants, rounded to the nearest integer,
-    :rtype: int
     """
     total_variants = TOTAL_GNOMAD_MISSENSE[CURRENT_VERSION]
     total_bases = TOTAL_EXOME_BASES[build]
@@ -298,7 +292,6 @@ def keep_criteria(ht: hl.Table, exac: bool = False) -> hl.expr.BooleanExpression
     :param hl.Table ht: Input Table.
     :param bool exac: Whether input Table is ExAC data. Default is False.
     :return: Keep criteria Boolean expression.
-    :rtype: hl.expr.BooleanExpression
     """
     # ExAC keep criteria: adjusted AC <= 123 and VQSLOD >= -2.632
     # Also remove variants with median depth < 1
@@ -324,7 +317,6 @@ def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.T
     :param bool filter: Whether to filter Table to a specific consequence. Default is False.
     :param str csq: Desired consequence. Default is None. Must be specified if filter is True.
     :return: Table filtered to canonical transcripts with option to filter to specific variant consequence.
-    :rtype: hl.Table
     """
     if "was_split" not in ht.row:
         logger.info("Splitting multiallelic variants and filtering to SNPs...")
@@ -354,7 +346,6 @@ def filter_to_region_type(ht: hl.Table, region: str) -> hl.Table:
     :param hl.Table ht: Input Table to be filtered.
     :param str region: Desired region type. One of 'autosomes', 'chrX', or 'chrY'.
     :return: Table filtered to autosomes/PAR, chrX, or chrY.
-    :rtype: hl.Table
     """
     if region == "chrX":
         ht = ht.filter(ht.locus.in_x_nonpar())
@@ -386,7 +377,6 @@ def generate_models(
     :param bool trimers: Whether to use trimers instead of heptamers.
     :param bool weighted: Whether to use weighted least squares when building models. Default is True.
     :return: Coverage model, plateau models for autosomes, plateau models for chrX, plateau models for chrY.
-    :rtype: Tuple[Tuple[float, float], hl.expr.DictExpression, hl.expr.DictExpression, hl.expr.DictExpression]
     """
     logger.info("Building autosomes/PAR plateau model and coverage model...")
     coverage_model, plateau_models = build_models(
@@ -421,7 +411,6 @@ def get_coverage_correction_expr(
          for calculating expected variants at low coverage sites.
     :param int high_cov_cutoff: Cutoff for high coverage. Default is 40.
     :return: Coverage correction expression.
-    :rtype: hl.expr.Float64Expression
     """
     return (
         hl.case()
@@ -448,7 +437,6 @@ def get_plateau_model(
     :param hl.expr.StructExpression globals_expr: Expression containing global annotations of context HT. Must contain plateau models as annotations.
     :param bool include_cpg: Whether to return full plateau model dictionary including CpG keys. Default is False.
     :return: Plateau model for locus type.
-    :rtype: hl.expr.Float64Expression
     """
     if include_cpg:
         return (
