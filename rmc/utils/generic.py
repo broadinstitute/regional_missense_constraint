@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Set, Tuple
+from typing import Dict, Tuple
 
 import hail as hl
 
@@ -136,6 +136,7 @@ def process_context_ht(
     vep_version: str,
     trimers: bool = True,
     missense_str: str = MISSENSE,
+    remove_outlier_transcripts: bool = True,
 ) -> hl.Table:
     """
     Prepare context HT (SNPs only, annotated with VEP) for regional missense constraint calculations.
@@ -149,8 +150,11 @@ def process_context_ht(
     :param str build: Reference genome build; must be one of BUILDS.
     :param str vep_version: VEP version.
     :param bool trimers: Whether to filter to trimers or heptamers. Default is True.
-    :return: Context HT filtered to missense variants in canonical transcripts and annotated with mutation rate, CpG status, and methylation level.
-    :rtype: hl.Table
+    :param str missense_str: Consequence string for missense variants. Default is MISSENSE.
+    :param bool remove_outlier_transcripts: Whether to remove outlier transcripts. Default is True.
+    :return: Context HT filtered to missense variants in canonical transcripts
+        (with the option to remove outlier transcripts)
+        and annotated with mutation rate, CpG status, and methylation level.
     """
     if build not in BUILDS:
         raise DataException(f"Build must be one of {BUILDS}.")
@@ -166,6 +170,12 @@ def process_context_ht(
         missense_str,
     )
     ht = process_vep(ht, filter_csq=True, csq=missense_str)
+
+    if remove_outlier_transcripts:
+        outlier_transcripts = get_outlier_transcripts()
+        ht = ht.filter(
+            ~outlier_transcripts.contains(ht.transcript_consequences.transcript_id)
+        )
 
     logger.info("Annotating with mutation rate...")
     # Mutation rate HT is keyed by context, ref, alt, methylation level
@@ -457,7 +467,7 @@ def get_plateau_model(
 
 
 ## Outlier transcript util
-def get_outlier_transcripts() -> Set[str]:
+def get_outlier_transcripts() -> hl.expr.SetExpression:
     """
     Read in loss-of-function (LoF) constraint Table results to get set of outlier transcripts.
 
@@ -479,8 +489,10 @@ def get_outlier_transcripts() -> Set[str]:
     constraint_transcript_ht = constraint_transcript_ht.filter(
         hl.len(constraint_transcript_ht.constraint_flag) > 0
     )
-    return constraint_transcript_ht.aggregate(
-        hl.agg.collect_as_set(constraint_transcript_ht.transcript),
+    return hl.literal(
+        constraint_transcript_ht.aggregate(
+            hl.agg.collect_as_set(constraint_transcript_ht.transcript),
+        )
     )
 
 
