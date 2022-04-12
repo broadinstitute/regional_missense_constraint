@@ -16,7 +16,6 @@ from rmc.resources.basics import (
     simul_break,
     temp_path,
 )
-from rmc.resources.grch37.exac import filtered_exac
 from rmc.resources.grch37.gnomad import (
     constraint_ht,
     filtered_exomes,
@@ -56,8 +55,6 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
-    exac = args.exac
-
     try:
         if args.pre_process_data:
             hl.init(log="/RMC_pre_process.log")
@@ -101,11 +98,7 @@ def main(args):
         if args.prep_for_constraint:
             hl.init(log="/RMC_prep_for_constraint.log")
             logger.info("Reading in exome HT...")
-            if exac:
-                exome_ht = filtered_exac.ht()
-
-            else:
-                exome_ht = filtered_exomes.ht()
+            exome_ht = filtered_exomes.ht()
 
             logger.info("Reading in context HT...")
             context_ht = processed_context.ht()
@@ -551,9 +544,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--trimers", help="Use trimers instead of heptamers", action="store_true"
-    )
-    parser.add_argument(
-        "--exac", help="Use ExAC Table (not gnomAD Table)", action="store_true"
     )
     parser.add_argument(
         "--n-partitions",
