@@ -591,11 +591,6 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--xg-transcript",
-        help="Transcript ID for XG",
-        default="ENST00000419513",
-    )
-    parser.add_argument(
         "--finalize",
         help="Combine and reformat (finalize) RMC output",
         action="store_true",
