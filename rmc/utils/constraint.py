@@ -888,42 +888,6 @@ def calculate_section_chisq(
     return ((obs_expr - exp_expr) ** 2) / exp_expr
 
 
-def get_all_breakpoint_pos(ht: hl.Table) -> hl.GroupedTable:
-    """
-    Get all breakpoint positions per transcript.
-
-    :param hl.Table ht: Input Table.
-            Example schema (truncated at two breaks for space reasons):
-            ----------------------------------------
-            Row fields:
-                'locus': locus<GRCh37>
-                'transcript': str
-                'mu_snp': float64
-                'observed': int32
-                'total_exp': float64
-                'total_mu': float64
-                'total_obs': int64
-                'max_chisq': float64
-                'break_list': array<bool>
-                'break_1_null': float64
-                'break_1_alt': float64
-                'break_1_chisq': float64
-                'break_2_chisq': float64
-                'break_2_max_chisq': float64
-                'break_2_null': float64
-                'break_2_alt': float64
-                'break_pos': array<int32>
-            ----------------------------------------
-            Key: ['locus', 'transcript']
-            ----------------------------------------
-    :return: Table grouped by transcript, with all breakpoint positions annotated as a list.
-    """
-    ht = ht.filter(ht.break_list.any(lambda x: x))
-    return ht.group_by("transcript").aggregate(
-        break_pos=hl.sorted(hl.agg.collect(ht.locus.position))
-    )
-
-
 def get_section_info(
     ht: hl.Table,
     section_num: int,
@@ -1037,21 +1001,20 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
 
 def get_unique_transcripts_per_break(
     ht: hl.Table,
-    max_n_breaks: int,
 ) -> Dict[int, Union[Set[str], hl.expr.SetExpression]]:
     """
-    Return the set of transcripts unique to each break number.
+    Return a DictExpression with break numbers (key) and set of transcripts unique to each break number (value).
 
-    If the set is empty, return an empty SetExpression.
+    Key is in format `break_{number}_transcripts`. Value is empty SetExpression if that break number has no unique transcripts.
+
+    Function also checkpoints temporary table containing breakpoint positions and number of breaks for each transcript.
 
     .. note::
         - This function will only get unique transcripts for transcripts with one or one + additional breaks.
-        - This will not work for transcripts with two simultaneous breaks.
         - Assumes input Table is annotated with list containing booleans for whether that locus is a breakpoint
         (`break_list`).
 
     :param hl.Table: Input Table.
-    :param int max_n_breaks: Largest number of breaks.
     :return: Dictionary with break number (key) and set of transcripts unique to that break number or empty SetExpression (value).
     """
     transcripts_per_break = {}
@@ -1061,20 +1024,31 @@ def get_unique_transcripts_per_break(
 
     # Group HT (filtered to breakpoint positions only) by transcript and
     # count the number of breakpoints associated with each transcript
-    group_ht = ht.group_by("transcript").aggregate(n_breaks=hl.agg.count())
+    group_ht = ht.group_by("transcript").aggregate(
+        break_pos=hl.sorted(hl.agg.collect(ht.locus.position))
+    )
+    group_ht = group_ht.annotate(n_breaks=hl.len(group_ht.break_pos))
 
-    # Checkpoint to force hail to finish this group by computation
+    # Checkpoint to force hail to finish this group_by computation
     group_ht = group_ht.checkpoint(
         f"{temp_path}/breaks_per_transcript.ht", overwrite=True
     )
+    max_n_breaks = hl.eval(group_ht.aggregate(hl.agg.max(group_ht.n_breaks)))
 
     for i in range(1, max_n_breaks + 1):
         temp_ht = group_ht.filter(group_ht.n_breaks == i)
         transcripts = temp_ht.aggregate(hl.agg.collect_as_set(temp_ht.transcript))
         if len(transcripts > 0):
-            transcripts_per_break[i] = transcripts
+            transcripts_per_break[f"break_{i}_transcripts"] = transcripts
         else:
-            transcripts_per_break[i] = hl.missing(hl.tset(hl.tstr))
+            transcripts_per_break[f"break_{i}_transcripts"] = hl.missing(
+                hl.tset(hl.tstr)
+            )
+
+    # Save transcripts per break DictExpression
+    hl.experimental.write_expression(
+        transcripts_per_break, f"{temp_path}/transcripts_per_break.he"
+    )
     return transcripts_per_break
 
 
@@ -1164,18 +1138,17 @@ def finalize_multiple_breaks(
     ht = ht.filter(~outlier_transcripts.contains(ht.transcript))
 
     logger.info("Getting transcripts associated with each break number...")
-    # Get number of transcripts UNIQUE to each break number
-    # Transcript sets in globals currently are not unique
+    # Get number of transcripts unique to each break number
+    # Transcript sets in globals of multiple breaks HT are not unique
     # i.e., `break_1_transcripts` could contain transcripts that are also present in `break_2_transcripts`
     ht = ht.select_globals()
-    transcripts_per_break = get_unique_transcripts_per_break(ht, max_n_breaks)
+    transcripts_per_break = get_unique_transcripts_per_break(ht)
 
     # Print number of transcripts per break to output
-    # This is used to create TSV input to `n_transcripts_per_break.R`
     for break_num in transcripts_per_break:
         logger.info(
             "Break number %i has %i transcripts",
-            break_num,
+            break_num.split("_")[1],
             len(transcripts_per_break[break_num]),
         )
 
@@ -1184,10 +1157,8 @@ def finalize_multiple_breaks(
     ht = ht.checkpoint(f"{temp_path}/multiple_breaks.ht", overwrite=True)
 
     logger.info("Getting all breakpoint positions...")
-    break_ht = get_all_breakpoint_pos(ht)
-    break_ht = break_ht.checkpoint(
-        f"{temp_path}/multiple_breaks_breakpoints.ht", overwrite=True
-    )
+    # This table is checkpointed as part of `get_unique_transcripts_per_break` above
+    break_ht = hl.read_table(f"{temp_path}/breaks_per_transcript.ht")
     ht = ht.annotate(break_pos=break_ht[ht.transcript].break_pos)
 
     logger.info("Get transcript section annotations (obs, exp, OE, chisq)...")
