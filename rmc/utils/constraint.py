@@ -528,7 +528,7 @@ def get_section_expr(
 def search_for_break(
     ht: hl.Table,
     search_field: hl.str,
-    chisq_threshold: float = 10.8,
+    chisq_threshold: float = 6.6,
 ) -> hl.Table:
     """
     Search for breakpoints in a transcript or within a transcript subsection.
@@ -565,8 +565,9 @@ def search_for_break(
     :param hl.Table ht: Input context Table.
     :param hl.expr.StringExpression search_field: Field of table to search. Value should be either 'transcript' or 'section'.
     :param float chisq_threshold: Chi-square significance threshold.
-        Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
-        Default is 10.8.
+        Default is 6.6 (corresponds to p-value of 0.01).
+        Default in ExAC was 10.8 (corresponds to p-value of 0.001).
+        Reference: https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
     :return: Table annotated with whether position is a breakpoint.
     """
     logger.info(
@@ -662,7 +663,7 @@ def process_transcripts(ht: hl.Table, chisq_threshold: float):
 
     :param hl.Table ht: Input Table. annotated with observed and expected variants counts per transcript.
     :param float chisq_threshold: Chi-square significance threshold.
-        Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
+        Value should be 6.6 (corresponds to p-value of 0.01).
     :return: Table with cumulative observed, expected, and observed/expected values annotated for forward and reverse directions.
         Table also annotated with boolean for whether each position is a breakpoint.
     """
@@ -754,7 +755,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
 
     :param hl.Table ht: Input Table.
     :param float chisq_threshold: Chi-square significance threshold.
-        Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
+        Value should be 6.6 (corresponds to p-value of 0.01).
     :return: Table annotated with whether position is a breakpoint.
     """
     ht = get_subsection_exprs(ht)
@@ -841,7 +842,7 @@ def process_additional_breaks(
     :param hl.Table ht: Input Table.
     :param int break_num: Number of additional break: 2 for second break, 3 for third, etc.
     :param float chisq_threshold: Chi-square significance threshold.
-        Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
+        Value should be 6.6 (corresponds to p-value of 0.01).
     :return: Table annotated with whether position is a breakpoint.
     """
     logger.info(

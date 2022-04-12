@@ -628,9 +628,13 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--chisq-threshold",
-        help="Chi-square significance threshold. Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).",
+        help="""
+        Chi-square significance threshold.
+        Value should be 6.6 (single break) and 9.2 (two breaks) (both correspond to p-value of 0.01).
+        See: https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
+        """,
         type=float,
-        default=10.8,
+        default=6.6,
     )
     parser.add_argument(
         "--pre-process-data", help="Pre-process data", action="store_true"
