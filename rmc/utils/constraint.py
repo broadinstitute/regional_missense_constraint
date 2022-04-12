@@ -13,10 +13,12 @@ from rmc.resources.basics import (
     multiple_breaks,
     oe_bin_counts_tsv,
     temp_path,
+    TOTAL_EXOME_BASES,
 )
-from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo, gene_model
+from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo
 from rmc.utils.generic import (
     get_coverage_correction_expr,
+    get_exome_bases,
     get_outlier_transcripts,
     import_clinvar_hi_variants,
     import_de_novo_variants,
@@ -1280,7 +1282,7 @@ def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Tab
     return ht1.annotate(**{f"{annot_str}": hl.int(hl.is_defined(ht2[ht1.locus]))})
 
 
-def get_oe_bins(ht: hl.Table, build: str) -> None:
+def get_oe_bins(ht: hl.Table, build: str, get_total_exome_bases: bool = False) -> None:
     """
     Group RMC results HT by obs/exp (OE) bin and annotate.
 
@@ -1313,18 +1315,16 @@ def get_oe_bins(ht: hl.Table, build: str) -> None:
 
     clinvar_ht = clinvar_path_mis.ht()
     dn_ht = de_novo.ht()
-    transcript_ht = gene_model.ht()
 
     # Split de novo HT into two HTs -- one for controls and one for cases
     dn_controls_ht = dn_ht.filter(dn_ht.case_control == "control")
     dn_case_ht = dn_ht.filter(dn_ht.case_control != "control")
 
     # Get total number of coding base pairs, also ClinVar and DNM variants
-    # TODO: use exon field in gene model HT to get only coding bases (rather than using transcript end - start)
-    transcript_ht = transcript_ht.annotate(
-        bp=transcript_ht.end_pos - transcript_ht.start_pos
-    )
-    total_bp = transcript_ht.aggregate(hl.agg.sum(transcript_ht.bp))
+    if get_total_exome_bases:
+        total_bp = get_exome_bases(build=build)
+    else:
+        total_bp = TOTAL_EXOME_BASES
     total_clinvar = clinvar_ht.count()
     total_control = dn_controls_ht.count()
     total_case = dn_case_ht.count()
