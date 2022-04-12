@@ -281,10 +281,10 @@ def main(args):
             )
             is_break_ht = context_ht.filter(context_ht.is_break)
             transcripts = is_break_ht.aggregate(
-                hl.agg.collect_as_set(is_break_ht.transcript), _localize=False
+                hl.agg.collect_as_set(is_break_ht.transcript)
             )
             one_break_ht = context_ht.filter(
-                transcripts.contains(context_ht.transcript)
+                hl.literal(transcripts).contains(context_ht.transcript)
             )
             one_break_ht = one_break_ht.annotate_globals(
                 break_1_transcripts=transcripts
@@ -342,7 +342,7 @@ def main(args):
                 # Otherwise, pull transcripts and annotate context ht
                 break_ht = break_ht.key_by("locus", "transcript")
                 transcripts = group_ht.aggregate(
-                    hl.agg.collect_as_set(group_ht.transcript), _localize=False
+                    hl.agg.collect_as_set(group_ht.transcript),
                 )
                 globals_annot_expr = {f"break_{break_num}_transcripts": transcripts}
                 context_ht = context_ht.annotate_globals(**globals_annot_expr)
@@ -456,7 +456,7 @@ def main(args):
 
             logger.info("Getting simultaneous breaks transcripts...")
             simul_break_transcripts = simul_breaks_ht.aggregate(
-                hl.agg.collect_as_set(simul_breaks_ht.transcript), _localize=False
+                hl.agg.collect_as_set(simul_breaks_ht.transcript)
             )
             rmc_transcripts = simul_break_transcripts
 
@@ -470,7 +470,7 @@ def main(args):
                 ht = hl.read_table(f"{temp_path}/break_{break_num}.ht")
                 ht = ht.filter(ht.is_break)
                 rmc_transcripts.append(
-                    ht.aggregate(hl.agg.collect_as_set(ht.transcript), _localize=False)
+                    ht.aggregate(hl.agg.collect_as_set(ht.transcript))
                 )
 
             logger.info("Removing overlapping transcript information...")
