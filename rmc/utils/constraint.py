@@ -1300,6 +1300,8 @@ def get_oe_bins(ht: hl.Table, build: str, get_total_exome_bases: bool = False) -
 
     :param hl.Table ht: Input Table containing all breaks results.
     :param str build: Reference genome build.
+    :param bool get_total_exome_bases: Boolean for whether to recalculate total number of bases in exome.
+        If False, will use value from `TOTAL_EXOME_BASES`. Default is False.
     :return: None; writes TSV with OE bins + annotations to `oe_bin_counts_tsv` resource path.
     """
     if build != "GRCh37":
