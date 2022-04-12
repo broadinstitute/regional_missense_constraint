@@ -61,7 +61,6 @@ def get_obs_exp_expr(
     :param hl.expr.Int64Expression obs_expr: Expression containing number of observed variants.
     :param hl.expr.Float64Expression exp_expr: Expression containing number of expected variants.
     :return: Observed/expected expression.
-    :rtype: hl.expr.Float64Expression
     """
     # Cap the o/e ratio at 1 to avoid pulling out regions that are enriched for missense variation
     # Code is looking for missense constraint, so regions with a ratio of >= 1.0 can be grouped together
@@ -89,7 +88,6 @@ def get_dpois_expr(
     :param Union[Dict[hl.expr.StringExpression, hl.expr.Int64Expression], hl.expr.Int64Expression] obs_expr: Expression containing observed variants count.
     :param Union[Dict[hl.expr.StringExpression, hl.expr.Float64Expression], hl.expr.Float64Expression] exp_expr: Expression containing expected variants count.
     :return: Struct containing forward or reverse null and alt values (either when searching for first or second break).
-    :rtype: hl.expr.StructExpression
     """
     return hl.or_missing(cond_expr, hl.dpois(obs_expr, exp_expr * section_oe_expr))
 
@@ -333,7 +331,6 @@ def search_for_two_breaks(
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
     :return: Table with largest simultaneous break window size annotated per transcript.
-    :rtype: hl.Table
     """
 
     def _simul_break_loop(
