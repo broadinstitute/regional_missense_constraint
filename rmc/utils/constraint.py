@@ -1320,7 +1320,7 @@ def finalize_all_breaks_results(
     :param int max_n_breaks: Largest number of breakpoints in any transcript. Used only for multiple breaks results.
     :param List[str] annotations: List of annotations to keep from input Table.
         Default is CONSTRAINT_ANNOTATIONS.
-    :return: None; writes Table to resource path.
+    :return: None; writes Tables to resource path.
     """
     logger.info("Finalizing multiple breaks results...")
     multi_breaks_ht = finalize_multiple_breaks(multi_breaks_ht).select(*annotations)
