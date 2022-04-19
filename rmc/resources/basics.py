@@ -181,7 +181,7 @@ Table containing transcripts with no significant breaks.
 rmc_results = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/rmc_results.ht")
+        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/all_rmc.ht")
         for version in GNOMAD_VERSIONS
     },
 )
