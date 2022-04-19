@@ -128,7 +128,7 @@ def process_context_ht(
 
     :param str build: Reference genome build; must be one of BUILDS.
     :param bool trimers: Whether to filter to trimers (if set to True) or heptamers. Default is True.
-    :param bool filter_to_missnese: Whether to filter Table to missense variants only. Default is True.
+    :param bool filter_to_missense: Whether to filter Table to missense variants only. Default is True.
     :param bool add_annotations: Whether to add mutation rate, CpG status, and methylation level annotations.
         Default is True.
     :return: Context HT filtered to canonical transcripts and optionally filtered to missense variants with
