@@ -502,7 +502,7 @@ def get_outlier_transcripts(keep: bool = False) -> hl.expr.SetExpression:
         )
     return hl.literal(
         constraint_transcript_ht.aggregate(
-            hl.agg.collect_as_set(constraint_transcript_ht.transcript),
+            hl.agg.collect_as_set(constraint_transcript_ht.transcript)
         )
     )
 
