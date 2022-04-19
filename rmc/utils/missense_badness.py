@@ -10,7 +10,7 @@ from rmc.resources.grch37.gnomad import constraint_ht
 from rmc.utils.generic import (
     filter_context_using_gnomad,
     get_codon_lookup,
-    get_outlier_transcripts,
+    get_constraint_transcripts,
     keep_criteria,
     process_context_ht,
 )
@@ -109,7 +109,7 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     :return: None; writes amino acid Table to resource path.
     """
     logger.info("Importing set of transcripts to keep...")
-    transcripts = get_outlier_transcripts(keep=True)
+    transcripts = get_constraint_transcripts(outlier=False)
 
     logger.info("Reading in VEP context HT...")
     context_ht = process_context_ht(

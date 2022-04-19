@@ -1,21 +1,24 @@
 from collections.abc import Callable
 import logging
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Set, Tuple, Union
 
 import hail as hl
+
+from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import file_exists
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
 from rmc.resources.basics import (
-    breaks,
     multiple_breaks,
     oe_bin_counts_tsv,
+    rmc_browser,
     temp_path,
 )
 from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo, gene_model
 from rmc.utils.generic import (
+    get_constraint_transcripts,
     get_coverage_correction_expr,
-    get_outlier_transcripts,
     import_clinvar_hi_variants,
     import_de_novo_variants,
 )
@@ -1472,7 +1475,7 @@ def finalize_multiple_breaks(
     :rtype: hl.Table
     """
     logger.info("Removing outlier transcripts...")
-    outlier_transcripts = get_outlier_transcripts()
+    outlier_transcripts = get_constraint_transcripts(outlier=True)
     ht = ht.filter(~outlier_transcripts.contains(ht.transcript))
 
     logger.info("Getting transcripts associated with each break number...")
@@ -1577,7 +1580,7 @@ def finalize_all_breaks_results(
 
     logger.info("Reformatting for browser release...")
     ht = reformat_annotations_for_release(ht)
-    ht.write(breaks.path, overwrite=True)
+    ht.write(rmc_browser.path, overwrite=True)
 
 
 def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:

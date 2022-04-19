@@ -1,6 +1,7 @@
 import hail as hl
 
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
+
 from rmc.resources.resource_utils import (
     CURRENT_VERSION,
     FLAGSHIP_LOF,
@@ -171,6 +172,21 @@ rmc_results = VersionedTableResource(
 Table containing all transcripts with evidence of regional missense constraint.
 
 Contains transcripts with one or additional breaks plus simultaneous breaks results.
+"""
+
+rmc_browser = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/rmc_browser.ht"
+        )
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table containing all transcripts with evidence of regional missense constraint.
+
+Contains same information as `rmc_results` but has different formatting for gnomAD browser.
 """
 
 amino_acids_oe = VersionedTableResource(

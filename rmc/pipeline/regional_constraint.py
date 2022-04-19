@@ -1,11 +1,10 @@
 import argparse
 import logging
-import os
-import subprocess
 
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 
@@ -43,8 +42,8 @@ from rmc.utils.generic import (
     filter_to_region_type,
     generate_models,
     get_avg_bases_between_mis,
+    get_constraint_transcripts,
     get_coverage_correction_expr,
-    get_outlier_transcripts,
     keep_criteria,
     process_context_ht,
     process_vep,
@@ -503,7 +502,7 @@ def main(args):
                 )
 
             if args.remove_outlier_transcripts:
-                outlier_transcripts = get_outlier_transcripts()
+                outlier_transcripts = get_constraint_transcripts(outlier=True)
 
             logger.info("Reading in context HT...")
             # Drop extra annotations from context HT

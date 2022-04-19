@@ -151,7 +151,6 @@ def process_context_ht(
         "Filtering to canonical transcripts and annotating with most severe consequence...",
     )
     if filter_to_missense:
-        logger.info("Filtering to %s...", missense_str)
         ht = process_vep(ht, filter_csq=True, csq=missense_str)
     else:
         ht = process_vep(ht)
@@ -232,7 +231,7 @@ def get_exome_bases(build: str) -> int:
     )
 
     logger.info("Removing outlier transcripts...")
-    outlier_transcripts = get_outlier_transcripts()
+    outlier_transcripts = get_constraint_transcripts(outlier=True)
     ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
     ht = ht.explode(ht.transcript_consequences)
     ht = ht.filter(
@@ -328,7 +327,7 @@ def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.T
     Option to filter Table to specific variant consequence (csq).
 
     :param Table ht: Input Table.
-    :param bool filter: Whether to filter Table to a specific consequence. Default is False.
+    :param bool filter_csq: Whether to filter Table to a specific consequence. Default is False.
     :param str csq: Desired consequence. Default is None. Must be specified if filter is True.
     :return: Table filtered to canonical transcripts with option to filter to specific variant consequence.
     :rtype: hl.Table
@@ -474,16 +473,19 @@ def get_plateau_model(
 
 
 ## Outlier transcript util
-def get_outlier_transcripts(keep: bool = False) -> hl.expr.SetExpression:
+def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
     """
-    Read in LoF constraint HT results to get set of outlier transcripts.
+    Read in LoF constraint HT results to get set of transcripts.
+
+    Return either set of transcripts to keep (transcripts that passed transcript QC)
+    or outlier transcripts.
 
     Transcripts are removed for the reasons detailed here:
     https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
 
-    :param bool keep: Whether to filter LoF constraint HT to transcripts to keep (if keep is True),
-        or transcripts to remove (if keep is False). Default is False.
-    :return: Set of outlier transcripts.
+    :param bool outlier: Whether to filter LoF constraint HT to outlier transcripts to keep (if True),
+        or QC-pass transcripts (if False). Default is True.
+    :return: Set of outlier transcripts or transcript QC pass transcripts.
     :rtype: hl.expr.SetExpression
     """
     logger.warning(
@@ -496,13 +498,13 @@ def get_outlier_transcripts(keep: bool = False) -> hl.expr.SetExpression:
     constraint_transcript_ht = constraint_transcript_ht.filter(
         constraint_transcript_ht.canonical
     ).select("constraint_flag")
-    if keep:
+    if outlier:
         constraint_transcript_ht = constraint_transcript_ht.filter(
-            hl.len(constraint_transcript_ht.constraint_flag) == 0
+            hl.len(constraint_transcript_ht.constraint_flag) > 0
         )
     else:
         constraint_transcript_ht = constraint_transcript_ht.filter(
-            hl.len(constraint_transcript_ht.constraint_flag) > 0
+            hl.len(constraint_transcript_ht.constraint_flag) == 0
         )
     return hl.literal(
         constraint_transcript_ht.aggregate(
