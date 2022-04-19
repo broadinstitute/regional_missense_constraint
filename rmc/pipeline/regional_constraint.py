@@ -83,9 +83,6 @@ def main(args):
             context_ht = context_ht.filter(
                 hl.is_missing(exome_join) | keep_criteria(exome_join)
             )
-            # NOTE: need to repartition here to desired number of partitions!
-            # NOTE: should use ~30k-40k partitions
-            context_ht = context_ht.repartition(args.n_partitions)
             context_ht.write(processed_context.path, overwrite=args.overwrite)
 
             exome_ht = exome_ht.filter(keep_criteria(exome_ht))
@@ -99,7 +96,9 @@ def main(args):
             exome_ht = filtered_exomes.ht()
 
             logger.info("Reading in context HT...")
-            context_ht = processed_context.ht()
+            context_ht = hl.read_table(
+                processed_context.path, _n_partitions=args.n_partitions
+            )
 
             logger.info("Building plateau and coverage models...")
             coverage_ht = prop_obs_coverage.ht()
@@ -395,7 +394,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--n-partitions",
-        help="Desired number of partitions for output data",
+        help="Desired number of partitions for processed context Table. Only used to repartition processed context Table on read.",
         type=int,
         default=40000,
     )
