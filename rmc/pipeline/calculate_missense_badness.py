@@ -30,7 +30,6 @@ def main(args):
         raise DataException("Please specify command for this script!")
 
     try:
-
         if args.command == "prepare-amino-acid-ht":
             hl.init(log="/calc_misbad_prep_context_gamma_ht.log")
             prepare_amino_acid_ht()
