@@ -5,16 +5,13 @@ import hail as hl
 
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
-from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
     constraint_prep,
     LOGGING_PATH,
     multiple_breaks,
-    no_breaks,
     not_one_break,
-    not_one_break_grouped,
     one_break,
     simul_break,
     temp_path,
@@ -26,8 +23,8 @@ from rmc.resources.grch37.gnomad import (
     processed_exomes,
     prop_obs_coverage,
 )
-from rmc.resources.grch37.reference_data import gene_model, processed_context
-from rmc.resources.resource_utils import GNOMAD_VER, MISSENSE
+from rmc.resources.grch37.reference_data import processed_context
+from rmc.resources.resource_utils import CURRENT_VERSION, MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     calculate_exp_per_transcript,
@@ -41,7 +38,6 @@ from rmc.utils.constraint import (
 from rmc.utils.generic import (
     filter_to_region_type,
     generate_models,
-    get_avg_bases_between_mis,
     get_constraint_transcripts,
     get_coverage_correction_expr,
     keep_criteria,
@@ -140,7 +136,9 @@ def main(args):
             )
             context_ht = context_ht.annotate(
                 coverage_correction=get_coverage_correction_expr(
-                    context_ht.exome_coverage, coverage_model, args.high_cov_cutoff,
+                    context_ht.exome_coverage,
+                    coverage_model,
+                    args.high_cov_cutoff,
                 )
             )
 
@@ -165,13 +163,19 @@ def main(args):
 
                 logger.info("Calculating expected values per transcript...")
                 exp_ht = calculate_exp_per_transcript(
-                    context_auto_ht, locus_type="autosomes", groupings=GROUPINGS,
+                    context_auto_ht,
+                    locus_type="autosomes",
+                    groupings=GROUPINGS,
                 )
                 exp_x_ht = calculate_exp_per_transcript(
-                    context_x_ht, locus_type="X", groupings=GROUPINGS,
+                    context_x_ht,
+                    locus_type="X",
+                    groupings=GROUPINGS,
                 )
                 exp_y_ht = calculate_exp_per_transcript(
-                    context_y_ht, locus_type="Y", groupings=GROUPINGS,
+                    context_y_ht,
+                    locus_type="Y",
+                    groupings=GROUPINGS,
                 )
                 exp_ht = exp_ht.union(exp_x_ht).union(exp_y_ht)
 
@@ -358,81 +362,6 @@ def main(args):
 
             context_ht.write(multiple_breaks.path, overwrite=args.overwrite)
 
-        if args.search_for_simul_breaks:
-
-            logger.info(
-                "Searching for two simultaneous breaks in transcripts that didn't have \
-                a single significant break..."
-            )
-            if not file_exists(not_one_break_grouped.path) or args.create_grouped_ht:
-                # Make sure user didn't specify a min obs of zero
-                if args.min_num_obs == 0:
-                    raise DataException(
-                        "Minimum number of observed variants must be greater than zero!"
-                    )
-
-                logger.info(
-                    "Getting start and end positions and total size for each transcript..."
-                )
-                transcript_ht = gene_model.ht()
-
-                # Get number of base pairs needed to observe `num` number of missense variants (on average)
-                # This number is used to determine the min_window_size - which is the smallest allowed distance between simultaneous breaks.
-                min_window_size = (
-                    get_avg_bases_between_mis(
-                        get_reference_genome(context_ht.locus).name,
-                        args.get_total_exome_bases,
-                        args.get_total_gnomad_missense,
-                    )
-                    * args.min_num_obs
-                )
-                logger.info(
-                    "Minimum window size (window size needed to observe %i missense variants on average): %i",
-                    args.min_num_obs,
-                    min_window_size,
-                )
-
-                logger.info(
-                    "Creating grouped HT with lists of cumulative observed and expected missense values..."
-                )
-                ht = not_one_break.ht()
-                group_ht = ht.group_by("transcript").aggregate(
-                    cum_obs=hl.agg.collect(ht.cumulative_obs),
-                    cum_exp=hl.agg.collect(ht.cumulative_exp),
-                    total_oe=hl.agg.take(ht.overall_oe, 1)[0],
-                    positions=hl.sorted(hl.agg.collect(ht.locus.position)),
-                )
-                group_ht = group_ht.annotate_globals(min_window_size=min_window_size)
-                group_ht = group_ht.annotate(max_idx=hl.len(group_ht.positions) - 1)
-                group_ht = group_ht.annotate(
-                    transcript_start=transcript_ht[group_ht.key].start_pos,
-                    transcript_end=transcript_ht[group_ht.key].end_pos,
-                )
-                group_ht.write(not_one_break_grouped.path, overwrite=True)
-
-            group_ht = not_one_break_grouped.ht()
-
-            logger.info("Searching for transcripts with simultaneous breaks...")
-            group_ht = search_for_two_breaks(group_ht, args.chisq_threshold)
-
-            logger.info("Writing out simultaneous breaks HT...")
-            group_ht.write(simul_break.path, overwrite=args.overwrite)
-
-            # Collecting all transcripts with two simultaneous breaks
-            simul_break_transcripts = group_ht.aggregate(
-                hl.agg.collect_as_set(group_ht.transcript),
-            )
-            simul_break_transcripts = hl.literal(simul_break_transcripts)
-
-            logger.info(
-                "Getting transcripts with no evidence of regional missense constraint..."
-            )
-            context_ht = not_one_break.ht()
-            context_ht = context_ht.filter(
-                ~simul_break_transcripts.contains(context_ht.transcript)
-            )
-            context_ht.write(no_breaks.path, overwrite=args.overwrite)
-
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions
         # after running on gnomAD v2
@@ -518,6 +447,7 @@ def main(args):
             multiple_breaks_ht = multiple_breaks_ht.filter(
                 ~outlier_transcripts.contains(multiple_breaks_ht.transcript)
             )
+            # TODO: Update simul breaks reformatting
             simul_breaks_ht = simul_break.ht()
             simul_breaks_ht = simul_breaks_ht.filter(
                 ~outlier_transcripts.contains(simul_breaks_ht.transcript)
@@ -600,7 +530,7 @@ def main(args):
                 ~total_rmc_transcripts.contains(context_ht.transcript)
             )
 
-            if GNOMAD_VER == "2.1.1":
+            if CURRENT_VERSION == "2.1.1":
                 logger.info("Reading in XG HT (one-off fix in v2.1.1)...")
                 xg_ht = hl.read_table(f"{temp_path}/XG.ht").select(
                     "total_mu",
@@ -720,62 +650,14 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--search-for-simul-breaks",
-        help="Search for two simultaneous breaks in transcripts without a single significant break",
-        action="store_true",
-    )
-    simul_breaks = parser.add_argument_group(
-        "simul_breaks",
-        description="Options specific to running simultaneous breaks search",
-    )
-    simul_breaks.add_argument(
-        "--transcript-tsv",
-        help="Path to store transcripts to search for two simultaneous breaks. Path should be to a file in Google cloud storage.",
-        default=f"{temp_path}/no_break_transcripts.tsv",
-    )
-    simul_breaks.add_argument(
-        "--get-no-break-transcripts",
-        help="Get all transcripts without evidence of one significant break (to search for two simultaneous breaks.",
-        action="store_true",
-    )
-    simul_breaks.add_argument(
-        "--get-min-window-size",
-        help="Determine smallest possible window size for simultaneous breaks.",
-        action="store_true",
-    )
-    simul_breaks.add_argument(
-        "--get-total-exome-bases",
-        help="Get total number of bases in the exome. If not set, will pull default value from TOTAL_EXOME_BASES.",
-        action="store_true",
-    )
-    simul_breaks.add_argument(
-        "--get-total-gnomad-missense",
-        help="Get total number of missense variants in gnomAD. If not set, will pull default value from TOTAL_GNOMAD_MISSENSE.",
-        action="store_true",
-    )
-    simul_breaks.add_argument(
-        "--min-num-obs",
-        help="Number of observed variants. Used when determining the smallest possible window size for simultaneous breaks.",
-        default=10,
-        type=int,
-    )
-    simul_breaks.add_argument(
-        "--create-grouped-ht",
-        help="Create hail Table grouped by transcript with cumulative observed and expected missense values collected into lists.",
-        action="store_true",
-    )
-    simul_breaks.add_argument(
-        "--simul-breaks-temp-path",
-        help="Path to bucket with temporary simultaneous breaks results tables.",
-        default=f"{temp_path}/simul_breaks_x*.ht",
-    )
-    parser.add_argument(
         "--fix-xg",
         help="Fix XG (gene that spans PAR and non-PAR regions on chrX). Required only for gnomAD v2",
         action="store_true",
     )
     parser.add_argument(
-        "--xg-transcript", help="Transcript ID for XG", default="ENST00000419513",
+        "--xg-transcript",
+        help="Transcript ID for XG",
+        default="ENST00000419513",
     )
     parser.add_argument(
         "--finalize",
