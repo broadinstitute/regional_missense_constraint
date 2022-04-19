@@ -1,5 +1,3 @@
-import hail as hl
-
 from gnomad.resources.resource_utils import (
     TableResource,
     VersionedTableResource,
@@ -16,6 +14,13 @@ processed_context = VersionedTableResource(
         )
     },
 )
+"""
+Context Table filtered to missense variants in canonical protein coding transcripts and annotated with
+probability of mutation for each variant, CpG status, gnomAD exome coverage, and methylation level.
+
+Used to calculate the cumulative observed and expected missense values per locus and
+generate regional missense constraint results.
+"""
 
 gene_model = TableResource(path=f"{RESOURCE_PREFIX}/GRCh37/browser/b37_transcripts.ht")
 """
