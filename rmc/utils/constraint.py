@@ -730,7 +730,7 @@ def get_subsection_exprs(
 
     logger.info("Getting observed/expected value for each transcript section...")
     return ht.annotate(
-        break_oe=get_obs_exp_expr(
+        section_oe=get_obs_exp_expr(
             cond_expr=hl.is_defined(ht[section_str]),
             obs_expr=ht.section_obs,
             exp_expr=ht.section_exp,
@@ -762,10 +762,10 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     """
     ht = get_subsection_exprs(ht)
 
-    # Rename break_oe (each section's observed/expected value) to be overall_oe
+    # Rename section_oe (each section's observed/expected value) to be overall_oe
     # This is because the overall OE ratio used in searching for additional breaks should be
     # transcript section OE and not transcript overall OE
-    ht = ht.transmute(overall_oe=ht.break_oe)
+    ht = ht.transmute(overall_oe=ht.section_oe)
 
     logger.info("Splitting HT into pre and post breakpoint sections...")
     pre_ht = ht.filter(ht.section.contains("pre"))
@@ -903,7 +903,7 @@ def get_section_info(
 
     :param hl.Table ht: Input Table.
     :param int section_num: Transcript section number (e.g., 1 for first section, 2 for second, 3 for third, etc.).
-    :param str section_type: Transcript section type. Must be one of 'first', 'middle', or 'end'.
+    :param str section_type: Transcript section type. Must be one of 'first', 'middle', or 'last'.
     :param Tuple[int] indices: List of indices pointing to breakpoints.
     :return: Table containing transcript and new section obs, exp, and chi square annotations.
     """
@@ -970,7 +970,7 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
     :param int max_n_breaks: Largest number of breaks.
     :return: Table with section and section values annotated.
     """
-    logger.info("Get section information for first section of each transcript...")
+    logger.info("Getting section information for first section of each transcript...")
     count = 1
     section_ht = get_section_info(
         ht,
@@ -1133,9 +1133,10 @@ def finalize_multiple_breaks(
         Default is FINAL_ANNOTATIONS.
     :return: Table annotated with transcript subsection values and breakpoint positions.
     """
+    # TODO: Change this to use updated get_outlier_transcripts function (updated in `misbad` branch)
     logger.info("Removing outlier transcripts...")
-    outlier_transcripts = get_outlier_transcripts()
-    ht = ht.filter(~outlier_transcripts.contains(ht.transcript))
+    pass_transcripts = get_outlier_transcripts(keep=True)
+    ht = ht.filter(pass_transcripts.contains(ht.transcript))
 
     logger.info("Getting transcripts associated with each break number...")
     # Get number of transcripts unique to each break number
@@ -1144,7 +1145,6 @@ def finalize_multiple_breaks(
     ht = ht.select_globals()
     transcripts_per_break = get_unique_transcripts_per_break(ht)
 
-    # Print number of transcripts per break to output
     for break_num in transcripts_per_break:
         logger.info(
             "Break number %i has %i transcripts",
@@ -1156,7 +1156,6 @@ def finalize_multiple_breaks(
     ht = ht.select(*annotations)
     ht = ht.checkpoint(f"{temp_path}/multiple_breaks.ht", overwrite=True)
 
-    logger.info("Getting all breakpoint positions...")
     # This table is checkpointed as part of `get_unique_transcripts_per_break` above
     break_ht = hl.read_table(f"{temp_path}/breaks_per_transcript.ht")
     ht = ht.annotate(break_pos=break_ht[ht.transcript].break_pos)
@@ -1164,20 +1163,20 @@ def finalize_multiple_breaks(
     logger.info("Get transcript section annotations (obs, exp, OE, chisq)...")
     hts = []
     for i in range(1, max_n_breaks + 1):
-        transcripts = hl.literal(transcripts_per_break[i])
-        if hl.is_missing(transcripts):
+        transcripts = hl.eval(transcripts_per_break[i])
+        if not transcripts:
             logger.info("Break number %i has no transcripts. Continuing...")
 
         # Filter HT to transcripts associated with this break only
         # and annotate section information
-        temp_ht = ht.filter(transcripts.contains(ht.transcript))
+        temp_ht = ht.filter(hl.literal(transcripts).contains(ht.transcript))
         temp_ht = annotate_transcript_sections(temp_ht, i)
 
-        # Add section oe
-        # Do not cap section oe value here (this is for browser display)
+        # Recalculate section oe to remove cap at 1
+        # Cap is only necessary when calculating constraint results and should not be included in release
         temp_ht = temp_ht.annotate(section_oe=temp_ht.section_obs / temp_ht.section_exp)
         temp_ht = temp_ht.checkpoint(
-            f"gs://regional_missense_constraint/temp/break_{i}_sections.ht",
+            f"{temp_path}/break_{i}_sections.ht",
             overwrite=True,
         )
         hts.append(temp_ht)
