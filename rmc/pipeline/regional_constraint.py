@@ -385,24 +385,7 @@ if __name__ == "__main__":
         "This script searches for regional missense constraint in gnomAD"
     )
     parser.add_argument(
-        "--vep-version",
-        help="VEP version used to annotate full context Table.",
-        default=VEP_VERSION,
-    )
-    parser.add_argument(
-        "--trimers", help="Use trimers instead of heptamers", action="store_true"
-    )
-    parser.add_argument(
-        "--n-partitions",
-        help="Desired number of partitions for processed context Table. Only used to repartition processed context Table on read.",
-        type=int,
-        default=40000,
-    )
-    parser.add_argument(
-        "--high-cov-cutoff",
-        help="Coverage threshold for a site to be considered high coverage",
-        type=int,
-        default=40,
+        "--overwrite", help="Overwrite existing data", action="store_true"
     )
     parser.add_argument(
         "--chisq-threshold",
@@ -415,51 +398,63 @@ if __name__ == "__main__":
         default=6.6,
     )
     parser.add_argument(
+        "--slack-channel",
+        help="Send message to Slack channel/user",
+    )
+
+    parser.add_argument(
         "--pre-process-data", help="Pre-process data", action="store_true"
     )
+    parser.add_argument(
+        "--vep-version",
+        help="VEP version used to annotate full context Table.",
+        default=VEP_VERSION,
+    )
+    parser.add_argument(
+        "--trimers", help="Use trimers instead of heptamers", action="store_true"
+    )
+    parser.add_argument(
+        "--high-cov-cutoff",
+        help="Coverage threshold for a site to be considered high coverage",
+        type=int,
+        default=40,
+    )
+
     parser.add_argument(
         "--prep-for-constraint",
         help="Prepare tables for constraint calculations",
         action="store_true",
     )
     parser.add_argument(
+        "--n-partitions",
+        help="Desired number of partitions for processed context Table. Only used to repartition processed context Table on read.",
+        type=int,
+        default=40000,
+    )
+    parser.add_argument(
         "--skip-calc-oe",
         help="Skip observed and expected variant calculations per transcript. Relevant only to gnomAD v2.1.1!",
         action="store_true",
     )
+
     parser.add_argument(
         "--search-for-first-break",
         help="Initial search for one break in all transcripts",
         action="store_true",
     )
+
     parser.add_argument(
         "--search-for-additional-breaks",
         help="Search for additional break in transcripts with one significant break",
         action="store_true",
     )
+
     parser.add_argument(
         "--finalize",
         help="Combine and reformat (finalize) RMC output",
         action="store_true",
     )
-    parser.add_argument(
-        "--overwrite-transcript-ht",
-        help="Overwrite the transcript HT (HT with start/end positions and transcript sizes), even if it already exists.",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--remove-outlier-transcripts",
-        help="Remove outlier transcripts (transcripts with too many/few LoF, synonymous, or missense variants)",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--overwrite", help="Overwrite existing data", action="store_true"
-    )
-    parser.add_argument(
-        "--slack-channel",
-        help="Send message to Slack channel/user",
-        default="@kc (she/her)",
-    )
+
     args = parser.parse_args()
 
     if args.slack_channel:
