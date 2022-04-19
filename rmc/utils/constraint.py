@@ -9,17 +9,22 @@ from gnomad.resources.resource_utils import DataException
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
 from rmc.resources.basics import (
-    breaks,
+    constraint_prep,
     multiple_breaks,
     oe_bin_counts_tsv,
+    rmc_browser,
+    rmc_results,
+    simul_break,
     temp_path,
     TOTAL_EXOME_BASES,
 )
-from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo
+from rmc.resources.grch37.reference_data import (
+    clinvar_path_mis,
+    de_novo,
+)
 from rmc.utils.generic import (
     get_coverage_correction_expr,
     get_exome_bases,
-    get_outlier_transcripts,
     import_clinvar_hi_variants,
     import_de_novo_variants,
 )
@@ -72,21 +77,43 @@ List of annotations required to calculate constraint.
 Used to drop unnecessary fields when searching for simultaneous breaks.
 """
 
-FINAL_ANNOTATIONS = [
+MULTI_BREAK_ANNOTATIONS = [
     "mu_snp",
     "observed",
     "total_exp",
     "total_mu",
     "total_obs",
     "cumulative_obs",
-    "_mu_scan",
     "cumulative_exp",
     "break_list",
     "start_pos",
     "end_pos",
 ]
 """
-List of annotations to keep when finalizing release HT.
+List of annotations to keep when finalizing first/additional (multiple) breaks HT.
+"""
+
+SIMUL_BREAK_ANNOTATIONS = [
+    "max_chisq",
+    "break_pos",
+    "start_pos",
+    "end_pos",
+]
+"""
+List of annotations to keep when finalizing two simultaneous breaks HT.
+"""
+
+CONSTRAINT_ANNOTATIONS = [
+    "section_start_pos",
+    "section_end_pos",
+    "section",
+    "section_exp",
+    "section_obs",
+    "section_chisq",
+    "section_oe",
+]
+"""
+List of annotations to keep on finalized regional missense constraint results HT.
 """
 
 
@@ -893,9 +920,21 @@ def get_section_info(
     section_num: int,
     section_type: str,
     indices: Tuple[int],
+    simul_breaks: bool,
 ) -> hl.Table:
     """
     Get the number of observed variants, number of expected variants, and chi square value for transcript section.
+
+    Section observed and expected missense calculations are slightly different between the first/addtional breaks results and the
+    two simultaneous breaks results. This is because the breakpoints are treated differently:
+
+    For first/additional breaks, breakpoints are treated as part of the previous transcript subsection.
+    For example, for a transcript with 200 positions and a single breakpoint between 99 and 100,
+    the transcript would be divided into the sections [1,99], (99,200].
+
+    For two simultaneous breaks, the two breakpoints are treated as a section.
+    For example, for a transcript with 200 positions, and two breaks at 50 and 100,
+    the transcript would be divided into the sections [1, 50), [50, 100], (100, 200].
 
     .. note::
         Assumes that the input Table is annotated with a list of breakpoint positions (`break_pos`) and
@@ -905,6 +944,7 @@ def get_section_info(
     :param int section_num: Transcript section number (e.g., 1 for first section, 2 for second, 3 for third, etc.).
     :param str section_type: Transcript section type. Must be one of 'first', 'middle', or 'last'.
     :param Tuple[int] indices: List of indices pointing to breakpoints.
+    :param bool simul_breaks: Whether this function is getting section information for two simultaneous breaks.
     :return: Table containing transcript and new section obs, exp, and chi square annotations.
     """
     assert section_type in {
@@ -918,24 +958,38 @@ def get_section_info(
         logger.info(
             "Getting info for first section of transcript (up to and including smallest breakpoint pos)..."
         )
-        ht = ht.filter(ht.locus.position <= ht.break_pos[0])
-        ht = ht.annotate(
-            # Start position is transcript start if this is the first section
-            section_start_pos=ht.start_pos,
-            section_end_pos=ht.break_pos[0],
-        )
+        if simul_breaks:
+            ht = ht.filter(ht.locus.position < ht.break_pos[0])
+            ht = ht.annotate(
+                section_start_pos=ht.start_pos,
+                section_end_pos=ht.break_pos[0] - 1,
+            )
+        else:
+            ht = ht.filter(ht.locus.position <= ht.break_pos[0])
+            ht = ht.annotate(
+                section_start_pos=ht.start_pos,
+                section_end_pos=ht.break_pos[0],
+            )
     elif section_type == "middle":
-        ht = ht.filter(
-            (ht.locus.position > ht.break_pos[indices[0]])
-            & (ht.locus.position <= ht.break_pos[indices[1]])
-        )
-
-        # Add section start/end position annotations
-        ht = ht.annotate(
-            # Add 1 to break_pos[indices[0]] since it isn't actually included in the region
-            section_start_pos=ht.break_pos[indices[0]] + 1,
-            section_end_pos=ht.break_pos[indices[1]],
-        )
+        if simul_breaks:
+            ht = ht.filter(
+                (ht.locus.position >= ht.break_pos[indices[0]])
+                & (ht.locus.position <= ht.break_pos[indices[1]])
+            )
+            ht = ht.annotate(
+                section_start_pos=ht.break_pos[indices[0]],
+                section_end_pos=ht.break_pos[indices[1]],
+            )
+        else:
+            ht = ht.filter(
+                (ht.locus.position > ht.break_pos[indices[0]])
+                & (ht.locus.position <= ht.break_pos[indices[1]])
+            )
+            ht = ht.annotate(
+                # Add 1 to break_pos[indices[0]] since it isn't actually included in the region
+                section_start_pos=ht.break_pos[indices[0]] + 1,
+                section_end_pos=ht.break_pos[indices[1]],
+            )
 
     else:
         logger.info(
@@ -958,7 +1012,9 @@ def get_section_info(
     )
 
 
-def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
+def annotate_transcript_sections(
+    ht: hl.Table, max_n_breaks: int, simul_breaks: bool
+) -> hl.Table:
     """
     Annotate each transcript section with observed, expected, OE, and section chi square values.
 
@@ -968,6 +1024,7 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
 
     :param hl.Table ht: Input Table.
     :param int max_n_breaks: Largest number of breaks.
+    :param bool simul_breaks: Whether this function is getting section information for two simultaneous breaks.
     :return: Table with section and section values annotated.
     """
     logger.info("Getting section information for first section of each transcript...")
@@ -977,6 +1034,7 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
         section_num=count,
         section_type="first",
         indices=None,
+        simul_breaks=simul_breaks,
     )
 
     # Check sections between breakpoint positions
@@ -992,16 +1050,23 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int) -> hl.Table:
                 section_num=count,
                 section_type="middle",
                 indices=(count - 2, count - 1),
+                simul_breaks=simul_breaks,
             )
             section_ht = section_ht.union(temp_ht)
             count += 1
-    end_ht = get_section_info(ht, section_num=count, section_type="last", indices=None)
+    end_ht = get_section_info(
+        ht,
+        section_num=count,
+        section_type="last",
+        indices=None,
+        simul_breaks=simul_breaks,
+    )
     return section_ht.union(end_ht)
 
 
 def get_unique_transcripts_per_break(
     ht: hl.Table,
-) -> Dict[int, Union[Set[str], hl.expr.SetExpression]]:
+) -> Tuple[Dict[int, Union[Set[str], hl.expr.SetExpression]], int]:
     """
     Return a DictExpression with break numbers (key) and set of transcripts unique to each break number (value).
 
@@ -1015,7 +1080,8 @@ def get_unique_transcripts_per_break(
         (`break_list`).
 
     :param hl.Table: Input Table.
-    :return: Dictionary with break number (key) and set of transcripts unique to that break number or empty SetExpression (value).
+    :return: Tuple of dictionary with break number (key) and set of transcripts unique to that break number or empty SetExpression (value) and
+        maximum number of breaks for any transcript.
     """
     transcripts_per_break = {}
     # Use `break_list` annotation (list of booleans for whether a row is a breakpoint)
@@ -1049,7 +1115,7 @@ def get_unique_transcripts_per_break(
     hl.experimental.write_expression(
         transcripts_per_break, f"{temp_path}/transcripts_per_break.he"
     )
-    return transcripts_per_break
+    return (transcripts_per_break, max_n_breaks)
 
 
 def reformat_annotations_for_release(ht: hl.Table) -> hl.Table:
@@ -1079,8 +1145,8 @@ def reformat_annotations_for_release(ht: hl.Table) -> hl.Table:
     """
     ht = ht.annotate(
         regions=hl.struct(
-            start=ht.section_start,
-            stop=ht.section_end,
+            start=ht.section_start_pos,
+            stop=ht.section_end_pos,
             observed_missense=ht.section_obs,
             expected_missense=ht.section_exp,
             chisq=ht.section_chisq,
@@ -1093,9 +1159,8 @@ def reformat_annotations_for_release(ht: hl.Table) -> hl.Table:
 
 
 def finalize_multiple_breaks(
-    ht: hl.Table,
-    max_n_breaks: int,
-    annotations: List[str] = FINAL_ANNOTATIONS,
+    multi_breaks_ht: hl.Table,
+    annotations: List[str] = MULTI_BREAK_ANNOTATIONS,
 ) -> hl.Table:
     """
     Organize table of transcripts with multiple breaks.
@@ -1106,7 +1171,7 @@ def finalize_multiple_breaks(
     Assumes:
         - Table is annotated with set of transcripts per break (e.g., `break_1_transcripts`)
 
-    :param hl.Table ht: Input Table. Example schema (truncated at two breaks for space reasons):
+    :param hl.Table multi_breaks_ht: Input Table. Example schema (truncated at two breaks for space reasons):
         ---------------------------------------
         Row fields:
             'locus': locus<grch37>
@@ -1128,22 +1193,20 @@ def finalize_multiple_breaks(
         ----------------------------------------
         Key: ['locus', 'transcript']
         ----------------------------------------
-    :param int max_n_breaks: Largest number of breakpoints in any transcript.
     :param List[str] annotations: List of annotations to keep from input Table.
-        Default is FINAL_ANNOTATIONS.
+        Default is MULTI_BREAK_ANNOTATIONS.
     :return: Table annotated with transcript subsection values and breakpoint positions.
     """
-    # TODO: Change this to use updated get_outlier_transcripts function (updated in `misbad` branch)
-    logger.info("Removing outlier transcripts...")
-    pass_transcripts = get_outlier_transcripts()
-    ht = ht.filter(pass_transcripts.contains(ht.transcript))
-
     logger.info("Getting transcripts associated with each break number...")
     # Get number of transcripts unique to each break number
     # Transcript sets in globals of multiple breaks HT are not unique
     # i.e., `break_1_transcripts` could contain transcripts that are also present in `break_2_transcripts`
-    ht = ht.select_globals(multiple_breaks_chisq_threshold=ht.chisq_threshold)
-    transcripts_per_break = get_unique_transcripts_per_break(ht)
+    multi_breaks_ht = multi_breaks_ht.select_globals(
+        multiple_breaks_chisq_threshold=multi_breaks_ht.chisq_threshold
+    )
+    transcripts_per_break, max_n_breaks = get_unique_transcripts_per_break(
+        multi_breaks_ht
+    )
 
     for break_num in transcripts_per_break:
         logger.info(
@@ -1153,12 +1216,20 @@ def finalize_multiple_breaks(
         )
 
     logger.info("Selecting only relevant annotations from HT and checkpointing...")
-    ht = ht.select(*annotations)
-    ht = ht.checkpoint(f"{temp_path}/multiple_breaks.ht", overwrite=True)
+    multiple_breaks_transcripts = multi_breaks_ht.aggregate(
+        hl.agg.collect_as_set(multi_breaks_ht.transcript)
+    )
 
+    # Reading in processed context HT (annotated with cumulative obs/exp missense values)
+    # because multiple breaks HT only contains one row per transcript
+    # Need the context HT to be able to calculate the observed and expected values for each transcript subsection
+    ht = constraint_prep.ht()
+    ht = ht.filter(hl.literal(multiple_breaks_transcripts).contains(ht.transcript))
     # This table is checkpointed as part of `get_unique_transcripts_per_break` above
     break_ht = hl.read_table(f"{temp_path}/breaks_per_transcript.ht")
     ht = ht.annotate(break_pos=break_ht[ht.transcript].break_pos)
+    ht = ht.select(*annotations)
+    ht = ht.checkpoint(f"{temp_path}/multiple_breaks.ht", overwrite=True)
 
     logger.info("Get transcript section annotations (obs, exp, OE, chisq)...")
     hts = []
@@ -1166,11 +1237,12 @@ def finalize_multiple_breaks(
         transcripts = hl.eval(transcripts_per_break[i])
         if not transcripts:
             logger.info("Break number %i has no transcripts. Continuing...")
+            continue
 
         # Filter HT to transcripts associated with this break only
         # and annotate section information
         temp_ht = ht.filter(hl.literal(transcripts).contains(ht.transcript))
-        temp_ht = annotate_transcript_sections(temp_ht, i)
+        temp_ht = annotate_transcript_sections(temp_ht, i, simul_breaks=False)
 
         # Recalculate section oe to remove cap at 1
         # Cap is only necessary when calculating constraint results and should not be included in release
@@ -1188,26 +1260,50 @@ def finalize_multiple_breaks(
     return ht
 
 
-def finalize_simul_breaks(ht: hl.Table) -> hl.Table:
+def finalize_simul_breaks(
+    simul_ht: hl.Table, annotations: List[str] = SIMUL_BREAK_ANNOTATIONS
+) -> hl.Table:
     """
     Process Table containing transcripts with two simultaneous breaks.
 
     Calculate each transcript subsection observed, expected, OE, and chi-square values.
 
-    :param hl.Table ht: Input Table with simultaneous breaks results.
+    :param hl.Table simul_ht: Input Table with simultaneous breaks results.
     :return: Table annotated with transcript subsection values.
     """
+    # Rename chisq cutoff in simultaneous breaks HT
+    simul_ht = simul_ht.transmute(simul_breaks_chisq_threshold=simul_ht.chisq_threshold)
+    simul_ht = simul_ht.select(*annotations)
+    simul_break_transcripts = simul_ht.aggregate(
+        hl.agg.collect_as_set(simul_ht.transcript)
+    )
+
+    logger.info(
+        "Reading in processed context Table, adding simul breaks annotations, and checkpointing..."
+    )
+    # Reading in processed context HT (annotated with cumulative obs/exp missense values)
+    # because simultaneous breaks HT only contains one row per transcript
+    # Need the context Table to be able to calculate the observed and expected values for each transcript subsection
+    ht = constraint_prep.ht()
+    ht = ht.filter(hl.literal(simul_break_transcripts).contains(ht.transcript))
+    ht = ht.annotate(
+        start_pos=simul_ht[ht.transcript].start,
+        end_pos=simul_ht[ht.transcript].stop,
+        max_chisq=simul_ht[ht.transcript].max_chisq,
+        break_pos=simul_ht[ht.transcript].break_pos,
+    )
+    ht = ht.checkpoint(f"{temp_path}/simul_breaks.ht", overwrite=True)
+
     logger.info("Get transcript section annotations (obs, exp, OE, chisq)...")
-    ht = annotate_transcript_sections(ht, max_n_breaks=2)
-    ht = ht.checkpoint(f"{temp_path}/simul_break_sections.ht", overwrite=True)
+    ht = annotate_transcript_sections(ht, max_n_breaks=2, simul_breaks=True)
+    ht = ht.checkpoint(simul_break.path, overwrite=True)
     return ht
 
 
 def finalize_all_breaks_results(
-    breaks_ht: hl.Table,
+    multi_breaks_ht: hl.Table,
     simul_breaks_ht: hl.Table,
-    max_n_breaks: int,
-    annotations: List[str] = FINAL_ANNOTATIONS,
+    annotations: List[str] = CONSTRAINT_ANNOTATIONS,
 ) -> None:
     """
     Finalize all breaks results.
@@ -1217,24 +1313,24 @@ def finalize_all_breaks_results(
 
     Also reformat Table to match desired release HT schema.
 
-    :param hl.Table breaks_ht: Input Table with multiple break results.
+    :param hl.Table multi_breaks_ht: Input Table with first/additional (multiple) break results.
     :param hl.Table simul_breaks_ht: Input Table with simultaneous breaks results.
     :param int max_n_breaks: Largest number of breakpoints in any transcript. Used only for multiple breaks results.
     :param List[str] annotations: List of annotations to keep from input Table.
-        Default is FINAL_ANNOTATIONS.
+        Default is CONSTRAINT_ANNOTATIONS.
     :return: None; writes Table to resource path.
     """
     logger.info("Finalizing multiple breaks results...")
-    breaks_ht = finalize_multiple_breaks(breaks_ht, max_n_breaks, annotations)
+    multi_breaks_ht = finalize_multiple_breaks(multi_breaks_ht).select(*annotations)
 
     logger.info("Finalizing simultaneous breaks results...")
-    simul_breaks_ht = finalize_simul_breaks(simul_breaks_ht)
-    ht = breaks_ht.union(simul_breaks_ht, unify=False)
-    ht = ht.checkpoint(f"{temp_path}/breaks.ht", overwrite=True)
+    simul_breaks_ht = finalize_simul_breaks(simul_breaks_ht).select(*annotations)
+    ht = multi_breaks_ht.union(simul_breaks_ht, unify=True)
+    ht = ht.checkpoint(rmc_results.path, overwrite=True)
 
     logger.info("Reformatting for browser release...")
     ht = reformat_annotations_for_release(ht)
-    ht.write(breaks.path, overwrite=True)
+    ht.write(rmc_browser.path, overwrite=True)
 
 
 def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:
@@ -1262,8 +1358,8 @@ def get_oe_bins(ht: hl.Table, build: str, get_total_exome_bases: bool = False) -
         - Proportion ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes.
 
     Assumes input Table is annotated with the following annotations:
-        - `section_start`: Start position for transcript subsection
-        - `section_end`: End position for transcript subsection
+        - `section_start_pos`: Start position for transcript subsection
+        - `section_end_pos`: End position for transcript subsection
         - `section_obs`: Number of observed missense variants within transcript subsection
         - `section_exp`: Proportion of expected missense variatns within transcript subsection
         - `section_oe`: Observed/expected missense variation ratio within transcript subsection
@@ -1319,8 +1415,8 @@ def get_oe_bins(ht: hl.Table, build: str, get_total_exome_bases: bool = False) -
     # Group HT by section to get number of base pairs per section
     # Need to group by to avoid overcounting
     group_ht = ht.group_by("section").aggregate(
-        start=hl.agg.take(ht.section_start, 1)[0],
-        end=hl.agg.take(ht.section_end, 1)[0],
+        start=hl.agg.take(ht.section_start_pos, 1)[0],
+        end=hl.agg.take(ht.section_end_pos, 1)[0],
         obs=hl.agg.take(ht.section_obs, 1)[0],
         exp=hl.agg.take(ht.section_exp, 1)[0],
         chisq=hl.agg.take(ht.section_chisq, 1)[0],
