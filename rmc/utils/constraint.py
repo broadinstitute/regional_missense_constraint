@@ -1462,6 +1462,7 @@ def get_oe_bins(ht: hl.Table, build: str, get_total_exome_bases: bool = False) -
     assess_ht.export(oe_bin_counts_tsv)
 
 
+# TODO: Remove this (expect RMC pipeline to be run after LoF constraint pipeline)
 def constraint_flag_expr(
     obs_syn_expr: hl.expr.Int64Expression,
     obs_mis_expr: hl.expr.Int64Expression,
