@@ -144,7 +144,7 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     context_ht = context_ht.annotate(_obs=gnomad.index(context_ht.key))
     context_ht = context_ht.transmute(observed=hl.int(hl.is_defined(context_ht._obs)))
 
-    logger.info("Checkpointing hT after joining with gnomAD data...")
+    logger.info("Checkpointing HT after joining with gnomAD data...")
     context_ht = context_ht.checkpoint(f"{temp_path}/codons_filt.ht", overwrite=True)
 
     logger.info(
