@@ -128,7 +128,7 @@ def process_context_ht(
 
     :param str build: Reference genome build; must be one of BUILDS.
     :param bool trimers: Whether to filter to trimers (if set to True) or heptamers. Default is True.
-    :param bool filter_to_missnese: Whether to filter Table to missense variants only. Default is True.
+    :param bool filter_to_missense: Whether to filter Table to missense variants only. Default is True.
     :param bool add_annotations: Whether to add mutation rate, CpG status, and methylation level annotations.
         Default is True.
     :return: Context HT filtered to canonical transcripts and optionally filtered to missense variants with
@@ -502,7 +502,7 @@ def get_outlier_transcripts(keep: bool = False) -> hl.expr.SetExpression:
         )
     return hl.literal(
         constraint_transcript_ht.aggregate(
-            hl.agg.collect_as_set(constraint_transcript_ht.transcript),
+            hl.agg.collect_as_set(constraint_transcript_ht.transcript)
         )
     )
 
