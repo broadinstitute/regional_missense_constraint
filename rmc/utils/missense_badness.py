@@ -148,7 +148,7 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     context_ht = context_ht.checkpoint(f"{temp_path}/codons_filt.ht", overwrite=True)
 
     logger.info(
-        "Getting observed to expecetd missense ratio, rekeying Table, and writing to output path..."
+        "Getting observed to expected missense ratio, rekeying Table, and writing to output path..."
     )
     context_ht = get_oe_annotation(context_ht)
     context_ht = context_ht.key_by().select(
