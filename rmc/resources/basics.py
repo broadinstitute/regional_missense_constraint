@@ -149,17 +149,6 @@ simul_break = VersionedTableResource(
 Table containing transcripts with two simultaneous breaks.
 """
 
-breaks = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/breaks.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing transcripts with any evidence of RMC (one break, multiple breaks, simultaneous breaks).
-"""
-
 no_breaks = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={

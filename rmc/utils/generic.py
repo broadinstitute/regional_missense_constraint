@@ -105,7 +105,10 @@ def get_divergence_scores() -> Dict[str, float]:
         d.readline()
         for line in d:
             transcript, score = line.strip().split("\t")
-            div_scores[transcript.split(".")[0]] = float(score)
+            try:
+                div_scores[transcript.split(".")[0]] = float(score)
+            except TypeError:
+                continue
     return div_scores
 
 
