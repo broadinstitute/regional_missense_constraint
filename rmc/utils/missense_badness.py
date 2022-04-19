@@ -31,7 +31,7 @@ def filter_codons(ht: hl.Table) -> hl.Table:
     'coding_sequence_variant', as these variants have either undefined or uninformative codon annotations
     (NA or codon with Ns, e.g. nnG/nnT).
 
-    'coding_sequence_variant' defined as: 'At sequence variant that changes the coding sequence'
+    'coding_sequence_variant' defined as: 'A sequence variant that changes the coding sequence'
     https://m.ensembl.org/info/genome/variation/prediction/predicted_data.html
     :param hl.Table ht: Input Table.
     :return: Table with informative codons only.
