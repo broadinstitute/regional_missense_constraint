@@ -1272,7 +1272,9 @@ def finalize_simul_breaks(
     :return: Table annotated with transcript subsection values.
     """
     # Rename chisq cutoff in simultaneous breaks HT
-    simul_ht = simul_ht.transmute(simul_breaks_chisq_threshold=simul_ht.chisq_threshold)
+    simul_ht = simul_ht.transmute_globals(
+        simul_breaks_chisq_threshold=simul_ht.chisq_threshold
+    )
     simul_ht = simul_ht.select(*annotations)
     simul_break_transcripts = simul_ht.aggregate(
         hl.agg.collect_as_set(simul_ht.transcript)
@@ -1326,6 +1328,12 @@ def finalize_all_breaks_results(
     logger.info("Finalizing simultaneous breaks results...")
     simul_breaks_ht = finalize_simul_breaks(simul_breaks_ht).select(*annotations)
     ht = multi_breaks_ht.union(simul_breaks_ht, unify=True)
+    ht = ht.transmute_globals(
+        chisq_threshold=hl.struct(
+            multiple_breaks=ht.multiple_breaks_chisq_threshold,
+            simultaneous_breaks=ht.simul_breaks_chisq_threshold,
+        )
+    )
     ht = ht.checkpoint(rmc_results.path, overwrite=True)
 
     logger.info("Reformatting for browser release...")
