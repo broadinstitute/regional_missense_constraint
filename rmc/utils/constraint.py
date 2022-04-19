@@ -15,7 +15,7 @@ from rmc.resources.basics import (
     temp_path,
     TOTAL_EXOME_BASES,
 )
-from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo
+from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo, gene_model
 from rmc.utils.generic import (
     get_coverage_correction_expr,
     get_exome_bases,
@@ -1153,6 +1153,11 @@ def finalize_multiple_breaks(
         )
 
     logger.info("Selecting only relevant annotations from HT and checkpointing...")
+    transcript_ht = gene_model.ht()
+    ht = ht.annotate(
+        start_pos=transcript_ht[ht.transcript].start,
+        end_pos=transcript_ht[ht.transcript].stop,
+    )
     ht = ht.select(*annotations)
     ht = ht.checkpoint(f"{temp_path}/multiple_breaks.ht", overwrite=True)
 
