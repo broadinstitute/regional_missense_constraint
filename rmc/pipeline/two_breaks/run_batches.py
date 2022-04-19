@@ -1,13 +1,33 @@
-"""This script contains functions used to search for two simultaneous breaks."""
-from collections.abc import Callable
+"""
+This script searches for two simultaneous breaks in groups of transcripts using Hail Batch.
+
+Note that a couple functions have been copied into this script from `constraint.py`:
+- `get_obs_exp_expr`
+- `get_dpois_expr`
+
+Note also that a few functions have been copied into this script from `simultaneous_breaks.py`:
+- `calculate_window_chisq`
+- `search_for_two_breaks`
+- `process_transcript_group`
+
+This is because python imports do not work in Hail Batch PythonJobs unless
+the python scripts are included within the provided Dockerfile, and the scripts within the RMC repo are
+too interdependent (would have to copy the entire repo into the Dockerfile).
+
+This script should be run locally because it submits jobs to the Hail Batch service.
+"""
+import argparse
 import logging
-from typing import List, Optional, Tuple
+from tqdm import tqdm
+
+from collections.abc import Callable
+from typing import Dict, List, Optional, Tuple, Union
 
 import hail as hl
+import hailtop.batch as hb
 
-from gnomad.utils.file_utils import file_exists, parallel_file_exists
-from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
     not_one_break_grouped,
@@ -15,207 +35,63 @@ from rmc.resources.basics import (
     simul_break_temp,
     simul_break_under_threshold,
 )
-from rmc.utils.constraint import get_dpois_expr, get_obs_exp_expr
-from rmc.utils.generic import get_avg_bases_between_mis
+from rmc.slack_creds import slack_token
+from rmc.utils.simultaneous_breaks import check_for_successful_transcripts
 
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
     datefmt="%m/%d/%Y %I:%M:%S %p",
 )
-logger = logging.getLogger("search_for_two_breaks_utils")
+logger = logging.getLogger("run_batches")
 logger.setLevel(logging.INFO)
 
 
-def group_not_one_break_ht(
-    ht: hl.Table,
-    transcript_ht: hl.Table,
-    get_min_window_size: bool = True,
-    get_total_exome_bases: bool = False,
-    get_total_gnomad_missense: bool = False,
-    min_window_size: Optional[int] = None,
-    min_num_obs: Optional[int] = None,
-) -> None:
+def get_obs_exp_expr(
+    cond_expr: hl.expr.BooleanExpression,
+    obs_expr: hl.expr.Int64Expression,
+    exp_expr: hl.expr.Float64Expression,
+) -> hl.expr.Float64Expression:
     """
-    Group HT with transcripts that don't have a single significant break by transcript and collect annotations into lists.
+    Return observed/expected annotation based on inputs.
 
-    This creates the input to the two simultaneous breaks search (`search_for_two_breaks`).
+    Typically imported from `constraint.py`. See `constraint.py` for full docstring.
 
-    .. note::
-        Expects that input Table is keyed by locus and transcript.
-        This is *required*, as the function expects that loci are sorted in the input Table.
-
-    :param hl.Table ht: Input Table with transcript that didn't have a single significant break.
-    :param hl.Table transcript_ht: Table with start and end positions per transcript.
-    :param bool get_min_window_size: Determine minimum window size for two simultaneous breaks search.
-        Default is True. Must be True if min_window_size is None.
-    :param bool get_total_exome_bases: Get total number of bases in the exome.
-        If True, will pull default value from TOTAL_EXOME_BASES (in basics.py).
-        Default is False.
-    :param bool get_total_gnomad_missense: Get total number of missense variants in gnomAD.
-        If True, will pull default value from TOTAL_GNOMAD_MISSENSE (in basics.py).
-        Default is False.
-    :param Optional[int] min_window_size: Minimum window size for two simultaneous breaks search.
-        Must be specified if get_min_window_size is False.
-        Default is None.
-    :param Optional[int] min_num_obs: Number of observed variants. Used when determining the smallest possible window size.
-        Must be specified if get_min_window_size is False.
-        Default is None.
-    :return: None; writes Table grouped by transcript with cumulative observed, expected missense counts
-        and all positions collected into lists to resource path.
+    :param hl.expr.BooleanExpression cond_expr: Condition to check prior to adding obs/exp expression.
+    :param hl.expr.Int64Expression obs_expr: Expression containing number of observed variants.
+    :param hl.expr.Float64Expression exp_expr: Expression containing number of expected variants.
+    :return: Observed/expected expression.
+    :rtype: hl.expr.Float64Expression
     """
-    if not get_min_window_size and not min_num_obs:
-        raise DataException(
-            "min_num_obs must be specified if get_min_window_size is True!"
-        )
-    if not min_window_size and not get_min_window_size:
-        raise DataException(
-            "min_window_size must be specified if get_min_window_size is False!"
-        )
-    if get_min_window_size and min_window_size:
-        logger.warning(
-            "get_min_window_size is True but min_window_size was also specified. Proceeding with specified min_window_size value..."
-        )
-
-    # Get number of base pairs needed to observe `num` number of missense variants (on average)
-    # This number is used to determine the min_window_size - which is the smallest allowed distance between simultaneous breaks
-    min_window_size = (
-        (
-            get_avg_bases_between_mis(
-                get_reference_genome(ht.locus).name,
-                get_total_exome_bases,
-                get_total_gnomad_missense,
-            )
-            * min_num_obs
-        )
-        if get_min_window_size
-        else min_window_size
-    )
-    logger.info(
-        "Minimum window size (window size needed to observe %i missense variants on average): %i",
-        min_num_obs,
-        min_window_size,
-    )
-
-    # Aggregating values into a struct here to force the positions and observed, expected missense values to stay sorted
-    # `hl.agg.collect` does not guarantee order: https://hail.is/docs/0.2/aggregators.html#hail.expr.aggregators.collect
-    group_ht = ht.group_by("transcript").aggregate(
-        values=hl.sorted(
-            hl.agg.collect(
-                hl.struct(
-                    locus=ht.locus,
-                    cum_exp=ht.cumulative_exp,
-                    cum_obs=ht.cumulative_obs,
-                    positions=ht.locus.position,
-                ),
-            ),
-            key=lambda x: x.locus,
-        ),
-        total_oe=hl.agg.take(ht.overall_oe, 1)[0],
-    )
-    group_ht = group_ht.annotate_globals(min_window_size=min_window_size)
-    group_ht = group_ht.annotate(max_idx=hl.len(group_ht.values.positions) - 1)
-    group_ht = group_ht.annotate(
-        transcript_start=transcript_ht[group_ht.key].start,
-        transcript_end=transcript_ht[group_ht.key].stop,
-    )
-    group_ht = group_ht.transmute(
-        cum_obs=group_ht.values.cum_obs,
-        cum_exp=group_ht.values.cum_exp,
-        positions=group_ht.values.positions,
-    )
-    group_ht.write(not_one_break_grouped.path, overwrite=True)
+    # Cap the o/e ratio at 1 to avoid pulling out regions that are enriched for missense variation
+    # Code is looking for missense constraint, so regions with a ratio of >= 1.0 can be grouped together
+    return hl.or_missing(cond_expr, hl.min(obs_expr / exp_expr, 1))
 
 
-def split_transcripts_by_len(
-    ht: hl.Table,
-    transcript_len_threshold: int,
-    ttn_id: str,
-    overwrite: bool,
-) -> None:
+def get_dpois_expr(
+    cond_expr: hl.expr.BooleanExpression,
+    section_oe_expr: hl.expr.Float64Expression,
+    obs_expr: Union[
+        Dict[hl.expr.StringExpression, hl.expr.Int64Expression], hl.expr.Int64Expression
+    ],
+    exp_expr: Union[
+        Dict[hl.expr.StringExpression, hl.expr.Float64Expression],
+        hl.expr.Float64Expression,
+    ],
+) -> hl.expr.StructExpression:
     """
-    Split transcripts based on the specified number of possible missense variants.
+    Calculate null and alt values in preparation for chi-squared test to find significant breaks.
 
-    This is necessary because transcripts with more possible missense variants take longer to run through `hl.experimental.loop`.
+    Typically imported from `constraint.py`. See `constraint.py` for full docstring.
 
-    :param hl.Table ht: Input Table (Table written using `group_not_one_break_ht`).
-    :param int transcript_len_threshold: Possible number of missense variants cutoff.
-    :param str ttn_id: TTN transcript ID. TTN is large and needs to be processed separately.
-    :param bool overwrite: Whether to overwrite existing SetExpressions.
-    :return: None; writes SetExpressions to resource paths (`simul_break_under_threshold`, `simul_break_over_threshold`).
+    :param hl.expr.BooleanExpression cond_expr: Conditional expression to check before calculating null and alt values.
+    :param hl.expr.Float64Expression section_oe_expr: Expression of section observed/expected value.
+    :param Union[Dict[hl.expr.StringExpression, hl.expr.Int64Expression], hl.expr.Int64Expression] obs_expr: Expression containing observed variants count.
+    :param Union[Dict[hl.expr.StringExpression, hl.expr.Float64Expression], hl.expr.Float64Expression] exp_expr: Expression containing expected variants count.
+    :return: Struct containing forward or reverse null and alt values (either when searching for first or second break).
+    :rtype: hl.expr.StructExpression
     """
-    logger.info("Annotating HT with length of cumulative observed list annotation...")
-    # This length is the number of positions with possible missense variants that need to be searched
-    # Not using transcript size here because transcript size
-    # doesn't necessarily reflect the number of positions that need to be searched
-    ht = ht.annotate(missense_list_len=ht.max_idx + 1)
-
-    logger.info(
-        "Splitting transcripts into two categories: list length < %i and list length >= %i...",
-        transcript_len_threshold,
-        transcript_len_threshold,
-    )
-    under_threshold = ht.aggregate(
-        hl.agg.filter(
-            ht.missense_list_len < transcript_len_threshold,
-            hl.agg.collect_as_set(ht.transcript),
-        )
-    )
-    over_threshold = ht.aggregate(
-        hl.agg.filter(
-            ht.missense_list_len >= transcript_len_threshold,
-            hl.agg.collect_as_set(ht.transcript),
-        )
-    )
-    if ttn_id in list(over_threshold):
-        logger.warning(
-            "TTN is present in input transcripts! It will need to be run separately."
-        )
-        over_threshold = list(over_threshold)
-        over_threshold.remove(ttn_id)
-        over_threshold = set(over_threshold)
-    hl.experimental.write_expression(
-        under_threshold, simul_break_under_threshold, overwrite
-    )
-    hl.experimental.write_expression(
-        over_threshold, simul_break_over_threshold, overwrite
-    )
-
-
-def check_for_successful_transcripts(
-    transcripts: List[str], in_parallel: bool = True
-) -> List[str]:
-    """
-    Check if any transcripts have been previously searched by searching for success TSV existence.
-
-    .. note::
-        This step needs to be run locally due to permissions involved with `parallel_file_exists`.
-
-    :param List[str] transcripts: List of transcripts to check.
-    :param bool in_parallel: Whether to check if successful file exist in parallel.
-        If True, must be run locally and not in Dataproc. Default is True.
-    :return: List of transcripts didn't have success TSVs and therefore still need to be processed.
-    """
-    logger.info("Checking if any transcripts have already been searched...")
-    success_file_path = f"{simul_break_temp}/success_files"
-    transcript_success_map = {}
-    transcripts_to_run = []
-    for transcript in transcripts:
-        transcript_success_map[transcript] = f"{success_file_path}/{transcript}.tsv"
-
-    if in_parallel:
-        # Use parallel_file_exists if in_parallel is set to True
-        success_tsvs_exist = parallel_file_exists(list(transcript_success_map.values()))
-        for transcript in transcripts:
-            if not success_tsvs_exist[transcript_success_map[transcript]]:
-                transcripts_to_run.append(transcript)
-    else:
-        # Otherwise, use file_exists
-        for transcript in transcripts:
-            if not file_exists(transcript_success_map[transcript]):
-                transcripts_to_run.append(transcript)
-
-    return transcripts_to_run
+    return hl.or_missing(cond_expr, hl.dpois(obs_expr, exp_expr * section_oe_expr))
 
 
 def calculate_window_chisq(
@@ -657,7 +533,7 @@ def process_transcript_group(
         ht = ht.annotate(i=ht.start_idx.i_start, j=ht.start_idx.j_start)
         ht = ht._key_by_assert_sorted("transcript", "i", "j")
         ht = ht.annotate(
-            # NOTE: i_max_idx needs to be adjusted here to be one smaller than the max
+            # i_max_idx needs to be adjusted here to be one smaller than the max
             # This is because we don't need to check the situation where i is the last index in a list
             # For example, if the transcript has 1003 possible missense variants,
             # (1002 is the largest list index)
@@ -717,3 +593,209 @@ def process_transcript_group(
         success_tsv_path = f"{output_tsv_path}/{transcript}.tsv"
         with hl.hadoop_open(success_tsv_path, "w") as o:
             o.write(f"{transcript}\n")
+
+
+def main(args):
+    """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
+    hl.init(log="search_for_two_breaks_run_batches.log")
+
+    # Make sure custom machine wasn't specified with under threshold
+    if args.under_threshold and args.use_custom_machine:
+        raise DataException(
+            "Do not specify --use-custom-machine when transcripts are --under-threshold size!"
+        )
+
+    logger.info("Importing SetExpression with transcripts...")
+    transcripts_to_run = check_for_successful_transcripts(
+        transcripts=(
+            list(hl.eval(hl.experimental.read_expression(simul_break_under_threshold)))
+            if args.under_threshold
+            else list(
+                hl.eval(hl.experimental.read_expression(simul_break_over_threshold))
+            )
+        ),
+    )
+    logger.info("Found %i transcripts to search...", len(transcripts_to_run))
+
+    if not args.docker_image:
+        logger.info("Picking default docker image...")
+        # Use a docker image that specifies spark memory allocation if --use-custom-machine was specified
+        if args.use_custom_machine:
+            args.docker_image = "gcr.io/broad-mpg-gnomad/rmc:20220304"
+        # Otherwise, use the default docker image
+        else:
+            args.docker_image = "gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220302"
+
+    logger.info("Setting up Batch parameters...")
+    backend = hb.ServiceBackend(
+        billing_project=args.billing_project,
+        remote_tmpdir=args.batch_bucket,
+        google_project=args.google_project,
+    )
+    b = hb.Batch(
+        name="simul_breaks",
+        backend=backend,
+        default_python_image=args.docker_image,
+    )
+
+    if args.under_threshold:
+        transcript_groups = [
+            transcripts_to_run[x : x + args.group_size]
+            for x in range(0, len(transcripts_to_run), args.group_size)
+        ]
+        split_window_size = None
+        count = 1
+        for group in tqdm(transcript_groups, unit="transcript group"):
+            logger.info("Working on group number %s...", count)
+            logger.info(group)
+            job_name = f'group{count}{"over" if args.over_threshold else "under"}'
+            j = b.new_python_job(name=job_name)
+            j.memory(args.batch_memory)
+            j.cpu(args.batch_cpu)
+            j.storage(args.batch_storage)
+            j.call(
+                process_transcript_group,
+                not_one_break_grouped.path,
+                group,
+                args.over_threshold,
+                f"{simul_break_temp}/hts/simul_break_{job_name}.ht",
+                f"{simul_break_temp}/success_files",
+                None,
+                args.chisq_threshold,
+                split_window_size,
+            )
+            count += 1
+
+    else:
+        transcript_groups = [[transcript] for transcript in transcripts_to_run]
+        for group in transcript_groups:
+            if args.use_custom_machine:
+                # NOTE: you do not specify memory and cpu when specifying a custom machine
+                j = b.new_python_job(name=job_name)
+                j._machine_type = "n1-highmem-32"
+                j._preemptible = True
+                j.storage("100Gi")
+            else:
+                j = b.new_python_job(name=group[0])
+                j.memory(args.batch_memory)
+                j.cpu(args.batch_cpu)
+                j.storage(args.batch_storage)
+            j.call(
+                process_transcript_group,
+                not_one_break_grouped.path,
+                group,
+                args.over_threshold,
+                f"{simul_break_temp}/hts/simul_break_{group[0]}.ht",
+                f"{simul_break_temp}/success_files",
+                f"{simul_break_temp}",
+                args.chisq_threshold,
+                args.group_size,
+            )
+
+    b.run(wait=False)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="""
+        This regional missense constraint script searches for two simultaneous breaks in transcripts without evidence
+        of a single significant break.
+        """,
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--chisq-threshold",
+        help="Chi-square significance threshold. Value should be 9.2 (value adjusted from ExAC code due to discussion with Mark).",
+        type=float,
+        default=9.2,
+    )
+    parser.add_argument(
+        "--slack-channel",
+        help="Send message to Slack channel/user.",
+        default="@kc (she/her)",
+    )
+
+    transcript_size = parser.add_mutually_exclusive_group(required=True)
+    transcript_size.add_argument(
+        "--under-threshold",
+        help="Transcripts in batch should have less than --transcript-len-threshold possible missense positions.",
+        action="store_true",
+    )
+    transcript_size.add_argument(
+        "--over-threshold",
+        help="Transcripts in batch should greater than or equal to --transcript-len-threshold possible missense positions.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--group-size",
+        help="""
+        Number of transcripts to include in each group of transcripts to be submitted to Hail Batch if --under-threshold.
+        Size of windows to split transcripts if --over-threshold.
+        Default is 100.
+        """,
+        type=int,
+        default=100,
+    )
+    parser.add_argument(
+        "--billing-project",
+        help="Billing project to use with hail batch.",
+        default="gnomad-production",
+    )
+    parser.add_argument(
+        "--batch-bucket",
+        help="Bucket provided to hail batch for temporary storage.",
+        default="gs://gnomad-tmp/kc/",
+    )
+    parser.add_argument(
+        "--google-project",
+        help="Google cloud project provided to hail batch for storage objects access.",
+        default="broad-mpg-gnomad",
+    )
+    parser.add_argument(
+        "--use-custom-machine",
+        help="""
+        Use custom large machine for hail batch rather than setting batch memory, cpu, and storage.
+        Used when the batch defaults are not enough and jobs run into out of memory errors.
+        Only necessary if --over-threshold.
+        """,
+        action="store_true",
+    )
+    parser.add_argument(
+        "--batch-memory",
+        help="Amount of memory to request for hail batch jobs.",
+        default="standard",
+    )
+    parser.add_argument(
+        "--batch-cpu",
+        help="Number of CPUs to request for hail batch jobs.",
+        default=8,
+        type=int,
+    )
+    parser.add_argument(
+        "--batch-storage",
+        help="Amount of disk storage to request for hail batch jobs.",
+        default="10Gi",
+    )
+    parser.add_argument(
+        "--docker-image",
+        help="""
+        Docker image to provide to hail Batch. Must have dill, hail, and python installed.
+        Suggested image: gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220302.
+
+        If running with --use-custom-machine, Docker image must also contain this line:
+        `ENV PYSPARK_SUBMIT_ARGS="--driver-memory 8g --executor-memory 8g pyspark-shell"`
+        to make sure the job allocates memory correctly.
+        Suggested image: gcr.io/broad-mpg-gnomad/rmc:20220304.
+
+        Default is None -- script will select default image if not specified on the command line.
+        """,
+        default=None,
+    )
+
+    args = parser.parse_args()
+
+    if args.slack_channel:
+        with slack_notifications(slack_token, args.slack_channel):
+            main(args)
+    else:
+        main(args)
