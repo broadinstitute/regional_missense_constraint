@@ -28,7 +28,7 @@ CODON_TABLE_PATH = f"{RESOURCE_PREFIX}/amino_acids/codons_lookup.tsv"
 ACID_NAMES_PATH = f"{RESOURCE_PREFIX}/amino_acids/acid_names.tsv"
 MUTATION_RATE_TABLE_PATH = f"{RESOURCE_PREFIX}/GRCh37/exac/mutation_rate_table.tsv"
 DIVERGENCE_SCORES_TSV_PATH = (
-    f"{RESOURCE_PREFIX}/GRCh37/exac/divsites_gencodev19_all_transcripts.tsv"
+    f"{RESOURCE_PREFIX}/GRCh37/exac/divsites_gencodev19_all_transcripts.txt"
 )
 divergence_scores = TableResource(
     path=f"{RESOURCE_PREFIX}/GRCh37/exac/ht/div_scores.ht",
