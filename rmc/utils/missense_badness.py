@@ -141,7 +141,7 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     context_ht = filter_context_using_gnomad(context_ht, gnomad_data_type)
 
     logger.info("Adding observed annotation...")
-    gnomad = public_release(gnomad_data_type)
+    gnomad = public_release(gnomad_data_type).ht()
     gnomad = gnomad.filter(keep_criteria(gnomad))
     context_ht = context_ht.annotate(_obs=gnomad.index(context_ht.key))
     context_ht = context_ht.transmute(observed=hl.int(hl.is_defined(context_ht._obs)))
