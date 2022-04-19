@@ -72,6 +72,8 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
         obs=hl.agg.take(overall_oe_ht.total_obs, 1)[0],
         exp=hl.agg.take(overall_oe_ht.total_exp, 1)[0],
     )
+    # Recalculating transcript level OE ratio because previous OE ratio (`overall_oe`)
+    # is capped at 1 for regional missense constraint calculation purposes
     group_ht = group_ht.annotate(oe=group_ht.obs / group_ht.exp)
 
     # Read in LoF constraint HT to get OE ratio for five transcripts missing in v2 RMC results
