@@ -1,7 +1,7 @@
 """
 This script calculates missense badness.
 
-Missense badness is a score that reflects the deleterious of each specific amino acid substitution.
+Missense badness is a score that reflects the deleteriousness of each specific amino acid substitution.
 """
 import argparse
 import logging
