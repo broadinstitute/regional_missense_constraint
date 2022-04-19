@@ -4,7 +4,6 @@ import logging
 import hail as hl
 
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
@@ -23,7 +22,7 @@ from rmc.resources.grch37.gnomad import (
     prop_obs_coverage,
     VEP_VERSION,
 )
-from rmc.resources.grch37.reference_data import processed_context
+from rmc.resources.grch37.reference_data import gene_model, processed_context
 from rmc.resources.resource_utils import CURRENT_VERSION, MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
@@ -360,10 +359,11 @@ def main(args):
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
             )
-            if not file_exists(f"{temp_path}/transcript.ht"):
-                raise DataException(
-                    "Transcript HT doesn't exist. Please double check and recreate!"
-                )
+            transcript_ht = gene_model.ht()
+            ht = ht.annotate(
+                start_pos=transcript_ht[ht.transcript].start,
+                end_pos=transcript_ht[ht.transcript].stop,
+            )
 
             if args.remove_outlier_transcripts:
                 outlier_transcripts = get_outlier_transcripts()

@@ -15,7 +15,7 @@ from rmc.resources.basics import (
     temp_path,
     TOTAL_EXOME_BASES,
 )
-from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo, gene_model
+from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo
 from rmc.utils.generic import (
     get_coverage_correction_expr,
     get_exome_bases,
@@ -1135,14 +1135,14 @@ def finalize_multiple_breaks(
     """
     # TODO: Change this to use updated get_outlier_transcripts function (updated in `misbad` branch)
     logger.info("Removing outlier transcripts...")
-    pass_transcripts = get_outlier_transcripts(keep=True)
+    pass_transcripts = get_outlier_transcripts()
     ht = ht.filter(pass_transcripts.contains(ht.transcript))
 
     logger.info("Getting transcripts associated with each break number...")
     # Get number of transcripts unique to each break number
     # Transcript sets in globals of multiple breaks HT are not unique
     # i.e., `break_1_transcripts` could contain transcripts that are also present in `break_2_transcripts`
-    ht = ht.select_globals()
+    ht = ht.select_globals(multiple_breaks_chisq_threshold=ht.chisq_threshold)
     transcripts_per_break = get_unique_transcripts_per_break(ht)
 
     for break_num in transcripts_per_break:
@@ -1153,11 +1153,6 @@ def finalize_multiple_breaks(
         )
 
     logger.info("Selecting only relevant annotations from HT and checkpointing...")
-    transcript_ht = gene_model.ht()
-    ht = ht.annotate(
-        start_pos=transcript_ht[ht.transcript].start,
-        end_pos=transcript_ht[ht.transcript].stop,
-    )
     ht = ht.select(*annotations)
     ht = ht.checkpoint(f"{temp_path}/multiple_breaks.ht", overwrite=True)
 
