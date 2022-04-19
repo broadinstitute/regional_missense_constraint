@@ -187,6 +187,7 @@ def filter_context_using_gnomad(
 
     :param hl.Table context_ht: VEP context Table.
     :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
+        Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
     :param adj_freq_index: Index of frequency array that contains global population filtered calculated on
         high quality (adj) genotypes. Default is 0.
@@ -198,7 +199,7 @@ def filter_context_using_gnomad(
         ac=gnomad.freq[adj_freq_index].AC,
         af=gnomad.freq[adj_freq_index].AF,
         pass_filters=hl.len(gnomad.filters) == 0,
-        exome_coverage=gnomad_cov[gnomad.locus].median,
+        gnomad_coverage=gnomad_cov[gnomad.locus].median,
     )
     # Filter to sites not seen in gnomAD or to rare sites in gnomAD
     gnomad_join = gnomad[context_ht.key]

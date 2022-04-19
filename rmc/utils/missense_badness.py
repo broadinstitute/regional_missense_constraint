@@ -104,6 +104,7 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
         - Write to `amino_acids_oe` resource path
 
     :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
+        Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
     :return: None; writes amino acid Table to resource path.
     """
