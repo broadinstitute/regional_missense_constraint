@@ -470,7 +470,7 @@ def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
     Transcripts are removed for the reasons detailed here:
     https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
 
-    :param bool outlier: Whether to filter LoF constraint HT to outlier transcripts to keep (if True),
+    :param bool outlier: Whether to filter LoF constraint HT to outlier transcripts (if True),
         or QC-pass transcripts (if False). Default is True.
     :return: Set of outlier transcripts or transcript QC pass transcripts.
     :rtype: hl.expr.SetExpression
