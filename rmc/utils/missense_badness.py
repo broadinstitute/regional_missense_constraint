@@ -198,11 +198,11 @@ def oe_bin_expr(
     )
 
 
-def variant_type_expr(
+def variant_csq_expr(
     ref_expr: hl.expr.StringExpression, alt_expr: hl.expr.StringExpression
 ) -> hl.expr.StringExpression:
     """
-    Determine variant type using reference and alternate amino acid annotations.
+    Determine variant consequence using reference and alternate amino acid annotations.
 
     :param hl.expr.StringExpression ref_expr: Reference amino acid StringExpression.
     :param hl.expr.StringExpression alt_expr: Alternate amino acid StringExpression.
