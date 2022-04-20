@@ -1,9 +1,10 @@
 import logging
-from typing import Tuple
 
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import public_release
+from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.vep import CSQ_NON_CODING
 
 from rmc.resources.basics import (
@@ -239,13 +240,28 @@ def get_total_csq_count(ht: hl.Table, csq: str, count_field: str) -> int:
     return ht.aggregate(hl.agg.filter(ht.mut_type == csq, hl.agg.sum(ht[count_field])))
 
 
-def calculate_misbad(ht: hl.Table) -> None:
+def calculate_misbad(use_exac_oe_cutoffs: bool) -> None:
     """
-    Calculate missense badness score.
+    Calculate missense badness score using Table with all amino acid substitutions and their missense observed/expected (OE) ratio.
 
-    :param hl.Table HT: Table with all amino acid substitutions and their missense observed/expected (OE) ratio.
+    If `use_exac_oe_cutoffs` is set, will remove all rows with 0.6 < OE <= 0.8.
+
+    :param bool use_exac_oe_cutoffs: Whether to use the same missense OE cutoffs as in ExAC missense badness calculation.
     :return: None; writes Table with missense badness score to resource path.
     """
+    if not file_exists(amino_acids_oe.path):
+        raise DataException(
+            "Table with all amino acid substitutions and missense OE doesn't exist!"
+        )
+
+    ht = amino_acids_oe.ht()
+    if use_exac_oe_cutoffs:
+        logger.info("Removing rows with OE greater than 0.6 and less than 0.8...")
+        ht = ht.filter((ht.oe <= 0.6) | (ht.oe > 0.8))
+
+    logger.info(
+        "Splitting input Table by OE to get synonymous and nonsense rates for high and low OE groups..."
+    )
     logger.info("Creating high missense OE (OE > 0.6) HT...")
     high_ht = split_ht_by_oe(ht, keep_high_oe=True)
     high_ht = high_ht.checkpoint(f"{temp_path}/amino_acids_high_oe.ht", overwrite=True)
@@ -270,6 +286,7 @@ def calculate_misbad(ht: hl.Table) -> None:
     non_rate = (non_obs_high / non_pos_high) / (non_obs_low / non_pos_low)
     logger.info("Nonsense rate: %i", non_rate)
 
+    logger.info("Re-joining split HTs to calculate missense badness...")
     high_ht = high_ht.transmute(
         high_obs=high_ht.obs,
         high_pos=high_ht.possible,
