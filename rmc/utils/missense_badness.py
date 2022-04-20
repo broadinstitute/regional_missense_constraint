@@ -114,8 +114,9 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     transcripts = get_constraint_transcripts(outlier=False)
 
     logger.info("Reading in VEP context HT...")
+    # NOTE: Keeping all variant types here because need synonymous and nonsense variants to calculate missense badness
     context_ht = process_context_ht(
-        build="GRCh37", filter_to_missense=True, add_annotations=False
+        build="GRCh37", filter_to_missense=False, add_annotations=False
     )
 
     logger.info(
@@ -153,8 +154,9 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     context_ht = context_ht.checkpoint(f"{temp_path}/codons_filt.ht", overwrite=True)
 
     logger.info(
-        "Getting observed to expected missense ratio, rekeying Table, and writing to output path..."
+        "Getting observed to expected ratio, rekeying Table, and writing to output path..."
     )
+    # Note that `get_oe_annotation` is pulling the missense OE ratio
     context_ht = get_oe_annotation(context_ht)
     context_ht = context_ht.key_by().select(
         "ref",
@@ -165,3 +167,51 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
         "oe",
     )
     context_ht.write(amino_acids_oe.path, overwrite=True)
+
+
+def oe_bin_expr(
+    oe_expr: hl.expr.Float64Expression, use_exac_bins: bool
+) -> hl.expr.StringExpression:
+    """
+    Determine observed/expected (OE) missense ratio bin annotation.
+
+    Bins are in increments of 0.2. Option to keep only OE bins 0-0.6 and 0.8-1.0+ for consistency with previous work.
+
+    :param hl.expr.Float64Expression: Missense OE annotation.
+    :param bool use_exac_bins: Whether to use only the 0-0.6 and 0.8-1.0+ OE bins for consistency with ExAC results.
+    :return: StringExpression containing missense OE bin for missense OE annotation.
+    """
+    if use_exac_bins:
+        return (
+            hl.case()
+            .when(oe_expr <= 0.6, "0-0.6")
+            .when(oe_expr > 0.8, "0.8-1.0+")
+            .or_missing()
+        )
+    return (
+        hl.case()
+        .when(oe_expr <= 0.2, "0-0.2")
+        .when((oe_expr > 0.2) & (oe_expr <= 0.4), "0.2-0.4")
+        .when((oe_expr > 0.4) & (oe_expr <= 0.6), "0.4-0.6")
+        .when((oe_expr > 0.6) & (oe_expr <= 0.8), "0.6-0.8")
+        .default("0.8-1.0+")
+    )
+
+
+def variant_type_expr(
+    ref_expr: hl.expr.StringExpression, alt_expr: hl.expr.StringExpression
+) -> hl.expr.StringExpression:
+    """
+    Determine variant type using reference and alternate amino acid annotations.
+
+    :param hl.expr.StringExpression ref_expr: Reference amino acid StringExpression.
+    :param hl.expr.StringExpression alt_expr: Alternate amino acid StringExpression.
+    :return: Variant type StringExpression. One of 'syn', 'non', 'mis', 'rdt' (stop lost).
+    """
+    return (
+        hl.case()
+        .when(ref_expr == alt_expr, "syn")
+        .when(alt_expr == "STOP", "non")
+        .when((ref_expr == "STOP") & (ref_expr != alt_expr), "rdt")
+        .default("mis")
+    )
