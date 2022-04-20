@@ -1,6 +1,7 @@
 import hail as hl
 
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
+
 from rmc.resources.resource_utils import (
     CURRENT_VERSION,
     FLAGSHIP_LOF,
@@ -28,7 +29,7 @@ CODON_TABLE_PATH = f"{RESOURCE_PREFIX}/amino_acids/codons_lookup.tsv"
 ACID_NAMES_PATH = f"{RESOURCE_PREFIX}/amino_acids/acid_names.tsv"
 MUTATION_RATE_TABLE_PATH = f"{RESOURCE_PREFIX}/GRCh37/exac/mutation_rate_table.tsv"
 DIVERGENCE_SCORES_TSV_PATH = (
-    f"{RESOURCE_PREFIX}/GRCh37/exac/divsites_gencodev19_all_transcripts.tsv"
+    f"{RESOURCE_PREFIX}/GRCh37/exac/divsites_gencodev19_all_transcripts.txt"
 )
 divergence_scores = TableResource(
     path=f"{RESOURCE_PREFIX}/GRCh37/exac/ht/div_scores.ht",
@@ -166,17 +167,6 @@ simul_break = VersionedTableResource(
 Table containing transcripts with two simultaneous breaks.
 """
 
-breaks = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/breaks.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing transcripts with any evidence of RMC (one break, multiple breaks, simultaneous breaks).
-"""
-
 no_breaks = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
@@ -187,6 +177,48 @@ no_breaks = VersionedTableResource(
 """
 Table containing transcripts with no significant breaks.
 """
+
+rmc_results = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/all_rmc.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table containing all transcripts with evidence of regional missense constraint.
+
+Contains transcripts with one or additional breaks plus simultaneous breaks results.
+"""
+
+rmc_browser = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/rmc_browser.ht"
+        )
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table containing all transcripts with evidence of regional missense constraint.
+
+Contains same information as `rmc_results` but has different formatting for gnomAD browser.
+"""
+
+amino_acids_oe = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{MODEL_PREFIX}/{version}/amino_acid_oe.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table containing all possible amino acid substitutions and their missense OE ratio.
+
+Input to missense badness calculations.
+"""
+
 
 oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/oe_bin.tsv"
 """

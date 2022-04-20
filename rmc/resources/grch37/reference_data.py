@@ -1,23 +1,11 @@
-import hail as hl
-
 from gnomad.resources.resource_utils import (
     TableResource,
     VersionedTableResource,
 )
-from rmc.resources.resource_utils import FLAGSHIP_LOF, RESOURCE_PREFIX
+from rmc.resources.resource_utils import RESOURCE_PREFIX
 
 
 ## Reference genome related resources
-full_context = VersionedTableResource(
-    default_version="20181129",
-    versions={
-        "20181129": TableResource(
-            path=f"{FLAGSHIP_LOF}/context/Homo_sapiens_assembly19.fasta.snps_only.vep_20181129.ht",
-        )
-        # NOTE: no import_func necessary for this (will not need to update until we switch to MANE transcripts)
-    },
-)
-
 processed_context = VersionedTableResource(
     default_version="v1",
     versions={
@@ -26,6 +14,13 @@ processed_context = VersionedTableResource(
         )
     },
 )
+"""
+Context Table filtered to missense variants in canonical protein coding transcripts and annotated with
+probability of mutation for each variant, CpG status, gnomAD exome coverage, and methylation level.
+
+Used to calculate the cumulative observed and expected missense values per locus and
+generate regional missense constraint results.
+"""
 
 gene_model = TableResource(path=f"{RESOURCE_PREFIX}/GRCh37/browser/b37_transcripts.ht")
 """
@@ -44,7 +39,6 @@ ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient gene
 de_novo_tsv = f"{RESOURCE_PREFIX}/GRCh37/reference_data/fordist_KES_combined_asc_dd_dnms_2020_04_21_annotated.txt"
 """
 De novo missense variants from 31,058 cases with developmental disorders, 6,430 cases with autism spectrum disorders, and 2,179 controls.
-
 Controls are the siblings of the autism cases.
 Samples are from:
 Kaplanis et al. (Evidence for 28 genetic disorders discovered by combining healthcare and research data.)

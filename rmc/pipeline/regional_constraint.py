@@ -38,8 +38,8 @@ from rmc.utils.constraint import (
 from rmc.utils.generic import (
     filter_to_region_type,
     generate_models,
+    get_constraint_transcripts,
     get_coverage_correction_expr,
-    get_outlier_transcripts,
     keep_criteria,
     process_context_ht,
     process_vep,
@@ -136,7 +136,9 @@ def main(args):
             )
             context_ht = context_ht.annotate(
                 coverage_correction=get_coverage_correction_expr(
-                    context_ht.exome_coverage, coverage_model, args.high_cov_cutoff,
+                    context_ht.exome_coverage,
+                    coverage_model,
+                    args.high_cov_cutoff,
                 )
             )
 
@@ -161,13 +163,19 @@ def main(args):
 
                 logger.info("Calculating expected values per transcript...")
                 exp_ht = calculate_exp_per_transcript(
-                    context_auto_ht, locus_type="autosomes", groupings=GROUPINGS,
+                    context_auto_ht,
+                    locus_type="autosomes",
+                    groupings=GROUPINGS,
                 )
                 exp_x_ht = calculate_exp_per_transcript(
-                    context_x_ht, locus_type="X", groupings=GROUPINGS,
+                    context_x_ht,
+                    locus_type="X",
+                    groupings=GROUPINGS,
                 )
                 exp_y_ht = calculate_exp_per_transcript(
-                    context_y_ht, locus_type="Y", groupings=GROUPINGS,
+                    context_y_ht,
+                    locus_type="Y",
+                    groupings=GROUPINGS,
                 )
                 exp_ht = exp_ht.union(exp_x_ht).union(exp_y_ht)
 
@@ -423,7 +431,7 @@ def main(args):
                 )
 
             if args.remove_outlier_transcripts:
-                outlier_transcripts = get_outlier_transcripts()
+                outlier_transcripts = get_constraint_transcripts(outlier=True)
 
             logger.info("Reading in context HT...")
             # Drop extra annotations from context HT
@@ -647,7 +655,9 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--xg-transcript", help="Transcript ID for XG", default="ENST00000419513",
+        "--xg-transcript",
+        help="Transcript ID for XG",
+        default="ENST00000419513",
     )
     parser.add_argument(
         "--finalize",

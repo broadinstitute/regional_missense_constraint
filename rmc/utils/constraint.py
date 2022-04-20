@@ -3,21 +3,21 @@ from typing import Dict, List, Set, Tuple, Union
 
 import hail as hl
 
-from gnomad.utils.file_utils import file_exists
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import file_exists
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
 from rmc.resources.basics import (
-    breaks,
     multiple_breaks,
     oe_bin_counts_tsv,
+    rmc_browser,
     temp_path,
 )
 from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo, gene_model
 from rmc.utils.generic import (
+    get_constraint_transcripts,
     get_coverage_correction_expr,
-    get_outlier_transcripts,
     import_clinvar_hi_variants,
     import_de_novo_variants,
 )
@@ -105,7 +105,8 @@ def calculate_observed(ht: hl.Table) -> hl.Table:
 
 
 def get_cumulative_mu_expr(
-    transcript_expr: hl.expr.StringExpression, mu_expr: hl.expr.Float64Expression,
+    transcript_expr: hl.expr.StringExpression,
+    mu_expr: hl.expr.Float64Expression,
 ) -> hl.expr.DictExpression:
     """
     Return annotation with the cumulative mutation rate probability, shifted by one.
@@ -178,7 +179,9 @@ def translate_mu_to_exp_expr(
 
 
 def calculate_exp_per_transcript(
-    context_ht: hl.Table, locus_type: str, groupings: List[str] = GROUPINGS,
+    context_ht: hl.Table,
+    locus_type: str,
+    groupings: List[str] = GROUPINGS,
 ) -> hl.Table:
     """
     Return the total number of expected variants and aggregate mutation rate per transcript.
@@ -264,7 +267,8 @@ def get_obs_exp_expr(
 
 
 def get_cumulative_obs_expr(
-    transcript_expr: hl.expr.StringExpression, observed_expr: hl.expr.Int64Expression,
+    transcript_expr: hl.expr.StringExpression,
+    observed_expr: hl.expr.Int64Expression,
 ) -> hl.expr.DictExpression:
     """
     Return annotation with the cumulative number of observed variants, shifted by one.
@@ -376,7 +380,8 @@ def get_fwd_exprs(
     logger.info("Getting cumulative observed variant counts...")
     ht = ht.annotate(
         _obs_scan=get_cumulative_obs_expr(
-            transcript_expr=ht[transcript_str], observed_expr=ht[obs_str],
+            transcript_expr=ht[transcript_str],
+            observed_expr=ht[obs_str],
         )
     )
     ht = ht.annotate(
@@ -406,7 +411,9 @@ def get_fwd_exprs(
     ht = ht.annotate(cond_expr=True)
     ht = ht.annotate(
         forward_oe=get_obs_exp_expr(
-            ht.cond_expr, ht.cumulative_obs[ht[transcript_str]], ht.cumulative_exp,
+            ht.cond_expr,
+            ht.cumulative_obs[ht[transcript_str]],
+            ht.cumulative_exp,
         )
     )
     return ht.drop("cond_expr")
@@ -513,7 +520,9 @@ def get_dpois_expr(
     return hl.or_missing(cond_expr, hl.dpois(obs_expr, exp_expr * section_oe_expr))
 
 
-def get_section_expr(dpois_expr: hl.expr.ArrayExpression,) -> hl.expr.Float64Expression:
+def get_section_expr(
+    dpois_expr: hl.expr.ArrayExpression,
+) -> hl.expr.Float64Expression:
     """
     Build null or alt model by multiplying all section null or alt distributions.
 
@@ -530,7 +539,9 @@ def get_section_expr(dpois_expr: hl.expr.ArrayExpression,) -> hl.expr.Float64Exp
 
 
 def search_for_break(
-    ht: hl.Table, search_field: hl.str, chisq_threshold: float = 10.8,
+    ht: hl.Table,
+    search_field: hl.str,
+    chisq_threshold: float = 10.8,
 ) -> hl.Table:
     """
     Search for breakpoints in a transcript or within a transcript subsection.
@@ -719,7 +730,8 @@ def get_subsection_exprs(
     )
     # Get total obs and mu per section
     section_counts = ht.group_by(ht[section_str]).aggregate(
-        obs=hl.agg.sum(ht[obs_str]), mu=hl.agg.sum(ht[mu_str]),
+        obs=hl.agg.sum(ht[obs_str]),
+        mu=hl.agg.sum(ht[mu_str]),
     )
 
     # Translate total mu to total expected per section
@@ -805,10 +817,14 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
 
     logger.info("Searching for a break in each section and returning...")
     pre_ht = search_for_break(
-        pre_ht, search_field="transcript", chisq_threshold=chisq_threshold,
+        pre_ht,
+        search_field="transcript",
+        chisq_threshold=chisq_threshold,
     )
     post_ht = search_for_break(
-        post_ht, search_field="transcript", chisq_threshold=chisq_threshold,
+        post_ht,
+        search_field="transcript",
+        chisq_threshold=chisq_threshold,
     )
     # Adjust is_break annotation in both HTs
     # to prevent this function from continually finding previous significant breaks
@@ -872,7 +888,8 @@ def process_additional_breaks(
 
 
 def calculate_section_chisq(
-    obs_expr: hl.expr.Int64Expression, exp_expr: hl.expr.Float64Expression,
+    obs_expr: hl.expr.Int64Expression,
+    exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
     """
     Create expression checking if transcript section is significantly different than the null model (no evidence of regional missense constraint).
@@ -925,7 +942,10 @@ def get_all_breakpoint_pos(ht: hl.Table) -> hl.GroupedTable:
 
 
 def get_section_info(
-    ht: hl.Table, section_num: int, section_type: str, indices: Tuple[int],
+    ht: hl.Table,
+    section_num: int,
+    section_type: str,
+    indices: Tuple[int],
 ) -> hl.Table:
     """
     Get the number of observed variants, number of expected variants, and chi square value for transcript section.
@@ -991,7 +1011,10 @@ def get_section_info(
     )
 
 
-def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int,) -> hl.Table:
+def annotate_transcript_sections(
+    ht: hl.Table,
+    max_n_breaks: int,
+) -> hl.Table:
     """
     Annotate each transcript section with observed, expected, OE, and section chi square values.
 
@@ -1007,7 +1030,10 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int,) -> hl.Table:
     logger.info("Get section information for first section of each transcript...")
     count = 1
     section_ht = get_section_info(
-        ht, section_num=count, section_type="first", indices=None,
+        ht,
+        section_num=count,
+        section_type="first",
+        indices=None,
     )
 
     # Check sections between breakpoint positions
@@ -1031,7 +1057,8 @@ def annotate_transcript_sections(ht: hl.Table, max_n_breaks: int,) -> hl.Table:
 
 
 def get_unique_transcripts_per_break(
-    ht: hl.Table, max_n_breaks: int,
+    ht: hl.Table,
+    max_n_breaks: int,
 ) -> Dict[int, Union[Set[str], hl.expr.SetExpression]]:
     """
     Return the set of transcripts unique to each break number.
@@ -1115,7 +1142,9 @@ def reformat_annotations_for_release(ht: hl.Table) -> hl.Table:
 
 
 def finalize_multiple_breaks(
-    ht: hl.Table, max_n_breaks: int, annotations: List[str] = FINAL_ANNOTATIONS,
+    ht: hl.Table,
+    max_n_breaks: int,
+    annotations: List[str] = FINAL_ANNOTATIONS,
 ) -> hl.Table:
     """
     Organize table of transcripts with multiple breaks.
@@ -1155,7 +1184,7 @@ def finalize_multiple_breaks(
     :rtype: hl.Table
     """
     logger.info("Removing outlier transcripts...")
-    outlier_transcripts = get_outlier_transcripts()
+    outlier_transcripts = get_constraint_transcripts(outlier=True)
     ht = ht.filter(~outlier_transcripts.contains(ht.transcript))
 
     logger.info("Getting transcripts associated with each break number...")
@@ -1260,7 +1289,7 @@ def finalize_all_breaks_results(
 
     logger.info("Reformatting for browser release...")
     ht = reformat_annotations_for_release(ht)
-    ht.write(breaks.path, overwrite=True)
+    ht.write(rmc_browser.path, overwrite=True)
 
 
 def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:
@@ -1452,7 +1481,8 @@ def fix_xg(
     """
 
     def _fix_xg_exp(
-        xg: hl.Table, groupings: List[str] = groupings,
+        xg: hl.Table,
+        groupings: List[str] = groupings,
     ) -> hl.expr.StructExpression:
         """
         Fix total expected and total mu counts for XG.

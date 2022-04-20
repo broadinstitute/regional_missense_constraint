@@ -3,6 +3,8 @@ from typing import Dict, Tuple
 
 import hail as hl
 
+from gnomad.resources.grch37.gnomad import coverage, public_release
+from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.filtering import filter_to_clinvar_pathogenic
@@ -41,23 +43,22 @@ logger.setLevel(logging.INFO)
 
 
 ## Resources from Kaitlin
-def get_codon_lookup() -> Dict[str, str]:
+def get_codon_lookup() -> hl.expr.DictExpression:
     """
     Read in codon lookup table and return as dictionary (key: codon, value: amino acid).
 
     .. note::
         This is only necessary for testing on ExAC and should be replaced with VEP annotations.
 
-    :return: Dictionary of codon translation.
-    :rtype: Dict[str, str]
+    :return: DictExpression of codon translation.
     """
     codon_lookup = {}
     with hl.hadoop_open(CODON_TABLE_PATH) as c:
         c.readline()
         for line in c:
-            line = line.strip().split(" ")
+            line = line.strip().split()
             codon_lookup[line[0]] = line[1]
-    return codon_lookup
+    return hl.literal(codon_lookup)
 
 
 def get_acid_names() -> Dict[str, str]:
@@ -106,14 +107,18 @@ def get_divergence_scores() -> Dict[str, float]:
             transcript, score = line.strip().split("\t")
             try:
                 div_scores[transcript.split(".")[0]] = float(score)
-            except:
+            except ValueError:
                 continue
     return div_scores
 
 
 ## Functions to process reference genome related resources
 def process_context_ht(
-    build: str, trimers: bool = True, missense_str: str = MISSENSE,
+    build: str,
+    trimers: bool = True,
+    filter_to_missense: bool = True,
+    missense_str: str = MISSENSE,
+    add_annotations: bool = True,
 ) -> hl.Table:
     """
     Prepare context HT (SNPs only, annotated with VEP) for regional missense constraint calculations.
@@ -125,8 +130,12 @@ def process_context_ht(
         `trimers` needs to be True for gnomAD v2.
 
     :param str build: Reference genome build; must be one of BUILDS.
-    :param bool trimers: Whether to filter to trimers or heptamers. Default is True.
-    :return: Context HT filtered to missense variants in canonical transcripts and annotated with mutation rate, CpG status, and methylation level.
+    :param bool trimers: Whether to filter to trimers (if set to True) or heptamers. Default is True.
+    :param bool filter_to_missense: Whether to filter Table to missense variants only. Default is True.
+    :param bool add_annotations: Whether to add ref, alt, methylation_level, exome_coverage, cpg, transition,
+        and variant_type annotations. Default is True.
+    :return: Context HT filtered to canonical transcripts and optionally filtered to missense variants with
+        mutation rate, CpG status, and methylation level annotations.
     :rtype: hl.Table
     """
     if build not in BUILDS:
@@ -134,35 +143,66 @@ def process_context_ht(
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     if build == "GRCh37":
-        ht = grch37.full_context.ht()
+        ht = vep_context.ht()
     else:
         ht = grch38.full_context.ht()
 
-    # `prepare_ht` annotates HT with: ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
-    ht = prepare_ht(ht, trimers)
-
     logger.info(
-        "Filtering to canonical transcripts, annotating with most severe consequence, and filtering to %s...",
-        missense_str,
+        "Filtering to canonical transcripts and annotating with most severe consequence...",
     )
-    ht = process_vep(ht, filter_csq=True, csq=missense_str)
+    if filter_to_missense:
+        ht = process_vep(ht, filter_csq=True, csq=missense_str)
+    else:
+        ht = process_vep(ht)
 
-    logger.info("Annotating with mutation rate...")
-    # Mutation rate HT is keyed by context, ref, alt, methylation level
-    mu_ht = mutation_rate.ht().select("mu_snp")
-    ht, grouping = annotate_constraint_groupings(ht)
-    ht = ht.select(
-        "context",
-        "ref",
-        "alt",
-        "methylation_level",
-        "exome_coverage",
-        "cpg",
-        "transition",
-        "variant_type",
-        *grouping,
+    if add_annotations:
+        # `prepare_ht` annotates HT with: ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
+        ht = prepare_ht(ht, trimers)
+
+        logger.info("Annotating with mutation rate...")
+        # Mutation rate HT is keyed by context, ref, alt, methylation level
+        mu_ht = mutation_rate.ht().select("mu_snp")
+        ht, grouping = annotate_constraint_groupings(ht)
+        ht = ht.select(
+            "context",
+            "ref",
+            "alt",
+            "methylation_level",
+            "exome_coverage",
+            "cpg",
+            "transition",
+            "variant_type",
+            *grouping,
+        )
+        return annotate_with_mu(ht, mu_ht)
+    return ht
+
+
+def filter_context_using_gnomad(
+    context_ht: hl.Table, gnomad_data_type: str = "exomes", adj_freq_index: int = 0
+) -> hl.Table:
+    """
+    Filter VEP context Table to sites that aren't seen in gnomAD or are rare in gnomAD.
+
+    :param hl.Table context_ht: VEP context Table.
+    :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
+        Must be one of "exomes" or "genomes" (check is done within `public_release`).
+        Default is "exomes".
+    :param adj_freq_index: Index of frequency array that contains global population filtered calculated on
+        high quality (adj) genotypes. Default is 0.
+    :return: Filtered VEP context Table.
+    """
+    gnomad = public_release(gnomad_data_type).ht().select_globals()
+    gnomad_cov = coverage(gnomad_data_type).ht()
+    gnomad = gnomad.select(
+        ac=gnomad.freq[adj_freq_index].AC,
+        af=gnomad.freq[adj_freq_index].AF,
+        pass_filters=hl.len(gnomad.filters) == 0,
+        gnomad_coverage=gnomad_cov[gnomad.locus].median,
     )
-    return annotate_with_mu(ht, mu_ht)
+    # Filter to sites not seen in gnomAD or to rare sites in gnomAD
+    gnomad_join = gnomad[context_ht.key]
+    return context_ht.filter(hl.is_missing(gnomad_join) | keep_criteria(gnomad_join))
 
 
 ## Functions for obs/exp related resources
@@ -181,7 +221,7 @@ def get_exome_bases(build: str) -> int:
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     if build == "GRCh37":
-        ht = grch37.full_context.ht()
+        ht = vep_context.ht()
     else:
         ht = grch38.full_context.ht()
 
@@ -191,7 +231,7 @@ def get_exome_bases(build: str) -> int:
     )
 
     logger.info("Removing outlier transcripts...")
-    outlier_transcripts = get_outlier_transcripts()
+    outlier_transcripts = get_constraint_transcripts(outlier=True)
     ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
     ht = ht.explode(ht.transcript_consequences)
     ht = ht.filter(
@@ -257,27 +297,14 @@ def get_avg_bases_between_mis(
     return round(total_bases / total_variants)
 
 
-def keep_criteria(ht: hl.Table, exac: bool = False) -> hl.expr.BooleanExpression:
+def keep_criteria(ht: hl.Table) -> hl.expr.BooleanExpression:
     """
     Return Boolean expression to filter variants in input Table.
 
     :param hl.Table ht: Input Table.
-    :param bool exac: Whether input Table is ExAC data. Default is False.
-    :return: Keep criteria Boolean expression.
-    :rtype: hl.expr.BooleanExpression
+    :return: Boolean expression used to filter variants.
     """
-    # ExAC keep criteria: adjusted AC <= 123 and VQSLOD >= -2.632
-    # Also remove variants with median depth < 1
-    if exac:
-        keep_criteria = (
-            (ht.ac <= 123) & (ht.ac > 0) & (ht.vqslod >= -2.632) & (ht.coverage > 1)
-        )
-    else:
-        keep_criteria = (
-            (ht.ac > 0) & (ht.af < 0.001) & (ht.pass_filters) & (ht.exome_coverage > 0)
-        )
-
-    return keep_criteria
+    return (ht.ac > 0) & (ht.af < 0.001) & (ht.pass_filters) & (ht.gnomad_coverage > 0)
 
 
 def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.Table:
@@ -287,7 +314,7 @@ def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.T
     Option to filter Table to specific variant consequence (csq).
 
     :param Table ht: Input Table.
-    :param bool filter: Whether to filter Table to a specific consequence. Default is False.
+    :param bool filter_csq: Whether to filter Table to a specific consequence. Default is False.
     :param str csq: Desired consequence. Default is None. Must be specified if filter is True.
     :return: Table filtered to canonical transcripts with option to filter to specific variant consequence.
     :rtype: hl.Table
@@ -433,14 +460,19 @@ def get_plateau_model(
 
 
 ## Outlier transcript util
-def get_outlier_transcripts() -> hl.expr.SetExpression:
+def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
     """
-    Read in LoF constraint HT results to get set of outlier transcripts.
+    Read in LoF constraint HT results to get set of transcripts.
+
+    Return either set of transcripts to keep (transcripts that passed transcript QC)
+    or outlier transcripts.
 
     Transcripts are removed for the reasons detailed here:
     https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
 
-    :return: Set of outlier transcripts.
+    :param bool outlier: Whether to filter LoF constraint HT to outlier transcripts (if True),
+        or QC-pass transcripts (if False). Default is True.
+    :return: Set of outlier transcripts or transcript QC pass transcripts.
     :rtype: hl.expr.SetExpression
     """
     logger.warning(
@@ -453,11 +485,18 @@ def get_outlier_transcripts() -> hl.expr.SetExpression:
     constraint_transcript_ht = constraint_transcript_ht.filter(
         constraint_transcript_ht.canonical
     ).select("constraint_flag")
-    constraint_transcript_ht = constraint_transcript_ht.filter(
-        hl.len(constraint_transcript_ht.constraint_flag) > 0
-    )
-    return constraint_transcript_ht.aggregate(
-        hl.agg.collect_as_set(constraint_transcript_ht.transcript), _localize=False,
+    if outlier:
+        constraint_transcript_ht = constraint_transcript_ht.filter(
+            hl.len(constraint_transcript_ht.constraint_flag) > 0
+        )
+    else:
+        constraint_transcript_ht = constraint_transcript_ht.filter(
+            hl.len(constraint_transcript_ht.constraint_flag) == 0
+        )
+    return hl.literal(
+        constraint_transcript_ht.aggregate(
+            hl.agg.collect_as_set(constraint_transcript_ht.transcript)
+        )
     )
 
 
@@ -483,10 +522,6 @@ def import_clinvar_hi_variants(build: str, overwrite: bool) -> None:
         from gnomad.resources.grch38.reference_data import clinvar
 
         raise DataException("ClinVar files currently only exist for GRCh37!")
-
-        raise DataException(
-            "RMC Clinvar HT path has not been prepared for build 38 yet!"
-        )
 
     if not file_exists(clinvar_ht_path) or overwrite:
         logger.info("Reading in ClinVar HT...")
