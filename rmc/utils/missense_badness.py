@@ -195,21 +195,6 @@ def variant_csq_expr(
     )
 
 
-def get_obs_and_possible_counts(
-    ht: hl.Table, group_exprs: Tuple[str] = ("ref", "alt"), obs_str: str = "obs"
-):
-    """
-    Group input Table by specified fields and aggregate to get total observed and possible variant counts.
-
-    :param hl.Table ht: Input Table.
-    :param Tuple[str] group_exprs: Fields to group by. Default is ("ref", "alt").
-    :param str obs_str: Name of field that contains the observed variant count. Default is "obs"..
-    """
-    return ht.group_by(*group_exprs).aggregate(
-        obs=hl.agg.sum(ht[obs_str]), possible=hl.agg.count()
-    )
-
-
 def split_ht_by_oe(ht: hl.Table, keep_high_oe: bool) -> hl.Table:
     """
     Split Table with all possible amino acid substitutions based on missense observed to expected (OE) ratio cutoff.
@@ -234,7 +219,9 @@ def split_ht_by_oe(ht: hl.Table, keep_high_oe: bool) -> hl.Table:
     ht = ht.filter(oe_filter_expr)
 
     logger.info("Grouping HT and aggregating observed and possible variant counts...")
-    ht = get_obs_and_possible_counts(ht)
+    ht = ht.group_by("ref", "alt").aggregate(
+        obs=hl.agg.sum(ht.observed), possible=hl.agg.count()
+    )
 
     logger.info("Adding variant consequence (mut_type) annotation and returning...")
     return ht.annotate(mut_type=variant_csq_expr(ht.ref, ht.alt))
