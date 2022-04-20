@@ -1,11 +1,18 @@
 import logging
+from typing import Tuple
 
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import public_release
 from gnomad.utils.vep import CSQ_NON_CODING
 
-from rmc.resources.basics import amino_acids_oe, constraint_prep, rmc_results, temp_path
+from rmc.resources.basics import (
+    amino_acids_oe,
+    constraint_prep,
+    misbad,
+    rmc_results,
+    temp_path,
+)
 from rmc.resources.grch37.gnomad import constraint_ht
 from rmc.utils.generic import (
     filter_context_using_gnomad,
@@ -169,35 +176,6 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     context_ht.write(amino_acids_oe.path, overwrite=True)
 
 
-def oe_bin_expr(
-    oe_expr: hl.expr.Float64Expression, use_exac_bins: bool
-) -> hl.expr.StringExpression:
-    """
-    Determine observed/expected (OE) missense ratio bin annotation.
-
-    Bins are in increments of 0.2. Option to keep only OE bins 0-0.6 and 0.8-1.0+ for consistency with previous work.
-
-    :param hl.expr.Float64Expression: Missense OE annotation.
-    :param bool use_exac_bins: Whether to use only the 0-0.6 and 0.8-1.0+ OE bins for consistency with ExAC results.
-    :return: StringExpression containing missense OE bin for missense OE annotation.
-    """
-    if use_exac_bins:
-        return (
-            hl.case()
-            .when(oe_expr <= 0.6, "0-0.6")
-            .when(oe_expr > 0.8, "0.8-1.0+")
-            .or_missing()
-        )
-    return (
-        hl.case()
-        .when(oe_expr <= 0.2, "0-0.2")
-        .when((oe_expr > 0.2) & (oe_expr <= 0.4), "0.2-0.4")
-        .when((oe_expr > 0.4) & (oe_expr <= 0.6), "0.4-0.6")
-        .when((oe_expr > 0.6) & (oe_expr <= 0.8), "0.6-0.8")
-        .default("0.8-1.0+")
-    )
-
-
 def variant_csq_expr(
     ref_expr: hl.expr.StringExpression, alt_expr: hl.expr.StringExpression
 ) -> hl.expr.StringExpression:
@@ -215,3 +193,117 @@ def variant_csq_expr(
         .when((ref_expr == "STOP") & (ref_expr != alt_expr), "rdt")
         .default("mis")
     )
+
+
+def get_obs_and_possible_counts(
+    ht: hl.Table, group_exprs: Tuple[str] = ("ref", "alt"), obs_str: str = "obs"
+):
+    """
+    Group input Table by specified fields and aggregate to get total observed and possible variant counts.
+
+    :param hl.Table ht: Input Table.
+    :param Tuple[str] group_exprs: Fields to group by. Default is ("ref", "alt").
+    :param str obs_str: Name of field that contains the observed variant count. Default is "obs"..
+    """
+    return ht.group_by(*group_exprs).aggregate(
+        obs=hl.agg.sum(ht[obs_str]), possible=hl.agg.count()
+    )
+
+
+def split_ht_by_oe(ht: hl.Table, keep_high_oe: bool) -> hl.Table:
+    """
+    Split Table with all possible amino acid substitutions based on missense observed to expected (OE) ratio cutoff.
+
+    :param hl.Table ht: Input Table with amino acid substitutions.
+    :param bool keep_high_oe: Whether to filter to high missense OE values.
+        If True, returns "boring" HT.
+        If False, gets "bad" (low missense OE) Table.
+    :return: Table filtered based on missense OE. Schema:
+        ----------------------------------------
+        Row fields:
+            'ref': str
+            'alt': str
+            'oe': float64
+            'obs': int64
+            'possible': int64
+            'mut_type': str
+        ----------------------------------------
+    """
+    logger.info("Filtering HT on missense OE values...")
+    oe_filter_expr = (ht.oe > 0.6) if keep_high_oe else (ht.oe <= 0.6)
+    ht = ht.filter(oe_filter_expr)
+
+    logger.info("Grouping HT and aggregating observed and possible variant counts...")
+    ht = get_obs_and_possible_counts(ht)
+
+    logger.info("Adding variant consequence (mut_type) annotation and returning...")
+    return ht.annotate(mut_type=variant_csq_expr(ht.ref, ht.alt))
+
+
+def get_total_csq_count(ht: hl.Table, csq: str, count_field: str) -> int:
+    """
+    Filter input Table using specified variant consequence and aggregate total value of specified field.
+
+    :param hl.Table ht: Input Table (Table with amino acid substitutions filtered to have high or low missense OE).
+    :param str csq: Desired variant consequence. One of "syn" or "non".
+    :param str count_field: Desired count type. One of "obs" or "possible".
+    :return: Int of total value of `count_field` for specified consequence.
+    """
+    return ht.aggregate(hl.agg.filter(ht.mut_type == csq, hl.agg.sum(ht[count_field])))
+
+
+def calculate_misbad(ht: hl.Table) -> None:
+    """
+    Calculate missense badness score.
+
+    :param hl.Table HT: Table with all amino acid substitutions and their missense observed/expected (OE) ratio.
+    :return: None; writes Table with missense badness score to resource path.
+    """
+    logger.info("Creating high missense OE (OE > 0.6) HT...")
+    high_ht = split_ht_by_oe(ht, keep_high_oe=True)
+    high_ht = high_ht.checkpoint(f"{temp_path}/amino_acids_high_oe.ht", overwrite=True)
+
+    logger.info("Creating low missense OE (OE <= 0.6) HT...")
+    low_ht = split_ht_by_oe(ht, keep_high_oe=False)
+    low_ht = low_ht.checkpoint(f"{temp_path}/amino_acids_low_oe.ht", overwrite=True)
+
+    logger.info("Calculating synonymous rates...")
+    syn_obs_high = get_total_csq_count(high_ht, csq="syn", count_field="obs")
+    syn_pos_high = get_total_csq_count(high_ht, csq="syn", count_field="possible")
+    syn_obs_low = get_total_csq_count(low_ht, csq="syn", count_field="obs")
+    syn_pos_low = get_total_csq_count(low_ht, csq="syn", count_field="possible")
+    syn_rate = (syn_obs_high / syn_pos_high) / (syn_obs_low / syn_pos_low)
+    logger.info("Synonymous rate: %i", syn_rate)
+
+    logger.info("Calculating nonsense rates...")
+    non_obs_high = get_total_csq_count(high_ht, csq="non", count_field="obs")
+    non_pos_high = get_total_csq_count(high_ht, csq="non", count_field="possible")
+    non_obs_low = get_total_csq_count(low_ht, csq="non", count_field="obs")
+    non_pos_low = get_total_csq_count(low_ht, csq="non", count_field="possible")
+    non_rate = (non_obs_high / non_pos_high) / (non_obs_low / non_pos_low)
+    logger.info("Nonsense rate: %i", non_rate)
+
+    high_ht = high_ht.transmute(
+        high_obs=high_ht.obs,
+        high_pos=high_ht.possible,
+    )
+    low_ht = low_ht.transmute(
+        low_obs=low_ht.obs,
+        low_pos=low_ht.possible,
+    )
+    ht = high_ht.join(low_ht, how="outer")
+    mb_ht = ht.group_by("ref", "alt").aggregate(
+        high_low=(
+            (hl.agg.sum(ht.high_obs) / hl.agg.sum(ht.high_pos))
+            / (hl.agg.sum(ht.low_obs) / hl.agg.sum(ht.low_pos))
+        )
+    )
+    mb_ht = mb_ht.annotate(mut_type=variant_csq_expr(mb_ht.ref, mb_ht.alt))
+    mb_ht = mb_ht.annotate(
+        misbad=hl.or_missing(
+            mb_ht.mut_type == "mis",
+            # Cap missense badness at 1
+            hl.min((mb_ht.high_low - syn_rate) / (non_rate - syn_rate), 1),
+        ),
+    )
+    mb_ht.write(misbad.path, overwrite=True)
