@@ -58,9 +58,7 @@ https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constra
 
 MODEL_PREFIX = f"{RMC_PREFIX}/model"
 """
-Path to bucket containing resources related to building the mutational models.
-
-Bucket also contains transcript-related resources.
+Path to bucket containing resources related to building the mutational models and setting up for regional missense constraint calculations.
 """
 
 
@@ -214,7 +212,7 @@ Contains same information as `rmc_results` but has different formatting for gnom
 amino_acids_oe = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
-        version: TableResource(path=f"{MODEL_PREFIX}/{version}/amino_acid_oe.ht")
+        version: TableResource(path=f"{MPC_PREFIX}/{version}/amino_acid_oe.ht")
         for version in GNOMAD_VERSIONS
     },
 )
