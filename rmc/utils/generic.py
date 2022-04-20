@@ -107,7 +107,7 @@ def get_divergence_scores() -> Dict[str, float]:
             transcript, score = line.strip().split("\t")
             try:
                 div_scores[transcript.split(".")[0]] = float(score)
-            except TypeError:
+            except ValueError:
                 continue
     return div_scores
 
@@ -297,27 +297,14 @@ def get_avg_bases_between_mis(
     return round(total_bases / total_variants)
 
 
-def keep_criteria(ht: hl.Table, exac: bool = False) -> hl.expr.BooleanExpression:
+def keep_criteria(ht: hl.Table) -> hl.expr.BooleanExpression:
     """
     Return Boolean expression to filter variants in input Table.
 
     :param hl.Table ht: Input Table.
-    :param bool exac: Whether input Table is ExAC data. Default is False.
-    :return: Keep criteria Boolean expression.
-    :rtype: hl.expr.BooleanExpression
+    :return: Boolean expression used to filter variants.
     """
-    # ExAC keep criteria: adjusted AC <= 123 and VQSLOD >= -2.632
-    # Also remove variants with median depth < 1
-    if exac:
-        keep_criteria = (
-            (ht.ac <= 123) & (ht.ac > 0) & (ht.vqslod >= -2.632) & (ht.coverage > 1)
-        )
-    else:
-        keep_criteria = (
-            (ht.ac > 0) & (ht.af < 0.001) & (ht.pass_filters) & (ht.exome_coverage > 0)
-        )
-
-    return keep_criteria
+    return (ht.ac > 0) & (ht.af < 0.001) & (ht.pass_filters) & (ht.gnomad_coverage > 0)
 
 
 def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.Table:

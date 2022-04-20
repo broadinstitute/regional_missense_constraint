@@ -47,10 +47,12 @@ def filter_codons(ht: hl.Table) -> hl.Table:
     ht = ht.filter((hl.is_defined(ht.codons)) & (hl.len(ht.codons) == 7))
     codon_map = get_codon_lookup()
     ht = ht.annotate(
-        ref=ht.codons.split("/")[0].upper(), alt=ht.codons.split("/")[1].upper(),
+        ref=ht.codons.split("/")[0].upper(),
+        alt=ht.codons.split("/")[1].upper(),
     )
     ht = ht.annotate(
-        ref=codon_map.get(ht.ref, "Unk"), alt=codon_map.get(ht.alt, "Unk"),
+        ref=codon_map.get(ht.ref, "Unk"),
+        alt=codon_map.get(ht.alt, "Unk"),
     )
     # Remove any lines with "Unk" (unknown amino acids)
     return ht.filter((ht.ref != "Unk") & (ht.alt != "Unk"))
@@ -113,7 +115,7 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
 
     logger.info("Reading in VEP context HT...")
     context_ht = process_context_ht(
-        build="GRCh37", filter_to_missense=False, add_annotations=False
+        build="GRCh37", filter_to_missense=True, add_annotations=False
     )
 
     logger.info(
@@ -155,6 +157,11 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     )
     context_ht = get_oe_annotation(context_ht)
     context_ht = context_ht.key_by().select(
-        "ref", "alt", "observed", "codons", "amino_acids", "oe",
+        "ref",
+        "alt",
+        "observed",
+        "codons",
+        "amino_acids",
+        "oe",
     )
     context_ht.write(amino_acids_oe.path, overwrite=True)
