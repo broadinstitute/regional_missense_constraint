@@ -130,9 +130,7 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     logger.info(
         "Filtering to transcripts to keep and selecting relevant annotations..."
     )
-    context_ht = context_ht.filter(
-        transcripts.contains(context_ht.transcript_consequences.transcript_id)
-    )
+    context_ht = context_ht.filter(transcripts.contains(context_ht.transcript))
     context_ht = context_ht.select(
         transcript=context_ht.transcript_consequences.transcript_id,
         consequence_terms=context_ht.transcript_consequences.consequence_terms,
