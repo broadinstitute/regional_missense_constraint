@@ -57,7 +57,7 @@ if __name__ == "__main__":
     # `dest`: https://docs.python.org/3/library/argparse.html#dest
     subparsers = parser.add_subparsers(title="command", dest="command", required=True)
 
-    prepare_amino_acid_ht = subparsers.add_parser(
+    prepare_ht = subparsers.add_parser(
         "prepare-ht",
         help="""
         Prepare Table with all possible amino acid substitutions and their missense observed to expected (OE) ratio.
