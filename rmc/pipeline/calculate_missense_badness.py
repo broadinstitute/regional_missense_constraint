@@ -26,7 +26,7 @@ logger.setLevel(logging.INFO)
 def main(args):
     """Calculate missense badness."""
     try:
-        if args.command == "prepare-amino-acid-ht":
+        if args.command == "prepare-ht":
             hl.init(log="/calc_misbad_prep_context_gamma_ht.log")
             prepare_amino_acid_ht()
 
