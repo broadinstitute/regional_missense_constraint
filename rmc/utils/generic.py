@@ -143,7 +143,7 @@ def process_context_ht(
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     if build == "GRCh37":
-        ht = vep_context.ht()
+        ht = vep_context.ht().select_globals()
     else:
         ht = grch38.full_context.ht()
 
