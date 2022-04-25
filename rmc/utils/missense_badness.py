@@ -88,9 +88,9 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
     # # 'ENST00000304270', 'ENST00000344415', 'ENST00000373521', 'ENST00000381708', 'ENST00000596936'
     # All 5 of these transcripts have extremely low coverage in gnomAD
     # Will keep for consistency with v2 LoF results but they look terrible
-    lof_ht = constraint_ht.ht().select("oe_mis")
+    lof_ht = constraint_ht.ht().select("oe_mis")._key_by_assert_sorted("transcript")
     ht = ht.annotate(
-        gnomad_oe=constraint_ht[ht.transcript].oe_mis,
+        gnomad_oe=lof_ht[ht.transcript].oe_mis,
         rmc_oe=group_ht[ht.transcript].oe,
     )
     ht = ht.transmute(overall_oe=hl.coalesce(ht.rmc_oe, ht.gnomad_oe))
@@ -154,17 +154,20 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     gnomad = public_release(gnomad_data_type).ht()
     gnomad_cov = coverage(gnomad_data_type).ht()
     gnomad = gnomad.select(
+        "filters",
         ac=gnomad.freq[0].AC,
         af=gnomad.freq[0].AF,
-        pass_filters=hl.len(gnomad.filters) == 0,
         gnomad_coverage=gnomad_cov[gnomad.locus].median,
     )
-    gnomad = gnomad.filter(keep_criteria(gnomad))
+    gnomad = gnomad.filter(
+        keep_criteria(gnomad.ac, gnomad.af, gnomad.filters, gnomad.gnomad_coverage)
+    )
     context_ht = context_ht.annotate(_obs=gnomad.index(context_ht.key))
     context_ht = context_ht.transmute(observed=hl.int(hl.is_defined(context_ht._obs)))
 
     logger.info("Checkpointing HT after joining with gnomAD data...")
-    context_ht = context_ht.checkpoint(f"{temp_path}/codons_filt.ht", overwrite=True)
+    # context_ht = context_ht.checkpoint(f"{temp_path}/codons_filt.ht", overwrite=True)
+    context_ht = hl.read_table(f"{temp_path}/codons_filt.ht")
 
     logger.info(
         "Getting observed to expected ratio, rekeying Table, and writing to output path..."
