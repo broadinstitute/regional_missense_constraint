@@ -88,6 +88,8 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
     # # 'ENST00000304270', 'ENST00000344415', 'ENST00000373521', 'ENST00000381708', 'ENST00000596936'
     # All 5 of these transcripts have extremely low coverage in gnomAD
     # Will keep for consistency with v2 LoF results but they look terrible
+    # NOTE: LoF HT is keyed by gene and transcript, but `_key_by_assert_sorted` doesn't work here for v2 version
+    # Throws this error: hail.utils.java.FatalError: IllegalArgumentException
     lof_ht = constraint_ht.ht().select("oe_mis").key_by("transcript")
     ht = ht.annotate(
         gnomad_oe=lof_ht[ht.transcript].oe_mis,
