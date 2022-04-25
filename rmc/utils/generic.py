@@ -195,6 +195,7 @@ def filter_context_using_gnomad(
     gnomad = public_release(gnomad_data_type).ht().select_globals()
     gnomad_cov = coverage(gnomad_data_type).ht()
     gnomad = gnomad.select(
+        "filters",
         ac=gnomad.freq[adj_freq_index].AC,
         af=gnomad.freq[adj_freq_index].AF,
         gnomad_coverage=gnomad_cov[gnomad.locus].median,
