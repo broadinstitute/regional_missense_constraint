@@ -25,8 +25,6 @@ Used when checkpointing intermediate files.
 
 ## Kaitlin's resources
 # Original regional missense constraint resource files
-CODON_TABLE_PATH = f"{RESOURCE_PREFIX}/amino_acids/codons_lookup.tsv"
-ACID_NAMES_PATH = f"{RESOURCE_PREFIX}/amino_acids/acid_names.tsv"
 MUTATION_RATE_TABLE_PATH = f"{RESOURCE_PREFIX}/GRCh37/exac/mutation_rate_table.tsv"
 DIVERGENCE_SCORES_TSV_PATH = (
     f"{RESOURCE_PREFIX}/GRCh37/exac/divsites_gencodev19_all_transcripts.txt"
@@ -43,6 +41,45 @@ divergence_scores = TableResource(
 )
 """
 Table with divergence score between humans and macaques for each canonical transcript in Gencode v19.
+"""
+
+## Amino acid resources
+CODON_TABLE_PATH = f"{RESOURCE_PREFIX}/amino_acids/codons_lookup.tsv"
+"""
+TSV file containing two columns: codon and three letter amino acid code.
+"""
+
+ACID_NAMES_PATH = f"{RESOURCE_PREFIX}/amino_acids/acid_names.tsv"
+"""
+TSV file containing three columns: amino acid name, amino acid 3 letter code, and amino acid 1 letter code.
+"""
+
+blosum_txt_path = f"{RESOURCE_PREFIX}/amino_acids/blosum62.txt"
+"""
+Text file containing matrix of BLOSUM scores for each amino acid pair.
+"""
+
+blosum_ht_path = TableResource(
+    path=f"{RESOURCE_PREFIX}/amino_acids/ht/blosum.ht",
+)
+"""
+Table containing BLOSUM scores for each amino acid pair.
+
+Hail Table representation of scores in `blosum_txt_path`.
+"""
+
+grantham_txt_path = f"{RESOURCE_PREFIX}/amino_acids/grantham.matrix.txt"
+"""
+Text file containing matrix of Grantham scores for each amino acid pair.
+"""
+
+grantham_ht_path = TableResource(
+    path=f"{RESOURCE_PREFIX}/amino_acids/ht/grantham.ht",
+)
+"""
+Table containing Grantham scores for each amino acid pair.
+
+Hail Table representation of scores in `grantham_txt_path`.
 """
 
 ## gnomAD resources
