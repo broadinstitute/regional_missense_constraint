@@ -1,11 +1,18 @@
 import logging
+from typing import Dict, List, Tuple
 
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import public_release
 from gnomad.resources.grch37.reference_data import vep_context
 
-from rmc.resources.basics import blosum_ht_path, blosum_txt_path, misbad
+from rmc.resources.basics import (
+    blosum_ht_path,
+    blosum_txt_path,
+    grantham_ht_path,
+    grantham_txt_path,
+    misbad,
+)
 from rmc.resources.grch37.reference_data import clinvar_path_mis
 from rmc.utils.generic import get_aa_map
 
@@ -16,6 +23,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger("mpc_utils")
 logger.setLevel(logging.INFO)
+
+
+def convert_score_list_to_ht(
+    score_list: List[Dict[str, str]],
+    schema: str = "array<struct{amino_acids: str, score: str}>",
+    key_fields: Tuple[str] = ("ref", "alt"),
+) -> hl.Table:
+    """
+    Convert list of amino acid changes/associated scores to Table format.
+
+    :param List[Dict[str, str]] score_list: List of dictionaries containing amino acid changes (key) and associated scores (value).
+    :param str schema: Schema of `score_list`. Default is 'array<struct{amino_acids: str, score: str}>'.
+        Note that the dictionary keys must match values provided in this schema.
+    :param str key_fields: Desired key fields for the new Table. Default is ("ref", "alt").
+    """
+    ht = hl.Table.parallelize(hl.literal(score_list, schema))
+    if schema == "array<struct{amino_acids: str, score: str}>":
+        ht = ht.transmute(
+            ref=ht.amino_acids.split("_")[0], alt=ht.amino_acids.split("_")[1]
+        )
+    return ht.key_by(*key_fields)
 
 
 def import_blosum():
@@ -74,14 +102,46 @@ def import_blosum():
                         )
 
     # Convert list of dictionaries to hail Table
-    ht = hl.Table.parallelize(
-        hl.literal(blosum_scores, "array<struct{amino_acids: str, score: str}>")
-    )
-    ht = ht.transmute(
-        ref=ht.amino_acids.split("_")[0], alt=ht.amino_acids.split("_")[1]
-    )
-    ht = ht.key_by("ref", "alt")
+    ht = convert_score_list_to_ht(blosum_scores)
     ht.write(blosum_ht_path)
+
+
+def import_grantham():
+    """
+    Import Grantham score.
+
+    Read in text file, convert to hail Table format, and write to resource path.
+
+    :return: None; function writes HT to resource path.
+    """
+    # Create empty list to store Grantham scores
+    # Will use this list later in the function to directly convert the scores into a Table format
+    grantham_scores = []
+    with open(grantham_txt_path) as g:
+        for line in g:
+            # Grab header line (starts with '.')
+            if line.startswith("."):
+                header = line.strip().split("\t")
+                header_dict = {}
+                for counter, item in enumerate(header):
+                    if item == ".":
+                        header_dict[counter] = item
+                    else:
+                        header_dict[counter] = aa_map[item]
+            else:
+                line = line.strip().split("\t")
+                aa = aa_map[line[0]]
+
+                for counter, item in enumerate(line):
+                    alt_aa = header_dict[counter]
+                    if alt_aa != ".":
+                        grantham_scores.append(
+                            {"amino_acids": f"{aa}-{alt_aa}", "score": item}
+                        )
+
+    # Convert list of dictionaries to hail Table
+    ht = convert_score_list_to_ht(grantham_scores)
+    ht.write(grantham_ht_path)
 
 
 def prepare_pop_path_ht(
