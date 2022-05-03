@@ -54,6 +54,9 @@ def import_blosum():
 
     :return: None; function writes HT to resource path.
     """
+    # Get amino acid map (map 1 letter code to 3 letter code)
+    aa_map = get_aa_map()
+
     # Create empty list to store BLOSUM scores
     # Will use this list later in the function to directly convert the scores into a Table format
     blosum_scores = []
@@ -114,6 +117,9 @@ def import_grantham():
 
     :return: None; function writes HT to resource path.
     """
+    # Get amino acid map (map 1 letter code to 3 letter code)
+    aa_map = get_aa_map()
+
     # Create empty list to store Grantham scores
     # Will use this list later in the function to directly convert the scores into a Table format
     grantham_scores = []
