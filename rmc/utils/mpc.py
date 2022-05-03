@@ -5,7 +5,7 @@ import hail as hl
 from gnomad.resources.grch37.gnomad import public_release
 from gnomad.resources.grch37.reference_data import vep_context
 
-from rmc.resources.basics import misbad
+from rmc.resources.basics import blosum_ht_path, blosum_txt_path, misbad
 from rmc.resources.grch37.reference_data import clinvar_path_mis
 from rmc.utils.generic import get_aa_map
 
