@@ -12,9 +12,11 @@ from rmc.resources.basics import (
     grantham_ht_path,
     grantham_txt_path,
     misbad,
+    temp_path,
 )
 from rmc.resources.grch37.reference_data import clinvar_path_mis
 from rmc.utils.generic import get_aa_map
+from rmc.utils.missense_badness import get_oe_annotation
 
 
 logging.basicConfig(
@@ -165,7 +167,16 @@ def prepare_pop_path_ht(
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
     clinvar_ht = clinvar_path_mis.ht()
+    clinvar_ht = clinvar_ht.annotate(pop_v_path="pop")
 
     logger.info("Importing gnomAD public data and filtering to common variants...")
-    gnomad = public_release(gnomad_data_type).ht()
-    gnomad = gnomad.filter(gnomad.freq[0].AF > af_threshold)
+    gnomad_ht = public_release(gnomad_data_type).ht()
+    gnomad_ht = gnomad_ht.filter(gnomad_ht.freq[0].AF > af_threshold)
+    gnomad_ht = gnomad_ht.annotate(pop_v_path="path")
+
+    logger.info("Joining ClinVar and gnomAD HTs...")
+    ht = clinvar_ht.select("pop_v_path").union(gnomad_ht.select("pop_v_path"))
+    ht = ht.checkpoint(f"{temp_path}/joint_clinvar_gnomad.ht", overwrite=True)
+
+    logger.info("Adding annotations...")
+    ht = get_oe_annotation(ht)
