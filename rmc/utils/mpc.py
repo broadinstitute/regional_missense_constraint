@@ -212,3 +212,10 @@ def prepare_pop_path_ht(
     )
     context_ht = filter_codons(context_ht)
     context_ht = context_ht.checkpoint(f"{temp_path}/polyphen.ht", overwrite=True)
+
+    logger.info("Adding PolyPhen-2 and codon annotations to joint ClinVar/gnomAD HT...")
+    ht = ht.annotate(**context_ht[ht.key])
+
+    logger.info("Getting missense badness annotation...")
+    mb_ht = misbad.ht()
+    ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
