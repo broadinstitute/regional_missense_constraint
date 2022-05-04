@@ -16,7 +16,7 @@ from rmc.resources.basics import (
 )
 from rmc.resources.grch37.reference_data import clinvar_path_mis
 from rmc.utils.generic import get_aa_map, process_vep
-from rmc.utils.missense_badness import get_oe_annotation
+from rmc.utils.missense_badness import filter_codons, get_oe_annotation
 
 
 logging.basicConfig(
@@ -197,7 +197,7 @@ def prepare_pop_path_ht(
     ht = get_oe_annotation(ht)
     ht = ht.checkpoint(f"{temp_path}/joint_clinvar_gnomad_temp.ht", overwrite=True)
 
-    logger.info("Getting PolyPhen-2 annotation from VEP context HT...")
+    logger.info("Getting PolyPhen-2 and codon annotations from VEP context HT...")
     context_ht = vep_context.ht().select_globals().select("vep", "was_split")
     context_ht = context_ht.filter(hl.is_defined(ht[context_ht].key))
     context_ht = process_vep(context_ht)
@@ -207,5 +207,8 @@ def prepare_pop_path_ht(
             score=ht.transcript_consequences.polyphen_score,
         )
     )
-    context_ht = context_ht.select("polyphen")
+    context_ht = context_ht.select(
+        "polyphen", codons=context_ht.transcript_consequences.codons
+    )
+    context_ht = filter_codons(context_ht)
     context_ht = context_ht.checkpoint(f"{temp_path}/polyphen.ht", overwrite=True)
