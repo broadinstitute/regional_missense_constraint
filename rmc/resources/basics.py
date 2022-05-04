@@ -59,7 +59,7 @@ blosum_txt_path = f"{RESOURCE_PREFIX}/amino_acids/blosum62.txt"
 Text file containing matrix of BLOSUM scores for each amino acid pair.
 """
 
-blosum_ht_path = TableResource(
+blosum = TableResource(
     path=f"{RESOURCE_PREFIX}/amino_acids/ht/blosum.ht",
 )
 """
@@ -73,7 +73,7 @@ grantham_txt_path = f"{RESOURCE_PREFIX}/amino_acids/grantham.matrix.txt"
 Text file containing matrix of Grantham scores for each amino acid pair.
 """
 
-grantham_ht_path = TableResource(
+grantham = TableResource(
     path=f"{RESOURCE_PREFIX}/amino_acids/ht/grantham.ht",
 )
 """

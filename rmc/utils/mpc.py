@@ -7,9 +7,9 @@ from gnomad.resources.grch37.gnomad import public_release
 from gnomad.resources.grch37.reference_data import vep_context
 
 from rmc.resources.basics import (
-    blosum_ht_path,
+    blosum,
     blosum_txt_path,
-    grantham_ht_path,
+    grantham,
     grantham_txt_path,
     misbad,
     temp_path,
@@ -108,7 +108,7 @@ def import_blosum():
 
     # Convert list of dictionaries to hail Table
     ht = convert_score_list_to_ht(blosum_scores)
-    ht.write(blosum_ht_path)
+    ht.write(blosum.path)
 
 
 def import_grantham():
@@ -149,7 +149,7 @@ def import_grantham():
 
     # Convert list of dictionaries to hail Table
     ht = convert_score_list_to_ht(grantham_scores)
-    ht.write(grantham_ht_path)
+    ht.write(grantham.path)
 
 
 def prepare_pop_path_ht(
@@ -189,5 +189,10 @@ def prepare_pop_path_ht(
     )
     cadd = hl.split_multi(cadd)
     ht = ht.annotate(cadd=hl.struct(**cadd[ht.key]))
+    # BLOSUM and Grantham
+    blosum_ht = blosum.ht()
+    grantham_ht = grantham.ht()
+    ht = ht.annotate(blosum=blosum_ht[ht.key].score, grantham=grantham_ht[ht.key].score)
+
     # Missense observed/expected (OE) ratio
     ht = get_oe_annotation(ht)
