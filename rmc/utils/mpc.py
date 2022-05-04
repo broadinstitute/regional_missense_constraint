@@ -158,6 +158,10 @@ def prepare_pop_path_ht(
     """
     Prepare Table with 'population' (common gnomAD missense) and 'pathogenic' (ClinVar pathogenic/likely pathogenic missense) variants.
 
+    .. note::
+        This function reads in data from a requester-pays bucket and will fail if requester-pays
+        is not enabled on the cluster.
+
     :param str gnomad_data_type: gnomAD data type. Used to retrieve public release Table.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
@@ -179,4 +183,11 @@ def prepare_pop_path_ht(
     ht = ht.checkpoint(f"{temp_path}/joint_clinvar_gnomad.ht", overwrite=True)
 
     logger.info("Adding annotations...")
+    # CADD (not sure if it needs to be split)
+    cadd = hl.experimental.load_dataset(
+        name="cadd", version="1.6", reference_genome="GRCh37"
+    )
+    cadd = hl.split_multi(cadd)
+    ht = ht.annotate(cadd=hl.struct(**cadd[ht.key]))
+    # Missense observed/expected (OE) ratio
     ht = get_oe_annotation(ht)
