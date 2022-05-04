@@ -15,7 +15,7 @@ from rmc.resources.basics import (
     temp_path,
 )
 from rmc.resources.grch37.reference_data import clinvar_path_mis
-from rmc.utils.generic import get_aa_map
+from rmc.utils.generic import get_aa_map, process_vep
 from rmc.utils.missense_badness import get_oe_annotation
 
 
@@ -182,7 +182,7 @@ def prepare_pop_path_ht(
     ht = clinvar_ht.select("pop_v_path").union(gnomad_ht.select("pop_v_path"))
     ht = ht.checkpoint(f"{temp_path}/joint_clinvar_gnomad.ht", overwrite=True)
 
-    logger.info("Adding annotations...")
+    logger.info("Adding CADD, BLOSUM, Grantham, RMC annotations and checkpointing...")
     # CADD (not sure if it needs to be split)
     cadd = hl.experimental.load_dataset(
         name="cadd", version="1.6", reference_genome="GRCh37"
@@ -193,6 +193,19 @@ def prepare_pop_path_ht(
     blosum_ht = blosum.ht()
     grantham_ht = grantham.ht()
     ht = ht.annotate(blosum=blosum_ht[ht.key].score, grantham=grantham_ht[ht.key].score)
-
     # Missense observed/expected (OE) ratio
     ht = get_oe_annotation(ht)
+    ht = ht.checkpoint(f"{temp_path}/joint_clinvar_gnomad_temp.ht", overwrite=True)
+
+    logger.info("Getting PolyPhen-2 annotation from VEP context HT...")
+    context_ht = vep_context.ht().select_globals().select("vep", "was_split")
+    context_ht = context_ht.filter(hl.is_defined(ht[context_ht].key))
+    context_ht = process_vep(context_ht)
+    context_ht = context_ht.annotate(
+        polyphen=hl.struct(
+            prediction=ht.transcript_consequences.polyphen_prediction,
+            score=ht.transcript_consequences.polyphen_score,
+        )
+    )
+    context_ht = context_ht.select("polyphen")
+    context_ht = context_ht.checkpoint(f"{temp_path}/polyphen.ht", overwrite=True)
