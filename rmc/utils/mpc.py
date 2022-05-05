@@ -173,12 +173,12 @@ def prepare_pop_path_ht(
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
     clinvar_ht = clinvar_path_mis.ht()
-    clinvar_ht = clinvar_ht.annotate(pop_v_path="pop")
+    clinvar_ht = clinvar_ht.annotate(pop_v_path=0)
 
     logger.info("Importing gnomAD public data and filtering to common variants...")
     gnomad_ht = public_release(gnomad_data_type).ht()
     gnomad_ht = gnomad_ht.filter(gnomad_ht.freq[0].AF > af_threshold)
-    gnomad_ht = gnomad_ht.annotate(pop_v_path="path")
+    gnomad_ht = gnomad_ht.annotate(pop_v_path=1)
 
     logger.info("Joining ClinVar and gnomAD HTs...")
     ht = clinvar_ht.select("pop_v_path").union(gnomad_ht.select("pop_v_path"))
@@ -235,8 +235,11 @@ def prepare_pop_path_ht(
 
 
 def run_regressions(
-    variables: List[str] = ["oe", "misbad", "polyphen", "blosum", "grantham"]
-):
+    regression_type: str,
+    output_fname: str,
+    variables: List[str] = ["oe", "misbad", "polyphen"],
+    additional_variables: List[str] = ["blosum", "grantham"],
+) -> None:
     """
     Run single variable and joint regressions and pick best model.
 
@@ -250,27 +253,59 @@ def run_regressions(
         mpc = -log10(n_less)/82932)
         n_less = number of ExAC variants with fitted_score < a given fitted_score
 
-    :return: None; function writes Table to resource path.
+    :return: None; function writes model coefficients to local file.
     """
     import pandas as pd
+    from patsy import dmatrices
+    import statsmodels
     import statsmodels.api as sm
+
+    assert regression_type in {
+        "single",
+        "additive",
+        "all",
+        "specific",
+    }, "regression_type must be one of 'single', 'additive', 'all', 'specific'!"
 
     # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
     ht = joint_clinvar_gnomad.ht()
     df = ht.to_pandas()
 
+    def _run_glm(
+        formula: str,
+    ) -> statsmodels.genmod.generalized_linear_model.GLMResultsWrapper:
+        """
+        Run logistic regression using input formula and return model results.
+
+        MPC formula (from ExAC):
+        `pop_v_path ~ obs_exp + mis_badness3 + obs_exp:mis_badness3 + polyphen2 + obs_exp:polyphen2`
+
+        For formula reference, see: https://learn-scikit.oneoffcoder.com/patsy.html.
+
+        :param str formula: String containing R-style formula defining model.
+        :return: Logistic regression results.
+        """
+        # Create design matrices to fit model
+        # NOTE: If run into a TypeError here, fix with df['field'].astype()
+        # Example error: TypeError: Cannot interpret 'string[python]' as a data type
+        # Example fix: df['misbad3'] = df['misbad3'].astype(float)
+        y, X = dmatrices(formula, data=df, return_type="dataframe")
+        model = sm.GLM(y, X, family=sm.families.Binomial()).fit()
+        logger.info("%s summary: %s", formula, model.summary())
+        logger.info("AIC: %i", model.aic)
+        return model
+
     logger.info("Run single variable regressions...")
     # E.g., mod.misbad3 <- glm(pop_v_path ~ mis_badness3, data=cleaned_joint_exac_clinvar.scores, family=binomial)
-    single_var_res = []
+    single_var_res = {}
     single_var_aic = []
-    for var in variables:
+    for var in [variables] + [additional_variables]:
         logger.info("Running single variable regression...")
-        model = sm.GLM(
-            df["pop_v_path"], df[variables[0]], family=sm.families.Binomial()
-        ).fit()
-        logger.info("%s summary: %s", var, model.summary())
+        # Create design matrices
+        formula = f"pop_v_path ~ {var}"
+        model = _run_glm(formula)
         single_var_aic.append(model.aic)
-        single_var_res.append((model.aic, model.params))
+        single_var_res[var] = model.params
 
     # Find lowest AIC for single variable regressions and corresponding model
     min_single_aic = min(single_var_aic)
@@ -279,3 +314,48 @@ def run_regressions(
         "Model with smallest AIC for single variable regressions used %i",
         min_single_aic_var,
     )
+
+    logger.info("Run joint (additive interactions only) regression...")
+    # Including
+    add_formula = f"pop_v_path ~ {' + '.join(variables)}"
+    add_model = _run_glm(add_formula)
+
+    logger.info("Running joint regression with all interactions...")
+    mult_formula = f"pop_v_path ~ {' * '.join(variables)}"
+    mult_model = _run_glm(mult_formula)
+
+    logger.info("Running joint regression with specific interactions...")
+    # Currently hardcoded to be formula from ExAC
+    spec_formula = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
+    spec_model = _run_glm(spec_formula)
+
+    single_var_aic.extend([add_model.aic, mult_model.aic, spec_model.aic])
+    min_aic = min(single_var_aic)
+    logger.info("Lowest model AIC: %i", min_aic)
+    if min_aic == min_single_aic:
+        logger.info(
+            "Single variable regression using %s had the lowest AIC", min_single_aic_var
+        )
+        logger.info("Coefficients: %s", single_var_res[min_single_aic_var])
+        single_var_res[min_single_aic_var].to_csv(output_fname)
+    elif min_aic == add_model.aic:
+        logger.info(
+            "Joint regression using additive interactions (%s) had the lowest AIC",
+            add_formula,
+        )
+        logger.info("Coefficients: %s", add_model.params)
+        add_model.params.to_csv(output_fname)
+    elif min_aic == mult_model.aic:
+        logger.info(
+            "Joint regression using all interactions (%s) had the lowest AIC",
+            mult_formula,
+        )
+        logger.info("Coefficients: %s", mult_model.params)
+        mult_model.params.to_csv(output_fname)
+    else:
+        logger.info(
+            "Joint regression using specific interactions (%s) had the lowest AIC",
+            spec_formula,
+        )
+        logger.info("Coefficients: %s", spec_model.params)
+        spec_model.params.to_csv(output_fname)
