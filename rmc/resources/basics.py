@@ -256,6 +256,24 @@ Table containing all possible amino acid substitutions and their missense OE rat
 Input to missense badness calculations.
 """
 
+joint_clinvar_gnomad = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{MODEL_PREFIX}/{version}/joint_clinvar_gnomad.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table containing "population" and "pathogenic" variants.
+
+Table contains common (AF > 0.01) gnomAD variants ("population") and
+ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes
+that cause severe disease ("pathogenic") with defined CADD, BLOSUM, Grantham, missense observed/expected ratios,
+missense badness, and PolyPhen-2 scores.
+
+Input to MPC (missense badness, polyphen-2, and constraint) calculations.
+"""
+
 
 oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/oe_bin.tsv"
 """

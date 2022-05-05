@@ -11,6 +11,7 @@ from rmc.resources.basics import (
     blosum_txt_path,
     grantham,
     grantham_txt_path,
+    joint_clinvar_gnomad,
     misbad,
     temp_path,
 )
@@ -168,6 +169,7 @@ def prepare_pop_path_ht(
     :param float af_threshold: Allele frequency cutoff to filter gnomAD public dataset.
         Variants *above* this threshold will be kept.
         Default is 0.01.
+    :return: None; function writes Table to resource path.
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
     clinvar_ht = clinvar_path_mis.ht()
@@ -227,5 +229,6 @@ def prepare_pop_path_ht(
         & hl.is_defined(ht.grantham)
         & hl.is_defined(ht.oe)
         & hl.is_defined(ht.polyphen.score)
+        & hl.is_defind(ht.misbad)
     )
-    ht = ht.checkpoint(f"{temp_path}/joint_clinvar_gnomad.ht", overwrite=True)
+    ht.write(joint_clinvar_gnomad.path, overwrite=True)
