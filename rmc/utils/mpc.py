@@ -229,6 +229,26 @@ def prepare_pop_path_ht(
         & hl.is_defined(ht.grantham)
         & hl.is_defined(ht.oe)
         & hl.is_defined(ht.polyphen.score)
-        & hl.is_defind(ht.misbad)
+        & hl.is_defined(ht.misbad)
     )
     ht.write(joint_clinvar_gnomad.path, overwrite=True)
+
+
+def run_regressions():
+    """
+    Run single variable and joint regressions and pick best model.
+
+    These regressions are used to determine the fitted score that is used to predict MPC scores.
+
+    Fitted score from ExAC:
+        fitted_score = 4.282793 + (4.359682*obs_exp) + (-3.654815*misbad) + (-3.512215*pph2)
+                    + (2.585361*obs_exp*misbad) + (1.350056*obs_exp*pph2)
+
+    Relationship between fitted score and MPC (from ExAC):
+        mpc = -log10(n_less)/82932)
+        n_less = number of ExAC variants with fitted_score < a given fitted_score
+
+    :return: None; function writes Table to resource path.
+    """
+    ht = joint_clinvar_gnomad.ht()
+    logger.info("Adding single variable regressions...")
