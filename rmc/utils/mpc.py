@@ -235,7 +235,6 @@ def prepare_pop_path_ht(
 
 
 def run_regressions(
-    regression_type: str,
     output_fname: str,
     variables: List[str] = ["oe", "misbad", "polyphen"],
     additional_variables: List[str] = ["blosum", "grantham"],
@@ -253,19 +252,18 @@ def run_regressions(
         mpc = -log10(n_less)/82932)
         n_less = number of ExAC variants with fitted_score < a given fitted_score
 
+    :param str output_fname: Name of output file (where model coefficients are written).
+        Must be a local file name.
+    :param List[str] variables: Variables to include in all regressions (single, joint).
+        Default is ["oe", "misbad", "polyphen"].
+    :param List[str] additional_variables: Additional variables to include in single variable regressions only.
+        Default is ["blosum", "grantham"].
     :return: None; function writes model coefficients to local file.
     """
     import pandas as pd
     from patsy import dmatrices
     import statsmodels
     import statsmodels.api as sm
-
-    assert regression_type in {
-        "single",
-        "additive",
-        "all",
-        "specific",
-    }, "regression_type must be one of 'single', 'additive', 'all', 'specific'!"
 
     # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
     ht = joint_clinvar_gnomad.ht()
