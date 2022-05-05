@@ -259,7 +259,7 @@ Input to missense badness calculations.
 joint_clinvar_gnomad = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
-        version: TableResource(path=f"{MODEL_PREFIX}/{version}/joint_clinvar_gnomad.ht")
+        version: TableResource(path=f"{MPC_PREFIX}/{version}/joint_clinvar_gnomad.ht")
         for version in GNOMAD_VERSIONS
     },
 )
