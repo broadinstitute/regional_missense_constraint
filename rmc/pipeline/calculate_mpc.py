@@ -13,7 +13,7 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH
 from rmc.slack_creds import slack_token
-from rmc.utils.mpc import prepare_pop_path_ht
+from rmc.utils.mpc import prepare_pop_path_ht, run_regressions
 
 
 logging.basicConfig(
@@ -30,6 +30,14 @@ def main(args):
         if args.command == "prepare-ht":
             hl.init(log="/write_pop_path_ht.log")
             prepare_pop_path_ht()
+
+        if args.command == "run-glm":
+            hl.init(log="/run_regressions_using_glm.log")
+            run_regressions(
+                output_fname=args.output_fname,
+                variables=args.variables.split(","),
+                additional_variables=args.extra_variables.split(","),
+            )
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -58,10 +66,36 @@ if __name__ == "__main__":
         help="""
         Prepare Table with 'population' (common missense variants in gnomAD) and 'pathogenic'
         (ClinVar pathogenic/likely pathogenic missense variants in severe haploinsufficient genes) variants.
+
         This step joins gnomAD and ClinVar variants, annotates them with PolyPhen-2, missense badness,
         CADD (raw and phred), BLOSUM, Grantham, and missense observed/expected (OE) raio, and removes
         any variants with undefined annotations.
         """,
+    )
+
+    run_glm = subparsers.add_parser(
+        "run-glm",
+        help="""
+        Run logistic regressions on different models (single variable, joint).
+
+        This step chooses a model based on the lowest AIC value and stores the
+        model coefficients to a local CSV.
+        """,
+    )
+    run_glm.add_argument(
+        "--output-fname",
+        help="Name of output file (where to store model coefficients).",
+        default="MPC_coefficients.csv",
+    )
+    run_glm.add_argument(
+        "--variables",
+        help="Comma separated string of variables to include in all logistic regression.",
+        default="oe,misbad,polyphen",
+    )
+    run_glm.add_argument(
+        "--extra-variables",
+        help="Comma separated string of additional variables to include in single variable regressions.",
+        default="blosum,grantham",
     )
 
     args = parser.parse_args()
