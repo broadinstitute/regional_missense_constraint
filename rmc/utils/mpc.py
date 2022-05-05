@@ -219,3 +219,13 @@ def prepare_pop_path_ht(
     logger.info("Getting missense badness annotation...")
     mb_ht = misbad.ht()
     ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
+
+    logger.info("Filtering to rows with defined annotations and checkpointing...")
+    ht = ht.filter(
+        hl.is_defined(ht.cadd.phred)
+        & hl.is_defined(ht.blosum)
+        & hl.is_defined(ht.grantham)
+        & hl.is_defined(ht.oe)
+        & hl.is_defined(ht.polyphen.score)
+    )
+    ht = ht.checkpoint(f"{temp_path}/joint_clinvar_gnomad.ht", overwrite=True)
