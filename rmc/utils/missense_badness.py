@@ -82,7 +82,7 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
     )
     # Recalculating transcript level OE ratio because previous OE ratio (`overall_oe`)
     # is capped at 1 for regional missense constraint calculation purposes
-    group_ht = group_ht.annotate(oe=group_ht.obs / group_ht.exp)
+    group_ht = group_ht.annotate(transcript_oe=group_ht.obs / group_ht.exp)
 
     # Read in LoF constraint HT to get OE ratio for five transcripts missing in v2 RMC results
     # # 'ENST00000304270', 'ENST00000344415', 'ENST00000373521', 'ENST00000381708', 'ENST00000596936'
@@ -92,14 +92,14 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
     # Throws this error: hail.utils.java.FatalError: IllegalArgumentException
     lof_ht = constraint_ht.ht().select("oe_mis").key_by("transcript")
     ht = ht.annotate(
-        gnomad_oe=lof_ht[ht.transcript].oe_mis,
-        rmc_oe=group_ht[ht.transcript].oe,
+        gnomad_transcript_oe=lof_ht[ht.transcript].oe_mis,
+        transcript_oe=group_ht[ht.transcript].oe,
     )
-    ht = ht.transmute(overall_oe=hl.coalesce(ht.rmc_oe, ht.gnomad_oe))
+    ht = ht.transmute(transcript_oe=hl.coalesce(ht.rmc_oe, ht.gnomad_oe))
 
     rmc_ht = rmc_results.ht().select("section_oe")
-    ht = ht.annotate(rmc_oe=rmc_ht[ht.locus, ht.transcript].section_oe)
-    return ht.transmute(oe=hl.coalesce(ht.rmc_oe, ht.overall_oe))
+    ht = ht.annotate(section_oe=rmc_ht[ht.locus, ht.transcript].section_oe)
+    return ht.transmute(oe=hl.coalesce(ht.section_oe, ht.transcript_oe))
 
 
 def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
