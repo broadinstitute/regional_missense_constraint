@@ -2,7 +2,6 @@ import logging
 
 import hail as hl
 
-from gnomad.resources.grch37.gnomad import coverage, public_release
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.vep import CSQ_NON_CODING
@@ -15,11 +14,11 @@ from rmc.resources.basics import (
     temp_path,
 )
 from rmc.resources.grch37.gnomad import constraint_ht
+from rmc.utils.constraint import add_obs_annotation
 from rmc.utils.generic import (
     filter_context_using_gnomad,
     get_codon_lookup,
     get_constraint_transcripts,
-    keep_criteria,
     process_context_ht,
 )
 
@@ -152,20 +151,9 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
 
     logger.info("Filtering sites using gnomAD %s...", gnomad_data_type)
     context_ht = filter_context_using_gnomad(context_ht, gnomad_data_type)
+
     logger.info("Adding observed annotation...")
-    gnomad = public_release(gnomad_data_type).ht()
-    gnomad_cov = coverage(gnomad_data_type).ht()
-    gnomad = gnomad.select(
-        "filters",
-        ac=gnomad.freq[0].AC,
-        af=gnomad.freq[0].AF,
-        gnomad_coverage=gnomad_cov[gnomad.locus].median,
-    )
-    gnomad = gnomad.filter(
-        keep_criteria(gnomad.ac, gnomad.af, gnomad.filters, gnomad.gnomad_coverage)
-    )
-    context_ht = context_ht.annotate(_obs=gnomad.index(context_ht.key))
-    context_ht = context_ht.transmute(observed=hl.int(hl.is_defined(context_ht._obs)))
+    context_ht = add_obs_annotation(context_ht)
 
     logger.info("Checkpointing HT after joining with gnomAD data...")
     # context_ht = context_ht.checkpoint(f"{temp_path}/codons_filt.ht", overwrite=True)
