@@ -201,7 +201,7 @@ def variant_csq_expr(
         hl.case()
         .when(ref_expr == alt_expr, "syn")
         .when(alt_expr == "STOP", "non")
-        .when((ref_expr == "STOP") & (ref_expr != alt_expr), "rdt")
+        .when(ref_expr == "STOP", "rdt")
         .default("mis")
     )
 
