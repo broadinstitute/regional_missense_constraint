@@ -206,7 +206,9 @@ def variant_csq_expr(
     )
 
 
-def split_ht_by_oe(ht: hl.Table, keep_high_oe: bool) -> hl.Table:
+def split_ht_by_oe(
+    ht: hl.Table, keep_high_oe: bool, oe_threshold: float = 0.6
+) -> hl.Table:
     """
     Split Table with all possible amino acid substitutions based on missense observed to expected (OE) ratio cutoff.
 
@@ -214,6 +216,10 @@ def split_ht_by_oe(ht: hl.Table, keep_high_oe: bool) -> hl.Table:
     :param bool keep_high_oe: Whether to filter to high missense OE values.
         If True, returns "boring" HT.
         If False, gets "bad" (low missense OE) Table.
+    :param float oe_threshold: OE Threshold used to split Table.
+        Rows with OE less than this threshold will be filtered if `keep_high_oe` is True, and
+        rows with OE greater than or equal to this threshold will be kept.
+        Default is 0.6.
     :return: Table filtered based on missense OE. Schema:
         ----------------------------------------
         Row fields:
@@ -226,7 +232,7 @@ def split_ht_by_oe(ht: hl.Table, keep_high_oe: bool) -> hl.Table:
         ----------------------------------------
     """
     logger.info("Filtering HT on missense OE values...")
-    oe_filter_expr = (ht.oe > 0.6) if keep_high_oe else (ht.oe <= 0.6)
+    oe_filter_expr = (ht.oe > oe_threshold) if keep_high_oe else (ht.oe <= oe_threshold)
     ht = ht.filter(oe_filter_expr)
 
     logger.info("Grouping HT and aggregating observed and possible variant counts...")
