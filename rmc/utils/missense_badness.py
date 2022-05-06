@@ -198,7 +198,9 @@ def variant_csq_expr(
 
 
 def aggregate_aa_and_filter_oe(
-    ht: hl.Table, keep_high_oe: bool, oe_threshold: float = 0.6
+    ht: hl.Table,
+    keep_high_oe: bool,
+    oe_threshold: float = 0.6,
 ) -> hl.Table:
     """
     Split Table with all possible amino acid substitutions based on missense observed to expected (OE) ratio cutoff.
@@ -211,8 +213,8 @@ def aggregate_aa_and_filter_oe(
         If True, returns "boring" HT.
         If False, gets "bad" (low missense OE) Table.
     :param float oe_threshold: OE Threshold used to split Table.
-        Rows with OE less than this threshold will be filtered if `keep_high_oe` is True, and
-        rows with OE greater than or equal to this threshold will be kept.
+        Rows with OE less than or equal to this threshold will be filtered if `keep_high_oe` is True, and
+        rows with OE greater than this threshold will be kept.
         Default is 0.6.
     :return: Table filtered based on missense OE. Schema:
         ----------------------------------------
@@ -250,13 +252,17 @@ def get_total_csq_count(ht: hl.Table, csq: str, count_field: str) -> int:
     return ht.aggregate(hl.agg.filter(ht.mut_type == csq, hl.agg.sum(ht[count_field])))
 
 
-def calculate_misbad(use_exac_oe_cutoffs: bool) -> None:
+def calculate_misbad(use_exac_oe_cutoffs: bool, oe_threshold: float = 0.6) -> None:
     """
     Calculate missense badness score using Table with all amino acid substitutions and their missense observed/expected (OE) ratio.
 
     If `use_exac_oe_cutoffs` is set, will remove all rows with 0.6 < OE <= 0.8.
 
     :param bool use_exac_oe_cutoffs: Whether to use the same missense OE cutoffs as in ExAC missense badness calculation.
+    :param float oe_threshold: OE Threshold used to split Table.
+        Rows with OE less or equal to this threshold will be considered "low" OE, and
+        rows with OE greater than this threshold will considered "high" OE.
+        Default is 0.6.
     :return: None; writes Table with missense badness score to resource path.
     """
     if not file_exists(amino_acids_oe.path):
@@ -272,11 +278,11 @@ def calculate_misbad(use_exac_oe_cutoffs: bool) -> None:
     logger.info(
         "Splitting input Table by OE to get synonymous and nonsense rates for high and low OE groups..."
     )
-    logger.info("Creating high missense OE (OE > 0.6) HT...")
+    logger.info("Creating high missense OE (OE > %i) HT...", oe_threshold)
     high_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=True)
     high_ht = high_ht.checkpoint(f"{temp_path}/amino_acids_high_oe.ht", overwrite=True)
 
-    logger.info("Creating low missense OE (OE <= 0.6) HT...")
+    logger.info("Creating low missense OE (OE <= %i) HT...", oe_threshold)
     low_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=False)
     low_ht = low_ht.checkpoint(f"{temp_path}/amino_acids_low_oe.ht", overwrite=True)
 
