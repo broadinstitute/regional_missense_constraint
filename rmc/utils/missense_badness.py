@@ -193,6 +193,9 @@ def variant_csq_expr(
     """
     Determine variant consequence using reference and alternate amino acid annotations.
 
+    Variant consequences are consistent with consequences kept in original missense badness work.
+    TODO: Update variant consequences?
+
     :param hl.expr.StringExpression ref_expr: Reference amino acid StringExpression.
     :param hl.expr.StringExpression alt_expr: Alternate amino acid StringExpression.
     :return: Variant type StringExpression. One of 'syn', 'non', 'mis', 'rdt' (stop lost).
