@@ -206,11 +206,14 @@ def variant_csq_expr(
     )
 
 
-def split_ht_by_oe(
+def aggregate_aa_and_filter_oe(
     ht: hl.Table, keep_high_oe: bool, oe_threshold: float = 0.6
 ) -> hl.Table:
     """
     Split Table with all possible amino acid substitutions based on missense observed to expected (OE) ratio cutoff.
+
+    Also group Table by reference and alternate amino acid, aggregate total observed and possible counts,
+    and add mutation type annotation.
 
     :param hl.Table ht: Input Table with amino acid substitutions.
     :param bool keep_high_oe: Whether to filter to high missense OE values.
@@ -279,11 +282,11 @@ def calculate_misbad(use_exac_oe_cutoffs: bool) -> None:
         "Splitting input Table by OE to get synonymous and nonsense rates for high and low OE groups..."
     )
     logger.info("Creating high missense OE (OE > 0.6) HT...")
-    high_ht = split_ht_by_oe(ht, keep_high_oe=True)
+    high_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=True)
     high_ht = high_ht.checkpoint(f"{temp_path}/amino_acids_high_oe.ht", overwrite=True)
 
     logger.info("Creating low missense OE (OE <= 0.6) HT...")
-    low_ht = split_ht_by_oe(ht, keep_high_oe=False)
+    low_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=False)
     low_ht = low_ht.checkpoint(f"{temp_path}/amino_acids_low_oe.ht", overwrite=True)
 
     logger.info("Calculating synonymous rates...")
