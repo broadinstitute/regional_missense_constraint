@@ -188,6 +188,10 @@ def prepare_pop_path_ht(
     logger.info("Adding CADD...")
     # CADD (not sure if it needs to be split)
     cadd_ht = cadd.ht()
+    cadd_ht = cadd_ht.transmute(
+        raw=cadd_ht.RawScore,
+        phred=cadd_ht.PHRED,
+    )
     cadd_ht = hl.split_multi(cadd_ht)
     ht = ht.annotate(cadd=hl.struct(**cadd_ht[ht.key]))
 
