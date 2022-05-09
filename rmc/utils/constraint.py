@@ -106,8 +106,9 @@ def add_obs_annotation(
     :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
-    :param bool filter_csq: Whether to filter Table to a specific consequence. Default is False.
-    :param str csq: Desired consequence. Default is None. Must be specified if filter is True.
+    :param bool filter_csq: Whether to filter gnomAD data to a specific consequence. Default is False.
+        If True, then only variants that match this consequence in the input Table will be annotated as observed.
+    :param str csq: Desired consequence. Default is None. Must be specified if filter_csq is True.
     :return: Table with observed variant annotation.
     """
     logger.info("Adding observed annotation...")
