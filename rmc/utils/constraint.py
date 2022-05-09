@@ -125,7 +125,7 @@ def add_obs_annotation(
         )
     )
     if filter_csq:
-        process_vep(gnomad_ht, filter_csq=filter_csq, csq=csq)
+        gnomad_ht = process_vep(gnomad_ht, filter_csq=filter_csq, csq=csq)
     ht = ht.annotate(_obs=gnomad_ht.index(ht.key))
     return ht.transmute(observed=hl.int(hl.is_defined(ht._obs)))
 
