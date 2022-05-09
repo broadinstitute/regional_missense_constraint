@@ -4,7 +4,6 @@ from typing import Dict, List, Set, Tuple, Union
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import coverage, public_release
-from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
@@ -126,8 +125,6 @@ def add_obs_annotation(
         )
     )
     if filter_csq:
-        if not csq:
-            raise DataException("Need to specify consequence if filter_csq is True!")
         gnomad_ht = process_vep(gnomad_ht, filter_csq=filter_csq, csq=csq)
     ht = ht.annotate(_obs=gnomad_ht.index(ht.key))
     return ht.transmute(observed=hl.int(hl.is_defined(ht._obs)))

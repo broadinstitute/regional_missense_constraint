@@ -361,6 +361,8 @@ def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.T
     ht = ht.explode(ht.transcript_consequences)
 
     if filter_csq:
+        if not csq:
+            raise DataException("Need to specify consequence if filter_csq is True!")
         logger.info("Filtering to %s...", csq)
         ht = ht.filter(ht.transcript_consequences.most_severe_consequence == csq)
     return ht
