@@ -298,6 +298,7 @@ def calculate_misbad(use_exac_oe_cutoffs: bool, oe_threshold: float = 0.6) -> No
         low_pos=low_ht.possible,
     )
     ht = high_ht.join(low_ht, how="outer")
+    ht = ht.transmute(mut_type=hl.coalesce(ht.mut_type, ht.mut_type_1))
     mb_ht = ht.group_by("ref", "alt").aggregate(
         high_low=(
             (hl.agg.sum(ht.high_obs) / hl.agg.sum(ht.high_pos))
@@ -307,20 +308,20 @@ def calculate_misbad(use_exac_oe_cutoffs: bool, oe_threshold: float = 0.6) -> No
     mb_ht = mb_ht.annotate(mut_type=variant_csq_expr(mb_ht.ref, mb_ht.alt))
 
     logger.info("Calculating synonymous rates...")
-    syn_obs_high = get_total_csq_count(high_ht, csq="syn", count_field="obs")
-    syn_pos_high = get_total_csq_count(high_ht, csq="syn", count_field="possible")
-    syn_obs_low = get_total_csq_count(low_ht, csq="syn", count_field="obs")
-    syn_pos_low = get_total_csq_count(low_ht, csq="syn", count_field="possible")
+    syn_obs_high = get_total_csq_count(high_ht, csq="syn", count_field="high_obs")
+    syn_pos_high = get_total_csq_count(high_ht, csq="syn", count_field="high_pos")
+    syn_obs_low = get_total_csq_count(low_ht, csq="syn", count_field="low_obs")
+    syn_pos_low = get_total_csq_count(low_ht, csq="syn", count_field="low_pos")
     syn_rate = (syn_obs_high / syn_pos_high) / (syn_obs_low / syn_pos_low)
-    logger.info("Synonymous rate: %i", syn_rate)
+    logger.info("Synonymous rate: %f", syn_rate)
 
     logger.info("Calculating nonsense rates...")
-    non_obs_high = get_total_csq_count(high_ht, csq="non", count_field="obs")
-    non_pos_high = get_total_csq_count(high_ht, csq="non", count_field="possible")
-    non_obs_low = get_total_csq_count(low_ht, csq="non", count_field="obs")
-    non_pos_low = get_total_csq_count(low_ht, csq="non", count_field="possible")
+    non_obs_high = get_total_csq_count(high_ht, csq="non", count_field="high_obs")
+    non_pos_high = get_total_csq_count(high_ht, csq="non", count_field="high_pos")
+    non_obs_low = get_total_csq_count(low_ht, csq="non", count_field="low_obs")
+    non_pos_low = get_total_csq_count(low_ht, csq="non", count_field="low_pos")
     non_rate = (non_obs_high / non_pos_high) / (non_obs_low / non_pos_low)
-    logger.info("Nonsense rate: %i", non_rate)
+    logger.info("Nonsense rate: %f", non_rate)
 
     logger.info("Calculating missense badness...")
     mb_ht = mb_ht.annotate(
