@@ -92,9 +92,9 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
     lof_ht = constraint_ht.ht().select("oe_mis").key_by("transcript")
     ht = ht.annotate(
         gnomad_transcript_oe=lof_ht[ht.transcript].oe_mis,
-        transcript_oe=group_ht[ht.transcript].oe,
+        rmc_transcript_oe=group_ht[ht.transcript].transcript_oe,
     )
-    ht = ht.transmute(transcript_oe=hl.coalesce(ht.rmc_oe, ht.gnomad_oe))
+    ht = ht.transmute(transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe))
 
     rmc_ht = rmc_results.ht().select("section_oe")
     ht = ht.annotate(section_oe=rmc_ht[ht.locus, ht.transcript].section_oe)
