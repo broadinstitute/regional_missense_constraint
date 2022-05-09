@@ -94,7 +94,9 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
         gnomad_transcript_oe=lof_ht[ht.transcript].oe_mis,
         rmc_transcript_oe=group_ht[ht.transcript].transcript_oe,
     )
-    ht = ht.transmute(transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe))
+    ht = ht.transmute(
+        transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe)
+    )
 
     rmc_ht = rmc_results.ht().select("section_oe")
     ht = ht.annotate(section_oe=rmc_ht[ht.locus, ht.transcript].section_oe)
@@ -278,11 +280,11 @@ def calculate_misbad(use_exac_oe_cutoffs: bool, oe_threshold: float = 0.6) -> No
     logger.info(
         "Splitting input Table by OE to get synonymous and nonsense rates for high and low OE groups..."
     )
-    logger.info("Creating high missense OE (OE > %f) HT...", oe_threshold)
+    logger.info("Creating high missense OE (OE > %s) HT...", oe_threshold)
     high_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=True)
     high_ht = high_ht.checkpoint(f"{temp_path}/amino_acids_high_oe.ht", overwrite=True)
 
-    logger.info("Creating low missense OE (OE <= %f) HT...", oe_threshold)
+    logger.info("Creating low missense OE (OE <= %s) HT...", oe_threshold)
     low_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=False)
     low_ht = low_ht.checkpoint(f"{temp_path}/amino_acids_low_oe.ht", overwrite=True)
 
