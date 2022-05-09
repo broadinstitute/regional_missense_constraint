@@ -2,16 +2,23 @@ import logging
 
 import hail as hl
 
-from gnomad.resources.grch37.gnomad import public_release
+from gnomad.resources.resource_utils import DataException
+from gnomad.utils.file_utils import file_exists
 from gnomad.utils.vep import CSQ_NON_CODING
 
-from rmc.resources.basics import amino_acids_oe, constraint_prep, rmc_results, temp_path
+from rmc.resources.basics import (
+    amino_acids_oe,
+    constraint_prep,
+    misbad,
+    rmc_results,
+    temp_path,
+)
 from rmc.resources.grch37.gnomad import constraint_ht
+from rmc.utils.constraint import add_obs_annotation
 from rmc.utils.generic import (
     filter_context_using_gnomad,
     get_codon_lookup,
     get_constraint_transcripts,
-    keep_criteria,
     process_context_ht,
 )
 
@@ -38,9 +45,7 @@ def filter_codons(ht: hl.Table) -> hl.Table:
     """
     logger.info("Removing non-coding loci from HT...")
     non_coding_csq = hl.literal(CSQ_NON_CODING)
-    ht = ht.filter(
-        ~non_coding_csq.contains(ht.transcript_consequences.most_severe_consequence)
-    )
+    ht = ht.filter(~non_coding_csq.contains(ht.most_severe_consequence))
 
     logger.info("Filtering to lines with expected codon annotations...")
     # Codons are in this format: NNN/NNN, so expected length is 7
@@ -76,22 +81,26 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
     )
     # Recalculating transcript level OE ratio because previous OE ratio (`overall_oe`)
     # is capped at 1 for regional missense constraint calculation purposes
-    group_ht = group_ht.annotate(oe=group_ht.obs / group_ht.exp)
+    group_ht = group_ht.annotate(transcript_oe=group_ht.obs / group_ht.exp)
 
     # Read in LoF constraint HT to get OE ratio for five transcripts missing in v2 RMC results
     # # 'ENST00000304270', 'ENST00000344415', 'ENST00000373521', 'ENST00000381708', 'ENST00000596936'
     # All 5 of these transcripts have extremely low coverage in gnomAD
     # Will keep for consistency with v2 LoF results but they look terrible
-    lof_ht = constraint_ht.ht().select("oe_mis")
+    # NOTE: LoF HT is keyed by gene and transcript, but `_key_by_assert_sorted` doesn't work here for v2 version
+    # Throws this error: hail.utils.java.FatalError: IllegalArgumentException
+    lof_ht = constraint_ht.ht().select("oe_mis").key_by("transcript")
     ht = ht.annotate(
-        gnomad_oe=constraint_ht[ht.transcript].oe_mis,
-        rmc_oe=group_ht[ht.transcript].oe,
+        gnomad_transcript_oe=lof_ht[ht.transcript].oe_mis,
+        rmc_transcript_oe=group_ht[ht.transcript].transcript_oe,
     )
-    ht = ht.transmute(overall_oe=hl.coalesce(ht.rmc_oe, ht.gnomad_oe))
+    ht = ht.transmute(
+        transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe)
+    )
 
     rmc_ht = rmc_results.ht().select("section_oe")
-    ht = ht.annotate(rmc_oe=rmc_ht[ht.locus, ht.transcript].section_oe)
-    return ht.transmute(oe=hl.coalesce(ht.rmc_oe, ht.overall_oe))
+    ht = ht.annotate(section_oe=rmc_ht[ht.locus, ht.transcript].section_oe)
+    return ht.transmute(oe=hl.coalesce(ht.section_oe, ht.transcript_oe))
 
 
 def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
@@ -114,8 +123,9 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     transcripts = get_constraint_transcripts(outlier=False)
 
     logger.info("Reading in VEP context HT...")
+    # NOTE: Keeping all variant types here because need synonymous and nonsense variants to calculate missense badness
     context_ht = process_context_ht(
-        build="GRCh37", filter_to_missense=True, add_annotations=False
+        build="GRCh37", filter_to_missense=False, add_annotations=False
     )
 
     logger.info(
@@ -138,23 +148,23 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     context_ht = filter_codons(context_ht)
 
     logger.info("Checkpointing HT before joining with gnomAD data...")
-    context_ht = context_ht.checkpoint(f"{temp_path}/codons.ht", overwrite=True)
+    # context_ht = context_ht.checkpoint(f"{temp_path}/codons.ht", overwrite=True)
+    context_ht = hl.read_table(f"{temp_path}/codons.ht")
 
-    logger.info("Filtering sites using gnomAD %i...", gnomad_data_type)
+    logger.info("Filtering sites using gnomAD %s...", gnomad_data_type)
     context_ht = filter_context_using_gnomad(context_ht, gnomad_data_type)
 
     logger.info("Adding observed annotation...")
-    gnomad = public_release(gnomad_data_type).ht()
-    gnomad = gnomad.filter(keep_criteria(gnomad))
-    context_ht = context_ht.annotate(_obs=gnomad.index(context_ht.key))
-    context_ht = context_ht.transmute(observed=hl.int(hl.is_defined(context_ht._obs)))
+    context_ht = add_obs_annotation(context_ht)
 
     logger.info("Checkpointing HT after joining with gnomAD data...")
-    context_ht = context_ht.checkpoint(f"{temp_path}/codons_filt.ht", overwrite=True)
+    # context_ht = context_ht.checkpoint(f"{temp_path}/codons_filt.ht", overwrite=True)
+    context_ht = hl.read_table(f"{temp_path}/codons_filt.ht")
 
     logger.info(
-        "Getting observed to expected missense ratio, rekeying Table, and writing to output path..."
+        "Getting observed to expected ratio, rekeying Table, and writing to output path..."
     )
+    # Note that `get_oe_annotation` is pulling the missense OE ratio
     context_ht = get_oe_annotation(context_ht)
     context_ht = context_ht.key_by().select(
         "ref",
@@ -165,3 +175,159 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
         "oe",
     )
     context_ht.write(amino_acids_oe.path, overwrite=True)
+
+
+def variant_csq_expr(
+    ref_expr: hl.expr.StringExpression, alt_expr: hl.expr.StringExpression
+) -> hl.expr.StringExpression:
+    """
+    Determine variant consequence using reference and alternate amino acid annotations.
+
+    Variant consequences are consistent with consequences kept in original missense badness work.
+    TODO: Update variant consequences?
+
+    :param hl.expr.StringExpression ref_expr: Reference amino acid StringExpression.
+    :param hl.expr.StringExpression alt_expr: Alternate amino acid StringExpression.
+    :return: Variant type StringExpression. One of 'syn', 'non', 'mis', 'rdt' (stop lost).
+    """
+    return (
+        hl.case()
+        .when(ref_expr == alt_expr, "syn")
+        .when(alt_expr == "STOP", "non")
+        .when(ref_expr == "STOP", "rdt")
+        .default("mis")
+    )
+
+
+def aggregate_aa_and_filter_oe(
+    ht: hl.Table,
+    keep_high_oe: bool,
+    oe_threshold: float = 0.6,
+) -> hl.Table:
+    """
+    Split Table with all possible amino acid substitutions based on missense observed to expected (OE) ratio cutoff.
+
+    Also group Table by reference and alternate amino acid, aggregate total observed and possible counts,
+    and add mutation type annotation.
+
+    :param hl.Table ht: Input Table with amino acid substitutions.
+    :param bool keep_high_oe: Whether to filter to high missense OE values.
+        If True, returns "boring" HT.
+        If False, gets "bad" (low missense OE) Table.
+    :param float oe_threshold: OE Threshold used to split Table.
+        Rows with OE less than or equal to this threshold will be filtered if `keep_high_oe` is True, and
+        rows with OE greater than this threshold will be kept.
+        Default is 0.6.
+    :return: Table filtered based on missense OE. Schema:
+        ----------------------------------------
+        Row fields:
+            'ref': str
+            'alt': str
+            'oe': float64
+            'obs': int64
+            'possible': int64
+            'mut_type': str
+        ----------------------------------------
+    """
+    logger.info("Filtering HT on missense OE values...")
+    oe_filter_expr = (ht.oe > oe_threshold) if keep_high_oe else (ht.oe <= oe_threshold)
+    ht = ht.filter(oe_filter_expr)
+
+    logger.info("Grouping HT and aggregating observed and possible variant counts...")
+    ht = ht.group_by("ref", "alt").aggregate(
+        obs=hl.agg.sum(ht.observed), possible=hl.agg.count()
+    )
+
+    logger.info("Adding variant consequence (mut_type) annotation and returning...")
+    return ht.annotate(mut_type=variant_csq_expr(ht.ref, ht.alt))
+
+
+def get_total_csq_count(ht: hl.Table, csq: str, count_field: str) -> int:
+    """
+    Filter input Table using specified variant consequence and aggregate total value of specified field.
+
+    :param hl.Table ht: Input Table (Table with amino acid substitutions filtered to have high or low missense OE).
+    :param str csq: Desired variant consequence. One of "syn" or "non".
+    :param str count_field: Desired count type. One of "obs" or "possible".
+    :return: Int of total value of `count_field` for specified consequence.
+    """
+    return ht.aggregate(hl.agg.filter(ht.mut_type == csq, hl.agg.sum(ht[count_field])))
+
+
+def calculate_misbad(use_exac_oe_cutoffs: bool, oe_threshold: float = 0.6) -> None:
+    """
+    Calculate missense badness score using Table with all amino acid substitutions and their missense observed/expected (OE) ratio.
+
+    If `use_exac_oe_cutoffs` is set, will remove all rows with 0.6 < OE <= 0.8.
+
+    :param bool use_exac_oe_cutoffs: Whether to use the same missense OE cutoffs as in ExAC missense badness calculation.
+    :param float oe_threshold: OE Threshold used to split Table.
+        Rows with OE less or equal to this threshold will be considered "low" OE, and
+        rows with OE greater than this threshold will considered "high" OE.
+        Default is 0.6.
+    :return: None; writes Table with missense badness score to resource path.
+    """
+    if not file_exists(amino_acids_oe.path):
+        raise DataException(
+            "Table with all amino acid substitutions and missense OE doesn't exist!"
+        )
+
+    ht = amino_acids_oe.ht()
+    if use_exac_oe_cutoffs:
+        logger.info("Removing rows with OE greater than 0.6 and less than 0.8...")
+        ht = ht.filter((ht.oe <= 0.6) | (ht.oe > 0.8))
+
+    logger.info(
+        "Splitting input Table by OE to get synonymous and nonsense rates for high and low OE groups..."
+    )
+    logger.info("Creating high missense OE (OE > %s) HT...", oe_threshold)
+    high_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=True)
+    high_ht = high_ht.checkpoint(f"{temp_path}/amino_acids_high_oe.ht", overwrite=True)
+
+    logger.info("Creating low missense OE (OE <= %s) HT...", oe_threshold)
+    low_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=False)
+    low_ht = low_ht.checkpoint(f"{temp_path}/amino_acids_low_oe.ht", overwrite=True)
+
+    logger.info("Re-joining split HTs to calculate missense badness...")
+    high_ht = high_ht.transmute(
+        high_obs=high_ht.obs,
+        high_pos=high_ht.possible,
+    )
+    low_ht = low_ht.transmute(
+        low_obs=low_ht.obs,
+        low_pos=low_ht.possible,
+    )
+    ht = high_ht.join(low_ht, how="outer")
+    mb_ht = ht.group_by("ref", "alt").aggregate(
+        high_low=(
+            (hl.agg.sum(ht.high_obs) / hl.agg.sum(ht.high_pos))
+            / (hl.agg.sum(ht.low_obs) / hl.agg.sum(ht.low_pos))
+        )
+    )
+    mb_ht = mb_ht.annotate(mut_type=variant_csq_expr(mb_ht.ref, mb_ht.alt))
+
+    logger.info("Calculating synonymous rates...")
+    syn_obs_high = get_total_csq_count(high_ht, csq="syn", count_field="obs")
+    syn_pos_high = get_total_csq_count(high_ht, csq="syn", count_field="possible")
+    syn_obs_low = get_total_csq_count(low_ht, csq="syn", count_field="obs")
+    syn_pos_low = get_total_csq_count(low_ht, csq="syn", count_field="possible")
+    syn_rate = (syn_obs_high / syn_pos_high) / (syn_obs_low / syn_pos_low)
+    logger.info("Synonymous rate: %i", syn_rate)
+
+    logger.info("Calculating nonsense rates...")
+    non_obs_high = get_total_csq_count(high_ht, csq="non", count_field="obs")
+    non_pos_high = get_total_csq_count(high_ht, csq="non", count_field="possible")
+    non_obs_low = get_total_csq_count(low_ht, csq="non", count_field="obs")
+    non_pos_low = get_total_csq_count(low_ht, csq="non", count_field="possible")
+    non_rate = (non_obs_high / non_pos_high) / (non_obs_low / non_pos_low)
+    logger.info("Nonsense rate: %i", non_rate)
+
+    logger.info("Calculating missense badness...")
+    mb_ht = mb_ht.annotate(
+        misbad=hl.or_missing(
+            mb_ht.mut_type == "mis",
+            # Cap missense badness at 1
+            hl.min((mb_ht.high_low - syn_rate) / (non_rate - syn_rate), 1),
+        ),
+    )
+    mb_ht.write(misbad.path, overwrite=True)

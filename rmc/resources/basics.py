@@ -56,12 +56,15 @@ This was calculated with `calculate_mu_by_downsampling` in
 https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constraint_basics.py.
 """
 
-## Gene/Transcript related resources
 MODEL_PREFIX = f"{RMC_PREFIX}/model"
 """
-Path to bucket containing resources related to building the mutational models.
+Path to bucket containing resources related to building the mutational models and setting up for regional missense constraint calculations.
+"""
 
-Bucket also contains transcript-related resources.
+
+MPC_PREFIX = f"{RMC_PREFIX}/MPC"
+"""
+Path to bucket containing resources related to building MPC (missense badness, Polyphen-2, and Constraint) score.
 """
 
 constraint_prep = VersionedTableResource(
@@ -209,7 +212,7 @@ Contains same information as `rmc_results` but has different formatting for gnom
 amino_acids_oe = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
-        version: TableResource(path=f"{MODEL_PREFIX}/{version}/amino_acid_oe.ht")
+        version: TableResource(path=f"{MPC_PREFIX}/{version}/amino_acid_oe.ht")
         for version in GNOMAD_VERSIONS
     },
 )
@@ -219,6 +222,16 @@ Table containing all possible amino acid substitutions and their missense OE rat
 Input to missense badness calculations.
 """
 
+misbad = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{MPC_PREFIX}/{version}/missense_badness.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table containing all possible amino acid substitutions and their missense badness scores.
+"""
 
 oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/oe_bin.tsv"
 """
