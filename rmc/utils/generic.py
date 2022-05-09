@@ -142,7 +142,7 @@ def process_context_ht(
 
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     if build == "GRCh37":
-        ht = vep_context.ht()
+        ht = vep_context.ht().select_globals()
     else:
         ht = grch38.full_context.ht()
 
@@ -194,14 +194,22 @@ def filter_context_using_gnomad(
     gnomad = public_release(gnomad_data_type).ht().select_globals()
     gnomad_cov = coverage(gnomad_data_type).ht()
     gnomad = gnomad.select(
+        "filters",
         ac=gnomad.freq[adj_freq_index].AC,
         af=gnomad.freq[adj_freq_index].AF,
-        pass_filters=hl.len(gnomad.filters) == 0,
         gnomad_coverage=gnomad_cov[gnomad.locus].median,
     )
     # Filter to sites not seen in gnomAD or to rare sites in gnomAD
     gnomad_join = gnomad[context_ht.key]
-    return context_ht.filter(hl.is_missing(gnomad_join) | keep_criteria(gnomad_join))
+    return context_ht.filter(
+        hl.is_missing(gnomad_join)
+        | keep_criteria(
+            gnomad_join.ac,
+            gnomad_join.af,
+            gnomad_join.filters,
+            gnomad_join.gnomad_coverage,
+        )
+    )
 
 
 ## Functions for obs/exp related resources
@@ -296,14 +304,33 @@ def get_avg_bases_between_mis(
     return round(total_bases / total_variants)
 
 
-def keep_criteria(ht: hl.Table) -> hl.expr.BooleanExpression:
+def keep_criteria(
+    ac_expr: hl.expr.Int32Expression,
+    af_expr: hl.expr.Float64Expression,
+    filters_expr: hl.expr.SetExpression,
+    cov_expr: hl.expr.Int32Expression,
+    af_threshold: float = 0.001,
+    cov_threshold: int = 0,
+) -> hl.expr.BooleanExpression:
     """
     Return Boolean expression to filter variants in input Table.
 
-    :param hl.Table ht: Input Table.
+    Default values will filter to rare variants (AC > 0, AF < 0.001) that pass filters and have median coverage greater than 0.
+
+    :param hl.expr.Int32Expression ac_expr: Allele count Int32Expression.
+    :param hl.expr.Float64Expression af_expr: Allele frequency (AF) Float64Expression.
+    :param hl.expr.SetExpression filters_expr: Filters SetExpression.
+    :param hl.expr.Int32Expression cov_expr: gnomAD median coverage Int32Expression.
+    :param float af_threshold: Remove rows above this AF threshold. Default is 0.001.
+    :param int cov_threshold: Remove rows below this median coverage threshold. Default is 0.
     :return: Boolean expression used to filter variants.
     """
-    return (ht.ac > 0) & (ht.af < 0.001) & (ht.pass_filters) & (ht.gnomad_coverage > 0)
+    return (
+        (ac_expr > 0)
+        & (af_expr < af_threshold)
+        & (hl.len(filters_expr) == 0)
+        & (cov_expr > cov_threshold)
+    )
 
 
 def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.Table:

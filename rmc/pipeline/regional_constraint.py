@@ -27,6 +27,7 @@ from rmc.resources.grch37.reference_data import processed_context
 from rmc.resources.resource_utils import CURRENT_VERSION, MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
+    add_obs_annotation,
     calculate_exp_per_transcript,
     calculate_observed,
     fix_xg,
@@ -217,10 +218,7 @@ def main(args):
                 "Annotating context HT with number of observed and expected variants per site..."
             )
             # Add observed variants to context HT
-            context_ht = context_ht.annotate(_obs=exome_ht.index(context_ht.key))
-            context_ht = context_ht.transmute(
-                observed=hl.int(hl.is_defined(context_ht._obs))
-            )
+            context_ht = add_obs_annotation(context_ht, filter_csq=True, csq=MISSENSE)
 
             logger.info(
                 "Collecting by key to run constraint per base and not per base-allele..."
