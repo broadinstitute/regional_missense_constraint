@@ -5,6 +5,7 @@ import hail as hl
 
 from gnomad.resources.grch37.gnomad import public_release
 from gnomad.resources.grch37.reference_data import vep_context
+from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import (
     blosum,
@@ -15,7 +16,7 @@ from rmc.resources.basics import (
     misbad,
     temp_path,
 )
-from rmc.resources.grch37.reference_data import clinvar_path_mis
+from rmc.resources.grch37.reference_data import cadd, clinvar_path_mis
 from rmc.utils.generic import get_aa_map, process_vep
 from rmc.utils.missense_badness import filter_codons, get_oe_annotation
 
@@ -126,7 +127,7 @@ def import_grantham():
     # Create empty list to store Grantham scores
     # Will use this list later in the function to directly convert the scores into a Table format
     grantham_scores = []
-    with open(grantham_txt_path) as g:
+    with hl.hadoop_open(grantham_txt_path) as g:
         for line in g:
             # Grab header line (starts with '.')
             if line.startswith("."):
@@ -145,7 +146,7 @@ def import_grantham():
                     alt_aa = header_dict[counter]
                     if alt_aa != ".":
                         grantham_scores.append(
-                            {"amino_acids": f"{aa}-{alt_aa}", "score": item}
+                            {"amino_acids": f"{aa}_{alt_aa}", "score": item}
                         )
 
     # Convert list of dictionaries to hail Table
@@ -184,43 +185,54 @@ def prepare_pop_path_ht(
     ht = clinvar_ht.select("pop_v_path").union(gnomad_ht.select("pop_v_path"))
     ht = ht.checkpoint(f"{temp_path}/joint_clinvar_gnomad.ht", overwrite=True)
 
-    logger.info("Adding CADD, BLOSUM, Grantham, RMC annotations and checkpointing...")
+    logger.info("Adding CADD...")
     # CADD (not sure if it needs to be split)
-    cadd = hl.experimental.load_dataset(
-        name="cadd", version="1.6", reference_genome="GRCh37"
-    )
-    cadd = hl.split_multi(cadd)
-    ht = ht.annotate(cadd=hl.struct(**cadd[ht.key]))
-    # BLOSUM and Grantham
-    blosum_ht = blosum.ht()
-    grantham_ht = grantham.ht()
-    ht = ht.annotate(blosum=blosum_ht[ht.key].score, grantham=grantham_ht[ht.key].score)
-    # Missense observed/expected (OE) ratio
-    ht = get_oe_annotation(ht)
-    ht = ht.checkpoint(f"{temp_path}/joint_clinvar_gnomad_temp.ht", overwrite=True)
+    cadd_ht = cadd.ht()
+    cadd_ht = hl.split_multi(cadd_ht)
+    ht = ht.annotate(cadd=hl.struct(**cadd_ht[ht.key]))
 
     logger.info("Getting PolyPhen-2 and codon annotations from VEP context HT...")
     context_ht = vep_context.ht().select_globals().select("vep", "was_split")
-    context_ht = context_ht.filter(hl.is_defined(ht[context_ht].key))
+    context_ht = context_ht.filter(hl.is_defined(ht[context_ht.key]))
     context_ht = process_vep(context_ht)
     context_ht = context_ht.annotate(
         polyphen=hl.struct(
-            prediction=ht.transcript_consequences.polyphen_prediction,
-            score=ht.transcript_consequences.polyphen_score,
+            prediction=context_ht.transcript_consequences.polyphen_prediction,
+            score=context_ht.transcript_consequences.polyphen_score,
         )
     )
     context_ht = context_ht.select(
-        "polyphen", codons=context_ht.transcript_consequences.codons
+        "polyphen",
+        codons=context_ht.transcript_consequences.codons,
+        most_severe_consequence=context_ht.transcript_consequences.most_severe_consequence,
+        transcript=context_ht.transcript_consequences.transcript_id,
     )
     context_ht = filter_codons(context_ht)
     context_ht = context_ht.checkpoint(f"{temp_path}/polyphen.ht", overwrite=True)
 
-    logger.info("Adding PolyPhen-2 and codon annotations to joint ClinVar/gnomAD HT...")
+    logger.info(
+        "Adding PolyPhen-2, codon, and transcript annotations to joint ClinVar/gnomAD HT..."
+    )
     ht = ht.annotate(**context_ht[ht.key])
+
+    logger.info("Getting regional missense constraint missense o/e annotation...")
+    ht = get_oe_annotation(ht)
 
     logger.info("Getting missense badness annotation...")
     mb_ht = misbad.ht()
     ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
+
+    logger.info("Adding BLOSUM and Grantham annotations...")
+    if not file_exists(blosum.path):
+        import_blosum()
+    blosum_ht = blosum.ht()
+    if not file_exists(grantham.path):
+        import_grantham()
+    grantham_ht = grantham.ht()
+    ht = ht.annotate(
+        blosum=blosum_ht[ht.ref, ht.alt].score,
+        grantham=grantham_ht[ht.ref, ht.alt].score,
+    )
 
     logger.info("Filtering to rows with defined annotations and checkpointing...")
     ht = ht.filter(

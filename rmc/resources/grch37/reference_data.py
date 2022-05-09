@@ -51,3 +51,11 @@ de_novo = TableResource(
 """
 De novo missense variants from 37,488 cases and 2,179 controls (same as above).
 """
+
+## MPC related resources
+cadd = TableResource(
+    path="gs://seqr-reference-data/GRCh37/CADD/CADD_snvs_and_indels.v1.6.ht"
+)
+"""
+Table with CADD (v1.6) raw and phredd scores.
+"""
