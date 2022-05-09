@@ -158,8 +158,7 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     context_ht = add_obs_annotation(context_ht)
 
     logger.info("Checkpointing HT after joining with gnomAD data...")
-    # context_ht = context_ht.checkpoint(f"{temp_path}/codons_filt.ht", overwrite=True)
-    context_ht = hl.read_table(f"{temp_path}/codons_filt.ht")
+    context_ht = context_ht.checkpoint(f"{temp_path}/codons_filt.ht", overwrite=True)
 
     logger.info(
         "Getting observed to expected ratio, rekeying Table, and writing to output path..."
