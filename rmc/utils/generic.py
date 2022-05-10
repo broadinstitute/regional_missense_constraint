@@ -182,7 +182,7 @@ def filter_context_using_gnomad(
     context_ht: hl.Table,
     gnomad_data_type: str = "exomes",
     adj_freq_index: int = 0,
-    filter_context_using_cov: bool = False,
+    filter_context_using_cov: bool = True,
     cov_threshold: int = 0,
 ) -> hl.Table:
     """
@@ -195,7 +195,7 @@ def filter_context_using_gnomad(
     :param adj_freq_index: Index of frequency array that contains global population filtered calculated on
         high quality (adj) genotypes. Default is 0.
     :param bool filter_context_using_cov: Whether to also filter sites in context Table using gnomAD coverage.
-        Default is False.
+        Default is True.
     :param int cov_threshold: Coverage threshold used to filter context Table if `filter_context_using_cov` is True.
         Default is 0.
     :return: Filtered VEP context Table.
