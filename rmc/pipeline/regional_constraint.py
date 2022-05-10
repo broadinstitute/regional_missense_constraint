@@ -37,6 +37,7 @@ from rmc.utils.constraint import (
     process_transcripts,
 )
 from rmc.utils.generic import (
+    filter_context_using_gnomad,
     filter_to_region_type,
     generate_models,
     get_constraint_transcripts,
@@ -64,6 +65,18 @@ def main(args):
             hl.init(log="/RMC_pre_process.log")
             # TODO: Add code to create annotations necessary for constraint_flag_expr and filter transcripts prior to running constraint
             logger.warning("Code currently only processes b37 data!")
+
+            logger.info("Preprocessing reference fasta (context) HT...")
+            context_ht = process_context_ht("GRCh37", args.trimers)
+
+            logger.info(
+                "Filtering context HT to all sites not found in gnomAD exomes + all rare, covered sites in gnomAD"
+            )
+            context_ht = filter_context_using_gnomad(
+                context_ht, "exomes", filter_context_using_cov=True
+            )
+            context_ht.write(processed_context.path, overwrite=args.overwrite)
+
             logger.info(
                 "Filtering gnomAD exomes HT to missense variants in canonical transcripts only..."
             )
@@ -78,22 +91,6 @@ def main(args):
                 exome_coverage=exome_ht.coverage.exomes.median,
                 transcript_consequences=exome_ht.transcript_consequences,
             )
-
-            logger.info("Preprocessing reference fasta (context) HT...")
-            context_ht = process_context_ht("GRCh37", args.trimers)
-
-            logger.info(
-                "Filtering context HT to all sites not found in gnomAD exomes + all rare, covered sites in gnomAD"
-            )
-            exome_join = exome_ht[context_ht.key]
-            context_ht = context_ht.filter(
-                hl.is_missing(exome_join) | keep_criteria(exome_join)
-            )
-            # NOTE: need to repartition here to desired number of partitions!
-            # NOTE: should use ~30k-40k partitions
-            context_ht = context_ht.repartition(args.n_partitions)
-            context_ht.write(processed_context.path, overwrite=args.overwrite)
-
             exome_ht = exome_ht.filter(keep_criteria(exome_ht))
             exome_ht.write(filtered_exomes.path, overwrite=args.overwrite)
 
