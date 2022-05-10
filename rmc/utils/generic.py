@@ -179,7 +179,11 @@ def process_context_ht(
 
 
 def filter_context_using_gnomad(
-    context_ht: hl.Table, gnomad_data_type: str = "exomes", adj_freq_index: int = 0
+    context_ht: hl.Table,
+    gnomad_data_type: str = "exomes",
+    adj_freq_index: int = 0,
+    filter_context_using_cov: bool = False,
+    cov_threshold: int = 0,
 ) -> hl.Table:
     """
     Filter VEP context Table to sites that aren't seen in gnomAD or are rare in gnomAD.
@@ -190,6 +194,10 @@ def filter_context_using_gnomad(
         Default is "exomes".
     :param adj_freq_index: Index of frequency array that contains global population filtered calculated on
         high quality (adj) genotypes. Default is 0.
+    :param bool filter_context_using_cov: Whether to also filter sites in context Table using gnomAD coverage.
+        Default is False.
+    :param int cov_threshold: Coverage threshold used to filter context Table if `filter_context_using_cov` is True.
+        Default is 0.
     :return: Filtered VEP context Table.
     """
     gnomad = public_release(gnomad_data_type).ht().select_globals()
@@ -200,8 +208,26 @@ def filter_context_using_gnomad(
         af=gnomad.freq[adj_freq_index].AF,
         gnomad_coverage=gnomad_cov[gnomad.locus].median,
     )
+
     # Filter to sites not seen in gnomAD or to rare sites in gnomAD
     gnomad_join = gnomad[context_ht.key]
+
+    # Optionally also filter context HT using gnomAD coverage
+    if filter_context_using_cov:
+        context_ht = context_ht.filter(
+            hl.is_missing(gnomad_join)
+            | keep_criteria(
+                gnomad_join.ac,
+                gnomad_join.af,
+                gnomad_join.filters,
+                gnomad_join.gnomad_coverage,
+            )
+        )
+        context_ht = context_ht.annotate(
+            gnomad_coverage=gnomad_cov[context_ht.locus].median
+        )
+        return context_ht.filter(context_ht.gnomad_coverage > cov_threshold)
+
     return context_ht.filter(
         hl.is_missing(gnomad_join)
         | keep_criteria(
