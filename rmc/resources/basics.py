@@ -25,8 +25,6 @@ Used when checkpointing intermediate files.
 
 ## Kaitlin's resources
 # Original regional missense constraint resource files
-CODON_TABLE_PATH = f"{RESOURCE_PREFIX}/amino_acids/codons_lookup.tsv"
-ACID_NAMES_PATH = f"{RESOURCE_PREFIX}/amino_acids/acid_names.tsv"
 MUTATION_RATE_TABLE_PATH = f"{RESOURCE_PREFIX}/GRCh37/exac/mutation_rate_table.tsv"
 DIVERGENCE_SCORES_TSV_PATH = (
     f"{RESOURCE_PREFIX}/GRCh37/exac/divsites_gencodev19_all_transcripts.txt"
@@ -43,6 +41,45 @@ divergence_scores = TableResource(
 )
 """
 Table with divergence score between humans and macaques for each canonical transcript in Gencode v19.
+"""
+
+## Amino acid resources
+CODON_TABLE_PATH = f"{RESOURCE_PREFIX}/amino_acids/codons_lookup.tsv"
+"""
+TSV file containing two columns: codon and three letter amino acid code.
+"""
+
+ACID_NAMES_PATH = f"{RESOURCE_PREFIX}/amino_acids/acid_names.tsv"
+"""
+TSV file containing three columns: amino acid name, amino acid 3 letter code, and amino acid 1 letter code.
+"""
+
+blosum_txt_path = f"{RESOURCE_PREFIX}/amino_acids/blosum62.txt"
+"""
+Text file containing matrix of BLOSUM scores for each amino acid pair.
+"""
+
+blosum = TableResource(
+    path=f"{RESOURCE_PREFIX}/amino_acids/ht/blosum.ht",
+)
+"""
+Table containing BLOSUM scores for each amino acid pair.
+
+Hail Table representation of scores in `blosum_txt_path`.
+"""
+
+grantham_txt_path = f"{RESOURCE_PREFIX}/amino_acids/grantham.matrix.txt"
+"""
+Text file containing matrix of Grantham scores for each amino acid pair.
+"""
+
+grantham = TableResource(
+    path=f"{RESOURCE_PREFIX}/amino_acids/ht/grantham.ht",
+)
+"""
+Table containing Grantham scores for each amino acid pair.
+
+Hail Table representation of scores in `grantham_txt_path`.
 """
 
 ## gnomAD resources
@@ -231,6 +268,24 @@ misbad = VersionedTableResource(
 )
 """
 Table containing all possible amino acid substitutions and their missense badness scores.
+"""
+
+joint_clinvar_gnomad = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{MPC_PREFIX}/{version}/joint_clinvar_gnomad.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table containing "population" and "pathogenic" variants.
+
+Table contains common (AF > 0.01) gnomAD variants ("population") and
+ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes
+that cause severe disease ("pathogenic") with defined CADD, BLOSUM, Grantham, missense observed/expected ratios,
+missense badness, and PolyPhen-2 scores.
+
+Input to MPC (missense badness, polyphen-2, and constraint) calculations.
 """
 
 oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/oe_bin.tsv"

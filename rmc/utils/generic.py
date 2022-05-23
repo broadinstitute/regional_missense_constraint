@@ -61,20 +61,19 @@ def get_codon_lookup() -> hl.expr.DictExpression:
     return hl.literal(codon_lookup)
 
 
-def get_acid_names() -> Dict[str, str]:
+def get_aa_map() -> Dict[str, str]:
     """
-    Read in amino acid table and stores as dict (key: 3 letter name, value: (long name, one letter name).
+    Create dictionary mapping amino acid 1 letter name to 3 letter name.
 
-    :return: Dictionary of amino acid names.
-    :rtype: Dict[str, str]
+    :return: Dictionary mapping amino acid 1 letter name (key) to 3 letter name (value).
     """
-    acid_map = {}
+    aa_map = {}
     with hl.hadoop_open(ACID_NAMES_PATH) as a:
         a.readline()
         for line in a:
             line = line.strip().split("\t")
-            acid_map[line[1]] = (line[0], line[2])
-    return acid_map
+            aa_map[line[2]] = line[1]
+    return aa_map
 
 
 def get_mutation_rate() -> Dict[str, Tuple[str, float]]:
@@ -362,6 +361,8 @@ def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.T
     ht = ht.explode(ht.transcript_consequences)
 
     if filter_csq:
+        if not csq:
+            raise DataException("Need to specify consequence if filter_csq is True!")
         logger.info("Filtering to %s...", csq)
         ht = ht.filter(ht.transcript_consequences.most_severe_consequence == csq)
     return ht
