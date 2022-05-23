@@ -39,13 +39,13 @@ def convert_score_list_to_ht(
 
     :param List[Dict[str, str]] score_list: List of dictionaries. Each dictionary contains two keys:
         amino_acids (value: ref and alt amino acids) and scores (value: associated score).
-    :param str schema: Schema of `score_list`. Default is 'array<struct{amino_acids: str, score: str}>'.
+    :param str schema: Schema of `score_list`. Default is 'array<struct{amino_acids: str, score: float}>'.
         Note that the dictionary keys must match the field names provided in this schema
         (amino_acids and score).
     :param str key_fields: Desired key fields for the new Table. Default is ("ref", "alt").
     """
     ht = hl.Table.parallelize(hl.literal(score_list, schema))
-    if schema == "array<struct{amino_acids: str, score: str}>":
+    if schema == "array<struct{amino_acids: str, score: float}>":
         ht = ht.transmute(
             ref=ht.amino_acids.split("_")[0], alt=ht.amino_acids.split("_")[1]
         )
@@ -107,7 +107,7 @@ def import_blosum():
 
                         # Add amino acid change and score to list
                         blosum_scores.append(
-                            {"amino_acids": f"{aa}_{alt_aa}", "score": item}
+                            {"amino_acids": f"{aa}_{alt_aa}", "score": float(item)}
                         )
 
     # Convert list of dictionaries to hail Table
@@ -144,7 +144,7 @@ def import_grantham():
                 for counter, item in enumerate(line[1:]):
                     alt_aa = header_dict[counter]
                     grantham_scores.append(
-                        {"amino_acids": f"{aa}_{alt_aa}", "score": item}
+                        {"amino_acids": f"{aa}_{alt_aa}", "score": float(item)}
                     )
 
     # Convert list of dictionaries to hail Table
