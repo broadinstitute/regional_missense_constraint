@@ -30,16 +30,20 @@ logger = logging.getLogger("calculate_missense_badness")
 logger.setLevel(logging.INFO)
 
 
-def filter_codons(ht: hl.Table) -> hl.Table:
+def annotate_and_filter_codons(ht: hl.Table) -> hl.Table:
     """
     Remove non-coding loci and keep informative codons only.
 
-    Remove rows with unknown amino acids. This also removes rows that are annotated as
-    'coding_sequence_variant', as these variants have either undefined or uninformative codon annotations
+    Split codon annotation to annotate reference and alternate amino acids, then
+    remove rows with unknown amino acids.
+
+    Additionally remove rows that are annotated as 'coding_sequence_variant',
+    as these variants have either undefined or uninformative codon annotations
     (NA or codon with Ns, e.g. nnG/nnT).
 
     'coding_sequence_variant' defined as: 'A sequence variant that changes the coding sequence'
     https://m.ensembl.org/info/genome/variation/prediction/predicted_data.html
+
     :param hl.Table ht: Input Table.
     :return: Table with informative codons only.
     """
@@ -145,7 +149,7 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     logger.info(
         "Filtering non-coding rows and rows with uninformative/unknown codons..."
     )
-    context_ht = filter_codons(context_ht)
+    context_ht = annotate_and_filter_codons(context_ht)
 
     logger.info("Checkpointing HT before joining with gnomAD data...")
     context_ht = context_ht.checkpoint(f"{temp_path}/codons.ht", overwrite=True)

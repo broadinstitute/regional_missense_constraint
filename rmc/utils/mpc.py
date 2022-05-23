@@ -18,7 +18,7 @@ from rmc.resources.basics import (
 )
 from rmc.resources.grch37.reference_data import cadd, clinvar_path_mis
 from rmc.utils.generic import get_aa_map, process_vep
-from rmc.utils.missense_badness import filter_codons, get_oe_annotation
+from rmc.utils.missense_badness import annotate_and_filter_codons, get_oe_annotation
 
 
 logging.basicConfig(
@@ -208,7 +208,7 @@ def prepare_pop_path_ht(
         most_severe_consequence=context_ht.transcript_consequences.most_severe_consequence,
         transcript=context_ht.transcript_consequences.transcript_id,
     )
-    context_ht = filter_codons(context_ht)
+    context_ht = annotate_and_filter_codons(context_ht)
     context_ht = context_ht.checkpoint(f"{temp_path}/polyphen.ht", overwrite=True)
 
     logger.info(
