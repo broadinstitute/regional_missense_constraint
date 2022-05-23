@@ -313,7 +313,7 @@ def run_regressions(
     single_var_res = {}
     single_var_aic = []
     for var in [variables] + [additional_variables]:
-        logger.info("Running single variable regression...")
+        logger.info("Running %s regression...", var)
         # Create design matrices
         formula = f"pop_v_path ~ {var}"
         model = _run_glm(formula)
