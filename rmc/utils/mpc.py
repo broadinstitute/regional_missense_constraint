@@ -257,13 +257,14 @@ def run_regressions(
 
     These regressions are used to determine the fitted score that is used to predict MPC scores.
 
-    Fitted score from ExAC:
-        fitted_score = 4.282793 + (4.359682*obs_exp) + (-3.654815*misbad) + (-3.512215*pph2)
-                    + (2.585361*obs_exp*misbad) + (1.350056*obs_exp*pph2)
+    For a variant v:
+    Fitted score (from ExAC):
+        fitted_score(v) = 4.282793 + (4.359682*v[obs_exp]) + (-3.654815*v[misbad]) + (-3.512215*v[pph2])
+                    + (2.585361*v[obs_exp]*v[misbad]) + (1.350056*v[obs_exp]*v[pph2])
 
     Relationship between fitted score and MPC (from ExAC):
-        mpc = -log10(n_less)/82932)
-        n_less = number of ExAC variants with fitted_score < a given fitted_score
+        mpc(v) = -log10(n_less(v))/82932)
+        n_less(v) = number of ExAC variants with fitted_score < fitted_score(v)
 
     :param str output_fname: Name of output file (where model coefficients are written).
         Must be a local file name.
