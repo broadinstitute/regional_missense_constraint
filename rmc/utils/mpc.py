@@ -30,7 +30,7 @@ logger.setLevel(logging.INFO)
 
 
 def convert_score_list_to_ht(
-    score_list: List[Dict[str, float]],
+    score_list: List[Dict[str, Union[str, float]]],
     schema: str = "array<struct{amino_acids: str, score: float}>",
     key_fields: Tuple[str] = ("ref", "alt"),
 ) -> hl.Table:
