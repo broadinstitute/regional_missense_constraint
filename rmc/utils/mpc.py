@@ -330,7 +330,6 @@ def run_regressions(
     )
 
     logger.info("Running joint (additive interactions only) regression...")
-    # Including
     add_formula = f"pop_v_path ~ {' + '.join(variables)}"
     add_model = _run_glm(add_formula)
 
