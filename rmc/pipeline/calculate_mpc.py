@@ -25,7 +25,7 @@ logger.setLevel(logging.INFO)
 
 
 def main(args):
-    """Calculate missense badness."""
+    """Calculate MPC (Missense badness, Polyphen-2, and Constraint) score."""
     try:
         if args.command == "prepare-ht":
             hl.init(log="/write_pop_path_ht.log")
