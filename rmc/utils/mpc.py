@@ -290,6 +290,8 @@ def run_regressions(
 
         MPC formula (from ExAC):
         `pop_v_path ~ obs_exp + mis_badness3 + obs_exp:mis_badness3 + polyphen2 + obs_exp:polyphen2`
+        Missense badness was calculated three times in ExAC.
+        The third version (mis_badness3) is the version that was released.
 
         For formula reference, see: https://learn-scikit.oneoffcoder.com/patsy.html.
 
