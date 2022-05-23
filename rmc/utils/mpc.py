@@ -184,13 +184,12 @@ def prepare_pop_path_ht(
     ht = ht.checkpoint(f"{temp_path}/joint_clinvar_gnomad.ht", overwrite=True)
 
     logger.info("Adding CADD...")
-    # CADD (not sure if it needs to be split)
+    # TODO: Make sure future CADD HTs have already been split
     cadd_ht = cadd.ht()
     cadd_ht = cadd_ht.transmute(
         raw=cadd_ht.RawScore,
         phred=cadd_ht.PHRED,
     )
-    cadd_ht = hl.split_multi(cadd_ht)
     ht = ht.annotate(cadd=hl.struct(**cadd_ht[ht.key]))
 
     logger.info("Getting PolyPhen-2 and codon annotations from VEP context HT...")
