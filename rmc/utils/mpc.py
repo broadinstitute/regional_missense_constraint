@@ -135,21 +135,17 @@ def import_grantham():
             if line.startswith("."):
                 header = line.strip().split("\t")
                 header_dict = {}
-                for counter, item in enumerate(header):
-                    if item == ".":
-                        header_dict[counter] = item
-                    else:
-                        header_dict[counter] = aa_map[item]
+                for counter, item in enumerate(header[1:]):
+                    header_dict[counter] = aa_map[item]
             else:
                 line = line.strip().split("\t")
                 aa = aa_map[line[0]]
 
-                for counter, item in enumerate(line):
+                for counter, item in enumerate(line[1:]):
                     alt_aa = header_dict[counter]
-                    if alt_aa != ".":
-                        grantham_scores.append(
-                            {"amino_acids": f"{aa}_{alt_aa}", "score": item}
-                        )
+                    grantham_scores.append(
+                        {"amino_acids": f"{aa}_{alt_aa}", "score": item}
+                    )
 
     # Convert list of dictionaries to hail Table
     ht = convert_score_list_to_ht(grantham_scores)
