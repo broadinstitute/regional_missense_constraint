@@ -312,7 +312,8 @@ def run_regressions(
     # E.g., mod.misbad3 <- glm(pop_v_path ~ mis_badness3, data=cleaned_joint_exac_clinvar.scores, family=binomial)
     single_var_res = {}
     single_var_aic = []
-    for var in [variables] + [additional_variables]:
+    all_var = variables + additional_variables
+    for var in all_var:
         logger.info("Running %s regression...", var)
         # Create design matrices
         formula = f"pop_v_path ~ {var}"
@@ -322,7 +323,7 @@ def run_regressions(
 
     # Find lowest AIC for single variable regressions and corresponding model
     min_single_aic = min(single_var_aic)
-    min_single_aic_var = variables[single_var_aic.index(min_single_aic)]
+    min_single_aic_var = all_var[single_var_aic.index(min_single_aic)]
     logger.info(
         "Model with smallest AIC for single variable regressions used %i",
         min_single_aic_var,
