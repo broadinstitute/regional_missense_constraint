@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 import hail as hl
 
