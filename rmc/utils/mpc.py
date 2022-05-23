@@ -37,9 +37,11 @@ def convert_score_list_to_ht(
     """
     Convert list of amino acid changes/associated scores to Table format.
 
-    :param List[Dict[str, str]] score_list: List of dictionaries containing amino acid changes (key) and associated scores (value).
+    :param List[Dict[str, str]] score_list: List of dictionaries. Each dictionary contains two keys:
+        amino_acids (value: ref and alt amino acids) and scores (value: associated score).
     :param str schema: Schema of `score_list`. Default is 'array<struct{amino_acids: str, score: str}>'.
-        Note that the dictionary keys must match values provided in this schema.
+        Note that the dictionary keys must match the field names provided in this schema
+        (amino_acids and score).
     :param str key_fields: Desired key fields for the new Table. Default is ("ref", "alt").
     """
     ht = hl.Table.parallelize(hl.literal(score_list, schema))
