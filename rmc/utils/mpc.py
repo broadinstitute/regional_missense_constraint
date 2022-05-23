@@ -285,7 +285,10 @@ def run_regressions(
 
     def _run_glm(
         formula: str,
-    ) -> statsmodels.genmod.generalized_linear_model.GLMResultsWrapper:
+    ) -> Tuple[
+        pd.core.frame.DataFrame,
+        statsmodels.genmod.generalized_linear_model.GLMResultsWrapper,
+    ]:
         """
         Run logistic regression using input formula and return model results.
 
@@ -307,7 +310,7 @@ def run_regressions(
         model = sm.GLM(y, X, family=sm.families.Binomial()).fit()
         logger.info("%s summary: %s", formula, model.summary())
         logger.info("AIC: %i", model.aic)
-        return model
+        return (X, model)
 
     logger.info("Run single variable regressions...")
     # E.g., mod.misbad3 <- glm(pop_v_path ~ mis_badness3, data=cleaned_joint_exac_clinvar.scores, family=binomial)
@@ -318,7 +321,7 @@ def run_regressions(
         logger.info("Running %s regression...", var)
         # Create design matrices
         formula = f"pop_v_path ~ {var}"
-        model = _run_glm(formula)
+        X, model = _run_glm(formula)
         single_var_aic.append(model.aic)
         single_var_res[var] = model.params
 
@@ -332,16 +335,16 @@ def run_regressions(
 
     logger.info("Running joint (additive interactions only) regression...")
     add_formula = f"pop_v_path ~ {' + '.join(variables)}"
-    add_model = _run_glm(add_formula)
+    add_X, add_model = _run_glm(add_formula)
 
     logger.info("Running joint regression with all interactions...")
     mult_formula = f"pop_v_path ~ {' * '.join(variables)}"
-    mult_model = _run_glm(mult_formula)
+    mult_X, mult_model = _run_glm(mult_formula)
 
     logger.info("Running joint regression with specific interactions...")
     # Currently hardcoded to be formula from ExAC
     spec_formula = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
-    spec_model = _run_glm(spec_formula)
+    spec_X, spec_model = _run_glm(spec_formula)
 
     single_var_aic.extend([add_model.aic, mult_model.aic, spec_model.aic])
     min_aic = min(single_var_aic)
@@ -352,6 +355,7 @@ def run_regressions(
         )
         logger.info("Coefficients: %s", single_var_res[min_single_aic_var])
         single_var_res[min_single_aic_var].to_csv(output_fname)
+        model = single_var_res
     elif min_aic == add_model.aic:
         logger.info(
             "Joint regression using additive interactions (%s) had the lowest AIC",
@@ -359,6 +363,8 @@ def run_regressions(
         )
         logger.info("Coefficients: %s", add_model.params)
         add_model.params.to_csv(output_fname)
+        model = add_model
+        X = add_X
     elif min_aic == mult_model.aic:
         logger.info(
             "Joint regression using all interactions (%s) had the lowest AIC",
@@ -366,6 +372,8 @@ def run_regressions(
         )
         logger.info("Coefficients: %s", mult_model.params)
         mult_model.params.to_csv(output_fname)
+        model = mult_model
+        X = mult_X
     else:
         logger.info(
             "Joint regression using specific interactions (%s) had the lowest AIC",
@@ -373,3 +381,108 @@ def run_regressions(
         )
         logger.info("Coefficients: %s", spec_model.params)
         spec_model.params.to_csv(output_fname)
+        model = spec_model
+        X = spec_X
+
+    logger.info("Annotating gnomAD variants with fitted score...")
+    gnomad_df = df[df["pop_v_path"]] == 0
+    gnomad_df["fitted_score"] = model.predict(X)
+
+    logger.info("Converting gnomAD variants dataframe into Table and writing...")
+    ht = hl.Table.from_pandas(gnomad_df)
+    ht.write(gnomad_fitted_score_ht.path)
+
+
+def annotate_mpc(
+    ht: hl.Table,
+    gnomad_ht: hl.Table,
+    coefficient: float,
+    mpc_rel_vars: Dict[str, float],
+    n_less_eq0_float: float = 0.83,
+) -> hl.Table:
+    """
+    Annotate Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
+
+    Relationship in `mpc_rel_vars` is the formula used to calculate a variant's fitted score.
+    A variant's fitted score is combined with the number of variants in gnomAD with scores < fitted score
+    to determine a variant's MPC score.
+
+    For more information on the fitted score and MPC calculation, see the docstring of `run_regressions`.
+
+    .. note::
+        Assume input Table is keyed by locus and alleles.
+
+    :param hl.Table ht: Input Table to be annotated.
+    :param hl.Table gnomad_ht: Table with gnomAD variants and their fitted score.
+    :param float coefficient: Coefficient from MPC regression model.
+        Coefficient was 4.282793 in ExAC model.
+    :param Dict[str, float] mpc_rel_vars: Dictionary of variables (key) and their relationship values (value).
+        For example, an entry from ExAC would be {"obs_exp": 4.359682}.
+        Relationship determined using `run_regressions`.
+    :param float n_less_lt0_float: Set `n_less` annotation to this float if value is 0.
+        This avoids errors in the `hl.log10` call and ensures that MPC for variants not seen in gnomAD is only
+        slightly more severe than variants seen only once in gnomAD.
+    :return: Table with MPC scores annotated.
+    """
+    logger.info("Annotating HT with MPC variables...")
+    variables = mpc_rel_vars.keys()
+    if "oe" in variables:
+        logger.info("Getting regional missense constraint missense o/e annotation...")
+        ht = get_oe_annotation(ht)
+
+    if "misbad" in variables:
+        logger.info("Getting missense badness annotation...")
+        if "ref" not in ht.row:
+            polyphen_ht = hl.read_table(f"{temp_path}/polyphen.ht").select("ref", "alt")
+            ht = ht.annotate(ref=polyphen_ht[ht.key].ref, alt=polyphen_ht[ht.key].alt)
+        mb_ht = misbad.ht()
+        ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
+
+    if "polyphen" in variables:
+        logger.info("Annotating HT with Polyphen...").select("polyphen")
+        polyphen_ht = hl.read_table(f"{temp_path}/polyphen.ht")
+        ht = ht.annotate(**polyphen_ht[ht.key])
+
+    logger.info("Aggregating gnomAD fitted scores...")
+    gnomad_var_count = gnomad_ht.count()
+    gnomad_ht = gnomad_ht.group_by("fitted_score").aggregate(n_var=hl.agg.count())
+    gnomad_ht = gnomad_ht.order_by("fitted_score")
+    gnomad_ht = gnomad_ht.key_by("fitted_score")
+    gnomad_ht = gnomad_ht.annotate(n_less=hl.scan.sum(gnomad_ht.n_var))
+    #
+    gnomad_ht = gnomad_ht.annotate(
+        n_less=hl.if_else(
+            gnomad_ht.n_less == 0,
+            n_less_eq0_float,
+            gnomad_ht.n_less,
+        )
+    )
+    gnomad_ht = gnomad_ht.checkpoint(f"{temp_path}/gnomad_group.ht", overwrite=True)
+
+    logger.info("Annotating fitted scores...")
+    variable_dict = {
+        variable: mpc_rel_vars[variable]
+        for variable in mpc_rel_vars
+        if "*" not in variable
+    }
+    interactions_dict = {
+        variable: mpc_rel_vars[variable] for variable in mpc_rel_vars if "*" in variable
+    }
+    annot_expr = [(ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict]
+    # NOTE: This assumes we won't have more than one variable interacting
+    interaction_annot_expr = [
+        (
+            ht[variable.split("*")[0]]
+            * ht[variable.split("*")[1]]
+            * mpc_rel_vars[variable]
+        )
+        for variable in interactions_dict
+    ]
+    annot_expr.extend(interaction_annot_expr)
+    combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
+
+    ht = ht.annotate(fitted_score=coefficient + combined_annot_expr)
+    ht = ht.annotate(n_less=gnomad_ht[ht.fitted_score].n_less)
+    ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
+    ht = ht.checkpoint(f"{temp_path}/mpc_temp.ht", overwrite=True)
+    return ht
