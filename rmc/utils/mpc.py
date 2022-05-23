@@ -10,6 +10,7 @@ from gnomad.utils.file_utils import file_exists
 from rmc.resources.basics import (
     blosum,
     blosum_txt_path,
+    gnomad_fitted_score,
     grantham,
     grantham_txt_path,
     joint_clinvar_gnomad,
@@ -390,7 +391,7 @@ def run_regressions(
 
     logger.info("Converting gnomAD variants dataframe into Table and writing...")
     ht = hl.Table.from_pandas(gnomad_df)
-    ht.write(gnomad_fitted_score_ht.path)
+    ht.write(gnomad_fitted_score.path)
 
 
 def annotate_mpc(

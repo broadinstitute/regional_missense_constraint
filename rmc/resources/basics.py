@@ -288,6 +288,19 @@ missense badness, and PolyPhen-2 scores.
 Input to MPC (missense badness, polyphen-2, and constraint) calculations.
 """
 
+gnomad_fitted_score = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{MPC_PREFIX}/{version}/gnomad_fitted_scores.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table gnomAD variants and their fitted scores (from MPC model regression).
+
+Input to MPC (missense badness, polyphen-2, and constraint) calculations on other datasets.
+"""
+
 oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/oe_bin.tsv"
 """
 TSV with RMC regions grouped by obs/exp (OE) bin.
