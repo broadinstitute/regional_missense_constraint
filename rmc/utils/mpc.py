@@ -331,7 +331,7 @@ def run_regressions(
     min_single_aic = min(single_var_aic)
     min_single_aic_var = all_var[single_var_aic.index(min_single_aic)]
     logger.info(
-        "Model with smallest AIC for single variable regressions used %i",
+        "Model with smallest AIC for single variable regressions used %s",
         min_single_aic_var,
     )
 
@@ -387,11 +387,11 @@ def run_regressions(
         X = spec_X
 
     logger.info("Annotating gnomAD variants with fitted score...")
-    gnomad_df = df[df["pop_v_path"]] == 0
-    gnomad_df["fitted_score"] = model.predict(X)
+    df["fitted_score"] = model.predict(X)
 
     logger.info("Converting gnomAD variants dataframe into Table and writing...")
-    ht = hl.Table.from_pandas(gnomad_df)
+    ht = hl.Table.from_pandas(df)
+    ht = ht.filter(ht.pop_v_path == 0)
     ht.write(gnomad_fitted_score.path)
 
 
