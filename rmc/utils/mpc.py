@@ -402,6 +402,7 @@ def annotate_mpc(
     ht: hl.Table,
     n_less_eq0_float: float = 0.83,
     interaction_char: str = ":",
+    intercept_str: str = "Intercept",
 ) -> hl.Table:
     """
     Annotate Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
@@ -429,8 +430,15 @@ def annotate_mpc(
     with hl.hadoop_open(mpc_model_pkl_path, "rb") as p:
         model = pickle.load(p)
     mpc_rel_vars = model.params.to_dict()
+    coefficient = mpc_rel_vars.pop(intercept_str)
 
     logger.info("Annotating HT with MPC variables...")
+    if "transcript" not in ht.row:
+        # Get transcript annotation from polyphen HT
+        # (context HT filtered to contain transcript, ref/alt amino acids, and polyphen annotation)
+        polyphen_ht = hl.read_table(f"{temp_path}/polyphen.ht").select("transcript")
+        ht = ht.annotate(transcript=polyphen_ht[ht.key].transcript)
+
     variables = mpc_rel_vars.keys()
     if "oe" in variables:
         logger.info("Getting regional missense constraint missense o/e annotation...")
@@ -445,9 +453,9 @@ def annotate_mpc(
         ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
 
     if "polyphen" in variables:
-        logger.info("Annotating HT with Polyphen...").select("polyphen")
-        polyphen_ht = hl.read_table(f"{temp_path}/polyphen.ht")
-        ht = ht.annotate(**polyphen_ht[ht.key])
+        logger.info("Annotating HT with Polyphen...")
+        polyphen_ht = hl.read_table(f"{temp_path}/polyphen.ht").select("polyphen")
+        ht = ht.annotate(polyphen=polyphen_ht[ht.key].polyphen.score)
 
     logger.info("Aggregating gnomAD fitted scores...")
     gnomad_ht = gnomad_fitted_score.ht()
@@ -490,7 +498,7 @@ def annotate_mpc(
     annot_expr.extend(interaction_annot_expr)
     combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
 
-    ht = ht.annotate(fitted_score=combined_annot_expr)
+    ht = ht.annotate(fitted_score=coefficient + combined_annot_expr)
     ht = ht.annotate(n_less=gnomad_ht[ht.fitted_score].n_less)
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
     ht = ht.checkpoint(f"{temp_path}/mpc_temp.ht", overwrite=True)
