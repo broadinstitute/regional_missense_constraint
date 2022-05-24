@@ -155,7 +155,10 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     context_ht = context_ht.checkpoint(f"{temp_path}/codons.ht", overwrite=True)
 
     logger.info("Filtering sites using gnomAD %s...", gnomad_data_type)
-    context_ht = filter_context_using_gnomad(context_ht, gnomad_data_type)
+    context_ht = filter_context_using_gnomad(
+        context_ht,
+        gnomad_data_type,
+    )
 
     logger.info("Adding observed annotation...")
     context_ht = add_obs_annotation(context_ht)
