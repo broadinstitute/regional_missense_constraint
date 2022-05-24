@@ -11,9 +11,10 @@ import hail as hl
 
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH
+from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX
+from rmc.resources.resource_utils import CURRENT_VERSION
 from rmc.slack_creds import slack_token
-from rmc.utils.mpc import prepare_pop_path_ht, run_regressions
+from rmc.utils.mpc import annotate_mpc, prepare_pop_path_ht, run_regressions
 
 
 logging.basicConfig(
@@ -40,6 +41,33 @@ def main(args):
 
         if args.command == "calculate-mpc":
             hl.init(log="/calculate_mpc.log")
+            if args.clinvar:
+                from rmc.resources.grch37.reference_data import clinvar_path_mis
+
+                annotate_mpc(
+                    ht=clinvar_path_mis.ht(),
+                    output_path=f"{MPC_PREFIX}/{CURRENT_VERSION}/clinvar_mpc_annot.ht",
+                )
+
+            if args.dd:
+                from rmc.resources.grch37.reference_data import de_novo
+
+                dd_ht = de_novo.ht()
+                case_ht = dd_ht.filter(dd_ht.case_control != "control")
+                annotate_mpc(
+                    ht=case_ht,
+                    output_path=f"{MPC_PREFIX}/{CURRENT_VERSION}/dd_case_mpc_annot.ht",
+                )
+                control_ht = dd_ht.filter(dd_ht.case_control == "control")
+                annotate_mpc(
+                    ht=control_ht,
+                    output_path=f"{MPC_PREFIX}/{CURRENT_VERSION}/dd_control_mpc_annot.ht",
+                )
+
+            if args.specify_ht:
+                annotate_mpc(
+                    ht=hl.read_table(args.ht_in_path), output_path=args.ht_out_path
+                )
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -101,7 +129,27 @@ if __name__ == "__main__":
         Calculate MPC for specified dataset.
         """,
     )
-    calculate_score.add_argument("--clinvar")
+    calculate_score.add_argument(
+        "--clinvar", help="Calculate MPC for ClinVar variants", action="store_true"
+    )
+    calculate_score.add_argument(
+        "--dd",
+        help="Calculate MPC for de novo variants from developmental disorder (DD) cases and controls",
+        action="store_true",
+    )
+    calculate_score.add_argument(
+        "--specify-ht",
+        help="Calculate MPC for variants in specified hail Table",
+        action="store_true",
+    )
+    calculate_score.add_argument(
+        "--ht-in-path",
+        help="Path to input hail Table for MPC calculations. Required if --specify-ht is set.",
+    )
+    calculate_score.add_argument(
+        "--ht-out-path",
+        help="Output path for hail Table after adding MPC annotation. Required if --specify-ht is set.",
+    )
 
     args = parser.parse_args()
 
