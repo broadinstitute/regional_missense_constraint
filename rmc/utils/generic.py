@@ -211,32 +211,27 @@ def filter_context_using_gnomad(
 
     # Filter to sites not seen in gnomAD or to rare sites in gnomAD
     gnomad_join = gnomad[context_ht.key]
-
-    # Optionally also filter context HT using gnomAD coverage
-    if filter_context_using_cov:
-        context_ht = context_ht.filter(
-            hl.is_missing(gnomad_join)
-            | keep_criteria(
-                gnomad_join.ac,
-                gnomad_join.af,
-                gnomad_join.filters,
-                gnomad_join.gnomad_coverage,
-            )
-        )
-        context_ht = context_ht.annotate(
-            gnomad_coverage=gnomad_cov[context_ht.locus].median
-        )
-        return context_ht.filter(context_ht.gnomad_coverage > cov_threshold)
-
-    return context_ht.filter(
+    context_ht = context_ht.filter(
         hl.is_missing(gnomad_join)
         | keep_criteria(
             gnomad_join.ac,
             gnomad_join.af,
             gnomad_join.filters,
             gnomad_join.gnomad_coverage,
+            cov_threshold=cov_threshold,
         )
     )
+
+    # Optionally also filter context HT using gnomAD coverage
+    if filter_context_using_cov:
+        context_ht = context_ht.annotate(
+            gnomad_coverage=gnomad_cov[context_ht.locus].median
+        )
+        # Drop coverage annotation here for consistency
+        # (This annotation is only added if `filter_context_using_cov` is True)
+        context_ht = context_ht.drop("gnomad_coverage")
+
+    return context_ht
 
 
 ## Functions for obs/exp related resources
