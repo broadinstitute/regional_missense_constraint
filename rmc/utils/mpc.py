@@ -5,11 +5,11 @@ import statsmodels
 import statsmodels.api as sm
 from typing import Dict, List, Tuple, Union
 
-
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import public_release
 from gnomad.resources.grch37.reference_data import vep_context
+from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import (
@@ -400,10 +400,11 @@ def run_regressions(
 
 def annotate_mpc(
     ht: hl.Table,
+    output_path: str,
     n_less_eq0_float: float = 0.83,
     interaction_char: str = ":",
     intercept_str: str = "Intercept",
-) -> hl.Table:
+) -> None:
     """
     Annotate Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
 
@@ -417,12 +418,14 @@ def annotate_mpc(
         Assume input Table is keyed by locus and alleles.
 
     :param hl.Table ht: Input Table to be annotated.
+    :param str output_path: Where to write Table after adding MPC annotations.
     :param float n_less_lt0_float: Set `n_less` annotation to this float if value is 0.
         This avoids errors in the `hl.log10` call and ensures that MPC for variants not seen in gnomAD is only
         slightly more severe than variants seen only once in gnomAD.
     :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
         Default is ":".
-    :return: Table with MPC scores annotated.
+    :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
+    :return: None; function writes Table to specified output path.
     """
     assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
 
@@ -430,7 +433,12 @@ def annotate_mpc(
     with hl.hadoop_open(mpc_model_pkl_path, "rb") as p:
         model = pickle.load(p)
     mpc_rel_vars = model.params.to_dict()
-    coefficient = mpc_rel_vars.pop(intercept_str)
+    try:
+        coefficient = mpc_rel_vars.pop(intercept_str)
+    except LookupError:
+        raise DataException(
+            f"{intercept_str} not in model parameters! Please double check and rerun."
+        )
 
     logger.info("Annotating HT with MPC variables...")
     if "transcript" not in ht.row:
@@ -501,5 +509,4 @@ def annotate_mpc(
     ht = ht.annotate(fitted_score=coefficient + combined_annot_expr)
     ht = ht.annotate(n_less=gnomad_ht[ht.fitted_score].n_less)
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
-    ht = ht.checkpoint(f"{temp_path}/mpc_temp.ht", overwrite=True)
-    return ht
+    ht.write(output_path)
