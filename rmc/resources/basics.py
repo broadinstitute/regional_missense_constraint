@@ -288,6 +288,13 @@ missense badness, and PolyPhen-2 scores.
 Input to MPC (missense badness, polyphen-2, and constraint) calculations.
 """
 
+mpc_model_pkl_path = f"{MPC_PREFIX}/{CURRENT_VERSION}/mpc_model.pkl"
+"""
+Path to model (stored as pickle) that contains relationship of MPC variables.
+
+Created using logistic regression.
+"""
+
 gnomad_fitted_score = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={

@@ -1,5 +1,9 @@
 import logging
+import pickle
+import statsmodels
+import statsmodels.api as sm
 from typing import Dict, List, Tuple, Union
+
 
 import hail as hl
 
@@ -15,6 +19,7 @@ from rmc.resources.basics import (
     grantham_txt_path,
     joint_clinvar_gnomad,
     misbad,
+    mpc_model_pkl_path,
     temp_path,
 )
 from rmc.resources.grch37.reference_data import cadd, clinvar_path_mis
@@ -249,7 +254,6 @@ def prepare_pop_path_ht(
 
 
 def run_regressions(
-    output_fname: str,
     variables: List[str] = ["oe", "misbad", "polyphen"],
     additional_variables: List[str] = ["blosum", "grantham"],
 ) -> None:
@@ -267,18 +271,15 @@ def run_regressions(
         mpc(v) = -log10(n_less(v))/82932)
         n_less(v) = number of ExAC variants with fitted_score < fitted_score(v)
 
-    :param str output_fname: Name of output file (where model coefficients are written).
-        Must be a local file name.
     :param List[str] variables: Variables to include in all regressions (single, joint).
         Default is ["oe", "misbad", "polyphen"].
     :param List[str] additional_variables: Additional variables to include in single variable regressions only.
         Default is ["blosum", "grantham"].
-    :return: None; function writes model coefficients to local file.
+    :return: None; function writes Table with gnomAD fitted scores
+        and model coefficients as pickle to resource paths.
     """
     import pandas as pd
     from patsy import dmatrices
-    import statsmodels
-    import statsmodels.api as sm
 
     # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
     ht = joint_clinvar_gnomad.ht()
@@ -356,7 +357,6 @@ def run_regressions(
             "Single variable regression using %s had the lowest AIC", min_single_aic_var
         )
         logger.info("Coefficients: %s", single_var_res[min_single_aic_var])
-        single_var_res[min_single_aic_var].to_csv(output_fname)
         model = single_var_res
     elif min_aic == add_model.aic:
         logger.info(
@@ -364,7 +364,6 @@ def run_regressions(
             add_formula,
         )
         logger.info("Coefficients: %s", add_model.params)
-        add_model.params.to_csv(output_fname)
         model = add_model
         X = add_X
     elif min_aic == mult_model.aic:
@@ -373,7 +372,6 @@ def run_regressions(
             mult_formula,
         )
         logger.info("Coefficients: %s", mult_model.params)
-        mult_model.params.to_csv(output_fname)
         model = mult_model
         X = mult_X
     else:
@@ -382,17 +380,22 @@ def run_regressions(
             spec_formula,
         )
         logger.info("Coefficients: %s", spec_model.params)
-        spec_model.params.to_csv(output_fname)
         model = spec_model
         X = spec_X
 
     logger.info("Annotating gnomAD variants with fitted score...")
+    model = spec_model
+    X = spec_X
     df["fitted_score"] = model.predict(X)
 
     logger.info("Converting gnomAD variants dataframe into Table and writing...")
     ht = hl.Table.from_pandas(df)
     ht = ht.filter(ht.pop_v_path == 0)
-    ht.write(gnomad_fitted_score.path)
+    ht.write(gnomad_fitted_score.path, overwrite=True)
+
+    logger.info("Saving model as pickle...")
+    with hl.hadoop_open(mpc_model_pkl_path, "wb") as p:
+        pickle.dump(model, p, protocol=pickle.HIGHEST_PROTOCOL)
 
 
 def annotate_mpc(
