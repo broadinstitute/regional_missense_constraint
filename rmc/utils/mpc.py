@@ -1,4 +1,5 @@
 import logging
+import pandas as pd
 import pickle
 import statsmodels
 import statsmodels.api as sm
@@ -278,7 +279,6 @@ def run_regressions(
     :return: None; function writes Table with gnomAD fitted scores
         and model coefficients as pickle to resource paths.
     """
-    import pandas as pd
     from patsy import dmatrices
 
     # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
@@ -400,10 +400,8 @@ def run_regressions(
 
 def annotate_mpc(
     ht: hl.Table,
-    gnomad_ht: hl.Table,
-    coefficient: float,
-    mpc_rel_vars: Dict[str, float],
     n_less_eq0_float: float = 0.83,
+    interaction_char: str = ":",
 ) -> hl.Table:
     """
     Annotate Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
@@ -418,17 +416,20 @@ def annotate_mpc(
         Assume input Table is keyed by locus and alleles.
 
     :param hl.Table ht: Input Table to be annotated.
-    :param hl.Table gnomad_ht: Table with gnomAD variants and their fitted score.
-    :param float coefficient: Coefficient from MPC regression model.
-        Coefficient was 4.282793 in ExAC model.
-    :param Dict[str, float] mpc_rel_vars: Dictionary of variables (key) and their relationship values (value).
-        For example, an entry from ExAC would be {"obs_exp": 4.359682}.
-        Relationship determined using `run_regressions`.
     :param float n_less_lt0_float: Set `n_less` annotation to this float if value is 0.
         This avoids errors in the `hl.log10` call and ensures that MPC for variants not seen in gnomAD is only
         slightly more severe than variants seen only once in gnomAD.
+    :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
+        Default is ":".
     :return: Table with MPC scores annotated.
     """
+    assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
+
+    logger.info("Extracting MPC model relationships from pickle...")
+    with hl.hadoop_open(mpc_model_pkl_path, "rb") as p:
+        model = pickle.load(p)
+    mpc_rel_vars = model.params.to_dict()
+
     logger.info("Annotating HT with MPC variables...")
     variables = mpc_rel_vars.keys()
     if "oe" in variables:
@@ -449,6 +450,7 @@ def annotate_mpc(
         ht = ht.annotate(**polyphen_ht[ht.key])
 
     logger.info("Aggregating gnomAD fitted scores...")
+    gnomad_ht = gnomad_fitted_score.ht()
     gnomad_var_count = gnomad_ht.count()
     gnomad_ht = gnomad_ht.group_by("fitted_score").aggregate(n_var=hl.agg.count())
     gnomad_ht = gnomad_ht.order_by("fitted_score")
@@ -468,17 +470,19 @@ def annotate_mpc(
     variable_dict = {
         variable: mpc_rel_vars[variable]
         for variable in mpc_rel_vars
-        if "*" not in variable
+        if variable.isalpha()
     }
     interactions_dict = {
-        variable: mpc_rel_vars[variable] for variable in mpc_rel_vars if "*" in variable
+        variable: mpc_rel_vars[variable]
+        for variable in mpc_rel_vars
+        if not variable.isalpha()
     }
     annot_expr = [(ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict]
     # NOTE: This assumes we won't have more than one variable interacting
     interaction_annot_expr = [
         (
-            ht[variable.split("*")[0]]
-            * ht[variable.split("*")[1]]
+            ht[variable.split(interaction_char)[0]]
+            * ht[variable.split(interaction_char)[1]]
             * mpc_rel_vars[variable]
         )
         for variable in interactions_dict
@@ -486,7 +490,7 @@ def annotate_mpc(
     annot_expr.extend(interaction_annot_expr)
     combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
 
-    ht = ht.annotate(fitted_score=coefficient + combined_annot_expr)
+    ht = ht.annotate(fitted_score=combined_annot_expr)
     ht = ht.annotate(n_less=gnomad_ht[ht.fitted_score].n_less)
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
     ht = ht.checkpoint(f"{temp_path}/mpc_temp.ht", overwrite=True)
