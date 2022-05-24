@@ -227,6 +227,7 @@ def filter_context_using_gnomad(
         context_ht = context_ht.annotate(
             gnomad_coverage=gnomad_cov[context_ht.locus].median
         )
+        context_ht = context_ht.filter(context_ht.gnomad_coverage > cov_threshold)
         # Drop coverage annotation here for consistency
         # (This annotation is only added if `filter_context_using_cov` is True)
         context_ht = context_ht.drop("gnomad_coverage")
