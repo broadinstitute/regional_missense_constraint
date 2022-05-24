@@ -34,10 +34,12 @@ def main(args):
         if args.command == "run-glm":
             hl.init(log="/run_regressions_using_glm.log")
             run_regressions(
-                output_fname=args.output_fname,
                 variables=args.variables.split(","),
                 additional_variables=args.extra_variables.split(","),
             )
+
+        if args.command == "calculate-mpc":
+            hl.init(log="/calculate_mpc.log")
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -83,11 +85,6 @@ if __name__ == "__main__":
         """,
     )
     run_glm.add_argument(
-        "--output-fname",
-        help="Name of output file (where to store model coefficients).",
-        default="MPC_coefficients.csv",
-    )
-    run_glm.add_argument(
         "--variables",
         help="Comma separated string of variables to include in all logistic regression.",
         default="oe,misbad,polyphen",
@@ -97,6 +94,14 @@ if __name__ == "__main__":
         help="Comma separated string of additional variables to include in single variable regressions.",
         default="blosum,grantham",
     )
+
+    calculate_score = subparsers.add_parser(
+        "calculate-mpc",
+        help="""
+        Calculate MPC for specified dataset.
+        """,
+    )
+    calculate_score.add_argument("--clinvar")
 
     args = parser.parse_args()
 
