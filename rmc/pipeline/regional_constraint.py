@@ -70,7 +70,7 @@ def main(args):
             context_ht = process_context_ht("GRCh37", args.trimers)
 
             logger.info(
-                "Filtering context HT to all sites not found in gnomAD exomes + all rare, covered sites in gnomAD"
+                "Filtering context HT to all covered sites not found or rare in gnomAD exomes"
             )
             context_ht = filter_context_using_gnomad(
                 context_ht, "exomes", filter_context_using_cov=True
