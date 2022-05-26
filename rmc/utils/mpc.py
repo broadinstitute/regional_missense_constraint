@@ -408,10 +408,37 @@ def run_regressions(
         pickle.dump(model, p, protocol=pickle.HIGHEST_PROTOCOL)
 
 
+def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> hl.Table:
+    """
+    Aggregate gnomAD fitted scores to count number of variants with a score less than a given score.
+
+    :param float n_less_eq0_float: Set `n_less` annotation to this float if `n_less` is 0.
+        This avoids errors in the `hl.log10` call and ensures that MPC for variants with a fitted score more severe than any common gnomAD variant (`n_less` = 0) is more severe but by a controlled amount compared to MPC for variants with a fitted score more severe than one common gnomAD variant (`n_less` = 1).
+        slightly more severe than variants seen only once in gnomAD.
+    :return: Table of gnomAD scores grouped by score and
+        annotated with the total number of variants with that score and
+        number of variants less than each score.
+    """
+    logger.info("Aggregating gnomAD fitted scores...")
+    gnomad_ht = gnomad_fitted_score.ht()
+    gnomad_ht = gnomad_ht.group_by("fitted_score").aggregate(n_var=hl.agg.count())
+    gnomad_ht = gnomad_ht.order_by("fitted_score")
+    gnomad_ht = gnomad_ht.key_by("fitted_score")
+    gnomad_ht = gnomad_ht.annotate(n_less=hl.scan.sum(gnomad_ht.n_var))
+    gnomad_ht = gnomad_ht.annotate(
+        n_less=hl.if_else(
+            gnomad_ht.n_less == 0,
+            n_less_eq0_float,
+            gnomad_ht.n_less,
+        )
+    )
+    gnomad_ht = gnomad_ht.checkpoint(f"{temp_path}/gnomad_group.ht", overwrite=True)
+    return gnomad_ht
+
+
 def annotate_mpc(
     ht: hl.Table,
     output_path: str,
-    n_less_eq0_float: float = 0.83,
     interaction_char: str = ":",
     intercept_str: str = "Intercept",
 ) -> None:
@@ -429,9 +456,6 @@ def annotate_mpc(
 
     :param hl.Table ht: Input Table to be annotated.
     :param str output_path: Where to write Table after adding MPC annotations.
-    :param float n_less_eq0_float: Set `n_less` annotation to this float if `n_less` is 0.
-        This avoids errors in the `hl.log10` call and ensures that MPC for variants with a fitted score more severe than any common gnomAD variant (`n_less` = 0) is more severe but by a controlled amount compared to MPC for variants with a fitted score more severe than one common gnomAD variant (`n_less` = 1).
-        slightly more severe than variants seen only once in gnomAD.
     :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
         Default is ":".
     :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
@@ -492,21 +516,8 @@ def annotate_mpc(
     ht = ht.filter(filter_expr)
 
     logger.info("Aggregating gnomAD fitted scores...")
-    gnomad_ht = gnomad_fitted_score.ht()
-    gnomad_var_count = gnomad_ht.count()
-    gnomad_ht = gnomad_ht.group_by("fitted_score").aggregate(n_var=hl.agg.count())
-    gnomad_ht = gnomad_ht.order_by("fitted_score")
-    gnomad_ht = gnomad_ht.key_by("fitted_score")
-    gnomad_ht = gnomad_ht.annotate(n_less=hl.scan.sum(gnomad_ht.n_var))
-    #
-    gnomad_ht = gnomad_ht.annotate(
-        n_less=hl.if_else(
-            gnomad_ht.n_less == 0,
-            n_less_eq0_float,
-            gnomad_ht.n_less,
-        )
-    )
-    gnomad_ht = gnomad_ht.checkpoint(f"{temp_path}/gnomad_group.ht", overwrite=True)
+    gnomad_var_count = gnomad_fitted_score.ht().count()
+    gnomad_ht = aggregate_gnomad_fitted_scores()
 
     logger.info("Annotating fitted scores...")
     variable_dict = {
