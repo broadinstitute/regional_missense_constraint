@@ -436,7 +436,7 @@ def annotate_mpc(
     mpc_rel_vars = model.params.to_dict()
     try:
         intercept = mpc_rel_vars.pop(intercept_str)
-    except LookupError:
+    except KeyError:
         raise DataException(
             f"{intercept_str} not in model parameters! Please double check and rerun."
         )
