@@ -486,6 +486,10 @@ def annotate_mpc(
     assert (
         len(ht.key) == 2 and "locus" in ht.key and "alleles" in ht.key
     ), "HT key must be keyed by 'locus' and 'alleles'!"
+    # NOTE: hl.tlocus() will user the reference genome build from the hail initialization
+    # if the user doesn't specify a reference build
+    # This means that for v2, where hail is initialized with GRCh37, this will check for
+    # a build 37 locus
     assert ht.key.locus.dtype == hl.tlocus() and ht.key.alleles.dtype == hl.tarray(
         hl.tstr
     ), "'locus' must be a LocusExpression, and 'alleles' must be an array of strings!"
