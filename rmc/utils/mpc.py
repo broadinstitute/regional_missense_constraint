@@ -456,17 +456,22 @@ def annotate_mpc(
             f"{intercept_str} not in model parameters! Please double check and rerun."
         )
 
-    logger.info("Annotating HT with MPC variables...")
-    if "transcript" not in ht.row:
-        # Get transcript annotation from polyphen HT
-        # (context HT filtered to contain transcript, ref/alt amino acids, and polyphen annotation)
-        polyphen_ht = polyphen.ht().select("transcript")
-        ht = ht.annotate(transcript=polyphen_ht[ht.key].transcript)
+    logger.info("Adding transcript annotation...")
+    # Get transcript annotation from polyphen HT
+    # (context HT filtered to contain transcript, ref/alt amino acids, and polyphen annotation)
+    # polyphen HT has the same transcript version as the constraint tables
+    # For v2, transcript annotation contains only canonical transcripts from GENCODE v19
+    polyphen_ht = polyphen.ht().select("transcript")
+    ht = ht.annotate(transcript=polyphen_ht[ht.key].transcript)
+    # Start filter expression to filter HT to defined annotations
+    filter_expr = hl.is_defined(ht.transcript)
 
+    logger.info("Annotating HT with MPC variables...")
     variables = mpc_rel_vars.keys()
     if "oe" in variables:
         logger.info("Getting regional missense constraint missense o/e annotation...")
         ht = get_oe_annotation(ht)
+        filter_expr &= hl.is_defined(ht.oe)
 
     if "misbad" in variables:
         logger.info("Getting missense badness annotation...")
@@ -475,11 +480,16 @@ def annotate_mpc(
             ht = ht.annotate(ref=polyphen_ht[ht.key].ref, alt=polyphen_ht[ht.key].alt)
         mb_ht = misbad.ht()
         ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
+        filter_expr &= hl.is_defined(ht.misbad)
 
     if "polyphen" in variables:
         logger.info("Annotating HT with Polyphen...")
         polyphen_ht = polyphen.ht().select("polyphen")
         ht = ht.annotate(polyphen=polyphen_ht[ht.key].polyphen.score)
+        filter_expr &= hl.is_defined(ht.polyphen)
+
+    logger.info("Filtering to defined annotations...")
+    ht = ht.filter(filter_expr)
 
     logger.info("Aggregating gnomAD fitted scores...")
     gnomad_ht = gnomad_fitted_score.ht()
