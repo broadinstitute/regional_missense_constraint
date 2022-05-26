@@ -1,5 +1,6 @@
 import logging
 import pandas as pd
+from patsy import dmatrices
 import pickle
 import statsmodels
 import statsmodels.api as sm
@@ -279,8 +280,6 @@ def run_regressions(
     :return: None; function writes Table with gnomAD fitted scores
         and model coefficients as pickle to resource paths.
     """
-    from patsy import dmatrices
-
     # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
     ht = joint_clinvar_gnomad.ht()
     ht = ht.transmute(polyphen=ht.polyphen.score)
