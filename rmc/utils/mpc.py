@@ -271,7 +271,7 @@ def run_regressions(
 
     Relationship between fitted score and MPC (from ExAC):
         mpc(v) = -log10(n_less(v))/82932)
-        n_less(v) = number of ExAC variants with fitted_score < fitted_score(v)
+        n_less(v) = number of common (MAF > 0.01) ExAC variants with fitted_score < fitted_score(v)
 
     :param List[str] variables: Variables to include in all regressions (single, joint).
         Default is ["oe", "misbad", "polyphen"].
@@ -351,7 +351,8 @@ def run_regressions(
     spec_formula = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
     spec_X, spec_model = _run_glm(spec_formula)
 
-    single_var_aic.extend([add_model.aic, mult_model.aic, spec_model.aic])
+    all_model_aic = single_var_aic + [add_model.aic, mult_model.aic, spec_model.aic]
+    min_aic = min(all_model_aic)
     min_aic = min(single_var_aic)
     logger.info("Lowest model AIC: %f", min_aic)
     if min_aic == min_single_aic:
@@ -413,7 +414,7 @@ def annotate_mpc(
     Annotate Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
 
     Relationship in `mpc_rel_vars` is the formula used to calculate a variant's fitted score.
-    A variant's fitted score is combined with the number of variants in gnomAD with scores < fitted score
+    A variant of interest's fitted score is combined with the number of common (MAF > 0.01) variants in gnomAD with fitted scores < the fitted score for the variant of interest to determine the variant's MPC score.
     to determine a variant's MPC score.
 
     For more information on the fitted score and MPC calculation, see the docstring of `run_regressions`.
@@ -423,8 +424,8 @@ def annotate_mpc(
 
     :param hl.Table ht: Input Table to be annotated.
     :param str output_path: Where to write Table after adding MPC annotations.
-    :param float n_less_lt0_float: Set `n_less` annotation to this float if value is 0.
-        This avoids errors in the `hl.log10` call and ensures that MPC for variants not seen in gnomAD is only
+    :param float n_less_eq0_float: Set `n_less` annotation to this float if `n_less` is 0.
+        This avoids errors in the `hl.log10` call and ensures that MPC for variants with a fitted score more severe than any common gnomAD variant (`n_less` = 0) is more severe but by a controlled amount compared to MPC for variants with a fitted score more severe than one common gnomAD variant (`n_less` = 1).
         slightly more severe than variants seen only once in gnomAD.
     :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
         Default is ":".
@@ -438,8 +439,8 @@ def annotate_mpc(
         model = pickle.load(p)
     mpc_rel_vars = model.params.to_dict()
     try:
-        coefficient = mpc_rel_vars.pop(intercept_str)
-    except LookupError:
+        intercept = mpc_rel_vars.pop(intercept_str)
+    except KeyError:
         raise DataException(
             f"{intercept_str} not in model parameters! Please double check and rerun."
         )
@@ -489,15 +490,15 @@ def annotate_mpc(
     logger.info("Annotating fitted scores...")
     variable_dict = {
         variable: mpc_rel_vars[variable]
-        for variable in mpc_rel_vars
+        for variable in variables
         if variable.isalpha()
     }
     interactions_dict = {
         variable: mpc_rel_vars[variable]
-        for variable in mpc_rel_vars
+        for variable in variables
         if not variable.isalpha()
     }
-    annot_expr = [(ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict]
+    annot_expr = [(ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()]
     # NOTE: This assumes we won't have more than one variable interacting
     interaction_annot_expr = [
         (
@@ -505,7 +506,7 @@ def annotate_mpc(
             * ht[variable.split(interaction_char)[1]]
             * mpc_rel_vars[variable]
         )
-        for variable in interactions_dict
+        for variable in interactions_dict.keys()
     ]
     annot_expr.extend(interaction_annot_expr)
     combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
