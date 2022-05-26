@@ -276,7 +276,7 @@ def run_regressions(
         n_less(v) = number of common (AF > 0.01) ExAC variants with fitted_score < fitted_score(v)
 
     Note that higher MPC scores predict increased missense deleteriousness, and
-    smaller n_less values will lead to higher MPC scores.
+    smaller n_less values and fitted scores will lead to higher MPC scores.
 
     :param List[str] variables: Variables to include in all regressions (single, joint).
         Default is ["oe", "misbad", "polyphen"].
