@@ -456,15 +456,18 @@ def annotate_mpc(
             f"{intercept_str} not in model parameters! Please double check and rerun."
         )
 
-    logger.info("Adding transcript annotation...")
-    # Get transcript annotation from polyphen HT
+    logger.info("Adding transcript and codons annotations...")
+    # Get transcript and codons annotation from polyphen HT
     # (context HT filtered to contain transcript, ref/alt amino acids, and polyphen annotation)
     # polyphen HT has the same transcript version as the constraint tables
     # For v2, transcript annotation contains only canonical transcripts from GENCODE v19
-    polyphen_ht = polyphen.ht().select("transcript")
-    ht = ht.annotate(transcript=polyphen_ht[ht.key].transcript)
+    # polyphen HT also has same codon annotation format as missense badness HT
+    polyphen_ht = polyphen.ht().select("transcript", "ref", "alt")
+    ht = ht.annotate(**polyphen_ht[ht.key])
     # Start filter expression to filter HT to defined annotations
-    filter_expr = hl.is_defined(ht.transcript)
+    filter_expr = (
+        hl.is_defined(ht.transcript) & hl.is_defined(ht.ref) & hl.is_defined(ht.alt)
+    )
 
     logger.info("Annotating HT with MPC variables...")
     variables = mpc_rel_vars.keys()
@@ -475,9 +478,6 @@ def annotate_mpc(
 
     if "misbad" in variables:
         logger.info("Getting missense badness annotation...")
-        if "ref" not in ht.row:
-            polyphen_ht = polyphen.ht().select("ref", "alt")
-            ht = ht.annotate(ref=polyphen_ht[ht.key].ref, alt=polyphen_ht[ht.key].alt)
         mb_ht = misbad.ht()
         ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
         filter_expr &= hl.is_defined(ht.misbad)
