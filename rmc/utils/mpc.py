@@ -486,7 +486,7 @@ def annotate_mpc(
     logger.info("Annotating fitted scores...")
     variable_dict = {
         variable: mpc_rel_vars[variable]
-        for variable in mpc_rel_vars
+        for variable in variables
         if variable.isalpha()
     }
     interactions_dict = {
