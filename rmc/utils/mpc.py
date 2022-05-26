@@ -557,6 +557,11 @@ def annotate_mpc(
         for variable in variables
         if interaction_char in variable
     }
+    for variable in interactions_dict.keys():
+        if len(variable.split(interaction_char) > 2):
+            raise DataException(
+                "Code currently doesn't handle interactions between more than two variables!"
+            )
     annot_expr = [
         (ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()
     ]
