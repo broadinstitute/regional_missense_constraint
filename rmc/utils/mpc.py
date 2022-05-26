@@ -270,7 +270,7 @@ def run_regressions(
 
     Relationship between fitted score and MPC (from ExAC):
         mpc(v) = -log10(n_less(v))/82932)
-        n_less(v) = number of ExAC variants with fitted_score < fitted_score(v)
+        n_less(v) = number of common (MAF > 0.01) ExAC variants with fitted_score < fitted_score(v)
 
     :param List[str] variables: Variables to include in all regressions (single, joint).
         Default is ["oe", "misbad", "polyphen"].
