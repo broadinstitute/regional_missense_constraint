@@ -471,7 +471,8 @@ def annotate_mpc(
     For more information on the fitted score and MPC calculation, see the docstring of `run_regressions`.
 
     .. note::
-        Assume input Table is keyed by locus and alleles.
+        - Assume input Table is keyed by locus and alleles.
+        - Function will re-add transcript and reference/alternate allele annotations even if present.
 
     :param hl.Table ht: Input Table to be annotated.
     :param str output_path: Where to write Table after adding MPC annotations.
