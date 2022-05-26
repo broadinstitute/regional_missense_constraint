@@ -316,9 +316,24 @@ gnomad_fitted_score = VersionedTableResource(
     },
 )
 """
-Table gnomAD variants and their fitted scores (from MPC model regression).
+Table of gnomAD variants and their fitted scores (from MPC model regression).
 
 Input to MPC (missense badness, polyphen-2, and constraint) calculations on other datasets.
+"""
+
+gnomad_fitted_score_group = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(
+            path=f"{MPC_PREFIX}/{version}/gnomad_fitted_scores_group.ht"
+        )
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table grouped by gnomAD fitted score.
+
+Annotated with the total number of variants with and less than each score.
 """
 
 oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/oe_bin.tsv"

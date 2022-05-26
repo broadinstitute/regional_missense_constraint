@@ -17,6 +17,7 @@ from rmc.resources.basics import (
     blosum,
     blosum_txt_path,
     gnomad_fitted_score,
+    gnomad_fitted_score_group,
     grantham,
     grantham_txt_path,
     joint_clinvar_gnomad,
@@ -419,7 +420,7 @@ def run_regressions(
         pickle.dump(model, p, protocol=pickle.HIGHEST_PROTOCOL)
 
 
-def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> hl.Table:
+def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
     """
     Aggregate gnomAD fitted scores to count number of variants with a score less than a given score.
 
@@ -427,9 +428,7 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> hl.Table:
         This avoids errors in the `hl.log10` call and ensures that MPC for variants with a fitted score
         not seen in gnomAD (`n_less` = 0) is more severe (by a controlled amount) compared to MPC
         for variants seen only once in gnomAD (`n_less` = 1).
-    :return: Table of gnomAD scores grouped by score and
-        annotated with the total number of variants with that score and
-        number of variants less than each score.
+    :return: None; function writes Table to resource path.
     """
     logger.info("Aggregating gnomAD fitted scores...")
     gnomad_ht = gnomad_fitted_score.ht()
@@ -452,8 +451,7 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> hl.Table:
     # `hl.binary_search` returns an int32 by default)
     gnomad_ht = gnomad_ht.add_index()
     gnomad_ht = gnomad_ht.annotate(idx=hl.int(gnomad_ht.idx))
-    gnomad_ht = gnomad_ht.checkpoint(f"{temp_path}/gnomad_group.ht", overwrite=True)
-    return gnomad_ht
+    gnomad_ht.write(gnomad_fitted_score_group.path, overwrite=True)
 
 
 def annotate_mpc(
@@ -541,7 +539,9 @@ def annotate_mpc(
     ht = ht.filter(filter_expr)
 
     logger.info("Aggregating gnomAD fitted scores...")
-    gnomad_ht = aggregate_gnomad_fitted_scores()
+    if not file_exists(gnomad_fitted_score_group.path):
+        aggregate_gnomad_fitted_scores()
+    gnomad_ht = gnomad_fitted_score_group.ht()
     scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
     scores_len = len(scores)
 
