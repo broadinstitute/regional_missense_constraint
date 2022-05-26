@@ -494,7 +494,7 @@ def annotate_mpc(
         for variable in mpc_rel_vars
         if not variable.isalpha()
     }
-    annot_expr = [(ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict]
+    annot_expr = [(ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()]
     # NOTE: This assumes we won't have more than one variable interacting
     interaction_annot_expr = [
         (
