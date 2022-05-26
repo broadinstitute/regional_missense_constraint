@@ -359,6 +359,14 @@ def run_regressions(
     all_model_aic = single_var_aic + [add_model.aic, mult_model.aic, spec_model.aic]
     min_aic = min(all_model_aic)
     logger.info("Lowest model AIC: %f", min_aic)
+    if all_model_aic.count(min_aic) > 1:
+        logger.warning(
+            """
+            There is a tie for minimum AIC.
+            This function will use the first model it finds by default
+            (single variable -> additive interactions -> all interactions -> specific interactions)!
+            """
+        )
     if min_aic == min_single_aic:
         logger.info(
             "Single variable regression using %s had the lowest AIC", min_single_aic_var
