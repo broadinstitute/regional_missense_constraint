@@ -420,7 +420,7 @@ def annotate_mpc(
 
     :param hl.Table ht: Input Table to be annotated.
     :param str output_path: Where to write Table after adding MPC annotations.
-    :param float n_less_lt0_float: Set `n_less` annotation to this float if value is 0.
+    :param float n_less_eq0_float: Set `n_less` annotation to this float if `n_less` is 0.
         This avoids errors in the `hl.log10` call and ensures that MPC for variants not seen in gnomAD is only
         slightly more severe than variants seen only once in gnomAD.
     :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
