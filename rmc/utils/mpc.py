@@ -435,7 +435,7 @@ def annotate_mpc(
         model = pickle.load(p)
     mpc_rel_vars = model.params.to_dict()
     try:
-        coefficient = mpc_rel_vars.pop(intercept_str)
+        intercept = mpc_rel_vars.pop(intercept_str)
     except LookupError:
         raise DataException(
             f"{intercept_str} not in model parameters! Please double check and rerun."
