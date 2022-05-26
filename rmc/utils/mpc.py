@@ -271,7 +271,10 @@ def run_regressions(
 
     Relationship between fitted score and MPC (from ExAC):
         mpc(v) = -log10(n_less(v))/82932)
-        n_less(v) = number of common (MAF > 0.01) ExAC variants with fitted_score < fitted_score(v)
+        n_less(v) = number of common (AF > 0.01) ExAC variants with fitted_score < fitted_score(v)
+
+    Note that higher MPC scores predict increased missense deleteriousness, and
+    smaller n_less values will lead to higher MPC scores.
 
     :param List[str] variables: Variables to include in all regressions (single, joint).
         Default is ["oe", "misbad", "polyphen"].
@@ -414,7 +417,7 @@ def annotate_mpc(
     Annotate Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
 
     Relationship in `mpc_rel_vars` is the formula used to calculate a variant's fitted score.
-    A variant of interest's fitted score is combined with the number of common (MAF > 0.01) variants in gnomAD with fitted scores < the fitted score for the variant of interest to determine the variant's MPC score.
+    A variant of interest's fitted score is combined with the number of common (AF > 0.01) variants in gnomAD with fitted scores < the fitted score for the variant of interest to determine the variant's MPC score.
     to determine a variant's MPC score.
 
     For more information on the fitted score and MPC calculation, see the docstring of `run_regressions`.
@@ -489,16 +492,16 @@ def annotate_mpc(
 
     logger.info("Annotating fitted scores...")
     variable_dict = {
-        variable: mpc_rel_vars[variable]
-        for variable in variables
-        if variable.isalpha()
+        variable: mpc_rel_vars[variable] for variable in variables if variable.isalpha()
     }
     interactions_dict = {
         variable: mpc_rel_vars[variable]
         for variable in variables
         if not variable.isalpha()
     }
-    annot_expr = [(ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()]
+    annot_expr = [
+        (ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()
+    ]
     # NOTE: This assumes we won't have more than one variable interacting
     interaction_annot_expr = [
         (
