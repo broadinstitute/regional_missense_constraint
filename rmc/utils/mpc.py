@@ -338,6 +338,13 @@ def run_regressions(
     min_single_aic = min(single_var_aic)
     min_single_aic_var = all_var[single_var_aic.index(min_single_aic)]
     min_single_X = all_var[single_var_X.index(min_single_aic)]
+    if single_var_aic.count(min_single_aic) > 1:
+        logger.warning(
+            """
+            There is a tie for minimum AIC.
+            This function will use the first variable it finds by default!
+            """
+        )
     logger.info(
         "Model with smallest AIC for single variable regressions used %s",
         min_single_aic_var,
@@ -400,8 +407,6 @@ def run_regressions(
         X = spec_X
 
     logger.info("Annotating gnomAD variants with fitted score...")
-    model = spec_model
-    X = spec_X
     df["fitted_score"] = model.predict(X)
 
     logger.info("Converting gnomAD variants dataframe into Table and writing...")
