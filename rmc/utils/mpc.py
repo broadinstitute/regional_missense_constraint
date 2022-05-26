@@ -466,7 +466,8 @@ def annotate_mpc(
     Annotate Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
 
     Relationship in `mpc_rel_vars` is the formula used to calculate a variant's fitted score.
-    A variant of interest's fitted score is combined with the number of common (AF > 0.01) variants in gnomAD with fitted scores < the fitted score for the variant of interest to determine the variant's MPC score.
+    A variant of interest's fitted score is combined with the number of common (AF > 0.01)
+    variants in gnomAD with fitted scores < the fitted score for the variant of interest
     to determine a variant's MPC score.
 
     For more information on the fitted score and MPC calculation, see the docstring of `run_regressions`.
