@@ -521,12 +521,14 @@ def annotate_mpc(
 
     logger.info("Annotating fitted scores...")
     variable_dict = {
-        variable: mpc_rel_vars[variable] for variable in variables if variable.isalpha()
+        variable: mpc_rel_vars[variable]
+        for variable in variables
+        if not interaction_char in variable
     }
     interactions_dict = {
         variable: mpc_rel_vars[variable]
         for variable in variables
-        if not variable.isalpha()
+        if interaction_char in variable
     }
     annot_expr = [
         (ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()
