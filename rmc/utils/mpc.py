@@ -358,7 +358,6 @@ def run_regressions(
 
     all_model_aic = single_var_aic + [add_model.aic, mult_model.aic, spec_model.aic]
     min_aic = min(all_model_aic)
-    min_aic = min(single_var_aic)
     logger.info("Lowest model AIC: %f", min_aic)
     if min_aic == min_single_aic:
         logger.info(
