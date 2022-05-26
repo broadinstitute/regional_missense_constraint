@@ -576,7 +576,7 @@ def annotate_mpc(
 
     # Search all gnomAD scores to find first score that is
     # less than or equal to score to be annotated
-    ht = ht.annotate(idx=hl.binary_search(ht.gnomad_scores, ht.score))
+    ht = ht.annotate(idx=hl.binary_search(ht.gnomad_scores, ht.fitted_score))
     ht = ht.annotate(
         idx=hl.if_else(
             # Reduce index by one if gnomAD fitted score is greater than current variant's score
