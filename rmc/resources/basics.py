@@ -278,7 +278,7 @@ polyphen = VersionedTableResource(
     },
 )
 """
-Table containing Polyphen-2 (score and prediction), transcript, codons, and most severe consequence annotations.
+Table containing Polyphen-2 (score and prediction), transcript, codons, most severe consequence, and reference and alternate amino acid annotations.
 
 Table contains variants in canonical transcripts only.
 """

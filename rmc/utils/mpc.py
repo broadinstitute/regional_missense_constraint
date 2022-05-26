@@ -277,7 +277,7 @@ def run_regressions(
         n_less(v) = number of common (AF > 0.01) ExAC variants with fitted_score < fitted_score(v)
 
     Note that higher MPC scores predict increased missense deleteriousness, and
-    smaller n_less values will lead to higher MPC scores.
+    smaller n_less values and fitted scores will lead to higher MPC scores.
 
     :param List[str] variables: Variables to include in all regressions (single, joint).
         Default is ["oe", "misbad", "polyphen"].
@@ -511,7 +511,7 @@ def annotate_mpc(
     # polyphen HT has the same transcript version as the constraint tables
     # For v2, transcript annotation contains only canonical transcripts from GENCODE v19
     # polyphen HT also has same codon annotation format as missense badness HT
-    polyphen_ht = polyphen.ht().select("transcript", "ref", "alt")
+    aa_ht = polyphen.ht().select("transcript", "ref", "alt")
     ht = ht.annotate(**polyphen_ht[ht.key])
     # Start filter expression to filter HT to defined annotations
     filter_expr = (
@@ -588,8 +588,7 @@ def annotate_mpc(
 
     # Search all gnomAD scores to find first score that is
     # less than or equal to score to be annotated
-    gnomad_var_count = gnomad_fitted_score.ht().count()
-    ht = ht.annotate(idx=hl.binary_search(ht.gnomad_scores, ht.score))
+    ht = ht.annotate(idx=hl.binary_search(ht.gnomad_scores, ht.fitted_score))
     ht = ht.annotate(
         idx=hl.if_else(
             # Reduce index by one if gnomAD fitted score is greater than current variant's score
@@ -600,7 +599,7 @@ def annotate_mpc(
     )
     ht = ht.annotate(
         n_less=hl.if_else(
-            # Make n_less variant equal to total gnomAD variant count if
+            # Make n_less equal to total gnomAD common variant count if
             # index is equal to the length of the gnomAD scores array
             ht.idx == scores_len,
             gnomad_var_count,
