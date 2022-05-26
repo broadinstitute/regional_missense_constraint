@@ -451,6 +451,7 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
     # `hl.binary_search` returns an int32 by default)
     gnomad_ht = gnomad_ht.add_index()
     gnomad_ht = gnomad_ht.annotate(idx=hl.int(gnomad_ht.idx))
+    gnomad_ht = gnomad_ht.key_by("idx")
     gnomad_ht.write(gnomad_fitted_score_group.path, overwrite=True)
 
 
