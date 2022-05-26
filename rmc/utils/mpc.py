@@ -432,6 +432,10 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> hl.Table:
             gnomad_ht.n_less,
         )
     )
+    # Add index annotation to table and convert from int64
+    # (default value returned by `add_index`) to int32
+    gnomad_ht = gnomad_ht.add_index()
+    gnomad_ht = gnomad_ht.annotate(idx=hl.int(gnomad_ht.idx))
     gnomad_ht = gnomad_ht.checkpoint(f"{temp_path}/gnomad_group.ht", overwrite=True)
     return gnomad_ht
 
@@ -518,6 +522,8 @@ def annotate_mpc(
     logger.info("Aggregating gnomAD fitted scores...")
     gnomad_var_count = gnomad_fitted_score.ht().count()
     gnomad_ht = aggregate_gnomad_fitted_scores()
+    scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
+    scores_len = len(scores)
 
     logger.info("Annotating fitted scores...")
     variable_dict = {
@@ -545,7 +551,35 @@ def annotate_mpc(
     annot_expr.extend(interaction_annot_expr)
     combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
 
+    logger.info("Computing fitted score...")
     ht = ht.annotate(fitted_score=intercept + combined_annot_expr)
-    ht = ht.annotate(n_less=gnomad_ht[ht.fitted_score].n_less)
+
+    logger.info("Getting n_less annotation...")
+    # Annotate HT with sorted array of gnomAD fitted scores
+    ht = ht.annotate(gnomad_scores=scores)
+
+    # Search all gnomAD scores to find first score that is
+    # less than or equal to score to be annotated
+    ht = ht.annotate(idx=hl.binary_search(ht.gnomad_scores, ht.score))
+    ht = ht.annotate(
+        idx=hl.if_else(
+            # Reduce index by one if gnomAD fitted score is greater than current variant's score
+            ht.gnomad_scores[ht.idx] > ht.score,
+            ht.idx - 1,
+            ht.idx,
+        )
+    )
+    ht = ht.annotate(
+        n_less=hl.if_else(
+            # Make n_less variant equal to total gnomAD variant count if
+            # index is equal to the length of the gnomAD scores array
+            ht.idx == scores_len,
+            gnomad_var_count,
+            gnomad_ht[ht.idx].n_less,
+        )
+    )
+    # Checkpoint here to force both the binary search and join to compute
+    # TODO: Check if checkpoint after binary search is also necessary
+    ht = ht.checkpoint(f"{temp_path}/mpc_temp.ht", overwrite=True)
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
     ht.write(output_path)
