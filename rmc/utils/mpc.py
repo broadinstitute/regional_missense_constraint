@@ -447,6 +447,9 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> hl.Table:
     )
     # Add index annotation to table and convert from int64
     # (default value returned by `add_index`) to int32
+    # This is necessary for code in `annotate_mpc` downstream
+    # (`annotate_mpc will try to join this index field with an int32 field;
+    # `hl.binary_search` returns an int32 by default)
     gnomad_ht = gnomad_ht.add_index()
     gnomad_ht = gnomad_ht.annotate(idx=hl.int(gnomad_ht.idx))
     gnomad_ht = gnomad_ht.checkpoint(f"{temp_path}/gnomad_group.ht", overwrite=True)
