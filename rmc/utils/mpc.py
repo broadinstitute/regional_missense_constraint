@@ -539,7 +539,8 @@ def annotate_mpc(
     annot_expr = [
         (ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()
     ]
-    # NOTE: This assumes we won't have more than one variable interacting
+    # NOTE: This assumes that variable is in the format of x:y or x*y
+    # and won't handle cases where variable is x:y:z or x*y*z correctly
     interaction_annot_expr = [
         (
             ht[variable.split(interaction_char)[0]]
