@@ -502,7 +502,7 @@ def annotate_mpc(
             * ht[variable.split(interaction_char)[1]]
             * mpc_rel_vars[variable]
         )
-        for variable in interactions_dict
+        for variable in interactions_dict.keys()
     ]
     annot_expr.extend(interaction_annot_expr)
     combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
