@@ -587,7 +587,7 @@ def annotate_mpc(
     )
     ht = ht.annotate(
         n_less=hl.if_else(
-            # Make n_less variant equal to total gnomAD variant count if
+            # Make n_less equal to total gnomAD common variant count if
             # index is equal to the length of the gnomAD scores array
             ht.idx == scores_len,
             gnomad_var_count,
