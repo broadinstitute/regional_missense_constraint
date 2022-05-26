@@ -318,18 +318,21 @@ def run_regressions(
     # E.g., mod.misbad3 <- glm(pop_v_path ~ mis_badness3, data=cleaned_joint_exac_clinvar.scores, family=binomial)
     single_var_res = {}
     single_var_aic = []
+    single_var_X = []
     all_var = variables + additional_variables
     for var in all_var:
         logger.info("Running %s regression...", var)
         # Create design matrices
         formula = f"pop_v_path ~ {var}"
         X, model = _run_glm(formula)
+        single_var_X.append(X)
         single_var_aic.append(model.aic)
         single_var_res[var] = model.params
 
     # Find lowest AIC for single variable regressions and corresponding model
     min_single_aic = min(single_var_aic)
     min_single_aic_var = all_var[single_var_aic.index(min_single_aic)]
+    min_single_X = all_var[single_var_X.index(min_single_aic)]
     logger.info(
         "Model with smallest AIC for single variable regressions used %s",
         min_single_aic_var,
@@ -350,13 +353,14 @@ def run_regressions(
 
     single_var_aic.extend([add_model.aic, mult_model.aic, spec_model.aic])
     min_aic = min(single_var_aic)
-    logger.info("Lowest model AIC: %i", min_aic)
+    logger.info("Lowest model AIC: %f", min_aic)
     if min_aic == min_single_aic:
         logger.info(
             "Single variable regression using %s had the lowest AIC", min_single_aic_var
         )
         logger.info("Coefficients: %s", single_var_res[min_single_aic_var])
         model = single_var_res
+        X = min_single_X
     elif min_aic == add_model.aic:
         logger.info(
             "Joint regression using additive interactions (%s) had the lowest AIC",
