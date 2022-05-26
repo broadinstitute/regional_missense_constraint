@@ -181,12 +181,12 @@ def prepare_pop_path_ht(
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
     clinvar_ht = clinvar_path_mis.ht()
-    clinvar_ht = clinvar_ht.annotate(pop_v_path=1)
+    clinvar_ht = clinvar_ht.annotate(pop_v_path=0)
 
     logger.info("Importing gnomAD public data and filtering to common variants...")
     gnomad_ht = public_release(gnomad_data_type).ht()
     gnomad_ht = gnomad_ht.filter(gnomad_ht.freq[0].AF > af_threshold)
-    gnomad_ht = gnomad_ht.annotate(pop_v_path=0)
+    gnomad_ht = gnomad_ht.annotate(pop_v_path=1)
 
     logger.info("Joining ClinVar and gnomAD HTs...")
     ht = clinvar_ht.select("pop_v_path").union(gnomad_ht.select("pop_v_path"))
@@ -411,8 +411,7 @@ def run_regressions(
 
     logger.info("Converting gnomAD variants dataframe into Table and writing...")
     ht = hl.Table.from_pandas(df)
-    # TODO: Fix pop v path Table (0 was initially assigned to ClinVar variants)
-    ht = ht.filter(ht.pop_v_path == 0)
+    ht = ht.filter(ht.pop_v_path == 1)
     ht.write(gnomad_fitted_score.path, overwrite=True)
 
     logger.info("Saving model as pickle...")
