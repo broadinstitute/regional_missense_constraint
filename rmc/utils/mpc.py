@@ -424,8 +424,9 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> hl.Table:
     Aggregate gnomAD fitted scores to count number of variants with a score less than a given score.
 
     :param float n_less_eq0_float: Set `n_less` annotation to this float if `n_less` is 0.
-        This avoids errors in the `hl.log10` call and ensures that MPC for variants with a fitted score more severe than any common gnomAD variant (`n_less` = 0) is more severe but by a controlled amount compared to MPC for variants with a fitted score more severe than one common gnomAD variant (`n_less` = 1).
-        slightly more severe than variants seen only once in gnomAD.
+        This avoids errors in the `hl.log10` call and ensures that MPC for variants with a fitted score
+        not seen in gnomAD (`n_less` = 0) is more severe (by a controlled amount) compared to MPC
+        for variants seen only once in gnomAD (`n_less` = 1).
     :return: Table of gnomAD scores grouped by score and
         annotated with the total number of variants with that score and
         number of variants less than each score.
