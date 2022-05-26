@@ -22,6 +22,7 @@ from rmc.resources.basics import (
     joint_clinvar_gnomad,
     misbad,
     mpc_model_pkl_path,
+    polyphen,
     temp_path,
 )
 from rmc.resources.grch37.reference_data import cadd, clinvar_path_mis
@@ -217,7 +218,8 @@ def prepare_pop_path_ht(
         transcript=context_ht.transcript_consequences.transcript_id,
     )
     context_ht = annotate_and_filter_codons(context_ht)
-    context_ht = context_ht.checkpoint(f"{temp_path}/polyphen.ht", overwrite=True)
+    # TODO: Move this table out of temp bucket (wrote there before creating resource path)
+    context_ht = context_ht.checkpoint(polyphen.path, overwrite=True)
 
     logger.info(
         "Adding PolyPhen-2, codon, and transcript annotations to joint ClinVar/gnomAD HT..."
@@ -452,7 +454,7 @@ def annotate_mpc(
     if "transcript" not in ht.row:
         # Get transcript annotation from polyphen HT
         # (context HT filtered to contain transcript, ref/alt amino acids, and polyphen annotation)
-        polyphen_ht = hl.read_table(f"{temp_path}/polyphen.ht").select("transcript")
+        polyphen_ht = polyphen.ht().select("transcript")
         ht = ht.annotate(transcript=polyphen_ht[ht.key].transcript)
 
     variables = mpc_rel_vars.keys()
@@ -463,14 +465,14 @@ def annotate_mpc(
     if "misbad" in variables:
         logger.info("Getting missense badness annotation...")
         if "ref" not in ht.row:
-            polyphen_ht = hl.read_table(f"{temp_path}/polyphen.ht").select("ref", "alt")
+            polyphen_ht = polyphen.ht().select("ref", "alt")
             ht = ht.annotate(ref=polyphen_ht[ht.key].ref, alt=polyphen_ht[ht.key].alt)
         mb_ht = misbad.ht()
         ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
 
     if "polyphen" in variables:
         logger.info("Annotating HT with Polyphen...")
-        polyphen_ht = hl.read_table(f"{temp_path}/polyphen.ht").select("polyphen")
+        polyphen_ht = polyphen.ht().select("polyphen")
         ht = ht.annotate(polyphen=polyphen_ht[ht.key].polyphen.score)
 
     logger.info("Aggregating gnomAD fitted scores...")

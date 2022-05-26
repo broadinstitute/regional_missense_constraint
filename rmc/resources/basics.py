@@ -270,6 +270,19 @@ misbad = VersionedTableResource(
 Table containing all possible amino acid substitutions and their missense badness scores.
 """
 
+polyphen = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{MPC_PREFIX}/{version}/polyphen.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table containing Polyphen-2 (score and prediction), transcript, codons, and most severe consequence annotations.
+
+Table contains variants in canonical transcripts only.
+"""
+
 joint_clinvar_gnomad = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
