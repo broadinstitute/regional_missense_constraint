@@ -437,6 +437,7 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> hl.Table:
     gnomad_ht = gnomad_ht.order_by("fitted_score")
     gnomad_ht = gnomad_ht.key_by("fitted_score")
     gnomad_ht = gnomad_ht.annotate(n_less=hl.scan.sum(gnomad_ht.n_var))
+    # Make n_less a non-zero value if it is zero
     gnomad_ht = gnomad_ht.annotate(
         n_less=hl.if_else(
             gnomad_ht.n_less == 0,
