@@ -438,6 +438,12 @@ def annotate_mpc(
     :return: None; function writes Table to specified output path.
     """
     assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
+    assert (
+        len(ht.key) == 2 and "locus" in ht.key and "alleles" in ht.key
+    ), "HT key must be keyed by 'locus' and 'alleles'!"
+    assert ht.key.locus.dtype == hl.tlocus() and ht.key.alleles.dtype == hl.tarray(
+        hl.tstr
+    ), "'locus' must be a LocusExpression, and 'alleles' must be an array of strings!"
 
     logger.info("Extracting MPC model relationships from pickle...")
     with hl.hadoop_open(mpc_model_pkl_path, "rb") as p:
@@ -516,7 +522,7 @@ def annotate_mpc(
     annot_expr.extend(interaction_annot_expr)
     combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
 
-    ht = ht.annotate(fitted_score=coefficient + combined_annot_expr)
+    ht = ht.annotate(fitted_score=intercept + combined_annot_expr)
     ht = ht.annotate(n_less=gnomad_ht[ht.fitted_score].n_less)
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
     ht.write(output_path)
