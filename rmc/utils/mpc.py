@@ -245,7 +245,7 @@ def prepare_pop_path_ht(
         grantham=grantham_ht[ht.ref, ht.alt].score,
     )
 
-    logger.info("Filtering to rows with defined annotations and checkpointing...")
+    logger.info("Filtering to rows with defined annotations and writing out...")
     ht = ht.filter(
         hl.is_defined(ht.cadd.phred)
         & hl.is_defined(ht.blosum)
