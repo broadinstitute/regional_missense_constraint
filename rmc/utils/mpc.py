@@ -586,7 +586,7 @@ def annotate_mpc(
     # Annotate HT with sorted array of gnomAD fitted scores
     ht = ht.annotate(gnomad_scores=scores)
 
-    # Get total number of gnomAD variants
+    # Get total number of gnomAD common variants
     gnomad_var_count = gnomad_fitted_score.ht().count()
     # Search all gnomAD scores to find first score that is
     # less than or equal to score to be annotated
