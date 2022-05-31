@@ -513,30 +513,31 @@ def annotate_mpc(
     aa_ht = polyphen.ht().select("transcript", "ref", "alt")
     ht = ht.annotate(**aa_ht[ht.key])
     # Start filter expression to filter HT to defined annotations
-    filter_expr = (
-        hl.is_defined(ht.transcript) & hl.is_defined(ht.ref) & hl.is_defined(ht.alt)
-    )
+    annotations = ["transcript", "ref", "alt"]
 
     logger.info("Annotating HT with MPC variables...")
     variables = mpc_rel_vars.keys()
     if "oe" in variables:
         logger.info("Getting regional missense constraint missense o/e annotation...")
         ht = get_oe_annotation(ht)
-        filter_expr &= hl.is_defined(ht.oe)
+        annotations.append("oe")
 
     if "misbad" in variables:
         logger.info("Getting missense badness annotation...")
         mb_ht = misbad.ht()
         ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
-        filter_expr &= hl.is_defined(ht.misbad)
+        annotations.append("misbad")
 
     if "polyphen" in variables:
         logger.info("Annotating HT with Polyphen...")
         polyphen_ht = polyphen.ht().select("polyphen")
         ht = ht.annotate(polyphen=polyphen_ht[ht.key].polyphen.score)
-        filter_expr &= hl.is_defined(ht.polyphen)
+        annotations.append("polyphen")
 
     logger.info("Filtering to defined annotations...")
+    filter_expr = True
+    for field in annotations:
+        filter_expr &= hl.is_defined(ht[field])
     ht = ht.filter(filter_expr)
 
     logger.info("Annotating fitted scores...")
