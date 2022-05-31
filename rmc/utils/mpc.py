@@ -459,6 +459,7 @@ def annotate_mpc(
     output_path: str,
     interaction_char: str = ":",
     intercept_str: str = "Intercept",
+    overwrite: bool = True,
 ) -> None:
     """
     Annotate Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
@@ -479,6 +480,8 @@ def annotate_mpc(
     :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
         Default is ":".
     :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
+    :param bool overwrite: Whether to overwrite specified output path if it already exists.
+        Default is True.
     :return: None; function writes Table to specified output path.
     """
     assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
@@ -612,4 +615,4 @@ def annotate_mpc(
     # TODO: Check if checkpoint after binary search is also necessary
     ht = ht.checkpoint(f"{temp_path}/mpc_temp.ht", overwrite=True)
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
-    ht.write(output_path)
+    ht.write(output_path, overwrite=overwrite)

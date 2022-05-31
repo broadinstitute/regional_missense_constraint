@@ -47,6 +47,7 @@ def main(args):
                 annotate_mpc(
                     ht=clinvar_path_mis.ht(),
                     output_path=f"{MPC_PREFIX}/{CURRENT_VERSION}/clinvar_mpc_annot.ht",
+                    overwrite=args.overwrite,
                 )
 
             if args.dd:
@@ -57,16 +58,20 @@ def main(args):
                 annotate_mpc(
                     ht=case_ht,
                     output_path=f"{MPC_PREFIX}/{CURRENT_VERSION}/dd_case_mpc_annot.ht",
+                    overwrite=args.overwrite,
                 )
                 control_ht = dd_ht.filter(dd_ht.case_control == "control")
                 annotate_mpc(
                     ht=control_ht,
                     output_path=f"{MPC_PREFIX}/{CURRENT_VERSION}/dd_control_mpc_annot.ht",
+                    overwrite=args.overwrite,
                 )
 
             if args.specify_ht:
                 annotate_mpc(
-                    ht=hl.read_table(args.ht_in_path), output_path=args.ht_out_path
+                    ht=hl.read_table(args.ht_in_path),
+                    output_path=args.ht_out_path,
+                    overwrite=args.overwrite,
                 )
 
     finally:
