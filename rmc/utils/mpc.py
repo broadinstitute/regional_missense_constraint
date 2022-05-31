@@ -591,6 +591,8 @@ def annotate_mpc(
     logger.info("Getting n_less annotation...")
     # Annotate HT with sorted array of gnomAD fitted scores
     ht = ht.annotate(gnomad_scores=scores)
+    # Checkpoint here to force the joins to complete
+    ht = ht.checkpoint(f"{temp_path}/scores_join.ht", overwrite=True)
 
     # Search all gnomAD scores to find first score that is
     # greater than or equal to score to be annotated
@@ -611,8 +613,7 @@ def annotate_mpc(
             gnomad_ht[ht.idx].n_less,
         )
     )
-    # Checkpoint here to force both the binary search and join to compute
-    # TODO: Check if checkpoint after binary search is also necessary
+    # Checkpoint here to force the binary search to compute
     ht = ht.checkpoint(f"{temp_path}/mpc_temp.ht", overwrite=True)
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
     ht.write(output_path, overwrite=overwrite)
