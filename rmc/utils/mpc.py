@@ -219,7 +219,6 @@ def prepare_pop_path_ht(
         transcript=context_ht.transcript_consequences.transcript_id,
     )
     context_ht = annotate_and_filter_codons(context_ht)
-    # TODO: Move this table out of temp bucket (wrote there before creating resource path)
     context_ht = context_ht.checkpoint(polyphen.path, overwrite=True)
 
     logger.info(
