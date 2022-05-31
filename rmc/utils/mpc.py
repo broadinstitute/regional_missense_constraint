@@ -1,19 +1,29 @@
 import logging
+import pandas as pd
+from patsy import dmatrices
+import pickle
+import statsmodels
+import statsmodels.api as sm
 from typing import Dict, List, Tuple, Union
 
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import public_release
 from gnomad.resources.grch37.reference_data import vep_context
+from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import (
     blosum,
     blosum_txt_path,
+    gnomad_fitted_score,
+    gnomad_fitted_score_group,
     grantham,
     grantham_txt_path,
     joint_clinvar_gnomad,
     misbad,
+    mpc_model_pkl_path,
+    polyphen,
     temp_path,
 )
 from rmc.resources.grch37.reference_data import cadd, clinvar_path_mis
@@ -209,7 +219,8 @@ def prepare_pop_path_ht(
         transcript=context_ht.transcript_consequences.transcript_id,
     )
     context_ht = annotate_and_filter_codons(context_ht)
-    context_ht = context_ht.checkpoint(f"{temp_path}/polyphen.ht", overwrite=True)
+    # TODO: Move this table out of temp bucket (wrote there before creating resource path)
+    context_ht = context_ht.checkpoint(polyphen.path, overwrite=True)
 
     logger.info(
         "Adding PolyPhen-2, codon, and transcript annotations to joint ClinVar/gnomAD HT..."
@@ -235,7 +246,7 @@ def prepare_pop_path_ht(
         grantham=grantham_ht[ht.ref, ht.alt].score,
     )
 
-    logger.info("Filtering to rows with defined annotations and checkpointing...")
+    logger.info("Filtering to rows with defined annotations and writing out...")
     ht = ht.filter(
         hl.is_defined(ht.cadd.phred)
         & hl.is_defined(ht.blosum)
@@ -248,7 +259,6 @@ def prepare_pop_path_ht(
 
 
 def run_regressions(
-    output_fname: str,
     variables: List[str] = ["oe", "misbad", "polyphen"],
     additional_variables: List[str] = ["blosum", "grantham"],
 ) -> None:
@@ -264,28 +274,29 @@ def run_regressions(
 
     Relationship between fitted score and MPC (from ExAC):
         mpc(v) = -log10(n_less(v))/82932)
-        n_less(v) = number of ExAC variants with fitted_score < fitted_score(v)
+        n_less(v) = number of common (AF > 0.01) ExAC variants with fitted_score < fitted_score(v)
 
-    :param str output_fname: Name of output file (where model coefficients are written).
-        Must be a local file name.
+    Note that higher MPC scores predict increased missense deleteriousness, and
+    smaller n_less values and fitted scores will lead to higher MPC scores.
+
     :param List[str] variables: Variables to include in all regressions (single, joint).
         Default is ["oe", "misbad", "polyphen"].
     :param List[str] additional_variables: Additional variables to include in single variable regressions only.
         Default is ["blosum", "grantham"].
-    :return: None; function writes model coefficients to local file.
+    :return: None; function writes Table with gnomAD fitted scores
+        and model coefficients as pickle to resource paths.
     """
-    import pandas as pd
-    from patsy import dmatrices
-    import statsmodels
-    import statsmodels.api as sm
-
     # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
     ht = joint_clinvar_gnomad.ht()
+    ht = ht.transmute(polyphen=ht.polyphen.score)
     df = ht.to_pandas()
 
     def _run_glm(
         formula: str,
-    ) -> statsmodels.genmod.generalized_linear_model.GLMResultsWrapper:
+    ) -> Tuple[
+        pd.core.frame.DataFrame,
+        statsmodels.genmod.generalized_linear_model.GLMResultsWrapper,
+    ]:
         """
         Run logistic regression using input formula and return model results.
 
@@ -307,69 +318,298 @@ def run_regressions(
         model = sm.GLM(y, X, family=sm.families.Binomial()).fit()
         logger.info("%s summary: %s", formula, model.summary())
         logger.info("AIC: %i", model.aic)
-        return model
+        return (X, model)
 
     logger.info("Run single variable regressions...")
     # E.g., mod.misbad3 <- glm(pop_v_path ~ mis_badness3, data=cleaned_joint_exac_clinvar.scores, family=binomial)
     single_var_res = {}
     single_var_aic = []
+    single_var_X = []
     all_var = variables + additional_variables
     for var in all_var:
         logger.info("Running %s regression...", var)
         # Create design matrices
         formula = f"pop_v_path ~ {var}"
-        model = _run_glm(formula)
+        X, model = _run_glm(formula)
+        single_var_X.append(X)
         single_var_aic.append(model.aic)
         single_var_res[var] = model.params
 
     # Find lowest AIC for single variable regressions and corresponding model
     min_single_aic = min(single_var_aic)
     min_single_aic_var = all_var[single_var_aic.index(min_single_aic)]
+    min_single_X = all_var[single_var_X.index(min_single_aic)]
+    if single_var_aic.count(min_single_aic) > 1:
+        logger.warning(
+            """
+            There is a tie for minimum AIC.
+            This function will use the first variable it finds by default!
+            """
+        )
     logger.info(
-        "Model with smallest AIC for single variable regressions used %i",
+        "Model with smallest AIC for single variable regressions used %s",
         min_single_aic_var,
     )
 
     logger.info("Running joint (additive interactions only) regression...")
     add_formula = f"pop_v_path ~ {' + '.join(variables)}"
-    add_model = _run_glm(add_formula)
+    add_X, add_model = _run_glm(add_formula)
 
     logger.info("Running joint regression with all interactions...")
     mult_formula = f"pop_v_path ~ {' * '.join(variables)}"
-    mult_model = _run_glm(mult_formula)
+    mult_X, mult_model = _run_glm(mult_formula)
 
     logger.info("Running joint regression with specific interactions...")
     # Currently hardcoded to be formula from ExAC
     spec_formula = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
-    spec_model = _run_glm(spec_formula)
+    spec_X, spec_model = _run_glm(spec_formula)
 
-    single_var_aic.extend([add_model.aic, mult_model.aic, spec_model.aic])
-    min_aic = min(single_var_aic)
-    logger.info("Lowest model AIC: %i", min_aic)
+    all_model_aic = single_var_aic + [add_model.aic, mult_model.aic, spec_model.aic]
+    min_aic = min(all_model_aic)
+    logger.info("Lowest model AIC: %f", min_aic)
+    if all_model_aic.count(min_aic) > 1:
+        logger.warning(
+            """
+            There is a tie for minimum AIC.
+            This function will use the first model it finds by default
+            (single variable -> additive interactions -> all interactions -> specific interactions)!
+            """
+        )
     if min_aic == min_single_aic:
         logger.info(
             "Single variable regression using %s had the lowest AIC", min_single_aic_var
         )
         logger.info("Coefficients: %s", single_var_res[min_single_aic_var])
-        single_var_res[min_single_aic_var].to_csv(output_fname)
+        model = single_var_res
+        X = min_single_X
     elif min_aic == add_model.aic:
         logger.info(
             "Joint regression using additive interactions (%s) had the lowest AIC",
             add_formula,
         )
         logger.info("Coefficients: %s", add_model.params)
-        add_model.params.to_csv(output_fname)
+        model = add_model
+        X = add_X
     elif min_aic == mult_model.aic:
         logger.info(
             "Joint regression using all interactions (%s) had the lowest AIC",
             mult_formula,
         )
         logger.info("Coefficients: %s", mult_model.params)
-        mult_model.params.to_csv(output_fname)
+        model = mult_model
+        X = mult_X
     else:
         logger.info(
             "Joint regression using specific interactions (%s) had the lowest AIC",
             spec_formula,
         )
         logger.info("Coefficients: %s", spec_model.params)
-        spec_model.params.to_csv(output_fname)
+        model = spec_model
+        X = spec_X
+
+    logger.info("Annotating gnomAD variants with fitted score...")
+    df["fitted_score"] = model.predict(X)
+
+    logger.info("Converting gnomAD variants dataframe into Table and writing...")
+    ht = hl.Table.from_pandas(df)
+    ht = ht.filter(ht.pop_v_path == 1)
+    ht.write(gnomad_fitted_score.path, overwrite=True)
+
+    logger.info("Saving model as pickle...")
+    with hl.hadoop_open(mpc_model_pkl_path, "wb") as p:
+        pickle.dump(model, p, protocol=pickle.HIGHEST_PROTOCOL)
+
+
+def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
+    """
+    Aggregate gnomAD fitted scores to count number of variants with a score less than a given score.
+
+    :param float n_less_eq0_float: Set `n_less` annotation to this float if `n_less` is 0.
+        This avoids errors in the `hl.log10` call and ensures that MPC for variants with a fitted score
+        more severe than any common gnomAD variant score (`n_less` = 0) is more severe (by a controlled amount)
+        compared to MPC for variants with a fitted score more severe than one common gnomAD variant (`n_less` = 1).
+    :return: None; function writes Table to resource path.
+    """
+    logger.info("Aggregating gnomAD fitted scores...")
+    gnomad_ht = gnomad_fitted_score.ht()
+    gnomad_ht = gnomad_ht.group_by("fitted_score").aggregate(n_var=hl.agg.count())
+    gnomad_ht = gnomad_ht.order_by("fitted_score")
+    gnomad_ht = gnomad_ht.key_by("fitted_score")
+    gnomad_ht = gnomad_ht.annotate(n_less=hl.scan.sum(gnomad_ht.n_var))
+    # Make n_less a non-zero value if it is zero
+    gnomad_ht = gnomad_ht.annotate(
+        n_less=hl.if_else(
+            gnomad_ht.n_less == 0,
+            n_less_eq0_float,
+            gnomad_ht.n_less,
+        )
+    )
+    # Add index annotation to table and convert from int64
+    # (default value returned by `add_index`) to int32
+    # This is necessary for code in `annotate_mpc` downstream
+    # (`annotate_mpc will try to join this index field with an int32 field;
+    # `hl.binary_search` returns an int32 by default)
+    gnomad_ht = gnomad_ht.add_index()
+    gnomad_ht = gnomad_ht.annotate(idx=hl.int(gnomad_ht.idx))
+    gnomad_ht = gnomad_ht.key_by("idx")
+    gnomad_ht.write(gnomad_fitted_score_group.path, overwrite=True)
+
+
+def annotate_mpc(
+    ht: hl.Table,
+    output_path: str,
+    interaction_char: str = ":",
+    intercept_str: str = "Intercept",
+) -> None:
+    """
+    Annotate Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
+
+    Relationship in `mpc_rel_vars` is the formula used to calculate a variant's fitted score.
+    A variant of interest's fitted score is combined with the number of common (AF > 0.01)
+    variants in gnomAD with fitted scores < the fitted score for the variant of interest
+    to determine a variant's MPC score.
+
+    For more information on the fitted score and MPC calculation, see the docstring of `run_regressions`.
+
+    .. note::
+        - Assume input Table is keyed by locus and alleles.
+        - Function will re-add transcript and reference/alternate allele annotations even if present.
+
+    :param hl.Table ht: Input Table to be annotated.
+    :param str output_path: Where to write Table after adding MPC annotations.
+    :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
+        Default is ":".
+    :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
+    :return: None; function writes Table to specified output path.
+    """
+    assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
+    assert (
+        len(ht.key) == 2 and "locus" in ht.key and "alleles" in ht.key
+    ), "HT key must be keyed by 'locus' and 'alleles'!"
+    # NOTE: hl.tlocus() will use the reference genome build from the hail initialization
+    # if the user doesn't specify a reference build
+    # This means that for v2, where hail is initialized with GRCh37, this will check for
+    # a build 37 locus
+    assert ht.key.locus.dtype == hl.tlocus() and ht.key.alleles.dtype == hl.tarray(
+        hl.tstr
+    ), "'locus' must be a LocusExpression, and 'alleles' must be an array of strings!"
+
+    logger.info("Extracting MPC model relationships from pickle...")
+    with hl.hadoop_open(mpc_model_pkl_path, "rb") as p:
+        model = pickle.load(p)
+    mpc_rel_vars = model.params.to_dict()
+    try:
+        intercept = mpc_rel_vars.pop(intercept_str)
+    except KeyError:
+        raise DataException(
+            f"{intercept_str} not in model parameters! Please double check and rerun."
+        )
+
+    logger.info("Adding transcript and codons annotations...")
+    # Get transcript and codons annotation from polyphen HT
+    # (context HT filtered to contain transcript, ref/alt amino acids, and polyphen annotation)
+    # polyphen HT has the same transcript version as the constraint tables
+    # For v2, transcript annotation contains only canonical transcripts from GENCODE v19
+    # polyphen HT also has same codon annotation format as missense badness HT
+    aa_ht = polyphen.ht().select("transcript", "ref", "alt")
+    ht = ht.annotate(**aa_ht[ht.key])
+    # Start filter expression to filter HT to defined annotations
+    filter_expr = (
+        hl.is_defined(ht.transcript) & hl.is_defined(ht.ref) & hl.is_defined(ht.alt)
+    )
+
+    logger.info("Annotating HT with MPC variables...")
+    variables = mpc_rel_vars.keys()
+    if "oe" in variables:
+        logger.info("Getting regional missense constraint missense o/e annotation...")
+        ht = get_oe_annotation(ht)
+        filter_expr &= hl.is_defined(ht.oe)
+
+    if "misbad" in variables:
+        logger.info("Getting missense badness annotation...")
+        mb_ht = misbad.ht()
+        ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
+        filter_expr &= hl.is_defined(ht.misbad)
+
+    if "polyphen" in variables:
+        logger.info("Annotating HT with Polyphen...")
+        polyphen_ht = polyphen.ht().select("polyphen")
+        ht = ht.annotate(polyphen=polyphen_ht[ht.key].polyphen.score)
+        filter_expr &= hl.is_defined(ht.polyphen)
+
+    logger.info("Filtering to defined annotations...")
+    ht = ht.filter(filter_expr)
+
+    logger.info("Annotating fitted scores...")
+    variable_dict = {
+        variable: mpc_rel_vars[variable]
+        for variable in variables
+        if not interaction_char in variable
+    }
+    interactions_dict = {
+        variable: mpc_rel_vars[variable]
+        for variable in variables
+        if interaction_char in variable
+    }
+    for variable in interactions_dict.keys():
+        if len(variable.split(interaction_char) > 2):
+            raise DataException(
+                "Code currently doesn't handle interactions between more than two variables!"
+            )
+    annot_expr = [
+        (ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()
+    ]
+    # NOTE: This assumes that variable is in the format of x:y or x*y
+    # and won't handle cases where variable is x:y:z or x*y*z correctly
+    interaction_annot_expr = [
+        (
+            ht[variable.split(interaction_char)[0]]
+            * ht[variable.split(interaction_char)[1]]
+            * mpc_rel_vars[variable]
+        )
+        for variable in interactions_dict.keys()
+    ]
+    annot_expr.extend(interaction_annot_expr)
+    combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
+
+    logger.info("Computing fitted score...")
+    ht = ht.annotate(fitted_score=intercept + combined_annot_expr)
+
+    logger.info("Aggregating gnomAD fitted scores...")
+    if not file_exists(gnomad_fitted_score_group.path):
+        aggregate_gnomad_fitted_scores()
+    gnomad_ht = gnomad_fitted_score_group.ht()
+    scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
+    scores_len = len(scores)
+
+    # Get total number of gnomAD common variants
+    gnomad_var_count = gnomad_fitted_score.ht().count()
+
+    logger.info("Getting n_less annotation...")
+    # Annotate HT with sorted array of gnomAD fitted scores
+    ht = ht.annotate(gnomad_scores=scores)
+
+    # Search all gnomAD scores to find first score that is
+    # greater than or equal to score to be annotated
+    # `binary_search` will return the index of the first gnomAD fitted score that
+    # is >= the score of interest
+    # e.g., if the score of interest is 0.45, and gnomAD fitted scores are
+    # [0.3, 0.4, 0.5], then `binary_search` will return an index of 2
+    # the `n_less` of 0.5 will contain the counts of variants with gnomAD scores of
+    # 0.3 and 0.4 due to the non-inclusive nature of scans
+    # (n_less[0.5] = n_var[0.3] + n_var[0.4])
+    ht = ht.annotate(idx=hl.binary_search(ht.gnomad_scores, ht.fitted_score))
+    ht = ht.annotate(
+        n_less=hl.if_else(
+            # Make n_less equal to total gnomAD common variant count if
+            # index is equal to the length of the gnomAD scores array
+            ht.idx == scores_len,
+            gnomad_var_count,
+            gnomad_ht[ht.idx].n_less,
+        )
+    )
+    # Checkpoint here to force both the binary search and join to compute
+    # TODO: Check if checkpoint after binary search is also necessary
+    ht = ht.checkpoint(f"{temp_path}/mpc_temp.ht", overwrite=True)
+    ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
+    ht.write(output_path)

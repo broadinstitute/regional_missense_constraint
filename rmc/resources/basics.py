@@ -270,6 +270,19 @@ misbad = VersionedTableResource(
 Table containing all possible amino acid substitutions and their missense badness scores.
 """
 
+polyphen = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{MPC_PREFIX}/{version}/polyphen.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table containing Polyphen-2 (score and prediction), transcript, codons, most severe consequence, and reference and alternate amino acid annotations.
+
+Table contains variants in canonical transcripts only.
+"""
+
 joint_clinvar_gnomad = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
@@ -286,6 +299,41 @@ that cause severe disease ("pathogenic") with defined CADD, BLOSUM, Grantham, mi
 missense badness, and PolyPhen-2 scores.
 
 Input to MPC (missense badness, polyphen-2, and constraint) calculations.
+"""
+
+mpc_model_pkl_path = f"{MPC_PREFIX}/{CURRENT_VERSION}/mpc_model.pkl"
+"""
+Path to model (stored as pickle) that contains relationship of MPC variables.
+
+Created using logistic regression.
+"""
+
+gnomad_fitted_score = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{MPC_PREFIX}/{version}/gnomad_fitted_scores.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table of gnomAD variants and their fitted scores (from MPC model regression).
+
+Input to MPC (missense badness, polyphen-2, and constraint) calculations on other datasets.
+"""
+
+gnomad_fitted_score_group = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(
+            path=f"{MPC_PREFIX}/{version}/gnomad_fitted_scores_group.ht"
+        )
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table of fitted scores for common (AF > 0.01) variants in gnomAD, grouped by score.
+
+Annotated with the total number of variants with and less than each score.
 """
 
 oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/oe_bin.tsv"
