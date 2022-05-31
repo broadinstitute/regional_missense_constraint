@@ -512,7 +512,7 @@ def annotate_mpc(
     # For v2, transcript annotation contains only canonical transcripts from GENCODE v19
     # polyphen HT also has same codon annotation format as missense badness HT
     aa_ht = polyphen.ht().select("transcript", "ref", "alt")
-    ht = ht.annotate(**polyphen_ht[ht.key])
+    ht = ht.annotate(**aa_ht[ht.key])
     # Start filter expression to filter HT to defined annotations
     filter_expr = (
         hl.is_defined(ht.transcript) & hl.is_defined(ht.ref) & hl.is_defined(ht.alt)
