@@ -621,7 +621,11 @@ def import_de_novo_variants(build: str, overwrite: bool) -> None:
         raise DataException("De novo TSV does not exist for GRCh38!")
 
     dn_ht = hl.import_table(tsv_path, impute=True)
-    dn_ht = dn_ht.transmute(locus=hl.locus(dn_ht.chrom, dn_ht.pos))
-    dn_ht = dn_ht.key_by("locus")
-    dn_ht = dn_ht.select("case_control")
+    dn_ht = dn_ht.transmute(
+        locus=hl.locus(dn_ht.chrom, dn_ht.pos),
+        alleles=[dn_ht.ref, dn_ht.alt],
+    )
+    # Key by locus and alleles for easy MPC annotation
+    # (MPC annotation requires input Table to be keyed by locus and alleles)
+    dn_ht = dn_ht.key_by("locus", "alleles")
     dn_ht.write(ht_path, overwrite=overwrite)
