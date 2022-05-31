@@ -540,13 +540,6 @@ def annotate_mpc(
     logger.info("Filtering to defined annotations...")
     ht = ht.filter(filter_expr)
 
-    logger.info("Aggregating gnomAD fitted scores...")
-    if not file_exists(gnomad_fitted_score_group.path):
-        aggregate_gnomad_fitted_scores()
-    gnomad_ht = gnomad_fitted_score_group.ht()
-    scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
-    scores_len = len(scores)
-
     logger.info("Annotating fitted scores...")
     variable_dict = {
         variable: mpc_rel_vars[variable]
@@ -582,12 +575,20 @@ def annotate_mpc(
     logger.info("Computing fitted score...")
     ht = ht.annotate(fitted_score=intercept + combined_annot_expr)
 
+    # Get total number of gnomAD variants
+    gnomad_var_count = gnomad_fitted_score.ht().count()
+
+    logger.info("Aggregating gnomAD fitted scores...")
+    if not file_exists(gnomad_fitted_score_group.path):
+        aggregate_gnomad_fitted_scores()
+    gnomad_ht = gnomad_fitted_score_group.ht()
+    scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
+    scores_len = len(scores)
+
     logger.info("Getting n_less annotation...")
     # Annotate HT with sorted array of gnomAD fitted scores
     ht = ht.annotate(gnomad_scores=scores)
 
-    # Get total number of gnomAD variants
-    gnomad_var_count = gnomad_fitted_score.ht().count()
     # Search all gnomAD scores to find first score that is
     # less than or equal to score to be annotated
     # `binary_search` will return the index of the first gnomAD fitted score that
