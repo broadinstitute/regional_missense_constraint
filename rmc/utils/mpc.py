@@ -589,7 +589,7 @@ def annotate_mpc(
     # Get total number of gnomAD common variants
     gnomad_var_count = gnomad_fitted_score.ht().count()
     # Search all gnomAD scores to find first score that is
-    # less than or equal to score to be annotated
+    # greater than or equal to score to be annotated
     # `binary_search` will return the index of the first gnomAD fitted score that
     # is >= the score of interest
     # e.g., if the score of interest is 0.45, and gnomAD fitted scores are
