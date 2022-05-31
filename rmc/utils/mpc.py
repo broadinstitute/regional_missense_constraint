@@ -426,8 +426,8 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
 
     :param float n_less_eq0_float: Set `n_less` annotation to this float if `n_less` is 0.
         This avoids errors in the `hl.log10` call and ensures that MPC for variants with a fitted score
-        not seen in gnomAD (`n_less` = 0) is more severe (by a controlled amount) compared to MPC
-        for variants seen only once in gnomAD (`n_less` = 1).
+        more severe than any common gnomAD variant score (`n_less` = 0) is more severe (by a controlled amount)
+        compared to MPC for variants with a fitted score more severe than one common gnomAD variant (`n_less` = 1).
     :return: None; function writes Table to resource path.
     """
     logger.info("Aggregating gnomAD fitted scores...")
