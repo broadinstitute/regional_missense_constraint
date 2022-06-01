@@ -14,7 +14,12 @@ from gnomad.utils.slack import slack_notifications
 from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX
 from rmc.resources.resource_utils import CURRENT_VERSION
 from rmc.slack_creds import slack_token
-from rmc.utils.mpc import annotate_mpc, prepare_pop_path_ht, run_regressions
+from rmc.utils.mpc import (
+    annotate_mpc,
+    create_mpc_release_ht,
+    prepare_pop_path_ht,
+    run_regressions,
+)
 
 
 logging.basicConfig(
@@ -40,7 +45,14 @@ def main(args):
             )
 
         if args.command == "calculate-mpc":
-            hl.init(log="/calculate_mpc.log")
+            hl.init(log="/calculate_mpc_release.log")
+            create_mpc_release_ht(
+                n_partitions=args.n_partitions,
+                overwrite=args.overwrite,
+            )
+
+        if args.command == "annotate_hts":
+            hl.init(log="/annotate_hts.log")
             if args.clinvar:
                 from rmc.resources.grch37.reference_data import clinvar_path_mis
 
@@ -131,27 +143,37 @@ if __name__ == "__main__":
     calculate_score = subparsers.add_parser(
         "calculate-mpc",
         help="""
-        Calculate MPC for specified dataset.
+        Calculate MPC release Table (VEP context Table filtered to missense variants in canonical, non-outlier transcripts).
         """,
     )
     calculate_score.add_argument(
+        "--n-partitions",
+        help="Desired number of partitions for VEP context HT.",
+        default=30000,
+        type=int,
+    )
+
+    annotate_hts = subparsers.add_parser(
+        "annotate-hts", help="Annotate specified dataset with MPC."
+    )
+    annotate_hts.add_argument(
         "--clinvar", help="Calculate MPC for ClinVar variants", action="store_true"
     )
-    calculate_score.add_argument(
+    annotate_hts.add_argument(
         "--dd",
         help="Calculate MPC for de novo variants from developmental disorder (DD) cases and controls",
         action="store_true",
     )
-    calculate_score.add_argument(
+    annotate_hts.add_argument(
         "--specify-ht",
         help="Calculate MPC for variants in specified hail Table",
         action="store_true",
     )
-    calculate_score.add_argument(
+    annotate_hts.add_argument(
         "--ht-in-path",
         help="Path to input hail Table for MPC calculations. Required if --specify-ht is set.",
     )
-    calculate_score.add_argument(
+    annotate_hts.add_argument(
         "--ht-out-path",
         help="Output path for hail Table after adding MPC annotation. Required if --specify-ht is set.",
     )
