@@ -16,6 +16,7 @@ from gnomad.utils.file_utils import file_exists
 from rmc.resources.basics import (
     blosum,
     blosum_txt_path,
+    context_with_oe,
     gnomad_fitted_score,
     gnomad_fitted_score_group,
     grantham,
@@ -23,11 +24,13 @@ from rmc.resources.basics import (
     joint_clinvar_gnomad,
     misbad,
     mpc_model_pkl_path,
+    mpc_release,
     polyphen,
     temp_path,
 )
 from rmc.resources.grch37.reference_data import cadd, clinvar_path_mis
-from rmc.utils.generic import get_aa_map, process_vep
+from rmc.resources.resource_utils import MISSENSE
+from rmc.utils.generic import get_aa_map, get_constraint_transcripts, process_vep
 from rmc.utils.missense_badness import annotate_and_filter_codons, get_oe_annotation
 
 
@@ -162,6 +165,41 @@ def import_grantham():
     ht.write(grantham.path)
 
 
+def get_annotations_from_context_ht_vep(
+    ht: hl.Table, annotations: List[str] = ["polyphen", "sift"]
+) -> hl.Table:
+    """
+    Get desired annotations from context Table's VEP annotation and annotate/filter to informative amino acids.
+
+    Function will get 'codons', 'most_severe_consequence', and 'transcript' annotations by default.
+    Additional annotations should be specified using `annotations`.
+
+    :param hl.Table ht: Input VEP context Table.
+    :param List[str] annotations: Additional annotations to extract from context HT's VEP field.
+    :return: VEP context Table with non-coding loci removed/filtered to informative amino acids
+        and filtered to keep only specified annotations.
+    """
+    annot_expr = {
+        "codons": ht.transcript_consequences.codons,
+        "most_severe_consequence": ht.transcript_consequences.most_severe_consequence,
+        "transcript": ht.transcript_consequences.transcript_id,
+    }
+    if "polyphen" in annotations:
+        annot_expr["polyphen"] = hl.struct(
+            prediction=ht.transcript_consequences.polyphen_prediction,
+            score=ht.transcript_consequences.polyphen_score,
+        )
+    if "sift" in annotations:
+        annot_expr["sift"] = hl.struct(
+            prediction=ht.transcript_consequences.sift_prediction,
+            score=ht.transcript_consequences.sift_score,
+        )
+    ht = ht.annotate(**annot_expr)
+    annotations.extend(["codons", "most_severe_consequence", "transcript"])
+    ht = ht.select(*annotations)
+    return annotate_and_filter_codons(ht)
+
+
 def prepare_pop_path_ht(
     gnomad_data_type: str = "exomes", af_threshold: float = 0.01
 ) -> None:
@@ -206,19 +244,7 @@ def prepare_pop_path_ht(
     context_ht = vep_context.ht().select_globals().select("vep", "was_split")
     context_ht = context_ht.filter(hl.is_defined(ht[context_ht.key]))
     context_ht = process_vep(context_ht)
-    context_ht = context_ht.annotate(
-        polyphen=hl.struct(
-            prediction=context_ht.transcript_consequences.polyphen_prediction,
-            score=context_ht.transcript_consequences.polyphen_score,
-        )
-    )
-    context_ht = context_ht.select(
-        "polyphen",
-        codons=context_ht.transcript_consequences.codons,
-        most_severe_consequence=context_ht.transcript_consequences.most_severe_consequence,
-        transcript=context_ht.transcript_consequences.transcript_id,
-    )
-    context_ht = annotate_and_filter_codons(context_ht)
+    context_ht = get_annotations_from_context_ht_vep(context_ht)
     context_ht = context_ht.checkpoint(polyphen.path, overwrite=True)
 
     logger.info(
@@ -454,15 +480,16 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
     gnomad_ht.write(gnomad_fitted_score_group.path, overwrite=True)
 
 
-def annotate_mpc(
-    ht: hl.Table,
-    output_path: str,
+def create_mpc_release_ht(
+    missense_str: str = MISSENSE,
     interaction_char: str = ":",
     intercept_str: str = "Intercept",
-    overwrite: bool = True,
+    temp_path_with_del: str = "gs://gnomad-tmp/kc",
+    n_partitions: int = 30000,
+    overwrite: bool = False,
 ) -> None:
     """
-    Annotate Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
+    Annotate VEP context Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
 
     Relationship in `mpc_rel_vars` is the formula used to calculate a variant's fitted score.
     A variant of interest's fitted score is combined with the number of common (AF > 0.01)
@@ -471,30 +498,56 @@ def annotate_mpc(
 
     For more information on the fitted score and MPC calculation, see the docstring of `run_regressions`.
 
-    .. note::
-        - Assume input Table is keyed by locus and alleles.
-        - Function will re-add transcript and reference/alternate allele annotations even if present.
-
-    :param hl.Table ht: Input Table to be annotated.
-    :param str output_path: Where to write Table after adding MPC annotations.
+    :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
     :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
         Default is ":".
     :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
-    :param bool overwrite: Whether to overwrite specified output path if it already exists.
-        Default is True.
+    :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
+        Default is 'gs://gnomad-tmp/kc'.
+    :param int n_partitions: Number of desired partitions for the VEP context Table.
+        Repartition VEP context Table to this number on read.
+        Default is 30000.
+    :param bool overwrite: Whether to overwrite temporary data if it already exists.
+        If False, will read existing temporary data rather than overwriting.
+        Default is False.
     :return: None; function writes Table to specified output path.
     """
     assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
-    assert (
-        len(ht.key) == 2 and "locus" in ht.key and "alleles" in ht.key
-    ), "HT key must be keyed by 'locus' and 'alleles'!"
-    # NOTE: hl.tlocus() will use the reference genome build from the hail initialization
-    # if the user doesn't specify a reference build
-    # This means that for v2, where hail is initialized with GRCh37, this will check for
-    # a build 37 locus
-    assert ht.key.locus.dtype == hl.tlocus() and ht.key.alleles.dtype == hl.tarray(
-        hl.tstr
-    ), "'locus' must be a LocusExpression, and 'alleles' must be an array of strings!"
+
+    logger.info("Importing set of transcripts to keep...")
+    transcripts = get_constraint_transcripts(outlier=False)
+
+    logger.info(
+        "Reading in VEP context HT and filtering to missense variants in canonical transcripts..."
+    )
+    # Using vep_context.path to read in table with fewer partitions
+    # VEP context resource has 62164 partitions
+    ht = (
+        hl.read_table(vep_context.path, _n_partitions=n_partitions)
+        .select_globals()
+        .select("vep", "was_split")
+    )
+    ht = process_vep(ht, filter_csq=True, csq=missense_str)
+    ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
+    ht = get_annotations_from_context_ht_vep(ht)
+    # Save context Table to temporary path with specified deletion policy because this is a very large file
+    # and relevant information will be saved at `context_with_oe` (written below)
+    # Checkpointing here to force this expensive computation to compute
+    # before joining with RMC tables in `get_oe_annotation`
+    # This computation is expensive, so overwrite only if specified (otherwise, read existing file)
+    ht = ht.checkpoint(
+        f"{temp_path_with_del}/vep_context_mis_only_annot.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
+    )
+
+    logger.info(
+        "Adding regional missense constraint missense o/e annotation and writing to resource path..."
+    )
+    ht = get_oe_annotation(ht)
+    ht = ht.checkpoint(
+        context_with_oe.path, _read_if_exists=not overwrite, overwrite=overwrite
+    )
 
     logger.info("Extracting MPC model relationships from pickle...")
     with hl.hadoop_open(mpc_model_pkl_path, "rb") as p:
@@ -507,44 +560,28 @@ def annotate_mpc(
             f"{intercept_str} not in model parameters! Please double check and rerun."
         )
 
-    logger.info("Adding transcript and codons annotations...")
-    # Get transcript and codons annotation from polyphen HT
-    # (context HT filtered to contain transcript, ref/alt amino acids, and polyphen annotation)
-    # polyphen HT has the same transcript version as the constraint tables
-    # For v2, transcript annotation contains only canonical transcripts from GENCODE v19
-    # polyphen HT also has same codon annotation format as missense badness HT
-    aa_ht = polyphen.ht().select("transcript", "ref", "alt")
-    ht = ht.annotate(**aa_ht[ht.key])
-    # Start filter expression to filter HT to defined annotations
-    annotations = ["transcript", "ref", "alt"]
-
     logger.info("Annotating HT with MPC variables...")
     variables = mpc_rel_vars.keys()
-    if "oe" in variables:
-        logger.info("Getting regional missense constraint missense o/e annotation...")
-        ht = get_oe_annotation(ht)
-        annotations.append("oe")
-
+    annotations = ["transcript", "ref", "alt"]
     if "misbad" in variables:
         logger.info("Getting missense badness annotation...")
         mb_ht = misbad.ht()
         ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
         annotations.append("misbad")
 
+    if "oe" in variables:
+        annotations.append("oe")
+
     if "polyphen" in variables:
-        logger.info("Annotating HT with Polyphen...")
-        polyphen_ht = polyphen.ht().select("polyphen")
-        ht = ht.annotate(polyphen=polyphen_ht[ht.key].polyphen.score)
         annotations.append("polyphen")
 
-    # Checkpoint to force the joins to finish, as this step is slow
-    ht = ht.checkpoint(f"{temp_path}/scores_join_full.ht", overwrite=True)
-
-    logger.info("Filtering to defined annotations...")
+    logger.info("Filtering to defined annotations and checkpointing...")
     filter_expr = True
     for field in annotations:
         filter_expr &= hl.is_defined(ht[field])
     ht = ht.filter(filter_expr)
+    # Checkpoint here to force missense badness join and filter to complete
+    ht = ht.checkpoint(f"{temp_path}/mpc_temp_join.ht", overwrite=True)
 
     logger.info("Annotating fitted scores...")
     variable_dict = {
@@ -595,7 +632,7 @@ def annotate_mpc(
     # Annotate HT with sorted array of gnomAD fitted scores
     ht = ht.annotate(gnomad_scores=scores)
     # Checkpoint here to force the gnomAD join to complete
-    ht = ht.checkpoint(f"{temp_path}/scores_join.ht", overwrite=True)
+    ht = ht.checkpoint(f"{temp_path}/mpc_temp_gnomad.ht", overwrite=True)
 
     # Search all gnomAD scores to find first score that is
     # greater than or equal to score to be annotated
@@ -617,6 +654,39 @@ def annotate_mpc(
         )
     )
     # Checkpoint here to force the binary search to compute
-    ht = ht.checkpoint(f"{temp_path}/mpc_temp.ht", overwrite=True)
+    ht = ht.checkpoint(f"{temp_path}/mpc_temp_binary.ht", overwrite=True)
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
+    ht.write(mpc_release.path, overwrite=overwrite)
+
+
+def annotate_mpc(
+    ht: hl.Table,
+    output_path: str,
+    overwrite: bool = True,
+) -> None:
+    """
+    Annotate Table with MPC score using MPC release Table (`mpc_release`).
+
+    .. note::
+        - Assume input Table is keyed by locus and alleles.
+
+    :param hl.Table ht: Input Table to be annotated.
+    :param str output_path: Where to write Table after adding MPC annotations.
+    :param bool overwrite: Whether to overwrite specified output path if it already exists.
+        Default is True.
+    :return: None; function writes Table to specified output path.
+    """
+    assert (
+        len(ht.key) == 2 and "locus" in ht.key and "alleles" in ht.key
+    ), "HT key must be keyed by 'locus' and 'alleles'!"
+    # NOTE: hl.tlocus() will use the reference genome build from the hail initialization
+    # if the user doesn't specify a reference build
+    # This means that for v2, where hail is initialized with GRCh37, this will check for
+    # a build 37 locus
+    assert ht.key.locus.dtype == hl.tlocus() and ht.key.alleles.dtype == hl.tarray(
+        hl.tstr
+    ), "'locus' must be a LocusExpression, and 'alleles' must be an array of strings!"
+
+    mpc_ht = mpc_release.ht()
+    ht = ht.annotate(mpc=mpc_ht[ht.key].mpc)
     ht.write(output_path, overwrite=overwrite)
