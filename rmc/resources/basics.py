@@ -231,6 +231,20 @@ Table containing all transcripts with evidence of regional missense constraint.
 Contains transcripts with one or additional breaks plus simultaneous breaks results.
 """
 
+context_with_oe = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/context_with_oe.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table containing missense variants in canonical transcripts annotated with missense OE.
+
+Each row is annotated with RMC transcript subsection missense OE if it exists, otherwise
+the transcript level missense OE.
+"""
+
 rmc_browser = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
@@ -334,6 +348,17 @@ gnomad_fitted_score_group = VersionedTableResource(
 Table of fitted scores for common (AF > 0.01) variants in gnomAD, grouped by score.
 
 Annotated with the total number of variants with and less than each score.
+"""
+
+mpc_release = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{MPC_PREFIX}/{version}/mpc.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table containing missense variants in canonical transcripts annotated with MPC.
 """
 
 oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/oe_bin.tsv"
