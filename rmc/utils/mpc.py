@@ -537,6 +537,9 @@ def annotate_mpc(
         ht = ht.annotate(polyphen=polyphen_ht[ht.key].polyphen.score)
         annotations.append("polyphen")
 
+    # Checkpoint to force the joins to finish, as this step is slow
+    ht = ht.checkpoint(f"{temp_path}/scores_join_full.ht", overwrite=True)
+
     logger.info("Filtering to defined annotations...")
     filter_expr = True
     for field in annotations:
@@ -591,7 +594,7 @@ def annotate_mpc(
     logger.info("Getting n_less annotation...")
     # Annotate HT with sorted array of gnomAD fitted scores
     ht = ht.annotate(gnomad_scores=scores)
-    # Checkpoint here to force the joins to complete
+    # Checkpoint here to force the gnomAD join to complete
     ht = ht.checkpoint(f"{temp_path}/scores_join.ht", overwrite=True)
 
     # Search all gnomAD scores to find first score that is
