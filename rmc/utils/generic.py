@@ -621,6 +621,7 @@ def import_de_novo_variants(build: str, overwrite: bool) -> None:
         raise DataException("De novo TSV does not exist for GRCh38!")
 
     dn_ht = hl.import_table(tsv_path, impute=True)
+    dn_ht = dn_ht.filter(dn_ht.consequence == "missense_variant")
     dn_ht = dn_ht.transmute(
         locus=hl.locus(dn_ht.chrom, dn_ht.pos),
         alleles=[dn_ht.ref, dn_ht.alt],
