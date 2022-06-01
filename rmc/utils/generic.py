@@ -603,13 +603,23 @@ def import_clinvar_hi_variants(build: str, overwrite: bool) -> None:
         )
 
 
-def import_de_novo_variants(build: str, overwrite: bool) -> None:
+def import_de_novo_variants(
+    build: str,
+    overwrite: bool,
+    csq_str: str = "consequence",
+    missense_str: str = MISSENSE,
+) -> None:
     """
     Import de novo missense variants.
 
     .. note::
         These files currently only exist for build GRCh37.
 
+    :param str build: Reference genome build; must be one of BUILDS.
+    :param bool overwrite: Whether to overwrite de novo Table.
+    :param str csq_str: Name of field in de novo TSV that contains variant consequence.
+        Default is 'consequence'.
+    :param str missense_str: String representing missense variant effect. Default is MISSENSE.
     :return: None; writes HT to resource path.
     """
     if build not in BUILDS:
@@ -621,7 +631,7 @@ def import_de_novo_variants(build: str, overwrite: bool) -> None:
         raise DataException("De novo TSV does not exist for GRCh38!")
 
     dn_ht = hl.import_table(tsv_path, impute=True)
-    dn_ht = dn_ht.filter(dn_ht.consequence == "missense_variant")
+    dn_ht = dn_ht.filter(dn_ht[csq_str] == missense_str)
     dn_ht = dn_ht.transmute(
         locus=hl.locus(dn_ht.chrom, dn_ht.pos),
         alleles=[dn_ht.ref, dn_ht.alt],
