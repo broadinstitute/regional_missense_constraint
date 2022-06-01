@@ -107,7 +107,7 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
         .select_globals()
         .select("transcript", "section_start_pos", "section_end_pos", "section_oe")
     )
-    rmc_ht = rmc_ht.transmute(
+    rmc_ht = rmc_ht.annotate(
         interval=hl.parse_locus_interval(
             hl.format(
                 "[%s:%s-%s]",
