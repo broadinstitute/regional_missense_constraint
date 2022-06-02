@@ -176,8 +176,8 @@ def get_annotations_from_context_ht_vep(
 
     :param hl.Table ht: Input VEP context Table.
     :param List[str] annotations: Additional annotations to extract from context HT's VEP field.
-    :return: VEP context Table with non-coding loci removed/filtered to informative amino acids
-        and filtered to keep only specified annotations.
+    :return: VEP context Table with rows filtered to remove loci that are non-coding and retain only those with informative amino acids
+        and columns filtered to keep only specified annotations.
     """
     annot_expr = {
         "codons": ht.transcript_consequences.codons,
