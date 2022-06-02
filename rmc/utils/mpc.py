@@ -484,7 +484,7 @@ def create_mpc_release_ht(
     missense_str: str = MISSENSE,
     interaction_char: str = ":",
     intercept_str: str = "Intercept",
-    temp_path_with_del: str = "gs://gnomad-tmp/kc",
+    temp_path_with_del: str = "gs://gnomad-tmp/mpc",
     n_partitions: int = 30000,
     overwrite: bool = False,
 ) -> None:
@@ -504,6 +504,7 @@ def create_mpc_release_ht(
     :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
     :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
         Default is 'gs://gnomad-tmp/kc'.
+        TODO: Update this to `temp_path` (and set automatic deletion policy.)
     :param int n_partitions: Number of desired partitions for the VEP context Table.
         Repartition VEP context Table to this number on read.
         Default is 30000.
