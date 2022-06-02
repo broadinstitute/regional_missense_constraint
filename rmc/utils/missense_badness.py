@@ -105,7 +105,7 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
     rmc_ht = (
         rmc_results.ht()
         .select_globals()
-        .select("transcript", "section_start_pos", "section_end_pos", "section_oe")
+        .select("section", "section_start_pos", "section_end_pos", "section_oe")
     )
     rmc_ht = rmc_ht.annotate(
         interval=hl.parse_locus_interval(
@@ -118,6 +118,7 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
         ),
     )
     rmc_ht = rmc_ht.key_by("interval", "transcript")
+    rmc_ht = rmc_ht.distinct()
     ht = ht.annotate(section_oe=rmc_ht[ht.locus, ht.transcript].section_oe)
     return ht.transmute(oe=hl.coalesce(ht.section_oe, ht.transcript_oe))
 
