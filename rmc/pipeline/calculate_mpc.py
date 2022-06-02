@@ -115,7 +115,7 @@ if __name__ == "__main__":
         (ClinVar pathogenic/likely pathogenic missense variants in severe haploinsufficient genes) variants.
 
         This step joins gnomAD and ClinVar variants, annotates them with PolyPhen-2, missense badness,
-        CADD (raw and phred), BLOSUM, Grantham, and missense observed/expected (OE) raio, and removes
+        CADD (raw and phred), BLOSUM, Grantham, and missense observed/expected (OE) ratio, and removes
         any variants with undefined annotations.
         """,
     )
@@ -126,7 +126,7 @@ if __name__ == "__main__":
         Run logistic regressions on different models (single variable, joint).
 
         This step chooses a model based on the lowest AIC value and stores the
-        model coefficients to a local CSV.
+        model coefficients as a pickle.
         """,
     )
     run_glm.add_argument(
