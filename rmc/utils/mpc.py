@@ -503,7 +503,7 @@ def create_mpc_release_ht(
         Default is ":".
     :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
     :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
-        Default is 'gs://gnomad-tmp/kc'.
+        Default is 'gs://gnomad-tmp/mpc'.
         TODO: Update this to `temp_path` (and set automatic deletion policy.)
     :param int n_partitions: Number of desired partitions for the VEP context Table.
         Repartition VEP context Table to this number on read.
