@@ -119,7 +119,18 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
     )
     rmc_ht = rmc_ht.key_by("interval", "transcript")
     rmc_ht = rmc_ht.distinct()
-    ht = ht.annotate(section_oe=rmc_ht[ht.locus, ht.transcript].section_oe)
+    ht = ht.key_by()
+    ht = ht.annotate(
+        interval=hl.parse_locus_interval(
+            hl.format(
+                "[%s:%s-%s]",
+                ht.locus.contig,
+                ht.locus.position,
+                ht.locus.position,
+            )
+        )
+    )
+    ht = ht.annotate(section_oe=rmc_ht[ht.interval, ht.transcript].section_oe)
     return ht.transmute(oe=hl.coalesce(ht.section_oe, ht.transcript_oe))
 
 
