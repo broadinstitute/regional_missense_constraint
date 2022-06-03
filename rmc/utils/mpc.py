@@ -574,6 +574,7 @@ def create_mpc_release_ht(
         annotations.append("oe")
 
     if "polyphen" in variables:
+        ht = ht.transmute(polyphen=ht.polyphen.score)
         annotations.append("polyphen")
 
     logger.info("Filtering to defined annotations and checkpointing...")
