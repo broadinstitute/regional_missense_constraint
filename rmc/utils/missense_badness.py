@@ -119,7 +119,6 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
     )
     rmc_ht = rmc_ht.key_by("interval", "transcript")
     rmc_ht = rmc_ht.distinct()
-    ht = ht.key_by()
     ht = ht.annotate(
         interval=hl.parse_locus_interval(
             hl.format(
