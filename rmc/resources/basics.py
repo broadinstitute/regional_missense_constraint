@@ -245,6 +245,24 @@ Each row is annotated with RMC transcript subsection missense OE if it exists, o
 the transcript level missense OE.
 """
 
+context_with_oe_dedup = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{version}/context_with_oe_dedup.ht"
+        )
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Deduplicated version of `context_with_oe`.
+
+Some locus/alleles combinations are present more than once in `context_with_oe` if they have
+a most severe consequence of 'missense_variant' in more than one canonical transcript.
+
+This Table contains only one row per each unique locus/alleles combination.
+"""
+
 rmc_browser = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
