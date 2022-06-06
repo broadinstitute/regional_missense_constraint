@@ -1527,6 +1527,7 @@ def group_rmc_ht_by_section() -> hl.Table:
         contig=hl.agg.take(rmc_ht.locus.contig, 1)[0],
         section_oe=hl.agg.take(rmc_ht.section_oe, 1)[0],
     )
+    rmc_ht = rmc_ht.checkpoint(f"{temp_path}/rmc_group_by_section.ht", overwrite=True)
     rmc_ht = rmc_ht.transmute(
         interval=hl.parse_locus_interval(
             hl.format(
