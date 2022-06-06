@@ -1531,9 +1531,9 @@ def group_rmc_ht_by_section() -> hl.Table:
         interval=hl.parse_locus_interval(
             hl.format(
                 "[%s:%s-%s]",
-                rmc_ht.locus.contig,
-                rmc_ht.section_start_pos,
-                rmc_ht.section_end_pos,
+                rmc_ht.contig,
+                rmc_ht.start_pos,
+                rmc_ht.end_pos,
             )
         ),
     )
