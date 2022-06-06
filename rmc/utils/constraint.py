@@ -4,6 +4,7 @@ from typing import Dict, List, Set, Tuple, Union
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import coverage, public_release
+from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
@@ -12,6 +13,7 @@ from rmc.resources.basics import (
     multiple_breaks,
     oe_bin_counts_tsv,
     rmc_browser,
+    rmc_results,
     temp_path,
 )
 from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo, gene_model
@@ -1500,6 +1502,42 @@ def constraint_flag_expr(
         mis_too_many=raw_mis_z_expr < -5,
         lof_too_many=raw_lof_z_expr < -5,
     )
+
+
+def group_rmc_ht_by_section() -> hl.Table:
+    """
+    Group RMC results Table by transcript subsection and return interval and section missense o/e.
+
+    .. note::
+        - Function reads RMC results Table from resource path.
+        - Assumes RMC HT is annotated with `locus`, `transcript`, `section`, `section_start_pos`,
+        `section_end_pos`, and `section_oe`.
+
+    :return: RMC results Table keyed by interval and annotated with transcript and section o/e.
+    """
+    rmc_ht = (
+        rmc_results.ht()
+        .select_globals()
+        .select("section", "section_start_pos", "section_end_pos", "section_oe")
+    )
+    rmc_ht = rmc_ht.group_by("section").aggregate(
+        transcript=hl.agg.take(rmc_ht.transcript, 1)[0],
+        start_pos=hl.agg.take(rmc_ht.section_start_pos, 1)[0],
+        end_pos=hl.agg.take(rmc_ht.section_end_pos, 1)[0],
+        contig=hl.agg.take(rmc_ht.locus.contig, 1)[0],
+        section_oe=hl.agg.take(rmc_ht.section_oe, 1)[0],
+    )
+    rmc_ht = rmc_ht.transmute(
+        interval=hl.parse_locus_interval(
+            hl.format(
+                "[%s:%s-%s]",
+                rmc_ht.locus.contig,
+                rmc_ht.section_start_pos,
+                rmc_ht.section_end_pos,
+            )
+        ),
+    )
+    return rmc_ht.key_by("interval").drop("section")
 
 
 def fix_xg(

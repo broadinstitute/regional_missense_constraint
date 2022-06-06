@@ -10,11 +10,10 @@ from rmc.resources.basics import (
     amino_acids_oe,
     constraint_prep,
     misbad,
-    rmc_results,
     temp_path,
 )
 from rmc.resources.grch37.gnomad import constraint_ht
-from rmc.utils.constraint import add_obs_annotation
+from rmc.utils.constraint import add_obs_annotation, group_rmc_ht_by_section
 from rmc.utils.generic import (
     filter_context_using_gnomad,
     get_codon_lookup,
@@ -102,34 +101,12 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
         transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe)
     )
 
-    rmc_ht = (
-        rmc_results.ht()
-        .select_globals()
-        .select("section", "section_start_pos", "section_end_pos", "section_oe")
-    )
-    rmc_ht = rmc_ht.annotate(
-        interval=hl.parse_locus_interval(
-            hl.format(
-                "[%s:%s-%s]",
-                rmc_ht.locus.contig,
-                rmc_ht.section_start_pos,
-                rmc_ht.section_end_pos,
-            )
-        ),
-    )
-    rmc_ht = rmc_ht.key_by("interval", "transcript")
-    rmc_ht = rmc_ht.distinct()
+    rmc_ht = group_rmc_ht_by_section()
     ht = ht.annotate(
-        interval=hl.parse_locus_interval(
-            hl.format(
-                "[%s:%s-%s]",
-                ht.locus.contig,
-                ht.locus.position,
-                ht.locus.position,
-            )
-        )
+        section_oe=rmc_ht.index(ht.locus, all_matches=True)
+        .filter(lambda x: x.transcript == ht.transcript)
+        .section_oe[0]
     )
-    ht = ht.annotate(section_oe=rmc_ht[ht.interval, ht.transcript].section_oe)
     return ht.transmute(oe=hl.coalesce(ht.section_oe, ht.transcript_oe))
 
 
