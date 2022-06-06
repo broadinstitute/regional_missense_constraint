@@ -105,7 +105,13 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
     ht = ht.annotate(
         section_oe=rmc_ht.index(ht.locus, all_matches=True)
         .filter(lambda x: x.transcript == ht.transcript)
-        .section_oe[0]
+        .section_oe
+    )
+    ht = ht.annotate(
+        section_oe=hl.or_missing(
+            hl.len(ht.section_oe) > 0,
+            ht.section_oe[0],
+        ),
     )
     return ht.transmute(oe=hl.coalesce(ht.section_oe, ht.transcript_oe))
 
