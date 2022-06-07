@@ -362,8 +362,9 @@ def run_regressions(
 
     # Find lowest AIC for single variable regressions and corresponding model
     min_single_aic = min(single_var_aic)
-    min_single_aic_var = all_var[single_var_aic.index(min_single_aic)]
-    min_single_X = all_var[single_var_X.index(min_single_aic)]
+    single_var_idx = single_var_aic.index(min_single_aic)
+    min_single_aic_var = all_var[single_var_idx]
+    min_single_X = single_var_X[single_var_idx]
     if single_var_aic.count(min_single_aic) > 1:
         logger.warning(
             """
@@ -632,7 +633,7 @@ def create_mpc_release_ht(
 
     logger.info("Getting n_less annotation...")
     # Annotate HT with sorted array of gnomAD fitted scores
-    ht = ht.annotate(gnomad_scores=scores)
+    ht = ht.annotate_globals(gnomad_scores=scores)
     # Checkpoint here to force the gnomAD join to complete
     ht = ht.checkpoint(f"{temp_path}/mpc_temp_gnomad.ht", overwrite=True)
 
@@ -661,7 +662,7 @@ def create_mpc_release_ht(
     ht.write(mpc_release.path, overwrite=overwrite)
 
 
-def annotate_mpc(
+def annotate_mpc_future(
     ht: hl.Table,
     output_path: str,
     overwrite: bool = True,
@@ -691,4 +692,148 @@ def annotate_mpc(
 
     mpc_ht = mpc_release.ht()
     ht = ht.annotate(mpc=mpc_ht[ht.key].mpc)
+    ht.write(output_path, overwrite=overwrite)
+
+
+def annotate_mpc(
+    ht: hl.Table,
+    output_path: str,
+    overwrite: bool = True,
+    interaction_char: str = ":",
+    intercept_str: str = "Intercept",
+) -> None:
+    """
+    Annotate VEP context Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
+
+    Relationship in `mpc_rel_vars` is the formula used to calculate a variant's fitted score.
+    A variant of interest's fitted score is combined with the number of common (AF > 0.01)
+    variants in gnomAD with fitted scores < the fitted score for the variant of interest
+    to determine a variant's MPC score.
+
+    For more information on the fitted score and MPC calculation, see the docstring of `run_regressions`.
+
+    :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
+    :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
+        Default is ":".
+    :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
+    :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
+        Default is 'gs://gnomad-tmp/mpc'.
+        TODO: Update this to `temp_path` (and set automatic deletion policy.)
+    :param int n_partitions: Number of desired partitions for the VEP context Table.
+        Repartition VEP context Table to this number on read.
+        Default is 30000.
+    :param bool overwrite: Whether to overwrite temporary data if it already exists.
+        If False, will read existing temporary data rather than overwriting.
+        Default is False.
+    :return: None; function writes Table to specified output path.
+    """
+    assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
+
+    logger.info("Extracting MPC model relationships from pickle...")
+    with hl.hadoop_open(mpc_model_pkl_path, "rb") as p:
+        model = pickle.load(p)
+    mpc_rel_vars = model.params.to_dict()
+    try:
+        intercept = mpc_rel_vars.pop(intercept_str)
+    except KeyError:
+        raise DataException(
+            f"{intercept_str} not in model parameters! Please double check and rerun."
+        )
+
+    logger.info("Annotating HT with MPC variables...")
+    variables = mpc_rel_vars.keys()
+    annotations = ["transcript", "ref", "alt"]
+    if "misbad" in variables:
+        logger.info("Getting missense badness annotation...")
+        mb_ht = misbad.ht()
+        ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
+        annotations.append("misbad")
+
+    if "oe" in variables:
+        annotations.append("oe")
+
+    if "polyphen" in variables:
+        annotations.append("polyphen")
+
+    logger.info("Filtering to defined annotations and checkpointing...")
+    filter_expr = True
+    for field in annotations:
+        filter_expr &= hl.is_defined(ht[field])
+    ht = ht.filter(filter_expr)
+    # Checkpoint here to force missense badness join and filter to complete
+    ht = ht.checkpoint("gs://gnomad-tmp/mpc/mpc_temp_join.ht", overwrite=True)
+
+    logger.info("Annotating fitted scores...")
+    variable_dict = {
+        variable: mpc_rel_vars[variable]
+        for variable in variables
+        if not interaction_char in variable
+    }
+    interactions_dict = {
+        variable: mpc_rel_vars[variable]
+        for variable in variables
+        if interaction_char in variable
+    }
+    for variable in interactions_dict.keys():
+        if len(variable.split(interaction_char)) > 2:
+            raise DataException(
+                "Code currently doesn't handle interactions between more than two variables!"
+            )
+    annot_expr = [
+        (ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()
+    ]
+    # NOTE: This assumes that variable is in the format of x:y or x*y
+    # and won't handle cases where variable is x:y:z or x*y*z correctly
+    interaction_annot_expr = [
+        (
+            ht[variable.split(interaction_char)[0]]
+            * ht[variable.split(interaction_char)[1]]
+            * mpc_rel_vars[variable]
+        )
+        for variable in interactions_dict.keys()
+    ]
+    annot_expr.extend(interaction_annot_expr)
+    combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
+
+    logger.info("Computing fitted score...")
+    ht = ht.annotate(fitted_score=intercept + combined_annot_expr)
+
+    logger.info("Aggregating gnomAD fitted scores...")
+    if not file_exists(gnomad_fitted_score_group.path):
+        aggregate_gnomad_fitted_scores()
+    gnomad_ht = gnomad_fitted_score_group.ht()
+    scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
+    scores_len = len(scores)
+
+    # Get total number of gnomAD common variants
+    gnomad_var_count = gnomad_fitted_score.ht().count()
+
+    logger.info("Getting n_less annotation...")
+    # Annotate HT with sorted array of gnomAD fitted scores
+    ht = ht.annotate_globals(gnomad_scores=scores)
+    # Checkpoint here to force the gnomAD join to complete
+    ht = ht.checkpoint("gs://gnomad-tmp/mpc/mpc_temp_gnomad.ht", overwrite=True)
+
+    # Search all gnomAD scores to find first score that is
+    # greater than or equal to score to be annotated
+    # `binary_search` will return the index of the first gnomAD fitted score that
+    # is >= the score of interest
+    # e.g., if the score of interest is 0.45, and gnomAD fitted scores are
+    # [0.3, 0.4, 0.5], then `binary_search` will return an index of 2
+    # the `n_less` of 0.5 will contain the counts of variants with gnomAD scores of
+    # 0.3 and 0.4 due to the non-inclusive nature of scans
+    # (n_less[0.5] = n_var[0.3] + n_var[0.4])
+    ht = ht.annotate(idx=hl.binary_search(ht.gnomad_scores, ht.fitted_score))
+    ht = ht.annotate(
+        n_less=hl.if_else(
+            # Make n_less equal to total gnomAD common variant count if
+            # index is equal to the length of the gnomAD scores array
+            ht.idx == scores_len,
+            gnomad_var_count,
+            gnomad_ht[ht.idx].n_less,
+        )
+    )
+    # Checkpoint here to force the binary search to compute
+    ht = ht.checkpoint("gs://gnomad-tmp/mpc/mpc_temp_binary.ht", overwrite=True)
+    ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
     ht.write(output_path, overwrite=overwrite)
