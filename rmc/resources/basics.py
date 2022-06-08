@@ -379,6 +379,19 @@ mpc_release = VersionedTableResource(
 Table containing missense variants in canonical transcripts annotated with MPC.
 """
 
+mpc_release_dedup = VersionedTableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{MPC_PREFIX}/{version}/mpc_dedup.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table containing missense variants in canonical transcripts annotated with MPC.
+
+This Table contains only one row per each unique locus/alleles combination.
+"""
+
 oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/oe_bin.tsv"
 """
 TSV with RMC regions grouped by obs/exp (OE) bin.
