@@ -398,6 +398,7 @@ def run_regressions(
     """
     # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
     ht = joint_clinvar_gnomad.ht()
+    ht = ht.transmute(polyphen=ht.polyphen.score)
     df = ht.to_pandas()
 
     def _run_glm(
@@ -572,7 +573,6 @@ def calculate_fitted_scores(
         annotations.append("oe")
 
     if "polyphen" in variables:
-        ht = ht.transmute(polyphen=ht.polyphen.score)
         annotations.append("polyphen")
 
     logger.info("Filtering to defined annotations and checkpointing...")
@@ -672,6 +672,7 @@ def create_mpc_release_ht(
     """
     logger.info("Calculating fitted scores...")
     ht = context_with_oe.ht()
+    ht = ht.transmute(polyphen=ht.polyphen.score)
     ht = calculate_fitted_scores(ht)
 
     logger.info("Aggregating gnomAD fitted scores...")
