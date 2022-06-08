@@ -276,7 +276,7 @@ def create_context_with_oe(
 
 
 def prepare_pop_path_ht(
-    gnomad_data_type: str = "exomes", af_threshold: float = 0.01
+    gnomad_data_type: str = "exomes", af_threshold: float = 0.001
 ) -> None:
     """
     Prepare Table with 'population' (common gnomAD missense) and 'pathogenic' (ClinVar pathogenic/likely pathogenic missense) variants.
@@ -290,7 +290,7 @@ def prepare_pop_path_ht(
         Default is "exomes".
     :param float af_threshold: Allele frequency cutoff to filter gnomAD public dataset.
         Variants *above* this threshold will be kept.
-        Default is 0.01.
+        Default is 0.001.
     :return: None; function writes Table to resource path.
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
@@ -339,6 +339,7 @@ def prepare_pop_path_ht(
     )
 
     logger.info("Getting missense badness annotation...")
+    ht = hl.read_table(f"{temp_path}/joint_clinvar_gnomad_transcript_aa.ht")
     mb_ht = misbad.ht()
     ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
 
@@ -353,6 +354,7 @@ def prepare_pop_path_ht(
         blosum=blosum_ht[ht.ref, ht.alt].score,
         grantham=grantham_ht[ht.ref, ht.alt].score,
     )
+    ht = ht.checkpoint(f"{temp_path}/joint_clinvar_gnomad_full.ht", overwrite=True)
 
     logger.info("Filtering to rows with defined annotations and writing out...")
     ht = ht.filter(
