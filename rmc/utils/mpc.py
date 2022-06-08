@@ -398,7 +398,6 @@ def run_regressions(
     """
     # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
     ht = joint_clinvar_gnomad.ht()
-    ht = ht.transmute(polyphen=ht.polyphen.score)
     df = ht.to_pandas()
 
     def _run_glm(
