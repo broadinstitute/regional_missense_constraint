@@ -25,6 +25,7 @@ from rmc.resources.basics import (
     misbad,
     mpc_model_pkl_path,
     mpc_release,
+    mpc_release_dedup,
     polyphen,
     temp_path,
 )
@@ -393,7 +394,7 @@ def run_regressions(
     all_model_aic = single_var_aic + [add_model.aic, mult_model.aic, spec_model.aic]
     min_aic = min(all_model_aic)
     logger.info("Lowest model AIC: %f", min_aic)
-    if all_model_aic.count(min_aic) > 1:
+    '''if all_model_aic.count(min_aic) > 1:
         logger.warning(
             """
             There is a tie for minimum AIC.
@@ -431,19 +432,108 @@ def run_regressions(
         )
         logger.info("Coefficients: %s", spec_model.params)
         model = spec_model
-        X = spec_X
+        X = spec_X'''
 
-    logger.info("Annotating gnomAD variants with fitted score...")
-    df["fitted_score"] = model.predict(X)
-
-    logger.info("Converting gnomAD variants dataframe into Table and writing...")
-    ht = hl.Table.from_pandas(df)
-    ht = ht.filter(ht.pop_v_path == 1)
-    ht.write(gnomad_fitted_score.path, overwrite=True)
-
+    model = spec_model
+    X = spec_X
     logger.info("Saving model as pickle...")
     with hl.hadoop_open(mpc_model_pkl_path, "wb") as p:
         pickle.dump(model, p, protocol=pickle.HIGHEST_PROTOCOL)
+
+    logger.info(
+        "Annotating gnomAD variants with fitted score and writing to gnomad_fitted_score path..."
+    )
+    ht = ht.filter(ht.pop_v_path == 1)
+    ht = calculate_fitted_scores(ht)
+    ht.write(gnomad_fitted_score.path, overwrite=True)
+
+
+def calculate_fitted_scores(
+    ht: hl.Table, interaction_char: str = ":", intercept_str: str = "Intercept"
+) -> hl.Table:
+    """
+    Use model and relationship determined in `run_regressions` to calculate fitted scores for input Table.
+
+    .. note::
+        - Assumes model has been written as pickle to `mpc_model_pkl_path`.
+
+    :param hl.Table ht: Input Table with variants to be annotated.
+    :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
+        Default is ":".
+    :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
+    :return: Table annotated with fitted score.
+    """
+    assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
+
+    logger.info("Extracting MPC model relationships from pickle...")
+    with hl.hadoop_open(mpc_model_pkl_path, "rb") as p:
+        model = pickle.load(p)
+    mpc_rel_vars = model.params.to_dict()
+    try:
+        intercept = mpc_rel_vars.pop(intercept_str)
+    except KeyError:
+        raise DataException(
+            f"{intercept_str} not in model parameters! Please double check and rerun."
+        )
+
+    logger.info("Annotating HT with MPC variables...")
+    variables = mpc_rel_vars.keys()
+    annotations = []
+    if "misbad" in variables:
+        logger.info("Getting missense badness annotation...")
+        mb_ht = misbad.ht()
+        ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
+        annotations.append("misbad")
+
+    if "oe" in variables:
+        annotations.append("oe")
+
+    if "polyphen" in variables:
+        ht = ht.transmute(polyphen=ht.polyphen.score)
+        annotations.append("polyphen")
+
+    logger.info("Filtering to defined annotations and checkpointing...")
+    filter_expr = True
+    for field in annotations:
+        filter_expr &= hl.is_defined(ht[field])
+    ht = ht.filter(filter_expr)
+    # Checkpoint here to force missense badness join and filter to complete
+    ht = ht.checkpoint(f"{temp_path}/fitted_score_temp_join.ht", overwrite=True)
+
+    logger.info("Annotating fitted scores...")
+    variable_dict = {
+        variable: mpc_rel_vars[variable]
+        for variable in variables
+        if not interaction_char in variable
+    }
+    interactions_dict = {
+        variable: mpc_rel_vars[variable]
+        for variable in variables
+        if interaction_char in variable
+    }
+    for variable in interactions_dict.keys():
+        if len(variable.split(interaction_char)) > 2:
+            raise DataException(
+                "Code currently doesn't handle interactions between more than two variables!"
+            )
+    annot_expr = [
+        (ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()
+    ]
+    # NOTE: This assumes that variable is in the format of x:y or x*y
+    # and won't handle cases where variable is x:y:z or x*y*z correctly
+    interaction_annot_expr = [
+        (
+            ht[variable.split(interaction_char)[0]]
+            * ht[variable.split(interaction_char)[1]]
+            * mpc_rel_vars[variable]
+        )
+        for variable in interactions_dict.keys()
+    ]
+    annot_expr.extend(interaction_annot_expr)
+    combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
+
+    logger.info("Computing fitted score and returning...")
+    return ht.annotate(fitted_score=intercept + combined_annot_expr)
 
 
 def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
@@ -483,8 +573,6 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
 
 def create_mpc_release_ht(
     missense_str: str = MISSENSE,
-    interaction_char: str = ":",
-    intercept_str: str = "Intercept",
     temp_path_with_del: str = "gs://gnomad-tmp/mpc",
     n_partitions: int = 30000,
     overwrite: bool = False,
@@ -500,9 +588,6 @@ def create_mpc_release_ht(
     For more information on the fitted score and MPC calculation, see the docstring of `run_regressions`.
 
     :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
-    :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
-        Default is ":".
-    :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
     :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
         Default is 'gs://gnomad-tmp/mpc'.
         TODO: Update this to `temp_path` (and set automatic deletion policy.)
@@ -514,8 +599,6 @@ def create_mpc_release_ht(
         Default is False.
     :return: None; function writes Table to specified output path.
     """
-    assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
-
     logger.info("Importing set of transcripts to keep...")
     transcripts = get_constraint_transcripts(outlier=False)
 
@@ -551,75 +634,8 @@ def create_mpc_release_ht(
         context_with_oe.path, _read_if_exists=not overwrite, overwrite=overwrite
     )
 
-    logger.info("Extracting MPC model relationships from pickle...")
-    with hl.hadoop_open(mpc_model_pkl_path, "rb") as p:
-        model = pickle.load(p)
-    mpc_rel_vars = model.params.to_dict()
-    try:
-        intercept = mpc_rel_vars.pop(intercept_str)
-    except KeyError:
-        raise DataException(
-            f"{intercept_str} not in model parameters! Please double check and rerun."
-        )
-
-    logger.info("Annotating HT with MPC variables...")
-    variables = mpc_rel_vars.keys()
-    annotations = ["transcript", "ref", "alt"]
-    if "misbad" in variables:
-        logger.info("Getting missense badness annotation...")
-        mb_ht = misbad.ht()
-        ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
-        annotations.append("misbad")
-
-    if "oe" in variables:
-        annotations.append("oe")
-
-    if "polyphen" in variables:
-        ht = ht.transmute(polyphen=ht.polyphen.score)
-        annotations.append("polyphen")
-
-    logger.info("Filtering to defined annotations and checkpointing...")
-    filter_expr = True
-    for field in annotations:
-        filter_expr &= hl.is_defined(ht[field])
-    ht = ht.filter(filter_expr)
-    # Checkpoint here to force missense badness join and filter to complete
-    ht = ht.checkpoint(f"{temp_path}/mpc_temp_join.ht", overwrite=True)
-
-    logger.info("Annotating fitted scores...")
-    variable_dict = {
-        variable: mpc_rel_vars[variable]
-        for variable in variables
-        if not interaction_char in variable
-    }
-    interactions_dict = {
-        variable: mpc_rel_vars[variable]
-        for variable in variables
-        if interaction_char in variable
-    }
-    for variable in interactions_dict.keys():
-        if len(variable.split(interaction_char)) > 2:
-            raise DataException(
-                "Code currently doesn't handle interactions between more than two variables!"
-            )
-    annot_expr = [
-        (ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()
-    ]
-    # NOTE: This assumes that variable is in the format of x:y or x*y
-    # and won't handle cases where variable is x:y:z or x*y*z correctly
-    interaction_annot_expr = [
-        (
-            ht[variable.split(interaction_char)[0]]
-            * ht[variable.split(interaction_char)[1]]
-            * mpc_rel_vars[variable]
-        )
-        for variable in interactions_dict.keys()
-    ]
-    annot_expr.extend(interaction_annot_expr)
-    combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
-
-    logger.info("Computing fitted score...")
-    ht = ht.annotate(fitted_score=intercept + combined_annot_expr)
+    logger.info("Calculating fitted scores...")
+    ht = calculate_fitted_scores(ht)
 
     logger.info("Aggregating gnomAD fitted scores...")
     if not file_exists(gnomad_fitted_score_group.path):
@@ -662,7 +678,7 @@ def create_mpc_release_ht(
     ht.write(mpc_release.path, overwrite=overwrite)
 
 
-def annotate_mpc_future(
+def annotate_mpc(
     ht: hl.Table,
     output_path: str,
     overwrite: bool = True,
@@ -690,150 +706,11 @@ def annotate_mpc_future(
         hl.tstr
     ), "'locus' must be a LocusExpression, and 'alleles' must be an array of strings!"
 
-    mpc_ht = mpc_release.ht()
-    ht = ht.annotate(mpc=mpc_ht[ht.key].mpc)
-    ht.write(output_path, overwrite=overwrite)
-
-
-def annotate_mpc(
-    ht: hl.Table,
-    output_path: str,
-    overwrite: bool = True,
-    interaction_char: str = ":",
-    intercept_str: str = "Intercept",
-) -> None:
-    """
-    Annotate VEP context Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
-
-    Relationship in `mpc_rel_vars` is the formula used to calculate a variant's fitted score.
-    A variant of interest's fitted score is combined with the number of common (AF > 0.01)
-    variants in gnomAD with fitted scores < the fitted score for the variant of interest
-    to determine a variant's MPC score.
-
-    For more information on the fitted score and MPC calculation, see the docstring of `run_regressions`.
-
-    :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
-    :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
-        Default is ":".
-    :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
-    :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
-        Default is 'gs://gnomad-tmp/mpc'.
-        TODO: Update this to `temp_path` (and set automatic deletion policy.)
-    :param int n_partitions: Number of desired partitions for the VEP context Table.
-        Repartition VEP context Table to this number on read.
-        Default is 30000.
-    :param bool overwrite: Whether to overwrite temporary data if it already exists.
-        If False, will read existing temporary data rather than overwriting.
-        Default is False.
-    :return: None; function writes Table to specified output path.
-    """
-    assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
-
-    logger.info("Extracting MPC model relationships from pickle...")
-    with hl.hadoop_open(mpc_model_pkl_path, "rb") as p:
-        model = pickle.load(p)
-    mpc_rel_vars = model.params.to_dict()
-    try:
-        intercept = mpc_rel_vars.pop(intercept_str)
-    except KeyError:
-        raise DataException(
-            f"{intercept_str} not in model parameters! Please double check and rerun."
-        )
-
-    logger.info("Annotating HT with MPC variables...")
-    variables = mpc_rel_vars.keys()
-    annotations = ["transcript", "ref", "alt"]
-    if "misbad" in variables:
-        logger.info("Getting missense badness annotation...")
-        mb_ht = misbad.ht()
-        ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
-        annotations.append("misbad")
-
-    if "oe" in variables:
-        annotations.append("oe")
-
-    if "polyphen" in variables:
-        annotations.append("polyphen")
-
-    logger.info("Filtering to defined annotations and checkpointing...")
-    filter_expr = True
-    for field in annotations:
-        filter_expr &= hl.is_defined(ht[field])
-    ht = ht.filter(filter_expr)
-    # Checkpoint here to force missense badness join and filter to complete
-    ht = ht.checkpoint("gs://gnomad-tmp/mpc/mpc_temp_join.ht", overwrite=True)
-
-    logger.info("Annotating fitted scores...")
-    variable_dict = {
-        variable: mpc_rel_vars[variable]
-        for variable in variables
-        if not interaction_char in variable
-    }
-    interactions_dict = {
-        variable: mpc_rel_vars[variable]
-        for variable in variables
-        if interaction_char in variable
-    }
-    for variable in interactions_dict.keys():
-        if len(variable.split(interaction_char)) > 2:
-            raise DataException(
-                "Code currently doesn't handle interactions between more than two variables!"
-            )
-    annot_expr = [
-        (ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()
-    ]
-    # NOTE: This assumes that variable is in the format of x:y or x*y
-    # and won't handle cases where variable is x:y:z or x*y*z correctly
-    interaction_annot_expr = [
-        (
-            ht[variable.split(interaction_char)[0]]
-            * ht[variable.split(interaction_char)[1]]
-            * mpc_rel_vars[variable]
-        )
-        for variable in interactions_dict.keys()
-    ]
-    annot_expr.extend(interaction_annot_expr)
-    combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
-
-    logger.info("Computing fitted score...")
-    ht = ht.annotate(fitted_score=intercept + combined_annot_expr)
-
-    logger.info("Aggregating gnomAD fitted scores...")
-    if not file_exists(gnomad_fitted_score_group.path):
-        aggregate_gnomad_fitted_scores()
-    gnomad_ht = gnomad_fitted_score_group.ht()
-    scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
-    scores_len = len(scores)
-
-    # Get total number of gnomAD common variants
-    gnomad_var_count = gnomad_fitted_score.ht().count()
-
-    logger.info("Getting n_less annotation...")
-    # Annotate HT with sorted array of gnomAD fitted scores
-    ht = ht.annotate_globals(gnomad_scores=scores)
-    # Checkpoint here to force the gnomAD join to complete
-    ht = ht.checkpoint("gs://gnomad-tmp/mpc/mpc_temp_gnomad.ht", overwrite=True)
-
-    # Search all gnomAD scores to find first score that is
-    # greater than or equal to score to be annotated
-    # `binary_search` will return the index of the first gnomAD fitted score that
-    # is >= the score of interest
-    # e.g., if the score of interest is 0.45, and gnomAD fitted scores are
-    # [0.3, 0.4, 0.5], then `binary_search` will return an index of 2
-    # the `n_less` of 0.5 will contain the counts of variants with gnomAD scores of
-    # 0.3 and 0.4 due to the non-inclusive nature of scans
-    # (n_less[0.5] = n_var[0.3] + n_var[0.4])
-    ht = ht.annotate(idx=hl.binary_search(ht.gnomad_scores, ht.fitted_score))
-    ht = ht.annotate(
-        n_less=hl.if_else(
-            # Make n_less equal to total gnomAD common variant count if
-            # index is equal to the length of the gnomAD scores array
-            ht.idx == scores_len,
-            gnomad_var_count,
-            gnomad_ht[ht.idx].n_less,
-        )
-    )
-    # Checkpoint here to force the binary search to compute
-    ht = ht.checkpoint("gs://gnomad-tmp/mpc/mpc_temp_binary.ht", overwrite=True)
-    ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
+    if not file_exists(mpc_release_dedup.path):
+        mpc_ht = mpc_release.ht()
+        mpc_ht = mpc_ht.select("transcript", "mpc")
+        mpc_ht = mpc_ht.collect_by_key()
+        mpc_ht.write(mpc_release_dedup.path, overwrite=True)
+    mpc_ht = mpc_release_dedup.ht()
+    ht = ht.annotate(mpc_list=mpc_ht[ht.key].values)
     ht.write(output_path, overwrite=overwrite)
