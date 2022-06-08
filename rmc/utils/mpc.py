@@ -683,9 +683,7 @@ def create_mpc_release_ht(
     scores_len = len(scores)
 
     # Get total number of gnomAD common variants
-    common_gnomad_ht = joint_clinvar_gnomad.ht()
-    common_gnomad_ht = common_gnomad_ht.filter(common_gnomad_ht.pop_v_path == 1)
-    gnomad_var_count = common_gnomad_ht.count()
+    gnomad_var_count = gnomad_fitted_score.ht().count()
 
     logger.info("Getting n_less annotation...")
     # Annotate HT with sorted array of gnomAD fitted scores
