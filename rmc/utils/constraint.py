@@ -1504,7 +1504,7 @@ def constraint_flag_expr(
     )
 
 
-def group_rmc_ht_by_section() -> hl.Table:
+def group_rmc_ht_by_section(overwrite: bool = False) -> hl.Table:
     """
     Group RMC results Table by transcript subsection and return interval and section missense o/e.
 
@@ -1513,6 +1513,8 @@ def group_rmc_ht_by_section() -> hl.Table:
         - Assumes RMC HT is annotated with `locus`, `transcript`, `section`, `section_start_pos`,
         `section_end_pos`, and `section_oe`.
 
+    :param bool overwrite: Whether to overwrite temporary checkpointed Table if it exists.
+        Default is False.
     :return: RMC results Table keyed by interval and annotated with transcript and section o/e.
     """
     rmc_ht = (
@@ -1527,7 +1529,11 @@ def group_rmc_ht_by_section() -> hl.Table:
         contig=hl.agg.take(rmc_ht.locus.contig, 1)[0],
         section_oe=hl.agg.take(rmc_ht.section_oe, 1)[0],
     )
-    rmc_ht = rmc_ht.checkpoint(f"{temp_path}/rmc_group_by_section.ht", overwrite=True)
+    rmc_ht = rmc_ht.checkpoint(
+        f"{temp_path}/rmc_group_by_section.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
+    )
     rmc_ht = rmc_ht.transmute(
         interval=hl.parse_locus_interval(
             hl.format(
