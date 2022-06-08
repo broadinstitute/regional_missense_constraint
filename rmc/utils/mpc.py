@@ -17,6 +17,7 @@ from rmc.resources.basics import (
     blosum,
     blosum_txt_path,
     context_with_oe,
+    context_with_oe_dedup,
     gnomad_fitted_score,
     gnomad_fitted_score_group,
     grantham,
@@ -209,8 +210,11 @@ def create_context_with_oe(
     """
     Filter VEP context Table to missense variants in canonical transcripts, and add missense observed/expected.
 
-    Function also keeps transcript, most severe consequence,
-    codons, reference and alternate amino acids, Polyphen-2, and SIFT annotations.
+    Function writes two Tables:
+        - `context_with_oe`: Table of all missense variants in canonical transcripts + all annotations (includes duplicate loci).
+            Annotations are: transcript, most severe consequence, codons, reference and alternate amino acids,
+            Polyphen-2, and SIFT.
+        - `context_with_oe_dedup`: Deduplicated version of `context_with_oe` that only contains missense o/e and transcript annotations.
 
     :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
     :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
@@ -255,7 +259,20 @@ def create_context_with_oe(
         "Adding regional missense constraint missense o/e annotation and writing to resource path..."
     )
     ht = get_oe_annotation(ht)
-    ht.write(context_with_oe.path, _read_if_exists=not overwrite, overwrite=overwrite)
+    ht = ht.checkpoint(
+        context_with_oe.path, _read_if_exists=not overwrite, overwrite=overwrite
+    )
+
+    logger.info(
+        "Creating dedup context with oe (with oe and transcript annotations only)..."
+    )
+    ht = ht.select("transcript", "oe")
+    ht = ht.collect_by_key()
+    ht = ht.annotate(oe=hl.min(ht.values.oe))
+    ht = ht.annotate(transcript=ht.values.find(lambda x: x.oe == ht.oe).transcript)
+    ht.write(
+        context_with_oe_dedup.path, _read_if_exists=not overwrite, overwrite=overwrite
+    )
 
 
 def prepare_pop_path_ht(
