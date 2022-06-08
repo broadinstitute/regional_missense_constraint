@@ -26,7 +26,6 @@ from rmc.resources.basics import (
     mpc_model_pkl_path,
     mpc_release,
     mpc_release_dedup,
-    polyphen,
     temp_path,
 )
 from rmc.resources.grch37.reference_data import cadd, clinvar_path_mis
@@ -201,6 +200,64 @@ def get_annotations_from_context_ht_vep(
     return annotate_and_filter_codons(ht)
 
 
+def create_context_with_oe(
+    missense_str: str = MISSENSE,
+    temp_path_with_del: str = "gs://gnomad-tmp/mpc",
+    n_partitions: int = 30000,
+    overwrite: bool = False,
+) -> None:
+    """
+    Filter VEP context Table to missense variants in canonical transcripts, and add missense observed/expected.
+
+    Function also keeps transcript, most severe consequence,
+    codons, reference and alternate amino acids, Polyphen-2, and SIFT annotations.
+
+    :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
+    :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
+        Default is 'gs://gnomad-tmp/mpc'.
+        TODO: Update this to `temp_path` (and set automatic deletion policy.)
+    :param int n_partitions: Number of desired partitions for the VEP context Table.
+        Repartition VEP context Table to this number on read.
+        Default is 30000.
+    :param bool overwrite: Whether to overwrite temporary data if it already exists.
+        If False, will read existing temporary data rather than overwriting.
+        Default is False.
+    :return: None; function writes Table to resource path.
+    """
+    logger.info("Importing set of transcripts to keep...")
+    transcripts = get_constraint_transcripts(outlier=False)
+
+    logger.info(
+        "Reading in VEP context HT and filtering to missense variants in canonical transcripts..."
+    )
+    # Using vep_context.path to read in table with fewer partitions
+    # VEP context resource has 62164 partitions
+    ht = (
+        hl.read_table(vep_context.path, _n_partitions=n_partitions)
+        .select_globals()
+        .select("vep", "was_split")
+    )
+    ht = process_vep(ht, filter_csq=True, csq=missense_str)
+    ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
+    ht = get_annotations_from_context_ht_vep(ht)
+    # Save context Table to temporary path with specified deletion policy because this is a very large file
+    # and relevant information will be saved at `context_with_oe` (written below)
+    # Checkpointing here to force this expensive computation to compute
+    # before joining with RMC tables in `get_oe_annotation`
+    # This computation is expensive, so overwrite only if specified (otherwise, read existing file)
+    ht = ht.checkpoint(
+        f"{temp_path_with_del}/vep_context_mis_only_annot.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
+    )
+
+    logger.info(
+        "Adding regional missense constraint missense o/e annotation and writing to resource path..."
+    )
+    ht = get_oe_annotation(ht)
+    ht.write(context_with_oe.path, _read_if_exists=not overwrite, overwrite=overwrite)
+
+
 def prepare_pop_path_ht(
     gnomad_data_type: str = "exomes", af_threshold: float = 0.01
 ) -> None:
@@ -242,11 +299,9 @@ def prepare_pop_path_ht(
     ht = ht.annotate(cadd=hl.struct(**cadd_ht[ht.key]))
 
     logger.info("Getting PolyPhen-2 and codon annotations from VEP context HT...")
-    context_ht = vep_context.ht().select_globals().select("vep", "was_split")
-    context_ht = context_ht.filter(hl.is_defined(ht[context_ht.key]))
-    context_ht = process_vep(context_ht)
-    context_ht = get_annotations_from_context_ht_vep(context_ht)
-    context_ht = context_ht.checkpoint(polyphen.path, overwrite=True)
+    if not file_exists(context_with_oe.path):
+        create_context_with_oe(overwrite=True)
+    context_ht = context_with_oe.ht()
 
     logger.info(
         "Adding PolyPhen-2, codon, and transcript annotations to joint ClinVar/gnomAD HT..."
@@ -572,10 +627,7 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
 
 
 def create_mpc_release_ht(
-    missense_str: str = MISSENSE,
-    temp_path_with_del: str = "gs://gnomad-tmp/mpc",
-    n_partitions: int = 30000,
-    overwrite: bool = False,
+    overwrite: bool = True,
 ) -> None:
     """
     Annotate VEP context Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
@@ -587,54 +639,11 @@ def create_mpc_release_ht(
 
     For more information on the fitted score and MPC calculation, see the docstring of `run_regressions`.
 
-    :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
-    :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
-        Default is 'gs://gnomad-tmp/mpc'.
-        TODO: Update this to `temp_path` (and set automatic deletion policy.)
-    :param int n_partitions: Number of desired partitions for the VEP context Table.
-        Repartition VEP context Table to this number on read.
-        Default is 30000.
-    :param bool overwrite: Whether to overwrite temporary data if it already exists.
-        If False, will read existing temporary data rather than overwriting.
-        Default is False.
-    :return: None; function writes Table to specified output path.
+    :param bool overwrite: Whether to overwrite output table if it already exists. Default is True.
+    :return: None; function writes Table to resource path.
     """
-    logger.info("Importing set of transcripts to keep...")
-    transcripts = get_constraint_transcripts(outlier=False)
-
-    logger.info(
-        "Reading in VEP context HT and filtering to missense variants in canonical transcripts..."
-    )
-    # Using vep_context.path to read in table with fewer partitions
-    # VEP context resource has 62164 partitions
-    ht = (
-        hl.read_table(vep_context.path, _n_partitions=n_partitions)
-        .select_globals()
-        .select("vep", "was_split")
-    )
-    ht = process_vep(ht, filter_csq=True, csq=missense_str)
-    ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
-    ht = get_annotations_from_context_ht_vep(ht)
-    # Save context Table to temporary path with specified deletion policy because this is a very large file
-    # and relevant information will be saved at `context_with_oe` (written below)
-    # Checkpointing here to force this expensive computation to compute
-    # before joining with RMC tables in `get_oe_annotation`
-    # This computation is expensive, so overwrite only if specified (otherwise, read existing file)
-    ht = ht.checkpoint(
-        f"{temp_path_with_del}/vep_context_mis_only_annot.ht",
-        _read_if_exists=not overwrite,
-        overwrite=overwrite,
-    )
-
-    logger.info(
-        "Adding regional missense constraint missense o/e annotation and writing to resource path..."
-    )
-    ht = get_oe_annotation(ht)
-    ht = ht.checkpoint(
-        context_with_oe.path, _read_if_exists=not overwrite, overwrite=overwrite
-    )
-
     logger.info("Calculating fitted scores...")
+    ht = context_with_oe.ht()
     ht = calculate_fitted_scores(ht)
 
     logger.info("Aggregating gnomAD fitted scores...")
