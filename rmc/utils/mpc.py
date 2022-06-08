@@ -315,13 +315,28 @@ def prepare_pop_path_ht(
     )
     ht = ht.annotate(cadd=hl.struct(**cadd_ht[ht.key]))
 
-    logger.info(
-        "Getting PolyPhen-2, codon, and regional missense constraint missense o/e from `context_with_oe` resource..."
-    )
-    if not file_exists(context_with_oe.path):
+    logger.info("Getting transcript annotations...")
+    # Create VEP context HT filtered to missense variants in canonical transcripts
+    # if they don't already exist
+    if not file_exists(context_with_oe_dedup.path):
         create_context_with_oe(overwrite=True)
+
+    # Get transcript annotation from deduplicated context HT resource
+    context_ht = context_with_oe_dedup.ht()
+    ht = ht.annotate(transcript=context_ht[ht.key].transcript)
+    ht = ht.checkpoint(
+        f"{temp_path}/joint_clinvar_gnomad_transcript.ht", overwrite=True
+    )
+
+    logger.info(
+        "Getting PolyPhen-2, codon, and regional missense constraint missense o/e annotations..."
+    )
+    # Get Polyphen, codon, o/e, amino acid,
     context_ht = context_with_oe.ht()
     ht = ht.annotate(**context_ht[ht.key])
+    ht = ht.checkpoint(
+        f"{temp_path}/joint_clinvar_gnomad_transcript_aa.ht", overwrite=True
+    )
 
     logger.info("Getting missense badness annotation...")
     mb_ht = misbad.ht()
