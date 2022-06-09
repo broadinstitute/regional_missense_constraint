@@ -47,11 +47,10 @@ def main(args):
         if args.command == "calculate-mpc":
             hl.init(log="/calculate_mpc_release.log")
             create_mpc_release_ht(
-                n_partitions=args.n_partitions,
                 overwrite=args.overwrite,
             )
 
-        if args.command == "annotate_hts":
+        if args.command == "annotate-hts":
             hl.init(log="/annotate_hts.log")
             if args.clinvar:
                 from rmc.resources.grch37.reference_data import clinvar_path_mis
@@ -76,6 +75,16 @@ def main(args):
                 annotate_mpc(
                     ht=control_ht,
                     output_path=f"{MPC_PREFIX}/{CURRENT_VERSION}/dd_control_mpc_annot.ht",
+                    overwrite=args.overwrite,
+                )
+
+            if args.gnomad_exomes:
+                from gnomad.resources.grch37.gnomad import public_release
+
+                ht = public_release("exomes").ht()
+                annotate_mpc(
+                    ht=ht,
+                    output_path=f"{MPC_PREFIX}/{CURRENT_VERSION}/gnomAD_mpc_annot.ht",
                     overwrite=args.overwrite,
                 )
 
@@ -146,12 +155,6 @@ if __name__ == "__main__":
         Calculate MPC release Table (VEP context Table filtered to missense variants in canonical, non-outlier transcripts).
         """,
     )
-    calculate_score.add_argument(
-        "--n-partitions",
-        help="Desired number of partitions for VEP context HT.",
-        default=30000,
-        type=int,
-    )
 
     annotate_hts = subparsers.add_parser(
         "annotate-hts", help="Annotate specified dataset with MPC."
@@ -162,6 +165,11 @@ if __name__ == "__main__":
     annotate_hts.add_argument(
         "--dd",
         help="Calculate MPC for de novo variants from developmental disorder (DD) cases and controls",
+        action="store_true",
+    )
+    annotate_hts.add_argument(
+        "--gnomad-exomes",
+        help="Calculate MPC for all gnomAD exomes variants",
         action="store_true",
     )
     annotate_hts.add_argument(
