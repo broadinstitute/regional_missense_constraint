@@ -718,17 +718,22 @@ def annotate_mpc(
     ht: hl.Table,
     output_path: str,
     overwrite: bool = True,
+    add_transcript_annotation: bool = True,
 ) -> None:
     """
     Annotate Table with MPC score using MPC release Table (`mpc_release`).
 
     .. note::
         - Assume input Table is keyed by locus and alleles.
+        - Function will add transcript annotations using `context_with_oe_dedup` resource
+            if they don't already exist in input Table.
 
     :param hl.Table ht: Input Table to be annotated.
     :param str output_path: Where to write Table after adding MPC annotations.
     :param bool overwrite: Whether to overwrite specified output path if it already exists.
         Default is True.
+    :param bool add_transcript_annotation: Whether to add transcript annotation to input Table
+        (even if it already exists). Default is True.
     :return: None; function writes Table to specified output path.
     """
     assert (
@@ -742,6 +747,13 @@ def annotate_mpc(
         hl.tstr
     ), "'locus' must be a LocusExpression, and 'alleles' must be an array of strings!"
 
+    if "transcript" not in ht.row or add_transcript_annotation:
+        assert file_exists(
+            context_with_oe_dedup.path
+        ), "De-duplicated context with OE resource does not exist!"
+        context_ht = context_with_oe_dedup.ht()
+        ht = ht.annotate(transcript=context_ht[ht.key].transcript)
+
     if not file_exists(mpc_release_dedup.path):
         mpc_ht = mpc_release.ht()
         mpc_ht = mpc_ht.select("transcript", "mpc")
@@ -749,4 +761,5 @@ def annotate_mpc(
         mpc_ht.write(mpc_release_dedup.path, overwrite=True)
     mpc_ht = mpc_release_dedup.ht()
     ht = ht.annotate(mpc_list=mpc_ht[ht.key].values)
+    ht = ht.annotate(mpc=ht.mpc_list.find(lambda x: x.transcript == ht.transcript).mpc)
     ht.write(output_path, overwrite=overwrite)
