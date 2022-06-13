@@ -42,6 +42,7 @@ def main(args):
             run_regressions(
                 variables=args.variables.split(","),
                 additional_variables=args.extra_variables.split(","),
+                overwrite=args.overwrite,
             )
 
         if args.command == "calculate-mpc":

@@ -371,6 +371,7 @@ def prepare_pop_path_ht(
 def run_regressions(
     variables: List[str] = ["oe", "misbad", "polyphen"],
     additional_variables: List[str] = ["blosum", "grantham"],
+    overwrite: bool = True,
 ) -> None:
     """
     Run single variable and joint regressions and pick best model.
@@ -393,6 +394,7 @@ def run_regressions(
         Default is ["oe", "misbad", "polyphen"].
     :param List[str] additional_variables: Additional variables to include in single variable regressions only.
         Default is ["blosum", "grantham"].
+    :param bool overwrite: Whether to overwrite gnomAD fitted score table if it already exists. Default is True.
     :return: None; function writes Table with gnomAD fitted scores
         and model coefficients as pickle to resource paths.
     """
@@ -527,7 +529,7 @@ def run_regressions(
     )
     ht = ht.filter(ht.pop_v_path == 1)
     ht = calculate_fitted_scores(ht)
-    ht.write(gnomad_fitted_score.path, overwrite=True)
+    ht.write(gnomad_fitted_score.path, overwrite=overwrite)
 
 
 def calculate_fitted_scores(
