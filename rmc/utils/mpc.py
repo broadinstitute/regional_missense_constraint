@@ -478,7 +478,7 @@ def run_regressions(
     all_model_aic = single_var_aic + [add_model.aic, mult_model.aic, spec_model.aic]
     min_aic = min(all_model_aic)
     logger.info("Lowest model AIC: %f", min_aic)
-    '''if all_model_aic.count(min_aic) > 1:
+    if all_model_aic.count(min_aic) > 1:
         logger.warning(
             """
             There is a tie for minimum AIC.
@@ -516,10 +516,8 @@ def run_regressions(
         )
         logger.info("Coefficients: %s", spec_model.params)
         model = spec_model
-        X = spec_X'''
+        X = spec_X
 
-    model = spec_model
-    X = spec_X
     logger.info("Saving model as pickle...")
     with hl.hadoop_open(mpc_model_pkl_path, "wb") as p:
         pickle.dump(model, p, protocol=pickle.HIGHEST_PROTOCOL)
