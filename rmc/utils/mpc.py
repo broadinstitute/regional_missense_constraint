@@ -691,3 +691,50 @@ def annotate_mpc(
     mpc_ht = mpc_release.ht()
     ht = ht.annotate(mpc=mpc_ht[ht.key].mpc)
     ht.write(output_path, overwrite=overwrite)
+
+
+def prep_mpc_histogram_tsv(
+    case_ht: hl.Table,
+    control_ht: hl.Table,
+    output_tsv_path: str,
+    keep_asd: bool,
+    keep_dd: bool,
+    temp_path_with_del: str = "gs://gnomad-tmp/mpc",
+    case_control_field: str = "case_control",
+    asd_str: str = "ASD",
+    dd_str: str = "DD",
+):
+    """
+    Create TSV of de novo variants from neurodevelopmental disorders (NDD) cases and controls in preparation for plotting.
+
+    .. note::
+        Input case and control HT must be annotated with MPC and `case_control_field`.
+
+    :param hl.Table case_ht: Table with de novo variants from NDD cases.
+    :param hl.Table control_ht: Table with de novo variants from NDD controls.
+    :param str output_tsv_path: Where to store output TSV.
+    :param bool keep_asd: Whether to keep variants from cases with Autism Spectrum Disorder (ASD).
+    :param bool keep_dd: Whether to keep variants from cases with developmental disorders (DD).
+    :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
+        Default is 'gs://gnomad-tmp/mpc'.
+    :param str case_control_field: Field describing whether variant is from a case or control.
+        Default is 'case_control'.
+    :param str asd_str: String describing whether case has ASD. Default is 'ASD'.
+    :param str dd_str: String describing whether case has DD. Default is 'DD'.
+    :return: None; function writes TSV to specified path.
+    """
+    if not keep_asd:
+        logger.info("Removing ASD cases...")
+        case_ht = case_ht.filter(case_ht[case_control_field] != asd_str)
+    if not keep_dd:
+        logger.info("Removing DD cases...")
+        case_ht = case_ht.filter(case_ht[case_control_field] != dd_str)
+
+    logger.info("Joining case and control HTs...")
+    ht = (
+        case_ht.key_by("case_control")
+        .select("mpc")
+        .union(control_ht.key_by("case_control").select("mpc"))
+    )
+    ht = ht.checkpoint(f"{temp_path_with_del}/ndd_mpc.ht", overwrite=True)
+    ht.export(output_tsv_path)
