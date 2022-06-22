@@ -340,7 +340,6 @@ def prepare_pop_path_ht(
     )
 
     logger.info("Getting missense badness annotation...")
-    ht = hl.read_table(f"{temp_path}/joint_clinvar_gnomad_transcript_aa.ht")
     mb_ht = misbad.ht()
     ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
 
