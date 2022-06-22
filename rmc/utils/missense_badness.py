@@ -72,6 +72,10 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
 
     Use regional OE value if available, otherwise use transcript OE value.
 
+    .. note::
+        - Assumes input Table has `locus` and `trancript` annotations
+        - OE values are transcript specific
+
     :param hl.Table ht: Input Table.
     :return: Table with `oe` annotation.
     """
