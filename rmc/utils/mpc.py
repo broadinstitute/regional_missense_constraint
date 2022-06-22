@@ -30,8 +30,9 @@ from rmc.resources.basics import (
 )
 from rmc.resources.grch37.reference_data import (
     cadd,
-    case_control_hist,
     clinvar_path_mis,
+    DE_NOVO_COUNTS,
+    get_mpc_case_control_ht_path,
 )
 from rmc.resources.resource_utils import MISSENSE
 from rmc.utils.generic import get_aa_map, get_constraint_transcripts, process_vep
@@ -706,9 +707,11 @@ def prep_mpc_histogram_tsv(
     case_control_field: str = "case_control",
     asd_str: str = "ASD",
     dd_str: str = "DD",
-):
+) -> None:
     """
-    Create TSV of de novo variants from neurodevelopmental disorders (NDD) cases and controls in preparation for plotting.
+    Create TSV of MPC scores of de novo variants from neurodevelopmental disorders (NDD) cases and controls.
+
+    Used to create stacked histograms of MPC scores from cases and controls.
 
     .. note::
         Input case and control HT must be annotated with MPC and `case_control_field`.
@@ -724,6 +727,10 @@ def prep_mpc_histogram_tsv(
     :param str dd_str: String describing whether case has DD. Default is 'DD'.
     :return: None; function writes TSV to specified path.
     """
+    assert any(
+        [keep_asd, keep_dd]
+    ), "At least one of `keep_asd` and `keep_dd` must be True!"
+
     if not keep_asd:
         logger.info("Removing ASD cases...")
         case_ht = case_ht.filter(case_ht[case_control_field] != asd_str)
@@ -737,11 +744,69 @@ def prep_mpc_histogram_tsv(
         .select("mpc")
         .union(control_ht.key_by("case_control").select("mpc"))
     )
-    ht = ht.checkpoint(case_control_hist.path, overwrite=True)
+
+    logger.info("Checkpointing Table and exporting to TSV...")
+    if keep_asd and keep_dd:
+        asd_only = dd_only = False
+    else:
+        asd_only = keep_asd
+        dd_only = keep_dd
+    ht = ht.checkpoint(get_mpc_case_control_ht_path(asd_only, dd_only), overwrite=True)
     ht.export(output_tsv_path)
 
 
-def prep_rate_ratio_tsv():
-    """Temp."""
-    ht = case_control_hist.ht()
+def prep_rate_ratio_tsv(
+    output_tsv_path: str,
+    keep_asd: bool,
+    keep_dd: bool,
+) -> None:
+    """
+    Create TSV of total number of variants from NDD cases and controls per MPC bin.
+
+    Used as input to two-sided Poisson exact test to calculate rate ratios.
+
+    :param str output_tsv_path: Where to store output TSV.
+    :param bool keep_asd: Whether to keep variants from cases with Autism Spectrum Disorder (ASD).
+    :param bool keep_dd: Whether to keep variants from cases with developmental disorders (DD).
+    :return: None; function writes TSV to specified path.
+    """
+    logger.info("Reading in Table...")
+    if keep_asd and keep_dd:
+        asd_only = dd_only = False
+    else:
+        asd_only = keep_asd
+        dd_only = keep_dd
+    ht_path = get_mpc_case_control_ht_path(asd_only, dd_only)
+
+    if not file_exists(ht_path):
+        raise DataException("%s does not exist! Double check and rerun.")
+    ht = hl.read_table(get_mpc_case_control_ht_path(asd_only, dd_only))
+
+    logger.info("Getting total number of cases and controls...")
+    total_cases = 0
+    if keep_asd:
+        total_cases += DE_NOVO_COUNTS["asd_only"]
+    if keep_dd:
+        total_cases += DE_NOVO_COUNTS["dd_only"]
+    total_controls = DE_NOVO_COUNTS["controls"]
+
+    logger.info("Annotating with MPC bin, grouping HT, and exporting...")
+    ht = ht.annotate(
+        mpc_bin=hl.case()
+        .when((ht.mpc >= 1) & (ht.mpc < 2), 1)
+        .when((ht.mpc >= 2) & (ht.mpc < 3), 2)
+        .when(ht.mpc >= 3, 3)
+        .default(0)
+    )
     ht = ht.group_by("mpc_bin").aggregate(count=hl.agg.count())
+    ht = ht.group_by("mpc_bin").aggregate(
+        n_case=hl.agg.filter(ht.case_control != "control", hl.agg.count()),
+        n_control=hl.agg.filter(ht.case_control == "control", hl.agg.count()),
+        total_cases=total_cases,
+        total_controls=total_controls,
+    )
+    ht = ht.annotate(
+        rate_per_case=ht.n_case / ht.total_controls,
+        rate_per_control=ht.n_control / ht.total_controls,
+    )
+    ht.export(output_tsv_path)

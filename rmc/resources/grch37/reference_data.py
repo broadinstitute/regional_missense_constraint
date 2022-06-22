@@ -5,7 +5,6 @@ from gnomad.resources.resource_utils import (
 from rmc.resources.basics import MPC_PREFIX
 from rmc.resources.resource_utils import (
     CURRENT_VERSION,
-    GNOMAD_VERSIONS,
     RESOURCE_PREFIX,
 )
 
@@ -57,6 +56,15 @@ de_novo = TableResource(
 De novo missense variants from 37,488 cases and 2,179 controls (same as above).
 """
 
+DE_NOVO_COUNTS = {
+    "dd_only": 31058,
+    "asd_only": 6430,
+    "controls": 2179,
+}
+"""
+Dictionary with counts of neurodevelopmental disorders (NDD) cases and controls in `de_novo` resources.
+"""
+
 ## MPC related resources
 cadd = TableResource(
     path="gs://seqr-reference-data/GRCh37/CADD/CADD_snvs_and_indels.v1.6.ht"
@@ -65,15 +73,25 @@ cadd = TableResource(
 Table with CADD (v1.6) raw and phredd scores.
 """
 
-case_control_hist = TableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{MPC_PREFIX}/{version}/ndd_mpc_hist.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table with variant case control status and MPC score.
 
-Used to create stacked histogram of MPC scores in neurodevelopmental disorders cases vs controls.
-"""
+def get_mpc_case_control_ht_path(asd_only: bool, dd_only: bool) -> str:
+    """
+    Return path to case control Table.
+
+    Table is used to create stacked histogram of MPC scores in NDD cases vs controls
+    and rate ratio Table.
+
+    Function will return path to one of three possible Tables:
+        - Table with developmental disorders (DD) cases + controls only (no Autism Spectrum Disorders cases)
+        - Table with Autism Spectrum Disorders (ASD) cases + controls only (no DD cases)
+        - Table with all NDD cases + controls
+
+    :param bool asd_only: Whether to return path to Table with ASD cases and controls only (no DD cases).
+    :param bool dd_only: Whether to return path to Table with developmental disorders (DD) cases and controls only (no ASD cases).
+    :return: Path to desired case control Table
+    """
+    if asd_only:
+        return f"{MPC_PREFIX}/{CURRENT_VERSION}/asd_mpc_hist.ht"
+    elif dd_only:
+        return f"{MPC_PREFIX}/{CURRENT_VERSION}/dd_mpc_hist.ht"
+    return f"{MPC_PREFIX}/{CURRENT_VERSION}/all_ndd_mpc_hist.ht"
