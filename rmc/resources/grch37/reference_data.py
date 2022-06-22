@@ -78,6 +78,8 @@ dbnsfp = TableResource(
 )
 """
 Table with REVEL score.
+
+NOTE: This table contains duplicate variants, and the REVEL score annotation is currently a string.
 """
 
 
