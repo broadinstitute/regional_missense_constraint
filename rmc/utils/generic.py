@@ -260,7 +260,7 @@ def get_exome_bases(build: str) -> int:
     )
 
     logger.info("Removing outlier transcripts...")
-    outlier_transcripts = get_constraint_transcripts(outlier=True)
+    outlier_transcripts = get_constraint_transcripts(outlier=False)
     ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
     ht = ht.explode(ht.transcript_consequences)
     ht = ht.filter(
@@ -375,6 +375,15 @@ def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.T
     logger.info("Filtering to canonical transcripts...")
     ht = fast_filter_vep(
         ht, vep_root="vep", syn=False, canonical=True, filter_empty=True
+    )
+
+    logger.info("Filtering to non-outlier transcripts...")
+    # Keep transcripts used in LoF constraint only (remove all other outlier transcripts)
+    constraint_transcripts = get_constraint_transcripts(outlier=True)
+    ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
+    ht = ht.explode(ht.transcript_consequences)
+    ht = ht.filter(
+        constraint_transcripts.contains(ht.transcript_consequences.transcript_id)
     )
 
     logger.info("Annotating HT with most severe consequence...")
