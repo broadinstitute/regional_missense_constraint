@@ -20,6 +20,9 @@ probability of mutation for each variant, CpG status, gnomAD exome coverage, and
 
 Used to calculate the cumulative observed and expected missense values per locus and
 generate regional missense constraint results.
+
+NOTE: This resource is created with `process_vep`, which now filters to non-outlier transcripts by default.
+However, for v2, this resource contains *all* transcripts (including outliers).
 """
 
 gene_model = TableResource(path=f"{RESOURCE_PREFIX}/GRCh37/browser/b37_transcripts.ht")

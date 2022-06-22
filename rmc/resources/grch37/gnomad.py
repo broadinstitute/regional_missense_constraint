@@ -19,7 +19,11 @@ filtered_exomes = TableResource(
 )
 """
 Processed gnomAD exomes Table filtered to missense variants only.
+
+NOTE: This resource is created with `process_vep`, which now filters to non-outlier transcripts by default.
+However, for v2, this resource contains *all* transcripts (including outliers).
 """
+
 processed_genomes = TableResource(path=f"{FLAGSHIP_MODEL_PREFIX}/genomes_processed.ht")
 """
 Processed gnomAD genomes Table.
