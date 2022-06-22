@@ -14,7 +14,7 @@ from gnomad.utils.slack import slack_notifications
 from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX
 from rmc.resources.resource_utils import CURRENT_VERSION
 from rmc.slack_creds import slack_token
-from rmc.utils.mpc import prep_mpc_histogram_tsv
+from rmc.utils.mpc import prep_mpc_histogram_tsv, prep_rate_ratio_tsv
 
 
 logging.basicConfig(
@@ -44,6 +44,14 @@ def main(args):
                 keep_dd=args.dd,
             )
 
+        if args.command == "prepare-rate-ratio-tsv":
+            hl.init(log="/prep_mpc_histogram.log")
+            prep_rate_ratio_tsv(
+                output_tsv_path=args.output_tsv_path,
+                keep_asd=args.asd,
+                keep_dd=args.dd,
+            )
+
     finally:
         logger.info("Copying hail log to logging bucket...")
         hl.copy_log(LOGGING_PATH)
@@ -60,6 +68,20 @@ if __name__ == "__main__":
         "--slack-channel",
         help="Send message to Slack channel/user.",
     )
+    parser.add_argument(
+        "--asd",
+        help="Specify this flag to keep variants from cases with Autism Spectrum Disorder (ASD).",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--dd",
+        help="Specify this flag to keep variants from cases with developmental disorders (DD).",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--output-tsv-path",
+        help="Output path for TSV (either for prepare-histogram-tsv or prepare-rate-ratio-tsv step).",
+    )
 
     # Create subparsers for each step
     # Need to specify `dest` to be able to check which subparser is being invoked
@@ -74,6 +96,9 @@ if __name__ == "__main__":
         TSV contains only two columns:
             - Case vs control status of variant
             - Variant's MPC score
+
+        This step also creates case control Hail Table used downstream to calculate rate ratios of MPC in de novo variants
+        from cases vs controls.
         """,
     )
     prepare_hist_tsv.add_argument(
@@ -86,20 +111,18 @@ if __name__ == "__main__":
         help="Path to Hail Table of de novo variants from NDD controls annotated with MPC.",
         default=f"{MPC_PREFIX}/{CURRENT_VERSION}/dd_control_mpc_annot.ht",
     )
-    prepare_hist_tsv.add_argument(
-        "--output-tsv-path",
-        help="Output path for TSV (input to RStudio for plotting). Note that TSV path should contain .bgz ending!",
-        default=f"{TEMP_PATH_WITH_DEL}/ndd_mpc.tsv.bgz",
-    )
-    prepare_hist_tsv.add_argument(
-        "--asd",
-        help="Specify this flag to keep variants from cases with Autism Spectrum Disorder (ASD).",
-        action="store_true",
-    )
-    prepare_hist_tsv.add_argument(
-        "--dd",
-        help="Specify this flag to keep variants from cases with developmental disorders (DD).",
-        action="store_true",
+
+    prepare_rate_tsv = subparsers.add_parser(
+        "prepare-rate-ratio-tsv",
+        help="""
+        Prepare TSV of MPC bins and corresponding variant counts (
+            total variants from cases, total variants from controls, total number of cases, total number of controls,
+            rate per case, rate per control
+        ).
+
+        This TSV is used as input in a two-sided Poisson exact test to calculate MPC rate ratios in de novo variants from
+        cases and controls.
+        """,
     )
 
     args = parser.parse_args()
