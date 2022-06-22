@@ -260,7 +260,7 @@ def get_exome_bases(build: str) -> int:
     )
 
     logger.info("Removing outlier transcripts...")
-    outlier_transcripts = get_constraint_transcripts(outlier=False)
+    outlier_transcripts = get_constraint_transcripts(outlier=True)
     ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
     ht = ht.explode(ht.transcript_consequences)
     ht = ht.filter(
