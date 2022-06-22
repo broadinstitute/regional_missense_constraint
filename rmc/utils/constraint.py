@@ -3,7 +3,6 @@ from typing import Dict, List, Set, Tuple, Union
 
 import hail as hl
 
-from gnomad.resources.grch37.gnomad import coverage, public_release
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 
@@ -16,11 +15,11 @@ from rmc.resources.basics import (
     rmc_results,
     temp_path,
 )
+from rmc.resources.grch37.gnomad import filtered_exomes
 from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo, gene_model
 from rmc.utils.generic import (
     get_constraint_transcripts,
     get_coverage_correction_expr,
-    keep_criteria,
     import_clinvar_hi_variants,
     import_de_novo_variants,
     process_vep,
@@ -94,7 +93,6 @@ List of annotations to keep when finalizing release HT.
 
 def add_obs_annotation(
     ht: hl.Table,
-    gnomad_data_type: str = "exomes",
     filter_csq: bool = False,
     csq: str = None,
 ) -> hl.Table:
@@ -104,28 +102,14 @@ def add_obs_annotation(
     Check if locus/allele are present in gnomAD and add as annotation.
 
     :param hl.Table ht: Input Table.
-    :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
-        Must be one of "exomes" or "genomes" (check is done within `public_release`).
-        Default is "exomes".
     :param bool filter_csq: Whether to filter gnomAD data to a specific consequence. Default is False.
         If True, then only variants that match this consequence in the input Table will be annotated as observed.
     :param str csq: Desired consequence. Default is None. Must be specified if filter_csq is True.
     :return: Table with observed variant annotation.
     """
     logger.info("Adding observed annotation...")
-    gnomad_ht = public_release(gnomad_data_type).ht()
-    gnomad_cov = coverage(gnomad_data_type).ht()
-    gnomad_ht = gnomad_ht.select(
-        "filters",
-        ac=gnomad_ht.freq[0].AC,
-        af=gnomad_ht.freq[0].AF,
-        gnomad_coverage=gnomad_cov[gnomad_ht.locus].median,
-    )
-    gnomad_ht = gnomad_ht.filter(
-        keep_criteria(
-            gnomad_ht.ac, gnomad_ht.af, gnomad_ht.filters, gnomad_ht.gnomad_coverage
-        )
-    )
+    gnomad_ht = filtered_exomes.ht()
+
     if filter_csq:
         gnomad_ht = process_vep(gnomad_ht, filter_csq=filter_csq, csq=csq)
     ht = ht.annotate(_obs=gnomad_ht.index(ht.key))
