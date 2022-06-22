@@ -2,7 +2,12 @@ from gnomad.resources.resource_utils import (
     TableResource,
     VersionedTableResource,
 )
-from rmc.resources.resource_utils import RESOURCE_PREFIX
+from rmc.resources.basics import MPC_PREFIX
+from rmc.resources.resource_utils import (
+    CURRENT_VERSION,
+    GNOMAD_VERSIONS,
+    RESOURCE_PREFIX,
+)
 
 
 ## Reference genome related resources
@@ -58,4 +63,17 @@ cadd = TableResource(
 )
 """
 Table with CADD (v1.6) raw and phredd scores.
+"""
+
+case_control_hist = TableResource(
+    default_version=CURRENT_VERSION,
+    versions={
+        version: TableResource(path=f"{MPC_PREFIX}/{version}/ndd_mpc_hist.ht")
+        for version in GNOMAD_VERSIONS
+    },
+)
+"""
+Table with variant case control status and MPC score.
+
+Used to create stacked histogram of MPC scores in neurodevelopmental disorders cases vs controls.
 """

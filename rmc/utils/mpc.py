@@ -28,7 +28,11 @@ from rmc.resources.basics import (
     polyphen,
     temp_path,
 )
-from rmc.resources.grch37.reference_data import cadd, clinvar_path_mis
+from rmc.resources.grch37.reference_data import (
+    cadd,
+    case_control_hist,
+    clinvar_path_mis,
+)
 from rmc.resources.resource_utils import MISSENSE
 from rmc.utils.generic import get_aa_map, get_constraint_transcripts, process_vep
 from rmc.utils.missense_badness import annotate_and_filter_codons, get_oe_annotation
@@ -699,7 +703,6 @@ def prep_mpc_histogram_tsv(
     output_tsv_path: str,
     keep_asd: bool,
     keep_dd: bool,
-    temp_path_with_del: str = "gs://gnomad-tmp/mpc",
     case_control_field: str = "case_control",
     asd_str: str = "ASD",
     dd_str: str = "DD",
@@ -715,8 +718,6 @@ def prep_mpc_histogram_tsv(
     :param str output_tsv_path: Where to store output TSV.
     :param bool keep_asd: Whether to keep variants from cases with Autism Spectrum Disorder (ASD).
     :param bool keep_dd: Whether to keep variants from cases with developmental disorders (DD).
-    :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
-        Default is 'gs://gnomad-tmp/mpc'.
     :param str case_control_field: Field describing whether variant is from a case or control.
         Default is 'case_control'.
     :param str asd_str: String describing whether case has ASD. Default is 'ASD'.
@@ -736,5 +737,5 @@ def prep_mpc_histogram_tsv(
         .select("mpc")
         .union(control_ht.key_by("case_control").select("mpc"))
     )
-    ht = ht.checkpoint(f"{temp_path_with_del}/ndd_mpc.ht", overwrite=True)
+    ht = ht.checkpoint(case_control_hist.path, overwrite=True)
     ht.export(output_tsv_path)

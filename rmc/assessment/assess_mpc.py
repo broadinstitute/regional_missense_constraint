@@ -42,7 +42,6 @@ def main(args):
                 output_tsv_path=args.output_tsv_path,
                 keep_asd=args.asd,
                 keep_dd=args.dd,
-                temp_path_with_del=TEMP_PATH_WITH_DEL,
             )
 
     finally:
