@@ -104,3 +104,12 @@ def get_mpc_case_control_ht_path(asd_only: bool, dd_only: bool) -> str:
     elif dd_only:
         return f"{MPC_PREFIX}/{CURRENT_VERSION}/dd_mpc_hist.ht"
     return f"{MPC_PREFIX}/{CURRENT_VERSION}/all_ndd_mpc_hist.ht"
+
+
+mpc_comparison = TableResource(path=f"{MPC_PREFIX}/{CURRENT_VERSION}/mpc_comparison.ht")
+"""
+Table containing de novo missense variants from NDD cases and controls annotated with MPC,
+Polyphen-2, SIFT, CADD, and REVEL scores.
+
+Used to compare MPC performance against these other scores.
+"""
