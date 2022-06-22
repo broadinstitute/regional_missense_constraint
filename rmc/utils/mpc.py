@@ -749,19 +749,19 @@ def annotate_mpc(
         hl.tstr
     ), "'locus' must be a LocusExpression, and 'alleles' must be an array of strings!"
 
-    if "transcript" not in ht.row or add_transcript_annotation:
-        assert file_exists(
-            context_with_oe_dedup.path
-        ), "De-duplicated context with OE resource does not exist!"
-        context_ht = context_with_oe_dedup.ht()
-        ht = ht.annotate(transcript=context_ht[ht.key].transcript)
-
     if not file_exists(mpc_release_dedup.path):
         mpc_ht = mpc_release.ht()
         mpc_ht = mpc_ht.select("transcript", "mpc")
         mpc_ht = mpc_ht.collect_by_key()
+        mpc_ht = mpc_ht.annotate(mpc=hl.min(mpc_ht.values.mpc))
+        mpc_ht = mpc_ht.annotate(
+            transcript=ht.values.find(lambda x: x.mpc == ht.mpc).transcript
+        )
         mpc_ht.write(mpc_release_dedup.path, overwrite=True)
+
     mpc_ht = mpc_release_dedup.ht()
-    ht = ht.annotate(mpc_list=mpc_ht[ht.key].values)
-    ht = ht.annotate(mpc=ht.mpc_list.find(lambda x: x.transcript == ht.transcript).mpc)
+    if "transcript" not in ht.row or add_transcript_annotation:
+        ht = ht.annotate(transcript=mpc_ht[ht.key].transcript)
+
+    ht = ht.annotate(mpc=mpc_ht[ht.key].mpc)
     ht.write(output_path, overwrite=overwrite)
