@@ -874,3 +874,71 @@ def prep_mpc_comparison_ht(
         & hl.is_defined(ht.revel)
     )
     ht.write(mpc_comparison.path, overwrite=True)
+
+
+def compare_frac_of_top_x_var(
+    score: str,
+    top_x_percent: float,
+    control_str: str = "control",
+    temp_path_with_del: str = "gs://gnomad-tmp/mpc",
+) -> Dict[str, Union[str, float]]:
+    """
+    Pull the top x% of variants with highest value for desired score, determine fraction of variants from cases, and determine odds ratio.
+
+    Used to compare MPC performance to other metrics. Odds ratio is calculated using Fisher's exact test.
+
+    .. note::
+        - MPC comparison HT must be annotated with score, and score must match the field name
+            (e.g., if score is "revel", then MPC comparison HT must have the annotation "revel")
+
+    :param str score: Score of interest.
+    :param float top_x_percent: Desired percent value. E.g., top_x_percent = 5 means this function will compare
+        the fraction of variants with the top 5% largest score values from cases vs controls.
+    :param str control_str: String noting whether variant is from a control sample. Default is 'control'.
+    :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
+        Default is 'gs://gnomad-tmp/mpc'.
+        TODO: Update this to `temp_path` (and set automatic deletion policy.)
+    """
+    ht = mpc_comparison.ht()
+    total_count = ht.count()
+    top_row_count = int(top_x_percent * total_count)
+    bottom_row_count = total_count - top_row_count
+
+    # Order Table by score (descending)
+    ht = ht.key_by()
+    ht = ht.order_by(hl.desc(ht[score]))
+    ht = ht.checkpoint(f"{temp_path_with_del}/score_temp.ht", overwrite=True)
+
+    # Split the table into the top x% and everything else (called top and bottom here)
+    ht_top = ht.head(top_row_count)
+    ht_top = ht_top.checkpoint(f"{temp_path_with_del}/score_top.ht", overwrite=True)
+    ht_bottom = ht.tail(bottom_row_count)
+    ht_bottom = ht_bottom.checkpoint(
+        f"{temp_path_with_del}/score_bottom.ht", overwrite=True
+    )
+
+    # Get fraction of top x% variants that come from cases
+    frac_cases = ht_top.aggregate(hl.agg.fraction(ht_top.case_control != control_str))
+
+    # Get total counts of cases and control from both top and bottom HTs to run Fisher's exact test
+    ht_n_case = ht_top.aggregate(hl.agg.count_where(ht_top.case_control != control_str))
+    ht_n_control = ht_top.aggregate(
+        hl.agg.count_where(ht_top.case_control == control_str)
+    )
+    htb_n_case = ht_bottom.aggregate(
+        hl.agg.count_where(ht_bottom.case_control != control_str)
+    )
+    htb_n_control = ht_bottom.aggregate(
+        hl.agg.count_where(ht_bottom.case_control == control_str)
+    )
+
+    # Run Fisher's exact test
+    fisher_struct = hl.eval(
+        hl.fisher_exact_test(ht_n_case, htb_n_case, ht_n_control, htb_n_control)
+    )
+    return {
+        "score": score,
+        "frac_cases": frac_cases,
+        "odds_ratio": fisher_struct.odds_ratio,
+        "p_value": fisher_struct.p_value,
+    }
