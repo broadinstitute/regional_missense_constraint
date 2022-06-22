@@ -18,7 +18,7 @@ filtered_exomes = TableResource(
     path=f"{RESOURCE_PREFIX}/GRCh37/gnomad/ht/exomes_missense_only.ht"
 )
 """
-Processed gnomAD exomes Table filtered to missense variants only.
+Processed gnomAD exomes Table filtered to rare (AF < 0.001) missense variants in canonical transcripts only.
 
 NOTE: This resource is created with `process_vep`, which now filters to non-outlier transcripts by default.
 However, for v2, this resource contains *all* transcripts (including outliers).
