@@ -269,7 +269,7 @@ def create_context_with_oe(
     )
     ht = ht.select("transcript", "oe")
     ht = ht.collect_by_key()
-    ht = ht.annotate(oe=hl.min(ht.values.oe))
+    ht = ht.annotate(oe=hl.nanmin(ht.values.oe))
     ht = ht.annotate(transcript=ht.values.find(lambda x: x.oe == ht.oe).transcript)
     ht.write(
         context_with_oe_dedup.path, _read_if_exists=not overwrite, overwrite=overwrite
@@ -720,7 +720,7 @@ def create_mpc_release_ht(
     # Create deduplicated MPC release
     ht = ht.select("transcript", "mpc")
     ht = ht.collect_by_key()
-    ht = ht.annotate(mpc=hl.max(ht.values.mpc))
+    ht = ht.annotate(mpc=hl.nanmax(ht.values.mpc))
     ht = ht.annotate(transcript=ht.values.find(lambda x: x.mpc == ht.mpc).transcript)
     ht.write(mpc_release_dedup.path, overwrite=overwrite)
 
