@@ -331,9 +331,10 @@ def prepare_pop_path_ht(
     logger.info(
         "Getting PolyPhen-2, codon, and regional missense constraint missense o/e annotations..."
     )
-    # Get Polyphen, codon, o/e, amino acid,
+    # Get Polyphen, codon, o/e, amino acid annotations
     context_ht = context_with_oe.ht()
-    ht = ht.annotate(**context_ht[ht.key])
+    context_ht = context_ht.key_by("locus", "alleles", "transcript")
+    ht = ht.annotate(**context_ht[ht.locus, ht.alleles, ht.transcript])
     ht = ht.checkpoint(
         f"{temp_path}/joint_clinvar_gnomad_transcript_aa.ht", overwrite=True
     )
