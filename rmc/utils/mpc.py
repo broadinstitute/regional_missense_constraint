@@ -716,16 +716,13 @@ def create_mpc_release_ht(
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
     ht.write(mpc_release.path, overwrite=overwrite)
 
-    if not file_exists(mpc_release_dedup.path):
-        mpc_ht = mpc_release.ht()
-        mpc_ht = mpc_ht.select("transcript", "mpc")
-        mpc_ht = mpc_ht.collect_by_key()
-        mpc_ht = mpc_ht.annotate(mpc=hl.max(mpc_ht.values.mpc))
-        mpc_ht = mpc_ht.annotate(
-            transcript=ht.values.find(lambda x: x.mpc == ht.mpc).transcript
-        )
-        mpc_ht.write(mpc_release_dedup.path, overwrite=True)
-
+    ht = ht.select("transcript", "mpc")
+    ht = ht.collect_by_key()
+    ht = ht.annotate(mpc=hl.max(ht.values.mpc)))
+    ht = ht.annotate(
+        transcript=ht.values.find(lambda x: x.mpc == ht.mpc).transcript
+    )
+    ht.write(mpc_release_dedup.path, overwrite=overwrite)
 
 def annotate_mpc(
     ht: hl.Table,
