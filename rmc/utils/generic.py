@@ -272,7 +272,7 @@ def get_exome_bases(build: str) -> int:
     )
     ht = ht.key_by("locus").collect_by_key()
 
-    logger.info("Filtering positions with median coverage < 5...")
+    logger.info("Removing positions with median coverage < 5...")
     # Taking just the first value since the coverage should be the same for all entries at a locus
     ht = ht.filter(ht.values[0].coverage.exomes.median >= 5)
     ht = ht.select()
