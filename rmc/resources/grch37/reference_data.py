@@ -73,6 +73,13 @@ cadd = TableResource(
 Table with CADD (v1.6) raw and phredd scores.
 """
 
+dbnsfp = TableResource(
+    path="gs://seqr-reference-data/GRCh37/dbNSFP/v2.9.3/dbNSFP2.9.3_variant.ht"
+)
+"""
+Table with REVEL score.
+"""
+
 
 def get_mpc_case_control_ht_path(asd_only: bool, dd_only: bool) -> str:
     """
