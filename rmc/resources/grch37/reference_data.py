@@ -6,7 +6,7 @@ from rmc.resources.resource_utils import RESOURCE_PREFIX
 
 
 ## Reference genome related resources
-processed_context = VersionedTableResource(
+filtered_context = VersionedTableResource(
     default_version="v1",
     versions={
         "v1": TableResource(

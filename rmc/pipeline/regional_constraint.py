@@ -23,7 +23,7 @@ from rmc.resources.grch37.gnomad import (
     processed_exomes,
     prop_obs_coverage,
 )
-from rmc.resources.grch37.reference_data import processed_context
+from rmc.resources.grch37.reference_data import filtered_context
 from rmc.resources.resource_utils import CURRENT_VERSION, MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
@@ -75,7 +75,7 @@ def main(args):
             context_ht = filter_context_using_gnomad(
                 context_ht, "exomes", filter_context_using_cov=True
             )
-            context_ht.write(processed_context.path, overwrite=args.overwrite)
+            context_ht.write(filtered_context.path, overwrite=args.overwrite)
 
             logger.info(
                 "Filtering gnomAD exomes HT to missense variants in canonical transcripts only..."
@@ -106,7 +106,7 @@ def main(args):
                 exome_ht = filtered_exomes.ht()
 
             logger.info("Reading in context HT...")
-            context_ht = processed_context.ht()
+            context_ht = filtered_context.ht()
 
             logger.info("Building plateau and coverage models...")
             coverage_ht = prop_obs_coverage.ht()
@@ -367,7 +367,7 @@ def main(args):
             exome_ht = filtered_exomes.ht()
 
             logger.info("Reading in context HT...")
-            context_ht = processed_context.ht()
+            context_ht = filtered_context.ht()
 
             logger.info("Adding models from constraint prep HT...")
             constraint_prep_ht = constraint_prep.ht().select()
@@ -430,7 +430,7 @@ def main(args):
 
             logger.info("Reading in context HT...")
             # Drop extra annotations from context HT
-            context_ht = processed_context.ht().drop(
+            context_ht = filtered_context.ht().drop(
                 "_obs_scan", "_mu_scan", "forward_oe", "values"
             )
             context_ht = context_ht.filter(
