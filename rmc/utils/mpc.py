@@ -211,7 +211,8 @@ def create_context_with_oe(
     Filter VEP context Table to missense variants in canonical transcripts, and add missense observed/expected.
 
     Function writes two Tables:
-        - `context_with_oe`: Table of all missense variants in canonical transcripts + all annotations (includes duplicate variants, i.e. those in multiple transcripts).
+        - `context_with_oe`: Table of all missense variants in canonical transcripts + all annotations
+            (includes duplicate variants, i.e. those in multiple transcripts).
             Annotations are: transcript, most severe consequence, codons, reference and alternate amino acids,
             Polyphen-2, and SIFT.
         - `context_with_oe_dedup`: Deduplicated version of `context_with_oe` that only contains missense o/e and transcript annotations.
