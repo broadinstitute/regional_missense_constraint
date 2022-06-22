@@ -31,8 +31,10 @@ from rmc.resources.basics import (
 from rmc.resources.grch37.reference_data import (
     cadd,
     clinvar_path_mis,
+    dbnsfp,
     DE_NOVO_COUNTS,
     get_mpc_case_control_ht_path,
+    mpc_comparison,
 )
 from rmc.resources.resource_utils import MISSENSE
 from rmc.utils.generic import get_aa_map, get_constraint_transcripts, process_vep
@@ -810,3 +812,65 @@ def prep_rate_ratio_tsv(
         rate_per_control=ht.n_control / ht.total_controls,
     )
     ht.export(output_tsv_path)
+
+
+def prep_mpc_comparison_ht(
+    case_ht: hl.Table,
+    control_ht: hl.Table,
+    temp_path_with_del: str = "gs://gnomad-tmp/mpc",
+) -> None:
+    """
+    Create Table of de novo variants from NDD cases and controls to compare MPC performance.
+
+    Annotations added are: Polyphen-2, SIFT, CADD, and REVEL scores.
+
+    :param hl.Table case_ht: Table with de novo variants from NDD cases.
+    :param hl.Table control_ht: Table with de novo variants from NDD controls.
+    :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
+        Default is 'gs://gnomad-tmp/mpc'.
+        TODO: Update this to `temp_path` (and set automatic deletion policy.)
+    :return: None; function writes Table to resource (`mpc_comparison`) path.
+    """
+    logger.info("Joining case and control HT...")
+    ht = case_ht.union(control_ht)
+    ht = ht.checkpoint(f"{temp_path_with_del}/all_ndd_mpc.ht", overwrite=True)
+
+    logger.info("Adding annotations and checkpointing after each join...")
+    # Read in `context_with_oe to get` Polyphen-2 and SIFT
+    context_ht = context_with_oe.ht()
+    context_ht = context_ht.key_by("locus", "alleles", "transcript")
+    ht = ht.annotate(
+        polyphen=context_ht[ht.locus, ht.alleles, ht.transcript].polyphen.score,
+        sift=context_ht[ht.locus, ht.alleles, ht.transcript].sift.score,
+    )
+    ht = ht.checkpoint(f"{temp_path_with_del}/all_ndd_mpc_pph_sift.ht", overwrite=True)
+
+    # CADD
+    cadd_ht = cadd.ht().select("PHRED")
+    ht = ht.annotate(cadd=cadd_ht[ht.key].PHRED)
+    ht = ht.checkpoint(
+        f"{temp_path_with_del}/all_ndd_mpc_pph_sift_cadd.ht", overwrite=True
+    )
+
+    # Read in dbNSFP Table to get REVEL score
+    revel_ht = dbnsfp.ht().select("REVEL_score")
+    # Split multiallelics in REVEL HT and convert score to float
+    # (score is currently a string)
+    revel_ht = hl.split_multi_hts(revel_ht)
+    revel_ht = revel_ht.select(revel=hl.float(revel_ht.REVEL_score))
+    revel_ht = revel_ht.collect_by_key()
+    revel_ht = revel_ht.transmute(revel=hl.nanmax(revel_ht.values.revel))
+    ht = ht.annotate(revel=revel_ht[ht.key].revel)
+    ht = ht.checkpoint(
+        f"{temp_path_with_del}/all_ndd_mpc_pph_sift_cadd_revel.ht", overwrite=True
+    )
+
+    logger.info("Filtering to defined annotations...")
+    ht = ht.filter(
+        hl.is_defined(ht.mpc)
+        & hl.is_defined(ht.polyphen)
+        & hl.is_defined(ht.sift)
+        & hl.is_defined(ht.cadd)
+        & hl.is_defined(ht.revel)
+    )
+    ht.write(mpc_comparison.path, overwrite=True)
