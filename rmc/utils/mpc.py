@@ -739,3 +739,9 @@ def prep_mpc_histogram_tsv(
     )
     ht = ht.checkpoint(case_control_hist.path, overwrite=True)
     ht.export(output_tsv_path)
+
+
+def prep_rate_ratio_tsv():
+    """Temp."""
+    ht = case_control_hist.ht()
+    ht = ht.group_by("mpc_bin").aggregate(count=hl.agg.count())
