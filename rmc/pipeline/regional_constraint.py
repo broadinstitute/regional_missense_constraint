@@ -215,7 +215,7 @@ def main(args):
                 "Annotating context HT with number of observed and expected variants per site..."
             )
             # Add observed variants to context HT
-            context_ht = add_obs_annotation(context_ht, filter_csq=True, csq=MISSENSE)
+            context_ht = add_obs_annotation(context_ht, filter_csq=True)
 
             logger.info(
                 "Collecting by key to run constraint per base and not per base-allele..."

@@ -16,6 +16,7 @@ from rmc.resources.basics import (
     rmc_results,
     temp_path,
 )
+from rmc.resources.grch37.gnomad import filtered_exomes
 from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo, gene_model
 from rmc.utils.generic import (
     get_constraint_transcripts,
@@ -23,7 +24,6 @@ from rmc.utils.generic import (
     keep_criteria,
     import_clinvar_hi_variants,
     import_de_novo_variants,
-    process_vep,
 )
 
 
@@ -96,7 +96,6 @@ def add_obs_annotation(
     ht: hl.Table,
     gnomad_data_type: str = "exomes",
     filter_csq: bool = False,
-    csq: str = None,
 ) -> hl.Table:
     """
     Add observed variant count for each variant in input Table.
@@ -109,25 +108,27 @@ def add_obs_annotation(
         Default is "exomes".
     :param bool filter_csq: Whether to filter gnomAD data to a specific consequence. Default is False.
         If True, then only variants that match this consequence in the input Table will be annotated as observed.
-    :param str csq: Desired consequence. Default is None. Must be specified if filter_csq is True.
     :return: Table with observed variant annotation.
     """
-    logger.info("Adding observed annotation...")
-    gnomad_ht = public_release(gnomad_data_type).ht()
-    gnomad_cov = coverage(gnomad_data_type).ht()
-    gnomad_ht = gnomad_ht.select(
-        "filters",
-        ac=gnomad_ht.freq[0].AC,
-        af=gnomad_ht.freq[0].AF,
-        gnomad_coverage=gnomad_cov[gnomad_ht.locus].median,
-    )
-    gnomad_ht = gnomad_ht.filter(
-        keep_criteria(
-            gnomad_ht.ac, gnomad_ht.af, gnomad_ht.filters, gnomad_ht.gnomad_coverage
-        )
-    )
     if filter_csq:
-        gnomad_ht = process_vep(gnomad_ht, filter_csq=filter_csq, csq=csq)
+        gnomad_ht = filtered_exomes.ht()
+
+    else:
+        logger.info("Adding observed annotation...")
+        gnomad_ht = public_release(gnomad_data_type).ht()
+        gnomad_cov = coverage(gnomad_data_type).ht()
+        gnomad_ht = gnomad_ht.select(
+            "filters",
+            ac=gnomad_ht.freq[0].AC,
+            af=gnomad_ht.freq[0].AF,
+            gnomad_coverage=gnomad_cov[gnomad_ht.locus].median,
+        )
+        gnomad_ht = gnomad_ht.filter(
+            keep_criteria(
+                gnomad_ht.ac, gnomad_ht.af, gnomad_ht.filters, gnomad_ht.gnomad_coverage
+            )
+        )
+
     ht = ht.annotate(_obs=gnomad_ht.index(ht.key))
     return ht.transmute(observed=hl.int(hl.is_defined(ht._obs)))
 
