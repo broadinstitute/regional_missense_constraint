@@ -1512,6 +1512,7 @@ def group_rmc_ht_by_section(overwrite: bool = False) -> hl.Table:
         - Function reads RMC results Table from resource path.
         - Assumes RMC HT is annotated with `locus`, `transcript`, `section`, `section_start_pos`,
         `section_end_pos`, and `section_oe`.
+        - Assumes `transcript` is one of RMC HT's key fields.
 
     :param bool overwrite: Whether to overwrite temporary checkpointed Table if it exists.
         Default is False.
