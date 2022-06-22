@@ -715,15 +715,15 @@ def create_mpc_release_ht(
     # Checkpoint here to force the binary search to compute
     ht = ht.checkpoint(f"{temp_path}/mpc_temp_binary.ht", overwrite=True)
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
-    ht.write(mpc_release.path, overwrite=overwrite)
+    ht = ht.checkpoint(mpc_release.path, overwrite=overwrite)
 
+    # Create deduplicated MPC release
     ht = ht.select("transcript", "mpc")
     ht = ht.collect_by_key()
-    ht = ht.annotate(mpc=hl.max(ht.values.mpc)))
-    ht = ht.annotate(
-        transcript=ht.values.find(lambda x: x.mpc == ht.mpc).transcript
-    )
+    ht = ht.annotate(mpc=hl.max(ht.values.mpc))
+    ht = ht.annotate(transcript=ht.values.find(lambda x: x.mpc == ht.mpc).transcript)
     ht.write(mpc_release_dedup.path, overwrite=overwrite)
+
 
 def annotate_mpc(
     ht: hl.Table,
