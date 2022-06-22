@@ -754,15 +754,24 @@ def annotate_mpc(
         mpc_ht = mpc_release.ht()
         mpc_ht = mpc_ht.select("transcript", "mpc")
         mpc_ht = mpc_ht.collect_by_key()
-        mpc_ht = mpc_ht.annotate(mpc=hl.min(mpc_ht.values.mpc))
+        mpc_ht = mpc_ht.annotate(mpc=hl.max(mpc_ht.values.mpc))
         mpc_ht = mpc_ht.annotate(
             transcript=ht.values.find(lambda x: x.mpc == ht.mpc).transcript
         )
         mpc_ht.write(mpc_release_dedup.path, overwrite=True)
 
-    mpc_ht = mpc_release_dedup.ht()
     if "transcript" not in ht.row or add_transcript_annotation:
+        logger.info(
+            """
+            Input HT did not have transcript annotation. Function will add transcript information from MPC HT.
+            This means that duplicate variants (variants that overlap multiple transcripts)
+            will only get one transcript annotation (and therefore one MPC annotation)!
+            """
+        )
+        mpc_ht = mpc_release_dedup.ht()
         ht = ht.annotate(transcript=mpc_ht[ht.key].transcript)
 
-    ht = ht.annotate(mpc=mpc_ht[ht.key].mpc)
+    mpc_ht = mpc_release.ht()
+    mpc_ht = mpc_ht.key_by("locus", "alleles", "transcript")
+    ht = ht.annotate(mpc=mpc_ht[ht.locus, ht.alleles, ht.transcript].mpc)
     ht.write(output_path, overwrite=overwrite)
