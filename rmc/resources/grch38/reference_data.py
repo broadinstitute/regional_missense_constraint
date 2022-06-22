@@ -10,10 +10,11 @@ from rmc.resources.resource_utils import RESOURCE_PREFIX
 
 ## Reference genome related resources
 full_context = VersionedTableResource(
-    default_version="101", versions={"101": vep_context.versions["101"]},
+    default_version="101",
+    versions={"101": vep_context.versions["101"]},
 )
 
-processed_context = VersionedTableResource(
+filtered_context = VersionedTableResource(
     default_version="101",
     versions={
         "101": TableResource(

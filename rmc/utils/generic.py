@@ -272,7 +272,7 @@ def get_exome_bases(build: str) -> int:
     )
     ht = ht.key_by("locus").collect_by_key()
 
-    logger.info("Filtering positions with median coverage < 5...")
+    logger.info("Removing positions with median coverage < 5...")
     # Taking just the first value since the coverage should be the same for all entries at a locus
     ht = ht.filter(ht.values[0].coverage.exomes.median >= 5)
     ht = ht.select()
@@ -381,6 +381,13 @@ def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.T
     ht = add_most_severe_csq_to_tc_within_ht(ht)
     ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
     ht = ht.explode(ht.transcript_consequences)
+
+    logger.info("Filtering to non-outlier transcripts...")
+    # Keep transcripts used in LoF constraint only (remove all other outlier transcripts)
+    constraint_transcripts = get_constraint_transcripts(outlier=True)
+    ht = ht.filter(
+        constraint_transcripts.contains(ht.transcript_consequences.transcript_id)
+    )
 
     if filter_csq:
         if not csq:

@@ -17,6 +17,7 @@ from rmc.resources.basics import (
     blosum,
     blosum_txt_path,
     context_with_oe,
+    context_with_oe_dedup,
     gnomad_fitted_score,
     gnomad_fitted_score_group,
     grantham,
@@ -25,7 +26,7 @@ from rmc.resources.basics import (
     misbad,
     mpc_model_pkl_path,
     mpc_release,
-    polyphen,
+    mpc_release_dedup,
     temp_path,
 )
 from rmc.resources.grch37.reference_data import cadd, clinvar_path_mis
@@ -200,8 +201,83 @@ def get_annotations_from_context_ht_vep(
     return annotate_and_filter_codons(ht)
 
 
+def create_context_with_oe(
+    missense_str: str = MISSENSE,
+    temp_path_with_del: str = "gs://gnomad-tmp/mpc",
+    n_partitions: int = 30000,
+    overwrite: bool = False,
+) -> None:
+    """
+    Filter VEP context Table to missense variants in canonical transcripts, and add missense observed/expected.
+
+    Function writes two Tables:
+        - `context_with_oe`: Table of all missense variants in canonical transcripts + all annotations
+            (includes duplicate variants, i.e. those in multiple transcripts).
+            Annotations are: transcript, most severe consequence, codons, reference and alternate amino acids,
+            Polyphen-2, and SIFT.
+        - `context_with_oe_dedup`: Deduplicated version of `context_with_oe` that only contains missense o/e and transcript annotations.
+
+    :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
+    :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
+        Default is 'gs://gnomad-tmp/mpc'.
+        TODO: Update this to `temp_path` (and set automatic deletion policy.)
+    :param int n_partitions: Number of desired partitions for the VEP context Table.
+        Repartition VEP context Table to this number on read.
+        Default is 30000.
+    :param bool overwrite: Whether to overwrite temporary data if it already exists.
+        If False, will read existing temporary data rather than overwriting.
+        Default is False.
+    :return: None; function writes Table to resource path.
+    """
+    logger.info("Importing set of transcripts to keep...")
+    transcripts = get_constraint_transcripts(outlier=False)
+
+    logger.info(
+        "Reading in VEP context HT and filtering to missense variants in canonical transcripts..."
+    )
+    # Using vep_context.path to read in table with fewer partitions
+    # VEP context resource has 62164 partitions
+    ht = (
+        hl.read_table(vep_context.path, _n_partitions=n_partitions)
+        .select_globals()
+        .select("vep", "was_split")
+    )
+    ht = process_vep(ht, filter_csq=True, csq=missense_str)
+    ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
+    ht = get_annotations_from_context_ht_vep(ht)
+    # Save context Table to temporary path with specified deletion policy because this is a very large file
+    # and relevant information will be saved at `context_with_oe` (written below)
+    # Checkpointing here to force this expensive computation to compute
+    # before joining with RMC tables in `get_oe_annotation`
+    # This computation is expensive, so overwrite only if specified (otherwise, read existing file)
+    ht = ht.checkpoint(
+        f"{temp_path_with_del}/vep_context_mis_only_annot.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
+    )
+
+    logger.info(
+        "Adding regional missense constraint missense o/e annotation and writing to resource path..."
+    )
+    ht = get_oe_annotation(ht)
+    ht = ht.checkpoint(
+        context_with_oe.path, _read_if_exists=not overwrite, overwrite=overwrite
+    )
+
+    logger.info(
+        "Creating dedup context with oe (with oe and transcript annotations only)..."
+    )
+    ht = ht.select("transcript", "oe")
+    ht = ht.collect_by_key()
+    ht = ht.annotate(oe=hl.min(ht.values.oe))
+    ht = ht.annotate(transcript=ht.values.find(lambda x: x.oe == ht.oe).transcript)
+    ht.write(
+        context_with_oe_dedup.path, _read_if_exists=not overwrite, overwrite=overwrite
+    )
+
+
 def prepare_pop_path_ht(
-    gnomad_data_type: str = "exomes", af_threshold: float = 0.01
+    gnomad_data_type: str = "exomes", af_threshold: float = 0.001
 ) -> None:
     """
     Prepare Table with 'population' (common gnomAD missense) and 'pathogenic' (ClinVar pathogenic/likely pathogenic missense) variants.
@@ -215,7 +291,7 @@ def prepare_pop_path_ht(
         Default is "exomes".
     :param float af_threshold: Allele frequency cutoff to filter gnomAD public dataset.
         Variants *above* this threshold will be kept.
-        Default is 0.01.
+        Default is 0.001.
     :return: None; function writes Table to resource path.
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
@@ -240,20 +316,29 @@ def prepare_pop_path_ht(
     )
     ht = ht.annotate(cadd=hl.struct(**cadd_ht[ht.key]))
 
-    logger.info("Getting PolyPhen-2 and codon annotations from VEP context HT...")
-    context_ht = vep_context.ht().select_globals().select("vep", "was_split")
-    context_ht = context_ht.filter(hl.is_defined(ht[context_ht.key]))
-    context_ht = process_vep(context_ht)
-    context_ht = get_annotations_from_context_ht_vep(context_ht)
-    context_ht = context_ht.checkpoint(polyphen.path, overwrite=True)
+    logger.info("Getting transcript annotations...")
+    # Create VEP context HT filtered to missense variants in canonical transcripts
+    # if they don't already exist
+    if not file_exists(context_with_oe_dedup.path):
+        create_context_with_oe(overwrite=True)
+
+    # Get transcript annotation from deduplicated context HT resource
+    context_ht = context_with_oe_dedup.ht()
+    ht = ht.annotate(transcript=context_ht[ht.key].transcript)
+    ht = ht.checkpoint(
+        f"{temp_path}/joint_clinvar_gnomad_transcript.ht", overwrite=True
+    )
 
     logger.info(
-        "Adding PolyPhen-2, codon, and transcript annotations to joint ClinVar/gnomAD HT..."
+        "Getting PolyPhen-2, codon, and regional missense constraint missense o/e annotations..."
     )
-    ht = ht.annotate(**context_ht[ht.key])
-
-    logger.info("Getting regional missense constraint missense o/e annotation...")
-    ht = get_oe_annotation(ht)
+    # Get Polyphen, codon, o/e, amino acid annotations
+    context_ht = context_with_oe.ht()
+    context_ht = context_ht.key_by("locus", "alleles", "transcript")
+    ht = ht.annotate(**context_ht[ht.locus, ht.alleles, ht.transcript])
+    ht = ht.checkpoint(
+        f"{temp_path}/joint_clinvar_gnomad_transcript_aa.ht", overwrite=True
+    )
 
     logger.info("Getting missense badness annotation...")
     mb_ht = misbad.ht()
@@ -270,6 +355,7 @@ def prepare_pop_path_ht(
         blosum=blosum_ht[ht.ref, ht.alt].score,
         grantham=grantham_ht[ht.ref, ht.alt].score,
     )
+    ht = ht.checkpoint(f"{temp_path}/joint_clinvar_gnomad_full.ht", overwrite=True)
 
     logger.info("Filtering to rows with defined annotations and writing out...")
     ht = ht.filter(
@@ -286,6 +372,7 @@ def prepare_pop_path_ht(
 def run_regressions(
     variables: List[str] = ["oe", "misbad", "polyphen"],
     additional_variables: List[str] = ["blosum", "grantham"],
+    overwrite: bool = True,
 ) -> None:
     """
     Run single variable and joint regressions and pick best model.
@@ -308,6 +395,7 @@ def run_regressions(
         Default is ["oe", "misbad", "polyphen"].
     :param List[str] additional_variables: Additional variables to include in single variable regressions only.
         Default is ["blosum", "grantham"].
+    :param bool overwrite: Whether to overwrite gnomAD fitted score table if it already exists. Default is True.
     :return: None; function writes Table with gnomAD fitted scores
         and model coefficients as pickle to resource paths.
     """
@@ -362,8 +450,9 @@ def run_regressions(
 
     # Find lowest AIC for single variable regressions and corresponding model
     min_single_aic = min(single_var_aic)
-    min_single_aic_var = all_var[single_var_aic.index(min_single_aic)]
-    min_single_X = all_var[single_var_X.index(min_single_aic)]
+    single_var_idx = single_var_aic.index(min_single_aic)
+    min_single_aic_var = all_var[single_var_idx]
+    min_single_X = single_var_X[single_var_idx]
     if single_var_aic.count(min_single_aic) > 1:
         logger.warning(
             """
@@ -432,17 +521,104 @@ def run_regressions(
         model = spec_model
         X = spec_X
 
-    logger.info("Annotating gnomAD variants with fitted score...")
-    df["fitted_score"] = model.predict(X)
-
-    logger.info("Converting gnomAD variants dataframe into Table and writing...")
-    ht = hl.Table.from_pandas(df)
-    ht = ht.filter(ht.pop_v_path == 1)
-    ht.write(gnomad_fitted_score.path, overwrite=True)
-
     logger.info("Saving model as pickle...")
     with hl.hadoop_open(mpc_model_pkl_path, "wb") as p:
         pickle.dump(model, p, protocol=pickle.HIGHEST_PROTOCOL)
+
+    logger.info(
+        "Annotating gnomAD variants with fitted score and writing to gnomad_fitted_score path..."
+    )
+    ht = ht.filter(ht.pop_v_path == 1)
+    ht = calculate_fitted_scores(ht)
+    ht.write(gnomad_fitted_score.path, overwrite=overwrite)
+
+
+def calculate_fitted_scores(
+    ht: hl.Table, interaction_char: str = ":", intercept_str: str = "Intercept"
+) -> hl.Table:
+    """
+    Use model and relationship determined in `run_regressions` to calculate fitted scores for input Table.
+
+    .. note::
+        - Assumes model has been written as pickle to `mpc_model_pkl_path`.
+        - Assumes input Table has missense observed/expected (`oe`) and `polyphen` annotations.
+
+    :param hl.Table ht: Input Table with variants to be annotated.
+    :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
+        Default is ":".
+    :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
+    :return: Table annotated with fitted score.
+    """
+    assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
+
+    logger.info("Extracting MPC model relationships from pickle...")
+    with hl.hadoop_open(mpc_model_pkl_path, "rb") as p:
+        model = pickle.load(p)
+    mpc_rel_vars = model.params.to_dict()
+    try:
+        intercept = mpc_rel_vars.pop(intercept_str)
+    except KeyError:
+        raise DataException(
+            f"{intercept_str} not in model parameters! Please double check and rerun."
+        )
+
+    logger.info("Annotating HT with MPC variables...")
+    variables = mpc_rel_vars.keys()
+    annotations = []
+    if "misbad" in variables:
+        logger.info("Getting missense badness annotation...")
+        mb_ht = misbad.ht()
+        ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
+        annotations.append("misbad")
+
+    if "oe" in variables:
+        annotations.append("oe")
+
+    if "polyphen" in variables:
+        annotations.append("polyphen")
+
+    logger.info("Filtering to defined annotations and checkpointing...")
+    filter_expr = True
+    for field in annotations:
+        filter_expr &= hl.is_defined(ht[field])
+    ht = ht.filter(filter_expr)
+    # Checkpoint here to force missense badness join and filter to complete
+    ht = ht.checkpoint(f"{temp_path}/fitted_score_temp_join.ht", overwrite=True)
+
+    logger.info("Annotating fitted scores...")
+    variable_dict = {
+        variable: mpc_rel_vars[variable]
+        for variable in variables
+        if not interaction_char in variable
+    }
+    interactions_dict = {
+        variable: mpc_rel_vars[variable]
+        for variable in variables
+        if interaction_char in variable
+    }
+    for variable in interactions_dict.keys():
+        if len(variable.split(interaction_char)) > 2:
+            raise DataException(
+                "Code currently doesn't handle interactions between more than two variables!"
+            )
+    annot_expr = [
+        (ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()
+    ]
+    # NOTE: This assumes that variable is in the format of x:y or x*y
+    # and won't handle cases where variable is x:y:z or x*y*z correctly
+    interaction_annot_expr = [
+        (
+            ht[variable.split(interaction_char)[0]]
+            * ht[variable.split(interaction_char)[1]]
+            * mpc_rel_vars[variable]
+        )
+        for variable in interactions_dict.keys()
+    ]
+    annot_expr.extend(interaction_annot_expr)
+    combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
+
+    logger.info("Computing fitted score and returning...")
+    return ht.annotate(fitted_score=intercept + combined_annot_expr)
 
 
 def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
@@ -481,12 +657,7 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
 
 
 def create_mpc_release_ht(
-    missense_str: str = MISSENSE,
-    interaction_char: str = ":",
-    intercept_str: str = "Intercept",
-    temp_path_with_del: str = "gs://gnomad-tmp/mpc",
-    n_partitions: int = 30000,
-    overwrite: bool = False,
+    overwrite: bool = True,
 ) -> None:
     """
     Annotate VEP context Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
@@ -498,126 +669,13 @@ def create_mpc_release_ht(
 
     For more information on the fitted score and MPC calculation, see the docstring of `run_regressions`.
 
-    :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
-    :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
-        Default is ":".
-    :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
-    :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
-        Default is 'gs://gnomad-tmp/mpc'.
-        TODO: Update this to `temp_path` (and set automatic deletion policy.)
-    :param int n_partitions: Number of desired partitions for the VEP context Table.
-        Repartition VEP context Table to this number on read.
-        Default is 30000.
-    :param bool overwrite: Whether to overwrite temporary data if it already exists.
-        If False, will read existing temporary data rather than overwriting.
-        Default is False.
-    :return: None; function writes Table to specified output path.
+    :param bool overwrite: Whether to overwrite output table if it already exists. Default is True.
+    :return: None; function writes Table to resource path.
     """
-    assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
-
-    logger.info("Importing set of transcripts to keep...")
-    transcripts = get_constraint_transcripts(outlier=False)
-
-    logger.info(
-        "Reading in VEP context HT and filtering to missense variants in canonical transcripts..."
-    )
-    # Using vep_context.path to read in table with fewer partitions
-    # VEP context resource has 62164 partitions
-    ht = (
-        hl.read_table(vep_context.path, _n_partitions=n_partitions)
-        .select_globals()
-        .select("vep", "was_split")
-    )
-    ht = process_vep(ht, filter_csq=True, csq=missense_str)
-    ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
-    ht = get_annotations_from_context_ht_vep(ht)
-    # Save context Table to temporary path with specified deletion policy because this is a very large file
-    # and relevant information will be saved at `context_with_oe` (written below)
-    # Checkpointing here to force this expensive computation to compute
-    # before joining with RMC tables in `get_oe_annotation`
-    # This computation is expensive, so overwrite only if specified (otherwise, read existing file)
-    ht = ht.checkpoint(
-        f"{temp_path_with_del}/vep_context_mis_only_annot.ht",
-        _read_if_exists=not overwrite,
-        overwrite=overwrite,
-    )
-
-    logger.info(
-        "Adding regional missense constraint missense o/e annotation and writing to resource path..."
-    )
-    ht = get_oe_annotation(ht)
-    ht = ht.checkpoint(
-        context_with_oe.path, _read_if_exists=not overwrite, overwrite=overwrite
-    )
-
-    logger.info("Extracting MPC model relationships from pickle...")
-    with hl.hadoop_open(mpc_model_pkl_path, "rb") as p:
-        model = pickle.load(p)
-    mpc_rel_vars = model.params.to_dict()
-    try:
-        intercept = mpc_rel_vars.pop(intercept_str)
-    except KeyError:
-        raise DataException(
-            f"{intercept_str} not in model parameters! Please double check and rerun."
-        )
-
-    logger.info("Annotating HT with MPC variables...")
-    variables = mpc_rel_vars.keys()
-    annotations = ["transcript", "ref", "alt"]
-    if "misbad" in variables:
-        logger.info("Getting missense badness annotation...")
-        mb_ht = misbad.ht()
-        ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
-        annotations.append("misbad")
-
-    if "oe" in variables:
-        annotations.append("oe")
-
-    if "polyphen" in variables:
-        annotations.append("polyphen")
-
-    logger.info("Filtering to defined annotations and checkpointing...")
-    filter_expr = True
-    for field in annotations:
-        filter_expr &= hl.is_defined(ht[field])
-    ht = ht.filter(filter_expr)
-    # Checkpoint here to force missense badness join and filter to complete
-    ht = ht.checkpoint(f"{temp_path}/mpc_temp_join.ht", overwrite=True)
-
-    logger.info("Annotating fitted scores...")
-    variable_dict = {
-        variable: mpc_rel_vars[variable]
-        for variable in variables
-        if not interaction_char in variable
-    }
-    interactions_dict = {
-        variable: mpc_rel_vars[variable]
-        for variable in variables
-        if interaction_char in variable
-    }
-    for variable in interactions_dict.keys():
-        if len(variable.split(interaction_char)) > 2:
-            raise DataException(
-                "Code currently doesn't handle interactions between more than two variables!"
-            )
-    annot_expr = [
-        (ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()
-    ]
-    # NOTE: This assumes that variable is in the format of x:y or x*y
-    # and won't handle cases where variable is x:y:z or x*y*z correctly
-    interaction_annot_expr = [
-        (
-            ht[variable.split(interaction_char)[0]]
-            * ht[variable.split(interaction_char)[1]]
-            * mpc_rel_vars[variable]
-        )
-        for variable in interactions_dict.keys()
-    ]
-    annot_expr.extend(interaction_annot_expr)
-    combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
-
-    logger.info("Computing fitted score...")
-    ht = ht.annotate(fitted_score=intercept + combined_annot_expr)
+    logger.info("Calculating fitted scores...")
+    ht = context_with_oe.ht()
+    ht = ht.transmute(polyphen=ht.polyphen.score)
+    ht = calculate_fitted_scores(ht)
 
     logger.info("Aggregating gnomAD fitted scores...")
     if not file_exists(gnomad_fitted_score_group.path):
@@ -631,7 +689,7 @@ def create_mpc_release_ht(
 
     logger.info("Getting n_less annotation...")
     # Annotate HT with sorted array of gnomAD fitted scores
-    ht = ht.annotate(gnomad_scores=scores)
+    ht = ht.annotate_globals(gnomad_scores=scores)
     # Checkpoint here to force the gnomAD join to complete
     ht = ht.checkpoint(f"{temp_path}/mpc_temp_gnomad.ht", overwrite=True)
 
@@ -657,24 +715,36 @@ def create_mpc_release_ht(
     # Checkpoint here to force the binary search to compute
     ht = ht.checkpoint(f"{temp_path}/mpc_temp_binary.ht", overwrite=True)
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
-    ht.write(mpc_release.path, overwrite=overwrite)
+    ht = ht.checkpoint(mpc_release.path, overwrite=overwrite)
+
+    # Create deduplicated MPC release
+    ht = ht.select("transcript", "mpc")
+    ht = ht.collect_by_key()
+    ht = ht.annotate(mpc=hl.max(ht.values.mpc))
+    ht = ht.annotate(transcript=ht.values.find(lambda x: x.mpc == ht.mpc).transcript)
+    ht.write(mpc_release_dedup.path, overwrite=overwrite)
 
 
 def annotate_mpc(
     ht: hl.Table,
     output_path: str,
     overwrite: bool = True,
+    add_transcript_annotation: bool = True,
 ) -> None:
     """
     Annotate Table with MPC score using MPC release Table (`mpc_release`).
 
     .. note::
         - Assume input Table is keyed by locus and alleles.
+        - Function will add transcript annotations using `context_with_oe_dedup` resource
+            if they don't already exist in input Table.
 
     :param hl.Table ht: Input Table to be annotated.
     :param str output_path: Where to write Table after adding MPC annotations.
     :param bool overwrite: Whether to overwrite specified output path if it already exists.
         Default is True.
+    :param bool add_transcript_annotation: Whether to add transcript annotation to input Table
+        (even if it already exists). Default is True.
     :return: None; function writes Table to specified output path.
     """
     assert (
@@ -688,6 +758,18 @@ def annotate_mpc(
         hl.tstr
     ), "'locus' must be a LocusExpression, and 'alleles' must be an array of strings!"
 
+    if "transcript" not in ht.row or add_transcript_annotation:
+        logger.info(
+            """
+            Input HT did not have transcript annotation. Function will add transcript information from MPC HT.
+            This means that duplicate variants (variants that overlap multiple transcripts)
+            will only get one transcript annotation (and therefore one MPC annotation)!
+            """
+        )
+        mpc_ht = mpc_release_dedup.ht()
+        ht = ht.annotate(transcript=mpc_ht[ht.key].transcript)
+
     mpc_ht = mpc_release.ht()
-    ht = ht.annotate(mpc=mpc_ht[ht.key].mpc)
+    mpc_ht = mpc_ht.key_by("locus", "alleles", "transcript")
+    ht = ht.annotate(mpc=mpc_ht[ht.locus, ht.alleles, ht.transcript].mpc)
     ht.write(output_path, overwrite=overwrite)
