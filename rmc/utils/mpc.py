@@ -542,12 +542,13 @@ def calculate_fitted_scores(
     .. note::
         - Assumes model has been written as pickle to `mpc_model_pkl_path`.
         - Assumes input Table has missense observed/expected (`oe`) and `polyphen` annotations.
+        - Function will remove any rows with undefined annotations from input Table.
 
     :param hl.Table ht: Input Table with variants to be annotated.
     :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
         Default is ":".
     :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
-    :return: Table annotated with fitted score.
+    :return: Table filtered to defined MPC model annotations and annotated with fitted score.
     """
     assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
 
