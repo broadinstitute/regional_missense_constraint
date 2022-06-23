@@ -15,6 +15,7 @@ from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX
 from rmc.resources.resource_utils import CURRENT_VERSION
 from rmc.slack_creds import slack_token
 from rmc.utils.mpc import (
+    compare_mpc_using_top_x_var,
     prep_mpc_comparison_ht,
     prep_mpc_histogram_tsv,
     prep_rate_ratio_tsv,
@@ -56,6 +57,10 @@ def main(args):
                 case_ht=hl.read_table(args.case_path),
                 control_ht=hl.read_table(args.control_path),
             )
+
+        if args.command == "compare-mpc-frac-high-score":
+            hl.init(log="/compare_mpc_using_frac_variants_top_xpct_score")
+            compare_mpc_using_top_x_var(args.top_x_pct)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -137,6 +142,24 @@ if __name__ == "__main__":
         annotated with MPC, Polyphen-2, SIFT, CADD, and REVEL scores.
 
         Used to compare MPC performance against these scores.
+        """,
+    )
+
+    compare_mpc_using_frac_top_x_pct = subparsers.add_parser(
+        "compare-mpc-frac-high-score",
+        help="""
+        Compare MPC to other scores by checking the fraction of variants from NDD cases.
+
+        Checks the fraction of variants from cases in two categories:
+            - Variants >= top x% of score
+            - Variants < top x% of score
+        """,
+    )
+    compare_mpc_using_frac_top_x_pct.add_argument(
+        "--top-x-pct",
+        help="""
+        Desired percent value. E.g., top_x_percent = 5 means this function will compare
+        the fraction of variants with the top 5% largest score values from cases vs controls.
         """,
     )
 
