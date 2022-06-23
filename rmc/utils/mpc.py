@@ -34,6 +34,7 @@ from rmc.resources.grch37.reference_data import (
     dbnsfp,
     DE_NOVO_COUNTS,
     get_mpc_case_control_ht_path,
+    get_mpc_pct_comparison_path,
     mpc_comparison,
 )
 from rmc.resources.resource_utils import MISSENSE
@@ -942,3 +943,36 @@ def compare_frac_of_top_x_var(
         "odds_ratio": fisher_struct.odds_ratio,
         "p_value": fisher_struct.p_value,
     }
+
+
+def compare_mpc_using_top_x_var(
+    top_x_percent: float,
+    scores: List[str] = ["revel", "cadd", "polyphen"],
+    schema: str = "array<struct{score: str, frac_cases: float, odds_ratio: float, p_value: float}>",
+) -> None:
+    """
+    Compare MPC score to other metrics by comparing the fraction of variants from cases in the top x% of each score.
+
+    Function compares fraction of variants from NDD cases vs controls in two categories:
+        - Variants with >= top x percent of each score
+        - Variants < top x percent of each score
+
+    .. note::
+        `mpc_comparison` Table must be annotated with each of the scores provided in `scores`.
+
+    :param float top_x_percent: Desired percent value. E.g., top_x_percent = 5 means this function will compare
+        the fraction of variants with the top 5% largest score values from cases vs controls.
+    :param List[str] scores: Scores to compare against MPC. Default is ['revel', 'cadd', 'polyphen'].
+    :param str schema: Schema used to create comparison Table from list of dictionaries returned by
+        `compare_frac_of_top_x_var`. Note that the dictionary keys must match the field names provided in this schema.
+        Default is 'array<struct{score: str, frac_cases: float, odds_ratio: float, p_value: float}>'.
+    :return: None; function writes Table to resource path (`get_mpc_pct_comparison_path`).
+    """
+    score_list = []
+    ht = mpc_comparison.ht()
+    for score in scores:
+        score_list.append(compare_mpc_using_top_x_var(ht, score, top_x_percent))
+
+    ht = hl.Table.parallelize(hl.literal(score_list, schema))
+    ht = ht.checkpoint(get_mpc_pct_comparison_path(top_x_percent), overwrite=True)
+    ht.show()

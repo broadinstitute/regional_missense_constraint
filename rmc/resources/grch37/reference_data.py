@@ -113,3 +113,18 @@ Polyphen-2, SIFT, CADD, and REVEL scores.
 
 Used to compare MPC performance against these other scores.
 """
+
+
+def get_mpc_pct_comparison_path(top_x_percent: float) -> str:
+    """
+    Return Table comparing MPC to other metrics using variants with top x percent of each score.
+
+    Table compares fraction of variants from NDD cases vs controls in two categories:
+        - Variants with >= top x percent of each score
+        - Variants < top x percent of each score
+
+    :param float top_x_percent: Desired percent value. E.g., top_x_percent = 5 will return the Table comparing
+        the fraction of variants with the top 5% largest score values from cases vs controls.
+    :return: Path to desired MPC comparison Table
+    """
+    return f"{MPC_PREFIX}/{CURRENT_VERSION}/mpc_{top_x_percent}pct_comparison.ht"
