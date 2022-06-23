@@ -971,7 +971,7 @@ def compare_mpc_using_top_x_var(
     score_list = []
     ht = mpc_comparison.ht()
     for score in scores:
-        score_list.append(compare_mpc_using_top_x_var(ht, score, top_x_percent))
+        score_list.append(compare_frac_of_top_x_var(ht, score, top_x_percent))
 
     ht = hl.Table.parallelize(hl.literal(score_list, schema))
     ht = ht.checkpoint(get_mpc_pct_comparison_path(top_x_percent), overwrite=True)
