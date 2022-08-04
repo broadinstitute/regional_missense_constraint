@@ -359,7 +359,8 @@ def main(args):
                 break_ht = break_ht.filter(transcripts.contains(break_ht.transcript))
                 break_num += 1
 
-            context_ht.write(f"{temp_path}/multiple_breaks.ht", overwrite=args.overwrite)
+            #context_ht.write(multiple_breaks.path, overwrite=args.overwrite)
+            context_ht.write(f"{temp_path}/multiple_breaks.ht", overwrite=True)
 
         # NOTE: This is only necessary for gnomAD v2
         # Fixed expected counts for any genes that span PAR and non-PAR regions
