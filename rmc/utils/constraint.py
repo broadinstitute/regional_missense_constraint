@@ -587,6 +587,7 @@ def search_for_break(
     ht: hl.Table,
     search_field: hl.str,
     chisq_threshold: float = 10.8,
+    break_num: int,
 ) -> hl.Table:
     """
     Search for breakpoints in a transcript or within a transcript subsection.
@@ -625,6 +626,7 @@ def search_for_break(
     :param float chisq_threshold: Chi-square significance threshold.
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
         Default is 10.8.
+    :param int break_num: Break search round number (Temporary addition for additional breaks check)
     :return: Table annotated with whether position is a breakpoint.
     :rtype: hl.Table
     """
@@ -688,7 +690,7 @@ def search_for_break(
     # 10.8 (p ~ 10e-3) and is 13.8 (p ~ 10e-4) for two breaks. These currently cannot
     # be adjusted."
     group_ht = ht.group_by(search_field).aggregate(max_chisq=hl.agg.max(ht.chisq))
-    group_ht = group_ht.checkpoint(f"{temp_path}/max_chisq.ht", overwrite=True)
+    group_ht = group_ht.checkpoint(f"{temp_path}/break_{break_num}_max_chisq.ht", overwrite=True)
     ht = ht.annotate(max_chisq=group_ht[ht.transcript].max_chisq)
     return ht.annotate(
         is_break=((ht.chisq == ht.max_chisq) & (ht.chisq >= chisq_threshold))
@@ -796,7 +798,7 @@ def get_subsection_exprs(
     )
 
 
-def process_sections(ht: hl.Table, chisq_threshold: float):
+def process_sections(ht: hl.Table, chisq_threshold: float, break_num: int):
     """
     Search for breaks within given sections of a transcript.
 
@@ -816,6 +818,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
     :param hl.Table ht: Input Table.
     :param float chisq_threshold: Chi-square significance threshold.
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
+    :param int break_num: Break search round number (Temporary addition for additional breaks check)
     :return: Table annotated with whether position is a breakpoint.
     :rtype: hl.Table
     """
@@ -865,11 +868,13 @@ def process_sections(ht: hl.Table, chisq_threshold: float):
         pre_ht,
         search_field="transcript",
         chisq_threshold=chisq_threshold,
+        break_num=break_num
     )
     post_ht = search_for_break(
         post_ht,
         search_field="transcript",
         chisq_threshold=chisq_threshold,
+        break_num=break_num
     )
     # Adjust is_break annotation in both HTs
     # to prevent this function from continually finding previous significant breaks
@@ -929,7 +934,7 @@ def process_additional_breaks(
             hl.format("%s_%s", ht.transcript, "pre"),
         ),
     )
-    return process_sections(ht, chisq_threshold)
+    return process_sections(ht, chisq_threshold, break_num)
 
 
 def calculate_section_chisq(
