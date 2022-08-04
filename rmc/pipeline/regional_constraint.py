@@ -303,6 +303,10 @@ def main(args):
             )
             context_ht = one_break.ht()
 
+            # Remove outlier transcripts
+            outlier_transcripts = get_constraint_transcripts(outlier=True)
+            context_ht = context_ht.filter(~outlier_transcripts.contains(context_ht.transcript))
+
             # Add break_list annotation to context HT
             context_ht = context_ht.annotate(break_list=[context_ht.is_break])
             break_ht = context_ht
