@@ -75,10 +75,7 @@ def main(args):
 
     try:
         if args.search_for_additional_breaks:
-            hl.init(log="/RMC_additional_breaks.log")
-
-            # Set hail flag to avoid method too large and out of memory errors
-            hl._set_flags(no_whole_stage_codegen="1")
+            hl.init(log="/RMC_additional_breaks.log", tmp_dir="gs://gnomad-tmp-4day")
 
             logger.info(
                 "Searching for additional breaks in transcripts with at least one significant break..."
