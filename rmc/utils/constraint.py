@@ -470,8 +470,8 @@ def search_for_break(
     ht: hl.Table,
     search_field: hl.str,
     break_num: int,
+    pre_or_post: str,
     chisq_threshold: float = 10.8,
-    pre_or_post: str
 ) -> hl.Table:
     """
     Search for breakpoints in a transcript or within a transcript subsection.
@@ -758,15 +758,15 @@ def process_sections(ht: hl.Table, chisq_threshold: float, break_num: int):
         pre_ht,
         search_field="transcript",
         break_num=break_num,
-        chisq_threshold=chisq_threshold,
         pre_or_post="pre",
+        chisq_threshold=chisq_threshold,
     )
     post_ht = search_for_break(
         post_ht,
         search_field="transcript",
         break_num=break_num,
-        chisq_threshold=chisq_threshold,
         pre_or_post="post",
+        chisq_threshold=chisq_threshold,
     )
     # Adjust is_break annotation in both HTs
     # to prevent this function from continually finding previous significant breaks
