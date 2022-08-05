@@ -3,27 +3,12 @@ from typing import Dict, List, Set, Tuple, Union
 
 import hail as hl
 
-from gnomad.resources.grch37.gnomad import coverage, public_release
-from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
-
-from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
 from rmc.resources.basics import (
     multiple_breaks,
-    oe_bin_counts_tsv,
     rmc_browser,
     rmc_results,
     temp_path,
-)
-from rmc.resources.grch37.gnomad import filtered_exomes
-from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo, gene_model
-from rmc.utils.generic import (
-    get_constraint_transcripts,
-    get_coverage_correction_expr,
-    keep_criteria,
-    import_clinvar_hi_variants,
-    import_de_novo_variants,
 )
 
 
@@ -90,47 +75,6 @@ FINAL_ANNOTATIONS = [
 """
 List of annotations to keep when finalizing release HT.
 """
-
-
-def add_obs_annotation(
-    ht: hl.Table,
-    gnomad_data_type: str = "exomes",
-    filter_csq: bool = False,
-) -> hl.Table:
-    """
-    Add observed variant count for each variant in input Table.
-
-    Check if locus/allele are present in gnomAD and add as annotation.
-
-    :param hl.Table ht: Input Table.
-    :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
-        Must be one of "exomes" or "genomes" (check is done within `public_release`).
-        Default is "exomes".
-    :param bool filter_csq: Whether to filter gnomAD data to a specific consequence. Default is False.
-        If True, then only variants that match this consequence in the input Table will be annotated as observed.
-    :return: Table with observed variant annotation.
-    """
-    if filter_csq:
-        gnomad_ht = filtered_exomes.ht()
-
-    else:
-        logger.info("Adding observed annotation...")
-        gnomad_ht = public_release(gnomad_data_type).ht()
-        gnomad_cov = coverage(gnomad_data_type).ht()
-        gnomad_ht = gnomad_ht.select(
-            "filters",
-            ac=gnomad_ht.freq[0].AC,
-            af=gnomad_ht.freq[0].AF,
-            gnomad_coverage=gnomad_cov[gnomad_ht.locus].median,
-        )
-        gnomad_ht = gnomad_ht.filter(
-            keep_criteria(
-                gnomad_ht.ac, gnomad_ht.af, gnomad_ht.filters, gnomad_ht.gnomad_coverage
-            )
-        )
-
-    ht = ht.annotate(_obs=gnomad_ht.index(ht.key))
-    return ht.transmute(observed=hl.int(hl.is_defined(ht._obs)))
 
 
 def calculate_observed(ht: hl.Table) -> hl.Table:
@@ -221,67 +165,6 @@ def translate_mu_to_exp_expr(
     :rtype: hl.expr.DictExpression
     """
     return (cumulative_mu_expr[transcript_expr] / total_mu_expr) * total_exp_expr
-
-
-def calculate_exp_per_transcript(
-    context_ht: hl.Table,
-    locus_type: str,
-    groupings: List[str] = GROUPINGS,
-) -> hl.Table:
-    """
-    Return the total number of expected variants and aggregate mutation rate per transcript.
-
-    .. note::
-        - Assumes that context_ht is annotated with all of the fields in `groupings` and that the names match exactly.
-        - Assumes that input table is filtered to autosomes/PAR only, X nonPAR only, or Y nonPAR only.
-        - Expects that input table contains coverage and plateau models in its global annotations (`coverage_model`, `plateau_models`).
-        - Expects that input table has multiple fields for mutation rate probabilities:
-            `mu_snp` for mutation rate probability adjusted by coverage, and
-            `raw_mu_snp` for raw mutation rate probability.
-
-    :param hl.Table context_ht: Context Table.
-    :param str locus_type: Locus type of input table. One of "X", "Y", or "autosomes".
-        NOTE: will treat any input other than "X" or "Y" as autosomes.
-    :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate.
-        Table must be annotated with these fields. Default is GROUPINGS.
-    :return: Table grouped by transcript with expected counts per search field.
-    :rtype: hl.Table
-    """
-    logger.info("Grouping by %s...", groupings)
-    group_ht = context_ht.group_by(*groupings).aggregate(
-        mu_agg=hl.agg.sum(context_ht.raw_mu_snp)
-    )
-
-    logger.info("Adding CpG annotations...")
-    group_ht = annotate_variant_types(group_ht)
-
-    logger.info("Adjusting aggregated mutation rate with plateau model...")
-    if locus_type == "X":
-        model = group_ht.plateau_x_models["total"][group_ht.cpg]
-    elif locus_type == "Y":
-        model = group_ht.plateau_y_models["total"][group_ht.cpg]
-    else:
-        model = group_ht.plateau_models["total"][group_ht.cpg]
-
-    group_ht = group_ht.annotate(mu_adj=group_ht.mu_agg * model[1] + model[0])
-
-    logger.info(
-        "Adjusting aggregated mutation rate with coverage correction to get expected counts..."
-    )
-    group_ht = group_ht.annotate(
-        coverage_correction=get_coverage_correction_expr(
-            group_ht.exome_coverage, group_ht.coverage_model
-        ),
-    )
-    group_ht = group_ht.annotate(
-        _exp=group_ht.mu_adj * group_ht.coverage_correction,
-        mu=group_ht.mu_agg * group_ht.coverage_correction,
-    )
-
-    logger.info("Getting expected counts per transcript and returning...")
-    return group_ht.group_by("transcript").aggregate(
-        expected=hl.agg.sum(group_ht._exp), mu_agg=hl.agg.sum(group_ht.mu)
-    )
 
 
 def get_obs_exp_expr(
@@ -586,8 +469,8 @@ def get_section_expr(
 def search_for_break(
     ht: hl.Table,
     search_field: hl.str,
-    chisq_threshold: float = 10.8,
     break_num: int,
+    chisq_threshold: float = 10.8,
 ) -> hl.Table:
     """
     Search for breakpoints in a transcript or within a transcript subsection.
@@ -690,7 +573,9 @@ def search_for_break(
     # 10.8 (p ~ 10e-3) and is 13.8 (p ~ 10e-4) for two breaks. These currently cannot
     # be adjusted."
     group_ht = ht.group_by(search_field).aggregate(max_chisq=hl.agg.max(ht.chisq))
-    group_ht = group_ht.checkpoint(f"{temp_path}/break_{break_num}_max_chisq.ht", overwrite=True)
+    group_ht = group_ht.checkpoint(
+        f"{temp_path}/break_{break_num}_max_chisq.ht", overwrite=True
+    )
     ht = ht.annotate(max_chisq=group_ht[ht.transcript].max_chisq)
     return ht.annotate(
         is_break=((ht.chisq == ht.max_chisq) & (ht.chisq >= chisq_threshold))
@@ -867,14 +752,14 @@ def process_sections(ht: hl.Table, chisq_threshold: float, break_num: int):
     pre_ht = search_for_break(
         pre_ht,
         search_field="transcript",
+        break_num=break_num,
         chisq_threshold=chisq_threshold,
-        break_num=break_num
     )
     post_ht = search_for_break(
         post_ht,
         search_field="transcript",
+        break_num=break_num,
         chisq_threshold=chisq_threshold,
-        break_num=break_num
     )
     # Adjust is_break annotation in both HTs
     # to prevent this function from continually finding previous significant breaks
@@ -1233,10 +1118,6 @@ def finalize_multiple_breaks(
     :return: Table annotated with transcript subsection values and breakpoint positions.
     :rtype: hl.Table
     """
-    logger.info("Removing outlier transcripts...")
-    outlier_transcripts = get_constraint_transcripts(outlier=True)
-    ht = ht.filter(~outlier_transcripts.contains(ht.transcript))
-
     logger.info("Getting transcripts associated with each break number...")
     # Get number of transcripts UNIQUE to each break number
     # Transcript sets in globals currently are not unique
@@ -1358,113 +1239,6 @@ def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Tab
     return ht1.annotate(**{f"{annot_str}": hl.int(hl.is_defined(ht2[ht1.locus]))})
 
 
-def get_oe_bins(ht: hl.Table, build: str) -> None:
-    """
-    Group RMC results HT by obs/exp (OE) bin and annotate.
-
-    Add the following annotations:
-        - Proportion coding base pairs
-        - Proportion de novo missense from controls/cases
-        - Proportion ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes.
-
-    Assumes input Table is annotated with the following annotations:
-        - `section_start`: Start position for transcript subsection
-        - `section_end`: End position for transcript subsection
-        - `section_obs`: Number of observed missense variants within transcript subsection
-        - `section_exp`: Proportion of expected missense variatns within transcript subsection
-        - `section_oe`: Observed/expected missense variation ratio within transcript subsection
-
-    :param hl.Table ht: Input Table containing all breaks results.
-    :param str build: Reference genome build.
-    :return: None; writes TSV with OE bins + annotations to `oe_bin_counts_tsv` resource path.
-    :rtype: None
-    """
-    if build != "GRCh37":
-        raise DataException(
-            "ClinVar and de novo files currently only exist for GRCh37!"
-        )
-
-    logger.info("Reading in ClinVar, de novo missense, and transcript HTs...")
-    if not file_exists(clinvar_path_mis.path):
-        import_clinvar_hi_variants(build="GRCh37", overwrite=True)
-    if not file_exists(de_novo.path):
-        import_de_novo_variants(build="GRCh37", overwrite=True)
-
-    clinvar_ht = clinvar_path_mis.ht()
-    dn_ht = de_novo.ht()
-    transcript_ht = gene_model.ht()
-
-    # Split de novo HT into two HTs -- one for controls and one for cases
-    dn_controls_ht = dn_ht.filter(dn_ht.case_control == "control")
-    dn_case_ht = dn_ht.filter(dn_ht.case_control != "control")
-
-    # Get total number of coding base pairs, also ClinVar and DNM variants
-    # TODO: use exon field in gene model HT to get only coding bases (rather than using transcript end - start)
-    transcript_ht = transcript_ht.annotate(
-        bp=transcript_ht.end_pos - transcript_ht.start_pos
-    )
-    total_bp = transcript_ht.aggregate(hl.agg.sum(transcript_ht.bp))
-    total_clinvar = clinvar_ht.count()
-    total_control = dn_controls_ht.count()
-    total_case = dn_case_ht.count()
-
-    # Annotate with control and case DNM, ClinVar P/LP variants,
-    ht = check_loci_existence(ht, dn_controls_ht, "dnm_controls")
-    ht = check_loci_existence(ht, dn_case_ht, "dnm_cases")
-    ht = check_loci_existence(ht, clinvar_ht, "clinvar_path")
-    ht = ht.annotate(
-        oe_bin=hl.case()
-        .when(ht.section_oe <= 0.2, "0-0.2")
-        .when((ht.section_oe > 0.2) & (ht.section_oe <= 0.4), "0.2-0.4")
-        .when((ht.section_oe > 0.4) & (ht.section_oe <= 0.6), "0.4-0.6")
-        .when((ht.section_oe > 0.6) & (ht.section_oe <= 0.8), "0.6-0.8")
-        .default("0.8-1.0")
-    )
-    # Checkpoint HT here because it becomes a couple tables below
-    ht = ht.checkpoint(f"{temp_path}/breaks_oe_bin.ht", overwrite=True)
-
-    # Group HT by section to get number of base pairs per section
-    # Need to group by to avoid overcounting
-    group_ht = ht.group_by("section").aggregate(
-        start=hl.agg.take(ht.section_start, 1)[0],
-        end=hl.agg.take(ht.section_end, 1)[0],
-        obs=hl.agg.take(ht.section_obs, 1)[0],
-        exp=hl.agg.take(ht.section_exp, 1)[0],
-        chisq=hl.agg.take(ht.section_chisq, 1)[0],
-        oe=hl.agg.take(ht.section_oe, 1)[0],
-        oe_bin=hl.agg.take(ht.oe_bin, 1)[0],
-    )
-    group_ht = group_ht.checkpoint(f"{temp_path}/sections.ht", overwrite=True)
-    group_ht = group_ht.annotate(bp=group_ht.end - group_ht.start)
-    group_ht = group_ht.group_by("oe_bin").aggregate(bp_sum=hl.agg.sum(group_ht.bp))
-
-    # Group HT
-    assess_ht = ht.group_by("oe_bin").aggregate(
-        dnm_controls=hl.agg.sum(ht.dnm_controls),
-        dnm_case=hl.agg.sum(ht.dnm_cases),
-        clinvar=hl.agg.sum(ht.clinvar_path),
-    )
-    assess_ht_count = assess_ht.count()
-    if assess_ht_count != 5:
-        raise DataException(
-            f"Expected 5 OE bins but found {assess_ht_count}. Please double check and rerun!"
-        )
-
-    logger.info("Reformatting annotations on assessment HT to be proportions...")
-    assess_ht = assess_ht.annotate(bp=group_ht[assess_ht.key])
-    assess_ht = assess_ht.transmute(
-        bp=assess_ht.bp / total_bp,
-        controls=assess_ht.dnm_controls / total_control,
-        case=assess_ht.dnm_case / total_case,
-        clinvar=assess_ht.clinvar / total_clinvar,
-    )
-    # Add a show to double check HT
-    assess_ht.show()
-
-    logger.info("Exporting assessment HT (in preparation for plotting)...")
-    assess_ht.export(oe_bin_counts_tsv)
-
-
 def constraint_flag_expr(
     obs_syn_expr: hl.expr.Int64Expression,
     obs_mis_expr: hl.expr.Int64Expression,
@@ -1552,116 +1326,3 @@ def group_rmc_ht_by_section(overwrite: bool = False) -> hl.Table:
         ),
     )
     return rmc_ht.key_by("interval").drop("section")
-
-
-def fix_xg(
-    context_ht: hl.Table,
-    exome_ht: hl.Table,
-    xg_transcript: str = "ENST00000419513",
-    groupings: List[str] = GROUPINGS,
-) -> hl.Table:
-    """
-    Fix observed and expected counts for XG (gene that spans PAR and non-PAR regions on chrX).
-
-    Expects that context HT is annotated with all of the fields in `groupings`.
-
-    :param hl.Table context_ht: Context Table.
-    :param hl.Table exome_ht: Table containing variants from gnomAD exomes.
-    :param str xg_transcript: XG transcript string. Default is 'ENST00000419513'.
-    :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate.
-        Default is GROUPINGS.
-    :return: Table filtered to XG and annotated with RMC annotations (forward scans, total obs/exp/mu, overall OE).
-    :rtype: hl.Table
-    """
-
-    def _fix_xg_exp(
-        xg: hl.Table,
-        groupings: List[str] = groupings,
-    ) -> hl.expr.StructExpression:
-        """
-        Fix total expected and total mu counts for XG.
-
-        :param hl.Table xg: Context Table filtered to XG.
-        :param List[str] groupings: List of Table fields used to group Table to adjust mutation rate.
-            Default is GROUPINGS.
-        :return: StructExpression with total mu and total expected values.
-        :rtype: hl.expr.StructExpression
-        """
-        xg = xg.annotate(par=xg.locus.in_x_par())
-        par = xg.filter(xg.par)
-        nonpar = xg.filter(~xg.par)
-        par = calculate_exp_per_transcript(
-            par, locus_type="autosomes", groupings=groupings
-        )
-        nonpar = calculate_exp_per_transcript(
-            nonpar, locus_type="X", groupings=groupings
-        )
-        exp_ht = par.union(nonpar)
-        return exp_ht.aggregate(
-            hl.struct(
-                total_exp=hl.agg.sum(exp_ht.expected),
-                total_mu=hl.agg.sum(exp_ht.mu_agg),
-            )
-        )
-
-    def _fix_xg_obs(xg: hl.Table, exome_ht: hl.Table) -> hl.Table:
-        """
-        Fix total observed counts for XG.
-
-        :param hl.Table xg: Context Table filtered to XG.
-        :param hl.Table exome_ht: Table containing variants from gnomAD exomes.
-        :return: Context Table filtered to XG, annotated with total observed and observed per position values.
-        :rtype: hl.Table
-        """
-        xg = xg.annotate(_obs=exome_ht.index(xg.key))
-        xg = xg.transmute(observed=hl.int(hl.is_defined(xg._obs)))
-        return xg.annotate(total_obs=obs_ht[xg.transcript].observed)
-
-    logger.info("Filtering context HT to XG (transcript: %s)...", xg_transcript)
-    xg = context_ht.filter(context_ht.transcript == xg_transcript)
-
-    logger.info("Fixing expected counts for XG...")
-    exp_struct = _fix_xg_exp(xg, groupings)
-
-    logger.info("Fixing observed counts for XG...")
-    exome_ht = exome_ht.filter(
-        exome_ht.transcript_consequences.transcript_id == xg_transcript
-    )
-    obs_ht = calculate_observed(exome_ht)
-    xg = _fix_xg_obs(xg, exome_ht)
-
-    logger.info("Collecting by key...")
-    # Context HT is keyed by locus and allele, which means there is one row for every possible missense variant
-    # This means that any locus could be present up to three times (once for each possible missense)
-    # Collect by key here to ensure all loci are unique
-    xg = xg.key_by("locus", "transcript").collect_by_key()
-    xg = xg.annotate(
-        # Collect the mutation rate probabilities at each locus
-        mu_snp=hl.sum(xg.values.mu_snp),
-        # Collect the observed counts for each locus
-        # (this includes counts for each possible missense at the locus)
-        observed=hl.sum(xg.values.observed),
-        # Take just the first coverage value, since the locus should have the same coverage across the possible variants
-        coverage=xg.values.exome_coverage[0],
-    )
-
-    logger.info(
-        "Annotating overall observed/expected value (capped at 1) and forward scans..."
-    )
-    xg = xg.annotate(
-        total_exp=exp_struct.total_exp,
-        total_mu=exp_struct.total_mu,
-        total_obs=obs_ht[xg.transcript].observed,
-    )
-    xg.describe()
-    xg = xg.annotate(overall_oe=hl.min(xg.total_obs / xg.total_exp, 1))
-    xg = get_fwd_exprs(
-        ht=xg,
-        transcript_str="transcript",
-        obs_str="observed",
-        mu_str="mu_snp",
-        total_mu_str="total_mu",
-        total_exp_str="total_exp",
-    )
-    xg = xg.checkpoint(f"{temp_path}/XG.ht", overwrite=True)
-    return xg
