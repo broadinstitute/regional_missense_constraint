@@ -71,8 +71,6 @@ def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
 
 def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
-    exac = args.exac
-
     try:
         if args.search_for_additional_breaks:
             hl.init(log="/RMC_additional_breaks.log", tmp_dir="gs://gnomad-tmp-4day")
