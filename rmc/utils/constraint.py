@@ -747,6 +747,8 @@ def process_sections(ht: hl.Table, chisq_threshold: float, break_num: int):
         scan_obs_expr=post_ht.cumulative_obs[post_ht.transcript],
         scan_exp_expr=post_ht.cumulative_exp,
     )
+    pre_ht = pre_ht.checkpoint(f"{temp_path}/pre_break.ht", overwrite=True)
+    post_ht = post_ht.checkpoint(f"{temp_path}/post_break.ht", overwrite=True)
 
     logger.info("Searching for a break in each section and returning...")
     pre_ht = search_for_break(
