@@ -73,7 +73,15 @@ def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
     try:
         if args.search_for_additional_breaks:
-            hl.init(log="/RMC_additional_breaks.log", tmp_dir="gs://gnomad-tmp-4day")
+            hl.init(
+                log="/RMC_additional_breaks.log",
+                tmp_dir="gs://gnomad-tmp-4day",
+                spark_conf={
+                    'spark.hadoop.fs.gs.requester.pays.mode': 'CUSTOM',
+                    'spark.hadoop.fs.gs.requester.pays.buckets': 'regional_missense_constraint',
+                    'spark.hadoop.fs.gs.requester.pays.project.id': 'broad-mpg-gnomad'
+                }
+            )
 
             logger.info(
                 "Searching for additional breaks in transcripts with at least one significant break..."
@@ -93,7 +101,7 @@ def main(args):
             # Start break number counter at 2
             break_num = 2
 
-            while True:
+            while break_num < 3:
                 # Search for additional breaks
                 # This technically should search for two additional breaks at a time:
                 # this calls `process_sections`, which checks each section of the transcript for a break
