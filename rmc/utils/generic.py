@@ -9,15 +9,6 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.filtering import filter_to_clinvar_pathogenic
 
-from gnomad_lof.constraint_utils.constraint_basics import (
-    add_most_severe_csq_to_tc_within_ht,
-    annotate_constraint_groupings,
-    annotate_with_mu,
-    build_models,
-    prepare_ht,
-)
-from gnomad_lof.constraint_utils.generic import fast_filter_vep
-
 from rmc.resources.basics import (
     ACID_NAMES_PATH,
     CODON_TABLE_PATH,
