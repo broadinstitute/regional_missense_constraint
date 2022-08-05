@@ -121,8 +121,9 @@ def main(args):
                 # Otherwise, pull transcripts and annotate context ht
                 break_ht = break_ht.key_by("locus", "transcript")
                 transcripts = group_ht.aggregate(
-                    hl.agg.collect_as_set(group_ht.transcript), _localize=False
+                    hl.agg.collect_as_set(group_ht.transcript),
                 )
+                transcripts = hl.literal(transcripts)
                 globals_annot_expr = {f"break_{break_num}_transcripts": transcripts}
                 context_ht = context_ht.annotate_globals(**globals_annot_expr)
                 annot_expr = {
