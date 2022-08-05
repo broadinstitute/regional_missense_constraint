@@ -471,6 +471,7 @@ def search_for_break(
     search_field: hl.str,
     break_num: int,
     chisq_threshold: float = 10.8,
+    pre_or_post: str
 ) -> hl.Table:
     """
     Search for breakpoints in a transcript or within a transcript subsection.
@@ -506,10 +507,12 @@ def search_for_break(
 
     :param hl.Table ht: Input context Table.
     :param hl.expr.StringExpression search_field: Field of table to search. Value should be either 'transcript' or 'section'.
+    :param int break_num: Break search round number (Temporary addition for additional breaks check)
     :param float chisq_threshold: Chi-square significance threshold.
         Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).
         Default is 10.8.
-    :param int break_num: Break search round number (Temporary addition for additional breaks check)
+    :param str pre_or_post: Whether the section to search is before or after the break.
+        Value should be either 'pre' or 'post'.
     :return: Table annotated with whether position is a breakpoint.
     :rtype: hl.Table
     """
@@ -574,7 +577,7 @@ def search_for_break(
     # be adjusted."
     group_ht = ht.group_by(search_field).aggregate(max_chisq=hl.agg.max(ht.chisq))
     group_ht = group_ht.checkpoint(
-        f"{temp_path}/break_{break_num}_max_chisq.ht", overwrite=True
+        f"{temp_path}/break_{break_num}_{pre_or_post}_max_chisq.ht", overwrite=True
     )
     ht = ht.annotate(max_chisq=group_ht[ht.transcript].max_chisq)
     return ht.annotate(
@@ -747,8 +750,8 @@ def process_sections(ht: hl.Table, chisq_threshold: float, break_num: int):
         scan_obs_expr=post_ht.cumulative_obs[post_ht.transcript],
         scan_exp_expr=post_ht.cumulative_exp,
     )
-    pre_ht = pre_ht.checkpoint(f"{temp_path}/pre_break.ht", overwrite=True)
-    post_ht = post_ht.checkpoint(f"{temp_path}/post_break.ht", overwrite=True)
+    pre_ht = pre_ht.checkpoint(f"{temp_path}/pre_break.ht", overwrite=False, _read_if_exists=True)
+    post_ht = post_ht.checkpoint(f"{temp_path}/post_break.ht", overwrite=False, _read_if_exists=True)
 
     logger.info("Searching for a break in each section and returning...")
     pre_ht = search_for_break(
@@ -756,12 +759,14 @@ def process_sections(ht: hl.Table, chisq_threshold: float, break_num: int):
         search_field="transcript",
         break_num=break_num,
         chisq_threshold=chisq_threshold,
+        pre_or_post="pre",
     )
     post_ht = search_for_break(
         post_ht,
         search_field="transcript",
         break_num=break_num,
         chisq_threshold=chisq_threshold,
+        pre_or_post="post",
     )
     # Adjust is_break annotation in both HTs
     # to prevent this function from continually finding previous significant breaks
