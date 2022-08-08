@@ -7,16 +7,7 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import (
-    constraint_prep,
-    LOGGING_PATH,
-    multiple_breaks,
-    not_one_break,
-    one_break,
-    simul_break,
-    temp_path,
-)
-from rmc.resources.grch37.exac import filtered_exac
+from rmc.resources.basics import LOGGING_PATH, TEMP_PATH
 from rmc.resources.grch37.gnomad import (
     constraint_ht,
     filtered_exomes,
@@ -24,6 +15,13 @@ from rmc.resources.grch37.gnomad import (
     prop_obs_coverage,
 )
 from rmc.resources.grch37.reference_data import filtered_context
+from rmc.resources.grch37.rmc import (
+    constraint_prep,
+    multiple_breaks,
+    not_one_break,
+    one_break,
+    simul_break,
+)
 from rmc.resources.resource_utils import CURRENT_VERSION, MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
@@ -58,8 +56,6 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
-    exac = args.exac
-
     try:
         if args.pre_process_data:
             hl.init(log="/RMC_pre_process.log")
@@ -99,11 +95,7 @@ def main(args):
         if args.prep_for_constraint:
             hl.init(log="/RMC_prep_for_constraint.log")
             logger.info("Reading in exome HT...")
-            if exac:
-                exome_ht = filtered_exac.ht()
-
-            else:
-                exome_ht = filtered_exomes.ht()
+            exome_ht = filtered_exomes.ht()
 
             logger.info("Reading in context HT...")
             context_ht = filtered_context.ht()
@@ -267,7 +259,7 @@ def main(args):
             context_ht = constraint_prep.ht()
             context_ht = process_transcripts(context_ht, args.chisq_threshold)
             context_ht = context_ht.checkpoint(
-                f"{temp_path}/first_break.ht", overwrite=True
+                f"{TEMP_PATH}/first_break.ht", overwrite=True
             )
 
             logger.info(
@@ -319,7 +311,7 @@ def main(args):
                     break_ht, break_num, args.chisq_threshold
                 )
                 break_ht = break_ht.checkpoint(
-                    f"{temp_path}/break_{break_num}.ht", overwrite=True
+                    f"{TEMP_PATH}/break_{break_num}.ht", overwrite=True
                 )
 
                 # Filter context HT to lines with break and check for transcripts with at least one additional break
@@ -407,7 +399,7 @@ def main(args):
             else:
                 logger.info("XG has at least one break!")
                 is_break_ht = is_break_ht.checkpoint(
-                    f"{temp_path}/XG_one_break.ht", overwrite=args.overwrite
+                    f"{TEMP_PATH}/XG_one_break.ht", overwrite=args.overwrite
                 )
                 # NOTE: Did not need to check for additional breaks in XG
                 # XG did not have a single significant break in gnomAD v2
@@ -420,7 +412,7 @@ def main(args):
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
             )
-            if not file_exists(f"{temp_path}/transcript.ht"):
+            if not file_exists(f"{TEMP_PATH}/transcript.ht"):
                 raise DataException(
                     "Transcript HT doesn't exist. Please double check and recreate!"
                 )
@@ -461,7 +453,7 @@ def main(args):
             ].sort()
             rmc_transcripts = []
             for break_num in n_breaks:
-                ht = hl.read_table(f"{temp_path}/break_{break_num}.ht")
+                ht = hl.read_table(f"{TEMP_PATH}/break_{break_num}.ht")
                 ht = ht.filter(ht.is_break)
                 rmc_transcripts.append(
                     ht.aggregate(hl.agg.collect_as_set(ht.transcript), _localize=False)
@@ -527,7 +519,7 @@ def main(args):
 
             if CURRENT_VERSION == "2.1.1":
                 logger.info("Reading in XG HT (one-off fix in v2.1.1)...")
-                xg_ht = hl.read_table(f"{temp_path}/XG.ht").select(
+                xg_ht = hl.read_table(f"{TEMP_PATH}/XG.ht").select(
                     "total_mu",
                     "total_exp",
                     "total_obs",
@@ -583,9 +575,9 @@ def main(args):
                 )
 
             logger.info("Checkpointing HTs...")
-            breaks_ht = breaks_ht.checkpoint(f"{temp_path}/breaks.ht", overwrite=True)
+            breaks_ht = breaks_ht.checkpoint(f"{TEMP_PATH}/breaks.ht", overwrite=True)
             no_breaks_ht = no_breaks_ht.checkpoint(
-                f"{temp_path}/no_breaks.ht", overwrite=True
+                f"{TEMP_PATH}/no_breaks.ht", overwrite=True
             )
 
     finally:
@@ -601,9 +593,6 @@ if __name__ == "__main__":
         "--trimers", help="Use trimers instead of heptamers", action="store_true"
     )
     parser.add_argument(
-        "--exac", help="Use ExAC Table (not gnomAD Table)", action="store_true"
-    )
-    parser.add_argument(
         "--n-partitions",
         help="Desired number of partitions for output data",
         type=int,
@@ -617,9 +606,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--chisq-threshold",
-        help="Chi-square significance threshold. Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).",
+        help="Chi-square significance threshold. Value should be 6.6 (single break) and 9.2 (two breaks); both values correspond to p = 0.01.",
         type=float,
-        default=10.8,
+        default=6.6,
     )
     parser.add_argument(
         "--pre-process-data", help="Pre-process data", action="store_true"
