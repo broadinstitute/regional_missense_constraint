@@ -5,6 +5,11 @@ from rmc.resources.resource_utils import CURRENT_VERSION, FLAGSHIP_LOF, RESOURCE
 
 ## Konrad's resources
 # LoF constraint resource files
+FLAGSHIP_LOF = "gs://gnomad-public-requester-pays/papers/2019-flagship-lof/v1.0"
+"""
+Path to bucket with gnomAD v2 loss-of-function (LoF) constraint results.
+"""
+
 FLAGSHIP_MODEL_PREFIX = f"{FLAGSHIP_LOF}/model"
 
 processed_exomes = TableResource(path=f"{FLAGSHIP_MODEL_PREFIX}/exomes_processed.ht")
