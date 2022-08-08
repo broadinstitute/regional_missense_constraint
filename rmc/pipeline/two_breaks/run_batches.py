@@ -29,10 +29,10 @@ import hailtop.batch as hb
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import (
+from rmc.resources.basics import SIMUL_BREAK_TEMP
+from rmc.resources.grch37.rmc import (
     not_one_break_grouped,
     simul_break_over_threshold,
-    simul_break_temp,
     simul_break_under_threshold,
 )
 from rmc.slack_creds import slack_token
@@ -658,8 +658,8 @@ def main(args):
                 not_one_break_grouped.path,
                 group,
                 args.over_threshold,
-                f"{simul_break_temp}/hts/simul_break_{job_name}.ht",
-                f"{simul_break_temp}/success_files",
+                f"{SIMUL_BREAK_TEMP}/hts/simul_break_{job_name}.ht",
+                f"{SIMUL_BREAK_TEMP}/success_files",
                 None,
                 args.chisq_threshold,
                 split_window_size,
@@ -685,9 +685,9 @@ def main(args):
                 not_one_break_grouped.path,
                 group,
                 args.over_threshold,
-                f"{simul_break_temp}/hts/simul_break_{group[0]}.ht",
-                f"{simul_break_temp}/success_files",
-                f"{simul_break_temp}",
+                f"{SIMUL_BREAK_TEMP}/hts/simul_break_{group[0]}.ht",
+                f"{SIMUL_BREAK_TEMP}/success_files",
+                f"{SIMUL_BREAK_TEMP}",
                 args.chisq_threshold,
                 args.group_size,
             )
