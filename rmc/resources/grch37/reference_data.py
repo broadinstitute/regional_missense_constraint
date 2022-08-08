@@ -1,3 +1,4 @@
+"""Script containing GRCh37 reference resources."""
 from gnomad.resources.resource_utils import (
     TableResource,
     VersionedTableResource,

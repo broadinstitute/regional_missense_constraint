@@ -1,3 +1,4 @@
+"""Script containing GRCh37 gnomAD resources."""
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
 
 from rmc.resources.basics import RESOURCE_PREFIX

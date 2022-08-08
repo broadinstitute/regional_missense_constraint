@@ -1,3 +1,9 @@
+"""
+Script containing RMC and MPC related resources.
+
+RMC: Regional missense constraint
+MPC: Missense badness, Polyphen-2, and Constraint score
+"""
 import hail as hl
 
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
