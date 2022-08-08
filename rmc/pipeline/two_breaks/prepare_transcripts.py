@@ -16,12 +16,9 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import (
-    LOGGING_PATH,
-    not_one_break,
-    not_one_break_grouped,
-)
+from rmc.resources.basics import LOGGING_PATH
 from rmc.resources.grch37.reference_data import gene_model
+from rmc.resources.grch37.rmc import not_one_break, not_one_break_grouped
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import (
     group_not_one_break_ht,
