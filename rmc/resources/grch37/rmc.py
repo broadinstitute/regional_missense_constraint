@@ -2,12 +2,16 @@ import hail as hl
 
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
 
+from rmc.resources.buckets import (
+    CONSTRAINT_PREFIX,
+    MODEL_PREFIX,
+    MPC_PREFIX,
+)
 from rmc.resources.resource_utils import (
     CURRENT_VERSION,
     FLAGSHIP_LOF,
     GNOMAD_VERSIONS,
     RESOURCE_PREFIX,
-    RMC_PREFIX,
 )
 
 

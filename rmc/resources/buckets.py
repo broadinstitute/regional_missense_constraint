@@ -1,6 +1,9 @@
 """Script containing Google cloud bucket paths."""
 
 
+from rmc.resources.resource_utils import RMC_PREFIX
+
+
 LOGGING_PATH = "gs://regional_missense_constraint/logs"
 """
 Path to bucket for hail logs.
