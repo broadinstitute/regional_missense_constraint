@@ -2,25 +2,28 @@ import hail as hl
 
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
 
-from rmc.resources.buckets import (
+from rmc.resources.basics import (
     CONSTRAINT_PREFIX,
     MODEL_PREFIX,
     MPC_PREFIX,
-)
-from rmc.resources.resource_utils import (
-    CURRENT_VERSION,
-    FLAGSHIP_LOF,
-    GNOMAD_VERSIONS,
     RESOURCE_PREFIX,
 )
+from rmc.resources.resource_utils import CURRENT_VERSION, GNOMAD_VERSIONS
 
 
-## Kaitlin's resources
 # Original regional missense constraint resource files
 MUTATION_RATE_TABLE_PATH = f"{RESOURCE_PREFIX}/GRCh37/exac/mutation_rate_table.tsv"
+"""
+Path to TSV containing ExAC mutation rates.
+"""
+
 DIVERGENCE_SCORES_TSV_PATH = (
     f"{RESOURCE_PREFIX}/GRCh37/exac/divsites_gencodev19_all_transcripts.txt"
 )
+"""
+Path to text file with divergence scores per transcript.
+"""
+
 divergence_scores = TableResource(
     path=f"{RESOURCE_PREFIX}/GRCh37/exac/ht/div_scores.ht",
     import_func=hl.import_table,
@@ -35,56 +38,8 @@ divergence_scores = TableResource(
 Table with divergence score between humans and macaques for each canonical transcript in Gencode v19.
 """
 
-## Amino acid resources
-CODON_TABLE_PATH = f"{RESOURCE_PREFIX}/amino_acids/codons_lookup.tsv"
-"""
-TSV file containing two columns: codon and three letter amino acid code.
-"""
 
-ACID_NAMES_PATH = f"{RESOURCE_PREFIX}/amino_acids/acid_names.tsv"
-"""
-TSV file containing three columns: amino acid name, amino acid 3 letter code, and amino acid 1 letter code.
-"""
-
-blosum_txt_path = f"{RESOURCE_PREFIX}/amino_acids/blosum62.txt"
-"""
-Text file containing matrix of BLOSUM scores for each amino acid pair.
-"""
-
-blosum = TableResource(
-    path=f"{RESOURCE_PREFIX}/amino_acids/ht/blosum.ht",
-)
-"""
-Table containing BLOSUM scores for each amino acid pair.
-
-Hail Table representation of scores in `blosum_txt_path`.
-"""
-
-grantham_txt_path = f"{RESOURCE_PREFIX}/amino_acids/grantham.matrix.txt"
-"""
-Text file containing matrix of Grantham scores for each amino acid pair.
-"""
-
-grantham = TableResource(
-    path=f"{RESOURCE_PREFIX}/amino_acids/ht/grantham.ht",
-)
-"""
-Table containing Grantham scores for each amino acid pair.
-
-Hail Table representation of scores in `grantham_txt_path`.
-"""
-
-## gnomAD resources
-mutation_rate = TableResource(
-    path=f"{FLAGSHIP_LOF}/model/mutation_rate_methylation_bins.ht",
-)
-"""
-Table with mutation rate recalculated for gnomAD constraint.
-
-This was calculated with `calculate_mu_by_downsampling` in
-https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constraint_basics.py.
-"""
-
+# RMC-related resources
 constraint_prep = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
@@ -100,14 +55,6 @@ Context Table ready for RMC calculations.
 HT is annotated with observed and expected variant counts per base.
 """
 
-hi_genes = f"{RESOURCE_PREFIX}/HI_genes.rCNV.txt"
-"""
-Path to haploinsufficient genes that cause severe disease.
-
-List is from Ryan Collins.
-"""
-
-## Constraint related resources
 one_break = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
@@ -253,6 +200,7 @@ Table containing all transcripts with evidence of regional missense constraint.
 Contains same information as `rmc_results` but has different formatting for gnomAD browser.
 """
 
+# Missense badness related resources
 amino_acids_oe = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
@@ -295,6 +243,7 @@ missense badness, and PolyPhen-2 scores.
 Input to MPC (missense badness, polyphen-2, and constraint) calculations.
 """
 
+# MPC related resources
 mpc_model_pkl_path = f"{MPC_PREFIX}/{CURRENT_VERSION}/mpc_model.pkl"
 """
 Path to model (stored as pickle) that contains relationship of MPC variables.
@@ -354,6 +303,7 @@ Table containing missense variants in canonical transcripts annotated with MPC.
 This Table contains only one row per each unique locus/alleles combination.
 """
 
+# Assessment related resources
 oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/oe_bin.tsv"
 """
 TSV with RMC regions grouped by obs/exp (OE) bin.
@@ -363,7 +313,7 @@ proportion de novo missense (case), and proportion ClinVar pathogenic/likely pat
 severe haploinsufficient missense.
 """
 
-
+# Reference related resources
 TOTAL_EXOME_BASES = {"GRCh37": 54426835}
 """
 Dictionary containing total number of bases in the exome.
