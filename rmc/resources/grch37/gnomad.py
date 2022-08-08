@@ -1,10 +1,10 @@
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
 
-from rmc.resources.resource_utils import CURRENT_VERSION, FLAGSHIP_LOF, RESOURCE_PREFIX
+from rmc.resources.basics import RESOURCE_PREFIX
+from rmc.resources.resource_utils import CURRENT_VERSION
 
 
-## Konrad's resources
-# LoF constraint resource files
+# gnomAD v2 loss-of-function (LoF) constraint resource files
 FLAGSHIP_LOF = "gs://gnomad-public-requester-pays/papers/2019-flagship-lof/v1.0"
 """
 Path to bucket with gnomAD v2 loss-of-function (LoF) constraint results.
@@ -60,6 +60,16 @@ Contains multiple mutation rate annotations:
 	- mu_agg: `mu_snp` multiplied by the number of times the variant was seen in the context HT (`possible_variants`).
 	- adjusted_mutation_rate: `mu_agg` corrected with plateau model.
 	- mu: `mu_agg` multipled by coverage correction.
+"""
+
+mutation_rate = TableResource(
+    path=f"{FLAGSHIP_LOF}/model/mutation_rate_methylation_bins.ht",
+)
+"""
+Table with mutation rate recalculated for gnomAD constraint.
+
+This was calculated with `calculate_mu_by_downsampling` in
+https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constraint_basics.py.
 """
 
 constraint_ht = VersionedTableResource(
