@@ -1188,47 +1188,6 @@ def get_unique_transcripts_per_break(
     return (transcripts_per_break, max_n_breaks)
 
 
-def reformat_annotations_for_release(ht: hl.Table) -> hl.Table:
-    """
-    Reformat annotations in input HT for release.
-
-    This reformatting is necessary to load data into the gnomAD browser.
-
-    Desired schema:
-    ---------------------------------------
-    Row fields:
-        'transcript_id': str
-        'regions': array<struct {
-            'start': int32
-            'stop': int32
-            'observed_missense': int32
-            'expected_missense': float64
-            'chisq': float64
-        }>
-
-    ----------------------------------------
-    Key: ['transcript_id']
-    ----------------------------------------
-
-    :param hl.Table ht: Input Table.
-    :return: Table with schema described above.
-    :rtype: hl.Table
-    """
-    ht = ht.annotate(
-        regions=hl.struct(
-            start=ht.section_start,
-            stop=ht.section_end,
-            observed_missense=ht.section_obs,
-            expected_missense=ht.section_exp,
-            chisq=ht.section_chisq,
-        )
-    )
-    # Group Table by transcript
-    return ht.group_by(transcript_id=ht.transcript).aggregate(
-        regions=hl.agg.collect(ht.regions)
-    )
-
-
 def finalize_multiple_breaks(
     ht: hl.Table,
     annotations: List[str] = MULTI_BREAK_ANNOTATIONS,
@@ -1365,6 +1324,47 @@ def finalize_simul_breaks(
     ht = annotate_transcript_sections(ht, max_n_breaks=2, simul_breaks=True)
     ht = ht.checkpoint(simul_break.path, overwrite=True)
     return ht
+
+
+def reformat_annotations_for_release(ht: hl.Table) -> hl.Table:
+    """
+    Reformat annotations in input HT for release.
+
+    This reformatting is necessary to load data into the gnomAD browser.
+
+    Desired schema:
+    ---------------------------------------
+    Row fields:
+        'transcript_id': str
+        'regions': array<struct {
+            'start': int32
+            'stop': int32
+            'observed_missense': int32
+            'expected_missense': float64
+            'chisq': float64
+        }>
+
+    ----------------------------------------
+    Key: ['transcript_id']
+    ----------------------------------------
+
+    :param hl.Table ht: Input Table.
+    :return: Table with schema described above.
+    :rtype: hl.Table
+    """
+    ht = ht.annotate(
+        regions=hl.struct(
+            start=ht.section_start,
+            stop=ht.section_end,
+            observed_missense=ht.section_obs,
+            expected_missense=ht.section_exp,
+            chisq=ht.section_chisq,
+        )
+    )
+    # Group Table by transcript
+    return ht.group_by(transcript_id=ht.transcript).aggregate(
+        regions=hl.agg.collect(ht.regions)
+    )
 
 
 def finalize_all_breaks_results(
