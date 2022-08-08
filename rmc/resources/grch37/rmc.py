@@ -11,18 +11,6 @@ from rmc.resources.resource_utils import (
 )
 
 
-LOGGING_PATH = "gs://regional_missense_constraint/logs"
-"""
-Path to bucket that stores hail logs.
-"""
-
-temp_path = "gs://regional_missense_constraint/temp"
-"""
-Path to bucket to store temporary files.
-Used when checkpointing intermediate files.
-"""
-
-
 ## Kaitlin's resources
 # Original regional missense constraint resource files
 MUTATION_RATE_TABLE_PATH = f"{RESOURCE_PREFIX}/GRCh37/exac/mutation_rate_table.tsv"
@@ -93,17 +81,6 @@ This was calculated with `calculate_mu_by_downsampling` in
 https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constraint_basics.py.
 """
 
-MODEL_PREFIX = f"{RMC_PREFIX}/model"
-"""
-Path to bucket containing resources related to building the mutational models and setting up for regional missense constraint calculations.
-"""
-
-
-MPC_PREFIX = f"{RMC_PREFIX}/MPC"
-"""
-Path to bucket containing resources related to building MPC (missense badness, Polyphen-2, and Constraint) score.
-"""
-
 constraint_prep = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
@@ -127,7 +104,6 @@ List is from Ryan Collins.
 """
 
 ## Constraint related resources
-CONSTRAINT_PREFIX = f"{RMC_PREFIX}/constraint"
 one_break = VersionedTableResource(
     default_version=CURRENT_VERSION,
     versions={
@@ -189,11 +165,6 @@ SetExpression containing transcripts with fewer possible missense positions than
 simul_break_over_threshold = f"{MODEL_PREFIX}/{CURRENT_VERSION}/transcripts_over_5k.he"
 """
 SetExpression containing transcripts with greater than or equal to the cutoff for possible missense positions.
-"""
-
-simul_break_temp = f"{temp_path}/simul_breaks"
-"""
-Bucket to store temporary results for simultaneous results.
 """
 
 simul_break = VersionedTableResource(
