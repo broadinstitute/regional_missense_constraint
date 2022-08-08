@@ -21,14 +21,15 @@ from gnomad_lof.constraint_utils.generic import fast_filter_vep
 from rmc.resources.basics import (
     ACID_NAMES_PATH,
     CODON_TABLE_PATH,
-    DIVERGENCE_SCORES_TSV_PATH,
     hi_genes,
-    mutation_rate,
+)
+from rmc.resources.grch37.gnomad import constraint_ht, filtered_exomes, mutation_rate
+from rmc.resources.grch37.rmc import (
+    DIVERGENCE_SCORES_TSV_PATH,
     MUTATION_RATE_TABLE_PATH,
     TOTAL_EXOME_BASES,
     TOTAL_GNOMAD_MISSENSE,
 )
-from rmc.resources.grch37.gnomad import constraint_ht, filtered_exomes
 import rmc.resources.grch37.reference_data as grch37
 import rmc.resources.grch38.reference_data as grch38
 from rmc.resources.resource_utils import BUILDS, CURRENT_VERSION, MISSENSE
