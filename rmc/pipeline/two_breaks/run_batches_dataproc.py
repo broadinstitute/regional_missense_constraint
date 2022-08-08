@@ -51,9 +51,9 @@ def main(args):
 
         for counter, group in enumerate(transcript_groups):
             output_ht = (
-                f"{simul_break_temp}/hts/simul_break_dataproc_ttn.ht"
+                f"{SIMUL_BREAK_TEMP}/hts/simul_break_dataproc_ttn.ht"
                 if args.run_ttn
-                else f"{simul_break_temp}/hts/simul_break_dataproc_{counter}.ht"
+                else f"{SIMUL_BREAK_TEMP}/hts/simul_break_dataproc_{counter}.ht"
             )
             if file_exists(output_ht):
                 raise DataException(
@@ -65,8 +65,8 @@ def main(args):
                 transcript_group=group,
                 over_threshold=True,
                 output_ht_path=output_ht,
-                output_tsv_path=f"{simul_break_temp}/success_files",
-                temp_ht_path=f"{simul_break_temp}",
+                output_tsv_path=f"{SIMUL_BREAK_TEMP}/success_files",
+                temp_ht_path=f"{SIMUL_BREAK_TEMP}",
                 chisq_threshold=args.chisq_threshold,
                 split_window_size=args.window_size,
                 read_if_exists=args.read_if_exists,
