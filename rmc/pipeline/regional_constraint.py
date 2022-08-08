@@ -281,7 +281,8 @@ def main(args):
                 transcripts.contains(context_ht.transcript)
             )
             one_break_ht = one_break_ht.annotate_globals(
-                break_1_transcripts=transcripts
+                break_1_transcripts=transcripts,
+                chisq_threshold=args.chisq_threshold,
             )
             one_break_ht.write(one_break.path, overwrite=args.overwrite)
 
@@ -355,6 +356,9 @@ def main(args):
                 break_ht = break_ht.filter(transcripts.contains(break_ht.transcript))
                 break_num += 1
 
+            context_ht = context_ht.annotate_globals(
+                chisq_threshold=args.chisq_threshold
+            )
             context_ht.write(multiple_breaks.path, overwrite=args.overwrite)
 
         # NOTE: This is only necessary for gnomAD v2
