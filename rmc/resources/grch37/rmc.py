@@ -14,7 +14,18 @@ from rmc.resources.basics import (
     MPC_PREFIX,
     RESOURCE_PREFIX,
 )
-from rmc.resources.resource_utils import CURRENT_VERSION, GNOMAD_VERSIONS
+from rmc.resources.resource_utils import CURRENT_VERSION
+
+
+FREEZES = [1, 2]
+"""
+List of RMC/MPC data versions.
+"""
+
+CURRENT_FREEZE = 2
+"""
+Current RMC/MPC data version.
+"""
 
 
 # Original regional missense constraint resource files
@@ -47,12 +58,12 @@ Table with divergence score between humans and macaques for each canonical trans
 
 # RMC-related resources
 constraint_prep = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(
-            path=f"{MODEL_PREFIX}/{version}/context_obs_exp_annot.ht"
+        freeze: TableResource(
+            path=f"{MODEL_PREFIX}/{CURRENT_VERSION}/{freeze}/context_obs_exp_annot.ht"
         )
-        for version in GNOMAD_VERSIONS
+        for freeze in FREEZES
     },
 )
 """
@@ -62,10 +73,12 @@ HT is annotated with observed and expected variant counts per base.
 """
 
 one_break = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/one_break.ht")
-        for version in GNOMAD_VERSIONS
+        freeze: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/one_break.ht"
+        )
+        for freeze in FREEZES
     },
 )
 """
@@ -75,10 +88,12 @@ Found when searching constraint_prep HT for transcripts for a single (first) bre
 """
 
 not_one_break = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/not_one_break.ht")
-        for version in GNOMAD_VERSIONS
+        freeze: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/not_one_break.ht"
+        )
+        for freeze in FREEZES
     },
 )
 """
@@ -88,11 +103,12 @@ Transcripts in this table will be processed to check for two simultaneous breaks
 """
 
 not_one_break_grouped = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        CURRENT_VERSION: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/not_one_break_grouped.ht"
-        ),
+        freeze: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/not_one_break_grouped.ht"
+        )
+        for freeze in FREEZES
     },
 )
 """
@@ -102,10 +118,12 @@ Input to searching for simultaneous breaks.
 """
 
 multiple_breaks = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/multiple_breaks.ht")
-        for version in GNOMAD_VERSIONS
+        freeze: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/multiple_breaks.ht"
+        )
+        for freeze in FREEZES
     },
 )
 """
@@ -113,22 +131,26 @@ Table containing transcripts with multiple breaks.
 """
 
 simul_break_under_threshold = (
-    f"{MODEL_PREFIX}/{CURRENT_VERSION}/transcripts_under_5k.he"
+    f"{MODEL_PREFIX}/{CURRENT_VERSION}/{CURRENT_FREEZE}/transcripts_under_5k.he"
 )
 """
 SetExpression containing transcripts with fewer possible missense positions than cutoff specified in `run_simultaneous_breaks.py`.
 """
 
-simul_break_over_threshold = f"{MODEL_PREFIX}/{CURRENT_VERSION}/transcripts_over_5k.he"
+simul_break_over_threshold = (
+    f"{MODEL_PREFIX}/{CURRENT_VERSION}/{CURRENT_FREEZE}/transcripts_over_5k.he"
+)
 """
 SetExpression containing transcripts with greater than or equal to the cutoff for possible missense positions.
 """
 
 simul_break = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/simul_break.ht")
-        for version in GNOMAD_VERSIONS
+        freeze: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/simul_break.ht"
+        )
+        for freeze in FREEZES
     },
 )
 """
@@ -136,10 +158,12 @@ Table containing transcripts with two simultaneous breaks.
 """
 
 no_breaks = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/no_breaks.ht")
-        for version in GNOMAD_VERSIONS
+        freeze: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/no_breaks.ht"
+        )
+        for freeze in FREEZES
     },
 )
 """
@@ -147,10 +171,12 @@ Table containing transcripts with no significant breaks.
 """
 
 rmc_results = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/all_rmc.ht")
-        for version in GNOMAD_VERSIONS
+        freeze: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/all_rmc.ht"
+        )
+        for freeze in FREEZES
     },
 )
 """
@@ -160,10 +186,12 @@ Contains transcripts with one or additional breaks plus simultaneous breaks resu
 """
 
 context_with_oe = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/context_with_oe.ht")
-        for version in GNOMAD_VERSIONS
+        freeze: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/context_with_oe.ht"
+        )
+        for freeze in FREEZES
     },
 )
 """
@@ -174,12 +202,12 @@ the transcript level missense OE.
 """
 
 context_with_oe_dedup = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{version}/context_with_oe_dedup.ht"
+        freeze: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/context_with_oe_dedup.ht"
         )
-        for version in GNOMAD_VERSIONS
+        for freeze in FREEZES
     },
 )
 """
@@ -192,12 +220,12 @@ This Table contains only one row per each unique locus/alleles combination.
 """
 
 rmc_browser = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/rmc_browser.ht"
+        freeze: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/rmc_browser.ht"
         )
-        for version in GNOMAD_VERSIONS
+        for freeze in FREEZES
     },
 )
 """
@@ -208,10 +236,12 @@ Contains same information as `rmc_results` but has different formatting for gnom
 
 # Missense badness related resources
 amino_acids_oe = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(path=f"{MPC_PREFIX}/{version}/amino_acid_oe.ht")
-        for version in GNOMAD_VERSIONS
+        freeze: TableResource(
+            path=f"{MPC_PREFIX}/{CURRENT_VERSION}/{freeze}/amino_acid_oe.ht"
+        )
+        for freeze in FREEZES
     },
 )
 """
@@ -221,10 +251,12 @@ Input to missense badness calculations.
 """
 
 misbad = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(path=f"{MPC_PREFIX}/{version}/missense_badness.ht")
-        for version in GNOMAD_VERSIONS
+        freeze: TableResource(
+            path=f"{MPC_PREFIX}/{CURRENT_VERSION}/{freeze}/missense_badness.ht"
+        )
+        for freeze in FREEZES
     },
 )
 """
@@ -232,10 +264,12 @@ Table containing all possible amino acid substitutions and their missense badnes
 """
 
 joint_clinvar_gnomad = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(path=f"{MPC_PREFIX}/{version}/joint_clinvar_gnomad.ht")
-        for version in GNOMAD_VERSIONS
+        freeze: TableResource(
+            path=f"{MPC_PREFIX}/{CURRENT_VERSION}/{freeze}/joint_clinvar_gnomad.ht"
+        )
+        for freeze in FREEZES
     },
 )
 """
@@ -250,7 +284,7 @@ Input to MPC (missense badness, polyphen-2, and constraint) calculations.
 """
 
 # MPC related resources
-mpc_model_pkl_path = f"{MPC_PREFIX}/{CURRENT_VERSION}/mpc_model.pkl"
+mpc_model_pkl_path = f"{MPC_PREFIX}/{CURRENT_VERSION}/{CURRENT_FREEZE}/mpc_model.pkl"
 """
 Path to model (stored as pickle) that contains relationship of MPC variables.
 
@@ -258,10 +292,12 @@ Created using logistic regression.
 """
 
 gnomad_fitted_score = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(path=f"{MPC_PREFIX}/{version}/gnomad_fitted_scores.ht")
-        for version in GNOMAD_VERSIONS
+        freeze: TableResource(
+            path=f"{MPC_PREFIX}/{CURRENT_VERSION}/{freeze}/gnomad_fitted_scores.ht"
+        )
+        for freeze in FREEZES
     },
 )
 """
@@ -271,12 +307,12 @@ Input to MPC (missense badness, polyphen-2, and constraint) calculations on othe
 """
 
 gnomad_fitted_score_group = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(
-            path=f"{MPC_PREFIX}/{version}/gnomad_fitted_scores_group.ht"
+        freeze: TableResource(
+            path=f"{MPC_PREFIX}/{CURRENT_VERSION}/{freeze}/gnomad_fitted_scores_group.ht"
         )
-        for version in GNOMAD_VERSIONS
+        for freeze in FREEZES
     },
 )
 """
@@ -286,10 +322,10 @@ Annotated with the total number of variants with and less than each score.
 """
 
 mpc_release = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(path=f"{MPC_PREFIX}/{version}/mpc.ht")
-        for version in GNOMAD_VERSIONS
+        freeze: TableResource(path=f"{MPC_PREFIX}/{CURRENT_VERSION}/{freeze}/mpc.ht")
+        for freeze in FREEZES
     },
 )
 """
@@ -297,10 +333,12 @@ Table containing missense variants in canonical transcripts annotated with MPC.
 """
 
 mpc_release_dedup = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_FREEZE,
     versions={
-        version: TableResource(path=f"{MPC_PREFIX}/{version}/mpc_dedup.ht")
-        for version in GNOMAD_VERSIONS
+        freeze: TableResource(
+            path=f"{MPC_PREFIX}/{CURRENT_VERSION}/{freeze}/mpc_dedup.ht"
+        )
+        for freeze in FREEZES
     },
 )
 """
@@ -310,7 +348,7 @@ This Table contains only one row per each unique locus/alleles combination.
 """
 
 # Assessment related resources
-oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/oe_bin.tsv"
+oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_FREEZE}/{CURRENT_FREEZE}/oe_bin.tsv"
 """
 TSV with RMC regions grouped by obs/exp (OE) bin.
 
