@@ -19,7 +19,6 @@ from rmc.resources.basics import (
 from rmc.resources.grch37.gnomad import filtered_exomes
 from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo, gene_model
 from rmc.utils.generic import (
-    get_constraint_transcripts,
     get_coverage_correction_expr,
     keep_criteria,
     import_clinvar_hi_variants,
@@ -1318,31 +1317,60 @@ def finalize_multiple_breaks(
     # Merge all HTs together
     ht = hts[0].union(*hts[1:])
     ht = ht.annotate_globals(**transcripts_per_break)
+    ht = ht.select(*annotations)
     ht = ht.checkpoint(multiple_breaks.path, overwrite=True)
     return ht
 
 
-def finalize_simul_breaks(ht: hl.Table) -> hl.Table:
+def finalize_simul_breaks(
+    simul_ht: hl.Table,
+    annotations: List[str] = SIMUL_BREAK_ANNOTATIONS,
+) -> hl.Table:
     """
     Process Table containing transcripts with two simultaneous breaks.
 
     Calculate each transcript subsection observed, expected, OE, and chi-square values.
 
-    :param hl.Table ht: Input Table with simultaneous breaks results.
+    :param hl.Table simul_ht: Input Table with simultaneous breaks results.
+    :param List[str] annotations: List of annotations to keep from input Table.
+        Default is SIMUL_BREAK_ANNOTATIONS.
     :return: Table annotated with transcript subsection values.
-    :rtype: hl.Table
     """
+    # Rename chisq cutoff in simultaneous breaks HT
+    simul_ht = simul_ht.transmute_globals(
+        simul_breaks_chisq_threshold=simul_ht.chisq_threshold
+    )
+    simul_ht = simul_ht.select(*annotations)
+    simul_break_transcripts = simul_ht.aggregate(
+        hl.agg.collect_as_set(simul_ht.transcript)
+    )
+
+    logger.info(
+        "Reading in processed context Table, adding simul breaks annotations, and checkpointing..."
+    )
+    # Reading in processed context HT (annotated with cumulative obs/exp missense values)
+    # because simultaneous breaks HT only contains one row per transcript
+    # Need the context Table to be able to calculate the observed and expected values for each transcript subsection
+    ht = constraint_prep.ht()
+    ht = ht.filter(hl.literal(simul_break_transcripts).contains(ht.transcript))
+    ht = ht.annotate(
+        start_pos=simul_ht[ht.transcript].start,
+        end_pos=simul_ht[ht.transcript].stop,
+        max_chisq=simul_ht[ht.transcript].max_chisq,
+        break_pos=simul_ht[ht.transcript].break_pos,
+    )
+    ht = ht.checkpoint(f"{temp_path}/simul_breaks.ht", overwrite=True)
+
     logger.info("Get transcript section annotations (obs, exp, OE, chisq)...")
-    ht = annotate_transcript_sections(ht, max_n_breaks=2)
-    ht = ht.checkpoint(f"{temp_path}/simul_break_sections.ht", overwrite=True)
+    ht = annotate_transcript_sections(ht, max_n_breaks=2, simul_breaks=True)
+    ht = ht.checkpoint(simul_break.path, overwrite=True)
     return ht
 
 
 def finalize_all_breaks_results(
-    breaks_ht: hl.Table,
+    multi_breaks_ht: hl.Table,
     simul_breaks_ht: hl.Table,
-    max_n_breaks: int,
-    annotations: List[str] = FINAL_ANNOTATIONS,
+    annotations: List[str] = CONSTRAINT_ANNOTATIONS,
 ) -> None:
     """
     Finalize all breaks results.
@@ -1352,20 +1380,26 @@ def finalize_all_breaks_results(
 
     Also reformat Table to match desired release HT schema.
 
-    :param hl.Table breaks_ht: Input Table with multiple break results.
+    :param hl.Table multi_breaks_ht: Input Table with first/additional (multiple) break results.
     :param hl.Table simul_breaks_ht: Input Table with simultaneous breaks results.
     :param int max_n_breaks: Largest number of breakpoints in any transcript. Used only for multiple breaks results.
     :param List[str] annotations: List of annotations to keep from input Table.
-        Default is FINAL_ANNOTATIONS.
-    :return: None; writes Table to resource path.
+        Default is CONSTRAINT_ANNOTATIONS.
+    :return: None; writes Tables to resource path.
     """
     logger.info("Finalizing multiple breaks results...")
-    breaks_ht = finalize_multiple_breaks(breaks_ht, max_n_breaks, annotations)
+    multi_breaks_ht = finalize_multiple_breaks(multi_breaks_ht).select(*annotations)
 
     logger.info("Finalizing simultaneous breaks results...")
-    simul_breaks_ht = finalize_simul_breaks(simul_breaks_ht)
-    ht = breaks_ht.union(simul_breaks_ht, unify=False)
-    ht = ht.checkpoint(f"{temp_path}/breaks.ht", overwrite=True)
+    simul_breaks_ht = finalize_simul_breaks(simul_breaks_ht).select(*annotations)
+    ht = multi_breaks_ht.union(simul_breaks_ht, unify=True)
+    ht = ht.transmute_globals(
+        chisq_threshold=hl.struct(
+            multiple_breaks=ht.multiple_breaks_chisq_threshold,
+            simultaneous_breaks=ht.simul_breaks_chisq_threshold,
+        )
+    )
+    ht = ht.checkpoint(rmc_results.path, overwrite=True)
 
     logger.info("Reformatting for browser release...")
     ht = reformat_annotations_for_release(ht)
