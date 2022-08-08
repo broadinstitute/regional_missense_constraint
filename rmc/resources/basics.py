@@ -1,4 +1,5 @@
 """Script containing generic resources and Google cloud bucket paths."""
+from gnomad.resources.resource_utils import TableResource
 
 
 ######################################################################
@@ -95,4 +96,14 @@ grantham = TableResource(
 Table containing Grantham scores for each amino acid pair.
 
 Hail Table representation of scores in `grantham_txt_path`.
+"""
+
+######################################################################
+## Gene/transcript resources
+######################################################################
+hi_genes = f"{RESOURCE_PREFIX}/HI_genes.rCNV.txt"
+"""
+Path to haploinsufficient genes that cause severe disease.
+
+List is from Ryan Collins.
 """
