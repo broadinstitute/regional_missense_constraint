@@ -11,7 +11,7 @@ import hail as hl
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import (
+from rmc.resources.grch37.rmc import (
     simul_break_over_threshold,
     simul_break_under_threshold,
 )
