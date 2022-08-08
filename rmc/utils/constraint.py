@@ -52,43 +52,43 @@ Core fields to group by when calculating expected variants per variant type.
 Fields taken from gnomAD LoF repo.
 """
 
-CONSTRAINT_ANNOTATIONS = [
-    "mu_snp",
-    "total_exp",
-    "_mu_scan",
-    "total_mu",
-    "cumulative_obs",
-    "observed",
-    "cumulative_exp",
-    "total_obs",
-    "reverse",
-    "forward_oe",
-    "overall_oe",
-    "start_pos",
-    "end_pos",
-    "transcript_size",
-]
-"""
-List of annotations required to calculate constraint.
-
-Used to drop unnecessary fields when searching for simultaneous breaks.
-"""
-
-FINAL_ANNOTATIONS = [
+MULTI_BREAK_ANNOTATIONS = [
     "mu_snp",
     "observed",
     "total_exp",
     "total_mu",
     "total_obs",
     "cumulative_obs",
-    "_mu_scan",
     "cumulative_exp",
     "break_list",
     "start_pos",
     "end_pos",
 ]
 """
-List of annotations to keep when finalizing release HT.
+List of annotations to keep when finalizing first/additional (multiple) breaks HT.
+"""
+
+SIMUL_BREAK_ANNOTATIONS = [
+    "max_chisq",
+    "break_pos",
+    "start_pos",
+    "end_pos",
+]
+"""
+List of annotations to keep when finalizing two simultaneous breaks HT.
+"""
+
+CONSTRAINT_ANNOTATIONS = [
+    "section_start_pos",
+    "section_end_pos",
+    "section",
+    "section_exp",
+    "section_obs",
+    "section_chisq",
+    "section_oe",
+]
+"""
+List of annotations to keep on finalized regional missense constraint results HT.
 """
 
 
@@ -1103,46 +1103,58 @@ def annotate_transcript_sections(
 
 def get_unique_transcripts_per_break(
     ht: hl.Table,
-    max_n_breaks: int,
-) -> Dict[int, Union[Set[str], hl.expr.SetExpression]]:
+) -> Tuple[Dict[int, Union[Set[str], hl.expr.SetExpression]], int]:
     """
-    Return the set of transcripts unique to each break number.
+    Return a DictExpression with the number of transcripts per break number.
 
-    If the set is empty, return an empty SetExpression.
+    Key is in format `break_{number}_transcripts`.
+    Value is SetExpression of all transcripts with the specified number of breakpoints
+        (empty SetExpression if that break number has no transcripts).
+
+    Function also checkpoints temporary table containing breakpoint positions and number of breaks for each transcript.
 
     .. note::
         - This function will only get unique transcripts for transcripts with one or one + additional breaks.
-        - This will not work for transcripts with two simultaneous breaks.
         - Assumes input Table is annotated with list containing booleans for whether that locus is a breakpoint
         (`break_list`).
 
     :param hl.Table: Input Table.
-    :param int max_n_breaks: Largest number of breaks.
-    :return: Dictionary with break number (key) and set of transcripts unique to that break number or empty SetExpression (value).
-    :rtype: Dict[int, Union[Set[str], hl.expr.SetExpression]]
+    :return: Tuple of dictionary with break number (key) and set of transcripts unique to that break number or empty SetExpression (value) and
+        maximum number of breaks for any transcript.
     """
     transcripts_per_break = {}
     # Use `break_list` annotation (list of booleans for whether a row is a breakpoint)
-    # to filter one/additional breaks ht to rows that are significant breakpoints ONLY
+    # to filter one/additional breaks ht to rows that are significant breakpoints
     ht = ht.filter(ht.break_list.any(lambda x: x))
 
     # Group HT (filtered to breakpoint positions only) by transcript and
     # count the number of breakpoints associated with each transcript
-    group_ht = ht.group_by("transcript").aggregate(n_breaks=hl.agg.count())
+    group_ht = ht.group_by("transcript").aggregate(
+        break_pos=hl.sorted(hl.agg.collect(ht.locus.position))
+    )
+    group_ht = group_ht.annotate(n_breaks=hl.len(group_ht.break_pos))
 
-    # Checkpoint to force hail to finish this group by computation
+    # Checkpoint to force hail to finish this group_by computation
     group_ht = group_ht.checkpoint(
         f"{temp_path}/breaks_per_transcript.ht", overwrite=True
     )
+    max_n_breaks = hl.eval(group_ht.aggregate(hl.agg.max(group_ht.n_breaks)))
 
     for i in range(1, max_n_breaks + 1):
         temp_ht = group_ht.filter(group_ht.n_breaks == i)
         transcripts = temp_ht.aggregate(hl.agg.collect_as_set(temp_ht.transcript))
         if len(transcripts > 0):
-            transcripts_per_break[i] = transcripts
+            transcripts_per_break[f"break_{i}_transcripts"] = transcripts
         else:
-            transcripts_per_break[i] = hl.missing(hl.tset(hl.tstr))
-    return transcripts_per_break
+            transcripts_per_break[f"break_{i}_transcripts"] = hl.missing(
+                hl.tset(hl.tstr)
+            )
+
+    # Save transcripts per break DictExpression
+    hl.experimental.write_expression(
+        transcripts_per_break, f"{temp_path}/transcripts_per_break.he"
+    )
+    return (transcripts_per_break, max_n_breaks)
 
 
 def reformat_annotations_for_release(ht: hl.Table) -> hl.Table:
@@ -1188,8 +1200,7 @@ def reformat_annotations_for_release(ht: hl.Table) -> hl.Table:
 
 def finalize_multiple_breaks(
     ht: hl.Table,
-    max_n_breaks: int,
-    annotations: List[str] = FINAL_ANNOTATIONS,
+    annotations: List[str] = MULTI_BREAK_ANNOTATIONS,
 ) -> hl.Table:
     """
     Organize table of transcripts with multiple breaks.
@@ -1222,21 +1233,16 @@ def finalize_multiple_breaks(
         ----------------------------------------
         Key: ['locus', 'transcript']
         ----------------------------------------
-    :param int max_n_breaks: Largest number of breakpoints in any transcript.
     :param List[str] annotations: List of annotations to keep from input Table.
-        Default is FINAL_ANNOTATIONS.
+        Default is MULTI_BREAK_ANNOTATIONS.
     :return: Table annotated with transcript subsection values and breakpoint positions.
     :rtype: hl.Table
     """
-    logger.info("Removing outlier transcripts...")
-    outlier_transcripts = get_constraint_transcripts(outlier=True)
-    ht = ht.filter(~outlier_transcripts.contains(ht.transcript))
-
     logger.info("Getting transcripts associated with each break number...")
     # Get number of transcripts UNIQUE to each break number
     # Transcript sets in globals currently are not unique
     # i.e., `break_1_transcripts` could contain transcripts that are also present in `break_2_transcripts`
-    ht = ht.select_globals()
+    ht = ht.select_globals(multiple_breaks_chisq_threshold=ht.chisq_threshold)
     transcripts_per_break = get_unique_transcripts_per_break(ht, max_n_breaks)
 
     # Print number of transcripts per break to output
