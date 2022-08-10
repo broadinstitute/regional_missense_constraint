@@ -11,8 +11,6 @@ from rmc.resources.basics import (
     constraint_prep,
     LOGGING_PATH,
     multiple_breaks,
-    not_one_break,
-    one_break,
     simul_break,
     temp_path,
 )
@@ -23,17 +21,15 @@ from rmc.resources.grch37.gnomad import (
     processed_exomes,
     prop_obs_coverage,
 )
-from rmc.resources.grch37.reference_data import filtered_context
+from rmc.resources.grch37.reference_data import filtered_context, gene_model
 from rmc.resources.resource_utils import CURRENT_VERSION, MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     add_obs_annotation,
     calculate_exp_per_transcript,
     calculate_observed,
-    fix_xg,
     get_fwd_exprs,
     GROUPINGS,
-    process_additional_breaks,
     process_transcripts,
 )
 from rmc.utils.generic import (
@@ -246,7 +242,9 @@ def main(args):
             context_ht = context_ht.annotate(
                 overall_oe=hl.min(context_ht.total_obs / context_ht.total_exp, 1)
             )
-
+            # TODO: Flatten _obs_scan, _mu_scan (> obs_scan, > mu_scan), and
+            # # cumulative_obs expression to be just float
+            # (rather than dict<str, float>)
             context_ht = get_fwd_exprs(
                 ht=context_ht,
                 transcript_str="transcript",
@@ -255,164 +253,93 @@ def main(args):
                 total_mu_str="total_mu",
                 total_exp_str="total_exp",
             )
-
+            # TODO: rewrite constraint_prep ht
+            context_ht = context_ht.drop("values")
             context_ht = context_ht.write(
                 constraint_prep.path, overwrite=args.overwrite
             )
 
-        if args.search_for_first_break:
-            hl.init(log="/RMC_first_break.log")
-
-            logger.info("Searching for transcripts with a significant break...")
-            context_ht = constraint_prep.ht()
-            context_ht = process_transcripts(context_ht, args.chisq_threshold)
-            context_ht = context_ht.checkpoint(
-                f"{temp_path}/first_break.ht", overwrite=True
-            )
+        if args.search_for_single_break:
+            hl.init(log=f"/round{args.search_num}_single_break_search.log")
 
             logger.info(
-                "Filtering HT to transcripts with one significant break and writing..."
+                "Searching for transcripts or transcript subsections with a single significant break..."
             )
-            is_break_ht = context_ht.filter(context_ht.is_break)
-            transcripts = is_break_ht.aggregate(
-                hl.agg.collect_as_set(is_break_ht.transcript), _localize=False
+            if args.search_num == 1:
+                # Read constraint_prep resource HT if this is the first search
+                ht = constraint_prep.ht()
+                # Add transcript start and stop positions from browser HT
+                transcript_ht = gene_model.ht().select("start", "stop")
+                ht = ht.annotate(**transcript_ht[ht.transcript])
+
+                logger.info(
+                    "Adding section annotation before searching for first break..."
+                )
+                ht = ht.annotate(
+                    section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop)
+                )
+            else:
+                # Read in merged single and simultaneous breaks results HT
+                ht_path = (
+                    f"{args.out_path}/round{args.search_num - 1}_merged_break_found.ht"
+                )
+                ht = hl.read_table(ht_path)
+
+            ht = process_transcripts(ht, args.chisq_threshold)
+
+            logger.info(
+                "Extracting breakpoints found in round %i...",
+                args.search_num,
             )
-            one_break_ht = context_ht.filter(
-                transcripts.contains(context_ht.transcript)
+            breakpoint_ht = ht.filter(ht.is_break)
+            breakpoint_ht = breakpoint_ht.annotate_globals(
+                chisq_threshold=args.chisq_threshold
             )
-            one_break_ht = one_break_ht.annotate_globals(
-                break_1_transcripts=transcripts
+            breakpoint_ht = breakpoint_ht.checkpoint(
+                f"{temp_path}/round{search_num}_single_breakpoint.ht", overwrite=True
             )
-            one_break_ht.write(one_break.path, overwrite=args.overwrite)
+
+            # TODO: Make out_path a resource path rather than using args
+            out_break_path = f"{args.out_path}/round{search_num}_single_break_found.ht"
+            ht = ht.annotate(breakpoint=breakpoint_ht[ht.key].locus.position)
+            # TODO: ? Checkpoint HT here to gnomad-tmp-4day?
+            break_found_ht = ht.filter(hl.is_defined(break_found_ht.breakpoint))
+            break_found_ht = break_found_ht.annotate(
+                section=hl.if_else(
+                    break_found_ht.locus.position > break_found_ht.breakpoint,
+                    hl.format(
+                        "%s_%s_%s",
+                        break_found_ht.transcript,
+                        break_found_ht.breakpoint + 1,
+                        break_found_ht.stop,
+                    ),
+                    hl.format(
+                        "%s_%s_%s",
+                        break_found_ht.transcript,
+                        break_found_ht.start,
+                        break_found_ht.breakpoint,
+                    ),
+                )
+            )
+            break_found_ht.write(out_break_path, overwrite=args.overwrite)
 
             logger.info(
                 "Filtering HT to transcripts without a significant break and writing..."
             )
-            not_one_break_ht = context_ht.anti_join(one_break_ht)
-            not_one_break_ht = not_one_break_ht.drop("values")
-            not_one_break_ht.write(not_one_break.path, overwrite=args.overwrite)
-
-        if args.search_for_additional_breaks:
-            hl.init(log="/RMC_additional_breaks.log")
-
-            # Set hail flag to avoid method too large and out of memory errors
-            hl._set_flags(no_whole_stage_codegen="1")
-
-            logger.info(
-                "Searching for additional breaks in transcripts with at least one significant break..."
+            no_break_found_path = (
+                f"{args.out_path}/round{args.search_num}_single_no_break_found.ht"
             )
-            context_ht = one_break.ht()
+            no_break_found_ht = ht.filter(hl.is_missing(ht.breakpoint))
+            no_break_found_ht = no_break_found_ht.drop("breakpoint")
+            no_break_found_ht.write(no_break_found_path, overwrite=args.overwrite)
 
-            # Add break_list annotation to context HT
-            context_ht = context_ht.annotate(break_list=[context_ht.is_break])
-            break_ht = context_ht
-
-            # Start break number counter at 2
-            break_num = 2
-
-            while True:
-                # Search for additional breaks
-                # This technically should search for two additional breaks at a time:
-                # this calls `process_sections`, which checks each section of the transcript for a break
-                # sections are transcript section pre and post first breakpoint
-                break_ht = process_additional_breaks(
-                    break_ht, break_num, args.chisq_threshold
-                )
-                break_ht = break_ht.checkpoint(
-                    f"{temp_path}/break_{break_num}.ht", overwrite=True
-                )
-
-                # Filter context HT to lines with break and check for transcripts with at least one additional break
-                is_break_ht = break_ht.filter(break_ht.is_break)
-                group_ht = is_break_ht.group_by("transcript").aggregate(
-                    n=hl.agg.count()
-                )
-                group_ht = group_ht.filter(group_ht.n >= 1)
-
-                # Exit loop if no additional breaks are found for any transcripts
-                if group_ht.count() == 0:
-                    break
-
-                # Otherwise, pull transcripts and annotate context ht
-                break_ht = break_ht.key_by("locus", "transcript")
-                transcripts = group_ht.aggregate(
-                    hl.agg.collect_as_set(group_ht.transcript), _localize=False
-                )
-                globals_annot_expr = {f"break_{break_num}_transcripts": transcripts}
-                context_ht = context_ht.annotate_globals(**globals_annot_expr)
-                annot_expr = {
-                    f"break_{break_num}_chisq": break_ht[context_ht.key].chisq,
-                    f"break_{break_num}_max_chisq": break_ht[context_ht.key].max_chisq,
-                    f"break_{break_num}_null": break_ht[context_ht.key].total_null,
-                    f"break_{break_num}_alt": break_ht[context_ht.key].total_alt,
-                    "is_break": break_ht[context_ht.key].is_break,
-                }
-                context_ht = context_ht.annotate(**annot_expr)
-                context_ht = context_ht.annotate(
-                    break_list=context_ht.break_list.append(context_ht.is_break)
-                )
-
-                break_ht = break_ht.filter(transcripts.contains(break_ht.transcript))
-                break_num += 1
-
-            context_ht.write(multiple_breaks.path, overwrite=args.overwrite)
-
-        # NOTE: This is only necessary for gnomAD v2
-        # Fixed expected counts for any genes that span PAR and non-PAR regions
-        # after running on gnomAD v2
-        if args.fix_xg:
-            hl.init(log="/RMC_fix_XG.log")
-
-            logger.info("Reading in exome HT...")
-            exome_ht = filtered_exomes.ht()
-
-            logger.info("Reading in context HT...")
-            context_ht = filtered_context.ht()
-
-            logger.info("Adding models from constraint prep HT...")
-            constraint_prep_ht = constraint_prep.ht().select()
-            context_ht = context_ht.annotate_globals(
-                **constraint_prep_ht.index_globals()
-            )
-
-            logger.info("Adding coverage correction to mutation rate probabilities...")
-            context_ht = context_ht.annotate(
-                raw_mu_snp=context_ht.mu_snp,
-                mu_snp=context_ht.mu_snp
-                * get_coverage_correction_expr(
-                    context_ht.exome_coverage, context_ht.coverage_model
-                ),
-            )
-
-            logger.info(
-                "Fixing XG (gene that spans PAR and non-PAR regions on chrX)..."
-            )
-            xg = fix_xg(context_ht, exome_ht, args.xg_transcript)
-
-            logger.info("Searching for a break in XG...")
-            xg = process_transcripts(xg, chisq_threshold=args.chisq_threshold)
-
-            logger.info("Checking whether there was one break...")
-            is_break_ht = xg.filter(xg.is_break)
-            if is_break_ht.count() == 0:
-                logger.info("XG didn't have one single significant break...")
-                transcript_ht = xg.group_by(xg.transcript).aggregate(
-                    end_pos=hl.agg.max(xg.locus.position),
-                    start_pos=hl.agg.min(xg.locus.position),
-                )
-                xg = xg.annotate(
-                    start_pos=transcript_ht[xg.transcript].start_pos,
-                    end_pos=transcript_ht[xg.transcript].end_pos,
-                )
-            else:
-                logger.info("XG has at least one break!")
-                is_break_ht = is_break_ht.checkpoint(
-                    f"{temp_path}/XG_one_break.ht", overwrite=args.overwrite
-                )
-                # NOTE: Did not need to check for additional breaks in XG
-                # XG did not have a single significant break in gnomAD v2
-                # xg = xg.annotate(is_break=is_break_ht[ht.key].is_break)
-                # xg = xg.annotate(break_list=[xg.is_break])
+        if args.merge_single_simul:
+            # Merge single breaks with simultaneous breaks
+            # Update simultaneous breaks write to reformat breakpoints
+            # Also need to add new section annotations (for simul break)
+            # Update merge simul breaks code to do this ^
+            # Update prepare transcripts (and other simul scripts) to be more flexible for simul breaks
+            pass
 
         if args.finalize:
             hl.init(log="/RMC_finalize.log")
@@ -595,17 +522,17 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        "This script searches for regional missense constraint in gnomAD"
+        "This script searches for regional missense constraint in gnomAD."
     )
     parser.add_argument(
-        "--trimers", help="Use trimers instead of heptamers", action="store_true"
+        "--pre-process-data", help="Pre-process data.", action="store_true"
     )
     parser.add_argument(
-        "--exac", help="Use ExAC Table (not gnomAD Table)", action="store_true"
+        "--trimers", help="Use trimers instead of heptamers.", action="store_true"
     )
     parser.add_argument(
         "--n-partitions",
-        help="Desired number of partitions for output data",
+        help="Desired number of partitions for output data.",
         type=int,
         default=40000,
     )
@@ -616,17 +543,8 @@ if __name__ == "__main__":
         default=40,
     )
     parser.add_argument(
-        "--chisq-threshold",
-        help="Chi-square significance threshold. Value should be 10.8 (single break) and 13.8 (two breaks) (values from ExAC RMC code).",
-        type=float,
-        default=10.8,
-    )
-    parser.add_argument(
-        "--pre-process-data", help="Pre-process data", action="store_true"
-    )
-    parser.add_argument(
         "--prep-for-constraint",
-        help="Prepare tables for constraint calculations",
+        help="Prepare tables for constraint calculations.",
         action="store_true",
     )
     parser.add_argument(
@@ -635,47 +553,35 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--search-for-first-break",
-        help="Initial search for one break in all transcripts",
+        "--search-for-single-break",
+        help="Search for single significant break in transcripts or transcript subsections.",
         action="store_true",
     )
     parser.add_argument(
-        "--search-for-additional-breaks",
-        help="Search for additional break in transcripts with one significant break",
-        action="store_true",
+        "--out-path",
+        help="Path to output bucket for Tables after searching for single break.",
     )
     parser.add_argument(
-        "--fix-xg",
-        help="Fix XG (gene that spans PAR and non-PAR regions on chrX). Required only for gnomAD v2",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--xg-transcript",
-        help="Transcript ID for XG",
-        default="ENST00000419513",
+        "--search-num",
+        help="Search iteration number (e.g., second round of searching for single break would be 2).",
     )
     parser.add_argument(
         "--finalize",
-        help="Combine and reformat (finalize) RMC output",
+        help="Combine and reformat (finalize) RMC output.",
         action="store_true",
     )
     parser.add_argument(
-        "--overwrite-transcript-ht",
-        help="Overwrite the transcript HT (HT with start/end positions and transcript sizes), even if it already exists.",
-        action="store_true",
+        "--chisq-threshold",
+        help="Chi-square significance threshold. Value should be 6.6 (single break) and 9.2 (two breaks) (p = 0.01).",
+        type=float,
+        default=6.6,
     )
     parser.add_argument(
-        "--remove-outlier-transcripts",
-        help="Remove outlier transcripts (transcripts with too many/few LoF, synonymous, or missense variants)",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--overwrite", help="Overwrite existing data", action="store_true"
+        "--overwrite", help="Overwrite existing data.", action="store_true"
     )
     parser.add_argument(
         "--slack-channel",
-        help="Send message to Slack channel/user",
-        default="@kc (she/her)",
+        help="Send message to Slack channel/user.",
     )
     args = parser.parse_args()
 
@@ -684,3 +590,4 @@ if __name__ == "__main__":
             main(args)
     else:
         main(args)
+# # # # # # # # # #
