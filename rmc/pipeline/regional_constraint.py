@@ -28,9 +28,8 @@ from rmc.utils.constraint import (
     add_obs_annotation,
     calculate_exp_per_transcript,
     calculate_observed,
-    get_fwd_exprs,
     GROUPINGS,
-    process_transcripts,
+    process_sections,
 )
 from rmc.utils.generic import (
     filter_context_using_gnomad,
@@ -230,6 +229,8 @@ def main(args):
                 coverage=context_ht.values.exome_coverage[0],
             )
 
+            # TODO: Remove this block of code (total obs, exp, mu, oe)?
+            # Currently redundant with `process_sections`
             logger.info(
                 "Annotating total observed and expected values and overall observed/expected value "
                 "(capped at 1) per transcript..."
@@ -245,14 +246,6 @@ def main(args):
             # TODO: Flatten _obs_scan, _mu_scan (> obs_scan, > mu_scan), and
             # # cumulative_obs expression to be just float
             # (rather than dict<str, float>)
-            context_ht = get_fwd_exprs(
-                ht=context_ht,
-                transcript_str="transcript",
-                obs_str="observed",
-                mu_str="mu_snp",
-                total_mu_str="total_mu",
-                total_exp_str="total_exp",
-            )
             # TODO: rewrite constraint_prep ht
             context_ht = context_ht.drop("values")
             context_ht = context_ht.write(
@@ -268,16 +261,16 @@ def main(args):
             if args.search_num == 1:
                 # Read constraint_prep resource HT if this is the first search
                 ht = constraint_prep.ht()
-                # Add transcript start and stop positions from browser HT
-                transcript_ht = gene_model.ht().select("start", "stop")
-                ht = ht.annotate(**transcript_ht[ht.transcript])
 
                 logger.info(
                     "Adding section annotation before searching for first break..."
                 )
+                # Add transcript start and stop positions from browser HT
+                transcript_ht = gene_model.ht().select("start", "stop")
+                ht = ht.annotate(**transcript_ht[ht.transcript])
                 ht = ht.annotate(
                     section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop)
-                )
+                ).drop("start", "stop")
             else:
                 # Read in merged single and simultaneous breaks results HT
                 ht_path = (
@@ -285,7 +278,14 @@ def main(args):
                 )
                 ht = hl.read_table(ht_path)
 
-            ht = process_transcripts(ht, args.chisq_threshold)
+            logger.info(
+                "Calculating nulls, alts, and chi square values and checkpointing..."
+            )
+            ht = process_sections(ht, args.chisq_threshold)
+            # TODO: Update this to write to gnomad-tmp-4day
+            ht = ht.checkpoint(
+                f"{temp_path}/round{args.search_num}_temp.ht", overwrite=True
+            )
 
             logger.info(
                 "Extracting breakpoints found in round %i...",
@@ -295,15 +295,26 @@ def main(args):
             breakpoint_ht = breakpoint_ht.annotate_globals(
                 chisq_threshold=args.chisq_threshold
             )
+            breakpoint_ht = breakpoint_ht.key_by("section")
             breakpoint_ht = breakpoint_ht.checkpoint(
-                f"{temp_path}/round{search_num}_single_breakpoint.ht", overwrite=True
+                # TODO: write this to a resource path
+                f"{temp_path}/round{args.search_num}_single_breakpoint.ht",
+                overwrite=True,
             )
 
+            logger.info(
+                "Filtering to transcripts or transcript subsections with breaks and checkpointing..."
+            )
             # TODO: Make out_path a resource path rather than using args
-            out_break_path = f"{args.out_path}/round{search_num}_single_break_found.ht"
-            ht = ht.annotate(breakpoint=breakpoint_ht[ht.key].locus.position)
-            # TODO: ? Checkpoint HT here to gnomad-tmp-4day?
-            break_found_ht = ht.filter(hl.is_defined(break_found_ht.breakpoint))
+            break_found_path = (
+                f"{args.out_path}/round{args.search_num}_single_break_found.ht"
+            )
+            ht = ht.annotate(breakpoint=breakpoint_ht[ht.section].locus.position)
+            # Possible checkpoint here if necessary
+            logger.info(
+                "Splitting at breakpoints and re-annotating section starts, stops, and names..."
+            )
+            break_found_ht = ht.filter(hl.is_defined(ht.breakpoint))
             break_found_ht = break_found_ht.annotate(
                 section=hl.if_else(
                     break_found_ht.locus.position > break_found_ht.breakpoint,
@@ -311,20 +322,21 @@ def main(args):
                         "%s_%s_%s",
                         break_found_ht.transcript,
                         break_found_ht.breakpoint + 1,
-                        break_found_ht.stop,
+                        break_found_ht.section.split("_")[2],
                     ),
                     hl.format(
                         "%s_%s_%s",
                         break_found_ht.transcript,
-                        break_found_ht.start,
+                        break_found_ht.section.split("_")[1],
                         break_found_ht.breakpoint,
                     ),
                 )
             )
-            break_found_ht.write(out_break_path, overwrite=args.overwrite)
+            logger.info("Writing out sections with single significant break...")
+            break_found_ht.write(break_found_path, overwrite=args.overwrite)
 
             logger.info(
-                "Filtering HT to transcripts without a significant break and writing..."
+                "Filtering HT to sections without a significant break and writing..."
             )
             no_break_found_path = (
                 f"{args.out_path}/round{args.search_num}_single_no_break_found.ht"
