@@ -228,26 +228,9 @@ def main(args):
                 # Take just the first coverage value, since the locus should have the same coverage across the possible variants
                 coverage=context_ht.values.exome_coverage[0],
             )
-
-            # TODO: Remove this block of code (total obs, exp, mu, oe)?
-            # Currently redundant with `process_sections`
-            logger.info(
-                "Annotating total observed and expected values and overall observed/expected value "
-                "(capped at 1) per transcript..."
-            )
-            context_ht = context_ht.annotate(
-                total_exp=exp_ht[context_ht.transcript].total_exp,
-                total_mu=exp_ht[context_ht.transcript].total_mu,
-                total_obs=obs_ht[context_ht.transcript].observed,
-            )
-            context_ht = context_ht.annotate(
-                overall_oe=hl.min(context_ht.total_obs / context_ht.total_exp, 1)
-            )
-            # TODO: Rewrite constraint_prep ht and
-            # flatten _obs_scan, _mu_scan (> obs_scan, > mu_scan), and
-            # # cumulative_obs expression to be just float
-            # (rather than dict<str, float>)
-            context_ht = context_ht.drop("values")
+            # NOTE: v2 constraint_prep HT has total and cumulative values annotated
+            # (HT as written before we decided to move these annotations to within
+            # `process_sections`)
             context_ht = context_ht.write(
                 constraint_prep.path, overwrite=args.overwrite
             )
