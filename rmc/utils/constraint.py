@@ -347,14 +347,14 @@ def adjust_obs_expr(
     :return: Adjusted cumulative observed counts expression.
     """
     return hl.if_else(
-        # Check if the current transcript/section exists in the _obs_scan dictionary
+        # Check if the current transcript/section exists in the obs_scan dictionary
         # If it doesn't exist, that means this is the first line in the HT for that particular transcript
         # The first line of a scan is always missing, but we want it to exist
         # Thus, set the cumulative_obs equal to the current observed value
         hl.is_missing(cumulative_obs_expr.get(group_str)),
-        {group_str: obs_expr},
+        obs_expr,
         # Otherwise, add the current obs to the scan to make sure the cumulative value isn't one line behind
-        {group_str: cumulative_obs_expr[group_str] + obs_expr},
+        cumulative_obs_expr[group_str] + obs_expr,
     )
 
 
@@ -415,14 +415,14 @@ def get_fwd_exprs(
     """
     logger.info("Getting cumulative observed variant counts...")
     ht = ht.annotate(
-        _obs_scan=get_cumulative_obs_expr(
+        obs_scan=get_cumulative_obs_expr(
             group_str=ht[group_str],
             observed_expr=ht[obs_str],
         )
     )
     ht = ht.annotate(
         cumulative_obs=adjust_obs_expr(
-            cumulative_obs_expr=ht._obs_scan,
+            cumulative_obs_expr=ht.obs_scan,
             obs_expr=ht[obs_str],
             group_str=ht[group_str],
         )
