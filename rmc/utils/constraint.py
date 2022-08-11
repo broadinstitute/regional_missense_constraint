@@ -757,6 +757,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float, group_str: str = "sec
     """
     # TODO: When re-running, make sure `get_subsection_exprs`,
     # `get_fwd_exprs` don't run again for first break search only
+    # Also rename total to section for this run
     ht = get_subsection_exprs(ht)
 
     logger.info(
