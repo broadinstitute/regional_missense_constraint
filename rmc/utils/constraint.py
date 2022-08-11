@@ -181,7 +181,7 @@ def adjust_obs_expr(
     This function can correct the scan created when searching for the first break or when searching for additional break(s).
 
     .. note::
-        This function expects that `cumulative_obs_expr` is a DictExpression keyed by transcript.
+        This function expects that `cumulative_obs_expr` is a DictExpression keyed by `group_str`.
 
     :param cumulative_obs_expr: DictExpression containing scan expression with cumulative observed counts per base.
     :param obs_expr: IntExpression with value of either 0 (no observed variant at site) or 1 (variant found in gnomAD).
@@ -676,7 +676,7 @@ def search_for_break(
     # be adjusted."
     group_ht = ht.group_by(group_str).aggregate(max_chisq=hl.agg.max(ht.chisq))
     group_ht = group_ht.checkpoint(f"{temp_path}/max_chisq.ht", overwrite=True)
-    ht = ht.annotate(max_chisq=group_ht[ht.transcript].max_chisq)
+    ht = ht.annotate(max_chisq=group_ht[ht[group_str]].max_chisq)
     return ht.annotate(
         is_break=((ht.chisq == ht.max_chisq) & (ht.chisq >= chisq_threshold))
     )
@@ -698,9 +698,7 @@ def get_subsection_exprs(
             - section
             - observed variants count per site
             - mutation rate probability per site
-            - total mutation rate probability per transcript
-            - total expected variant counts per transcript
-        Names of annotations must match section_str, obs_str, mu_str, total_mu_str, and total_exp_str.
+        Names of annotations must match section_str, obs_str, and mu_str.
 
     :param ht: Input Table.
     :param section_str: Name of section annotation.
