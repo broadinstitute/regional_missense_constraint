@@ -243,10 +243,10 @@ def main(args):
             context_ht = context_ht.annotate(
                 overall_oe=hl.min(context_ht.total_obs / context_ht.total_exp, 1)
             )
-            # TODO: Flatten _obs_scan, _mu_scan (> obs_scan, > mu_scan), and
+            # TODO: Rewrite constraint_prep ht and
+            # flatten _obs_scan, _mu_scan (> obs_scan, > mu_scan), and
             # # cumulative_obs expression to be just float
             # (rather than dict<str, float>)
-            # TODO: rewrite constraint_prep ht
             context_ht = context_ht.drop("values")
             context_ht = context_ht.write(
                 constraint_prep.path, overwrite=args.overwrite
