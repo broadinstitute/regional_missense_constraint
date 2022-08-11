@@ -446,7 +446,7 @@ def get_fwd_exprs(
     ht = ht.annotate(
         forward_oe=get_obs_exp_expr(
             ht.cond_expr,
-            ht.cumulative_obs[ht[group_str]],
+            ht.cumulative_obs,
             ht.cumulative_exp,
         )
     )
@@ -628,7 +628,7 @@ def search_for_break(
             get_dpois_expr(
                 cond_expr=hl.len(ht.cumulative_obs) != 0,
                 section_oe_expr=ht.overall_oe,
-                obs_expr=ht.cumulative_obs[ht[group_str]],
+                obs_expr=ht.cumulative_obs,
                 exp_expr=ht.cumulative_exp,
             ),
             # Add reverse section null (going through positions larger to smaller)
@@ -645,7 +645,7 @@ def search_for_break(
             get_dpois_expr(
                 cond_expr=hl.len(ht.cumulative_obs) != 0,
                 section_oe_expr=ht.forward_oe,
-                obs_expr=ht.cumulative_obs[ht[group_str]],
+                obs_expr=ht.cumulative_obs,
                 exp_expr=ht.cumulative_exp,
             ),
             # Add reverse section alt
@@ -776,7 +776,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float, group_str: str = "sec
         ht=ht,
         total_obs_expr=ht.section_obs,
         total_exp_expr=ht.section_exp,
-        scan_obs_expr=ht.cumulative_obs[ht.transcript],
+        scan_obs_expr=ht.cumulative_obs,
         scan_exp_expr=ht.cumulative_exp,
     )
 
