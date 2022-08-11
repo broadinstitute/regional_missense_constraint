@@ -153,10 +153,13 @@ def get_cumulative_obs_expr(
     observed_expr: hl.expr.Int64Expression,
 ) -> hl.expr.DictExpression:
     """
-    Return annotation with the cumulative number of observed variants, shifted by one.
+    Return annotation with the cumulative number of observed variants (non-inclusive).
 
-    Value is shifted by one due to the nature of `hl.scan` and needs to be corrected later.
+    Value is non-inclusive (does not include value of row)
+    due to the nature of `hl.scan` and needs to be corrected later.
+
     This function can produce the scan when searching for the first break or when searching for additional break(s).
+
     :param group_str: StringExpression containing transcript or transcript subsection information.
         Used to group observed and expected values.
     :param observed_expr: Observed variants expression.
@@ -178,8 +181,7 @@ def adjust_obs_expr(
     This function can correct the scan created when searching for the first break or when searching for additional break(s).
 
     .. note::
-        This function expects:
-            - cumulative_obs_expr is a DictExpression keyed by transcript.
+        This function expects that `cumulative_obs_expr` is a DictExpression keyed by transcript.
 
     :param cumulative_obs_expr: DictExpression containing scan expression with cumulative observed counts per base.
     :param obs_expr: IntExpression with value of either 0 (no observed variant at site) or 1 (variant found in gnomAD).
@@ -203,9 +205,9 @@ def get_cumulative_mu_expr(
     mu_expr: hl.expr.Float64Expression,
 ) -> hl.expr.DictExpression:
     """
-    Return annotation with the cumulative mutation rate probability, shifted by one.
+    Return annotation with the cumulative mutation rate probability (non-inclusive).
 
-    Value is shifted by one due to the nature of `hl.scan` and needs to be corrected later.
+    Value is non-inclusive due to the nature of `hl.scan` and needs to be corrected later.
 
     This function can produce the scan when searching for the first break or when searching for additional break(s).
 
