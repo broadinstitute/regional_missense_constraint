@@ -148,6 +148,56 @@ def calculate_observed(ht: hl.Table) -> hl.Table:
     )
 
 
+def get_cumulative_obs_expr(
+    group_str: hl.expr.StringExpression,
+    observed_expr: hl.expr.Int64Expression,
+) -> hl.expr.DictExpression:
+    """
+    Return annotation with the cumulative number of observed variants, shifted by one.
+
+    Value is shifted by one due to the nature of `hl.scan` and needs to be corrected later.
+    This function can produce the scan when searching for the first break or when searching for additional break(s).
+    :param group_str: StringExpression containing transcript or transcript subsection information.
+        Used to group observed and expected values.
+    :param observed_expr: Observed variants expression.
+    :return: DictExpression containing scan expressions for cumulative observed variant counts for `search_expr`.
+    """
+    return hl.scan.group_by(group_str, hl.scan.sum(observed_expr))
+
+
+def adjust_obs_expr(
+    cumulative_obs_expr: hl.expr.DictExpression,
+    obs_expr: hl.expr.Int64Expression,
+    group_str: str = "section",
+) -> hl.expr.DictExpression:
+    """
+    Adjust the scan with the cumulative number of observed variants.
+
+    This adjustment is necessary because scans are always one line behind, and we want the values to match per line.
+
+    This function can correct the scan created when searching for the first break or when searching for additional break(s).
+
+    .. note::
+        This function expects:
+            - cumulative_obs_expr is a DictExpression keyed by transcript.
+
+    :param cumulative_obs_expr: DictExpression containing scan expression with cumulative observed counts per base.
+    :param obs_expr: IntExpression with value of either 0 (no observed variant at site) or 1 (variant found in gnomAD).
+    :param group_str: Field used to group Table observed and expected values. Default is "section".
+    :return: Adjusted cumulative observed counts expression.
+    """
+    return hl.if_else(
+        # Check if the current transcript/section exists in the obs_scan dictionary
+        # If it doesn't exist, that means this is the first line in the HT for that particular transcript
+        # The first line of a scan is always missing, but we want it to exist
+        # Thus, set the cumulative_obs equal to the current observed value
+        hl.is_missing(cumulative_obs_expr.get(group_str)),
+        obs_expr,
+        # Otherwise, add the current obs to the scan to make sure the cumulative value isn't one line behind
+        cumulative_obs_expr[group_str] + obs_expr,
+    )
+
+
 def get_cumulative_mu_expr(
     group_str: hl.expr.StringExpression,
     mu_expr: hl.expr.Float64Expression,
@@ -306,56 +356,6 @@ def get_obs_exp_expr(
     :return: Observed/expected expression.
     """
     return hl.or_missing(cond_expr, hl.min(obs_expr / exp_expr, 1))
-
-
-def get_cumulative_obs_expr(
-    group_str: hl.expr.StringExpression,
-    observed_expr: hl.expr.Int64Expression,
-) -> hl.expr.DictExpression:
-    """
-    Return annotation with the cumulative number of observed variants, shifted by one.
-
-    Value is shifted by one due to the nature of `hl.scan` and needs to be corrected later.
-    This function can produce the scan when searching for the first break or when searching for additional break(s).
-    :param group_str: StringExpression containing transcript or transcript subsection information.
-        Used to group observed and expected values.
-    :param observed_expr: Observed variants expression.
-    :return: DictExpression containing scan expressions for cumulative observed variant counts for `search_expr`.
-    """
-    return hl.scan.group_by(group_str, hl.scan.sum(observed_expr))
-
-
-def adjust_obs_expr(
-    cumulative_obs_expr: hl.expr.DictExpression,
-    obs_expr: hl.expr.Int64Expression,
-    group_str: str = "section",
-) -> hl.expr.DictExpression:
-    """
-    Adjust the scan with the cumulative number of observed variants.
-
-    This adjustment is necessary because scans are always one line behind, and we want the values to match per line.
-
-    This function can correct the scan created when searching for the first break or when searching for additional break(s).
-
-    .. note::
-        This function expects:
-            - cumulative_obs_expr is a DictExpression keyed by transcript.
-
-    :param cumulative_obs_expr: DictExpression containing scan expression with cumulative observed counts per base.
-    :param obs_expr: IntExpression with value of either 0 (no observed variant at site) or 1 (variant found in gnomAD).
-    :param group_str: Field used to group Table observed and expected values. Default is "section".
-    :return: Adjusted cumulative observed counts expression.
-    """
-    return hl.if_else(
-        # Check if the current transcript/section exists in the obs_scan dictionary
-        # If it doesn't exist, that means this is the first line in the HT for that particular transcript
-        # The first line of a scan is always missing, but we want it to exist
-        # Thus, set the cumulative_obs equal to the current observed value
-        hl.is_missing(cumulative_obs_expr.get(group_str)),
-        obs_expr,
-        # Otherwise, add the current obs to the scan to make sure the cumulative value isn't one line behind
-        cumulative_obs_expr[group_str] + obs_expr,
-    )
 
 
 def get_reverse_obs_exp_expr(
