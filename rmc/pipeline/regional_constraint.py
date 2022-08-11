@@ -231,6 +231,7 @@ def main(args):
             # NOTE: v2 constraint_prep HT has total and cumulative values annotated
             # (HT as written before we decided to move these annotations to within
             # `process_sections`)
+            context_ht = context_ht.drop("values")
             context_ht = context_ht.write(
                 constraint_prep.path, overwrite=args.overwrite
             )
