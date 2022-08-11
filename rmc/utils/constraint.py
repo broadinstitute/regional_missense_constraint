@@ -755,7 +755,8 @@ def process_sections(ht: hl.Table, chisq_threshold: float, group_str: str = "sec
     :param group_str: Field used to group observed and expected values. Default is 'section'.
     :return: Table annotated with whether position is a breakpoint.
     """
-    # TODO: When re-running, make sure this doesn't run again for first break search
+    # TODO: When re-running, make sure `get_subsection_exprs`,
+    # `get_fwd_exprs` don't run again for first break search only
     ht = get_subsection_exprs(ht)
 
     logger.info(
