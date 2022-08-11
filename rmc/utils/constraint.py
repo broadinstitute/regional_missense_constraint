@@ -55,7 +55,7 @@ Fields taken from gnomAD LoF repo.
 CONSTRAINT_ANNOTATIONS = [
     "mu_snp",
     "total_exp",
-    "_mu_scan",
+    "mu_scan",
     "total_mu",
     "cumulative_obs",
     "observed",
@@ -81,7 +81,7 @@ FINAL_ANNOTATIONS = [
     "total_mu",
     "total_obs",
     "cumulative_obs",
-    "_mu_scan",
+    "mu_scan",
     "cumulative_exp",
     "break_list",
     "start_pos",
@@ -186,14 +186,14 @@ def adjust_mu_expr(
     :return: Adjusted cumulative mutation rate expression.
     """
     return hl.if_else(
-        # Check if the current transcript/section exists in the _mu_scan dictionary
+        # Check if the current transcript/section exists in the mu_scan dictionary
         # If it doesn't exist, that means this is the first line in the HT for that particular transcript/section
         # The first line of a scan is always missing, but we want it to exist
         # Thus, set the cumulative_mu equal to the current mu_snp value
         hl.is_missing(cumulative_mu_expr.get(group_str)),
-        {group_str: mu_expr},
+        mu_expr,
         # Otherwise, add the current mu_snp to the scan to make sure the cumulative value isn't one line behind
-        {group_str: cumulative_mu_expr[group_str] + mu_expr},
+        cumulative_mu_expr[group_str] + mu_expr,
     )
 
 
@@ -430,12 +430,12 @@ def get_fwd_exprs(
 
     logger.info("Getting cumulative expected variant counts...")
     # Get scan of mu_snp
-    ht = ht.annotate(_mu_scan=get_cumulative_mu_expr(ht[group_str], ht[mu_str]))
+    ht = ht.annotate(mu_scan=get_cumulative_mu_expr(ht[group_str], ht[mu_str]))
     # Adjust scan of mu_snp
-    ht = ht.annotate(_mu_scan=adjust_mu_expr(ht._mu_scan, ht[mu_str], ht[group_str]))
+    ht = ht.annotate(mu_scan=adjust_mu_expr(ht.mu_scan, ht[mu_str], ht[group_str]))
     ht = ht.annotate(
         cumulative_exp=translate_mu_to_exp_expr(
-            ht._mu_scan, ht[group_str], ht[total_mu_str], ht[total_exp_str]
+            ht.mu_scan, ht[group_str], ht[total_mu_str], ht[total_exp_str]
         )
     )
 
