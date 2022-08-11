@@ -428,7 +428,7 @@ def get_fwd_exprs(
             obs_expr=ht[obs_str],
             group_str=ht[group_str],
         )
-    )
+    ).drop("obs_scan")
 
     logger.info("Getting cumulative expected variant counts...")
     # Get scan of mu_snp
@@ -755,6 +755,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float, group_str: str = "sec
     :param group_str: Field used to group observed and expected values. Default is 'section'.
     :return: Table annotated with whether position is a breakpoint.
     """
+    # TODO: When re-running, make sure this doesn't run again for first break search
     ht = get_subsection_exprs(ht)
 
     logger.info(
