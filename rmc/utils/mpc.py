@@ -386,7 +386,7 @@ def run_regressions(
 
     Relationship between fitted score and MPC (from ExAC):
         mpc(v) = -log10(n_less(v))/82932)
-        n_less(v) = number of common (AF > 0.01) ExAC variants with fitted_score < fitted_score(v)
+        n_less(v) = number of common (AC > 121, AF > 0.001) ExAC variants with fitted_score < fitted_score(v)
 
     Note that higher MPC scores predict increased missense deleteriousness, and
     smaller n_less values and fitted scores will lead to higher MPC scores.
