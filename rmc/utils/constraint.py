@@ -63,7 +63,7 @@ CONSTRAINT_ANNOTATIONS = [
     "total_obs",
     "reverse",
     "forward_oe",
-    "overall_oe",
+    "section_oe",
     "start_pos",
     "end_pos",
     "transcript_size",
@@ -523,13 +523,13 @@ def get_dpois_expr(
         - Reverse counts for entire transcript.
         - Reverse counts for section of transcript.
 
-    For forward null/alts, values for overall_oe_expr and section_oe_expr should be:
+    For forward null/alts, value for section_oe_expr should be:
         - Expression containing observed/expected value for entire transcript and
             expression containing observed/expected value calculated on cumulative observed and expected
             variants at each position.
         - Expression containing observed/expected value for section of transcript.
 
-    For reverse null/alts, values for overall_oe_expr and section_oe_expr should be:
+    For reverse null/alts, value for section_oe_expr should be:
         - Expression containing observed/expected value for entire transcript and
             expression containing observed/expected value calculated on reverse observed variants value
             (total observed - cumulative observed count).
@@ -586,27 +586,16 @@ def search_for_break(
         - coverage (median)
         - mu_snp
         - scan_counts struct
-        - overall_oe
+        - section_oe
         - forward_oe
         - reverse struct
         - reverse_obs_exp
-        - total_obs
-        - total_exp
-    If searching for simultaneous breaks, expects HT to have the following fields:
-        - pre_obs
-        - pre_exp
-        - pre_oe
-        - window_obs
-        - window_exp
-        - window_oe
-        - post_obs
-        - post_exp
-        - post_oe
+        - section_obs
+        - section_exp
+
     Also expects:
         - multiallelic variants in input HT have been split.
         - Input HT is autosomes/PAR only, X non-PAR only, or Y non-PAR only.
-
-    Return HT filtered to lines with maximum chisq if chisq >= max_value, otherwise returns None.
 
     :param ht: Input context Table.
     :param chisq_threshold: Chi-square significance threshold.
@@ -629,14 +618,14 @@ def search_for_break(
             # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
             get_dpois_expr(
                 cond_expr=hl.len(ht.cumulative_obs) != 0,
-                section_oe_expr=ht.overall_oe,
+                section_oe_expr=ht.section_oe,
                 obs_expr=ht.cumulative_obs,
                 exp_expr=ht.cumulative_exp,
             ),
             # Add reverse section null (going through positions larger to smaller)
             get_dpois_expr(
                 cond_expr=hl.is_defined(ht.reverse.obs),
-                section_oe_expr=ht.overall_oe,
+                section_oe_expr=ht.section_oe,
                 obs_expr=ht.reverse.obs,
                 exp_expr=ht.reverse.exp,
             ),
@@ -726,7 +715,7 @@ def get_subsection_exprs(
 
     logger.info("Getting observed/expected value for each transcript section...")
     return ht.annotate(
-        overall_oe=get_obs_exp_expr(
+        section_oe=get_obs_exp_expr(
             cond_expr=hl.is_defined(ht[section_str]),
             obs_expr=ht.section_obs,
             exp_expr=ht.section_exp,
@@ -758,6 +747,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float, group_str: str = "sec
     # TODO: When re-running, make sure `get_subsection_exprs`,
     # `get_fwd_exprs` don't run again for first break search only
     # Also rename total to section for this run
+    # TODO: Rename overall_oe to section_oe
     ht = get_subsection_exprs(ht)
 
     logger.info(
