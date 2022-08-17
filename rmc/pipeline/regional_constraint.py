@@ -135,6 +135,7 @@ def main(args):
                 )
             )
 
+            # TODO: Make this a separate section of code (with its own argument)
             if not args.skip_calc_oe:
                 logger.info(
                     "Adding coverage correction to mutation rate probabilities..."
@@ -148,11 +149,11 @@ def main(args):
                 )
 
                 logger.info(
-                    "Creating autosomes-only, chrX non-PAR-only, and chrY non-PAR-only HT versions..."
+                    "Creating autosomes + chrX PAR, chrX non-PAR, and chrY non-PAR HT versions..."
                 )
+                context_auto_ht = filter_to_region_type(context_ht, "autosomes")
                 context_x_ht = filter_to_region_type(context_ht, "chrX")
                 context_y_ht = filter_to_region_type(context_ht, "chrY")
-                context_auto_ht = filter_to_region_type(context_ht, "autosomes")
 
                 logger.info("Calculating expected values per transcript...")
                 exp_ht = calculate_exp_per_transcript(
@@ -178,18 +179,20 @@ def main(args):
                 # Adding a sum here to make sure that genes like XG that span PAR/nonPAR regions
                 # have correct total expected values
                 exp_ht = exp_ht.group_by(transcript=exp_ht.transcript).aggregate(
-                    total_exp=hl.agg.sum(exp_ht.expected),
-                    total_mu=hl.agg.sum(exp_ht.mu_agg),
+                    section_exp=hl.agg.sum(exp_ht.expected),
+                    section_mu=hl.agg.sum(exp_ht.mu_agg),
                 )
+                # TODO: Write exp HT here
 
                 logger.info(
                     "Aggregating total observed variant counts per transcript..."
                 )
                 obs_ht = calculate_observed(exome_ht)
+                # TODO: Write obs HT here
 
             else:
                 logger.warning(
-                    "Using observed and expected values calculated on gnomAD v2.1.1 exomes..."
+                    "Using observed and expected values calculated using LoF pipeline..."
                 )
                 exp_ht = (
                     constraint_ht.ht()
@@ -231,6 +234,7 @@ def main(args):
             # NOTE: v2 constraint_prep HT has total and cumulative values annotated
             # (HT as written before we decided to move these annotations to within
             # `process_sections`)
+            # TODO: Update get_subsection_exprs to pull expected values from exp_ht
             context_ht = context_ht.drop("values")
             context_ht = context_ht.write(
                 constraint_prep.path, overwrite=args.overwrite
@@ -290,9 +294,9 @@ def main(args):
                 "Filtering to transcripts or transcript subsections with breaks and checkpointing..."
             )
             # TODO: Make out_path a resource path rather than using args
-            break_found_path = (
-                f"{args.out_path}/round{args.search_num}_single_break_found.ht"
-            )
+            # break_found_path = (
+            #    f"{args.out_path}/round{args.search_num}_single_break_found.ht"
+            # )
             ht = ht.annotate(breakpoint=breakpoint_ht[ht.section].locus.position)
             # Possible checkpoint here if necessary
             logger.info(
@@ -317,17 +321,23 @@ def main(args):
                 )
             )
             logger.info("Writing out sections with single significant break...")
-            break_found_ht.write(break_found_path, overwrite=args.overwrite)
+            break_found_ht.write(
+                break_found_path(args.search_num), overwrite=args.overwrite
+            )
 
             logger.info(
                 "Filtering HT to sections without a significant break and writing..."
             )
-            no_break_found_path = (
-                f"{args.out_path}/round{args.search_num}_single_no_break_found.ht"
-            )
+            # TODO: Convert `no_break_found_path`, and paths for `breakpoint_ht`, merged_break_found hts
+            # to functions
+            # no_break_found_path = (
+            #     f"{args.out_path}/round{args.search_num}_single_no_break_found.ht"
+            # )
             no_break_found_ht = ht.filter(hl.is_missing(ht.breakpoint))
             no_break_found_ht = no_break_found_ht.drop("breakpoint")
-            no_break_found_ht.write(no_break_found_path, overwrite=args.overwrite)
+            no_break_found_ht.write(
+                no_break_found_path(args.search_num), overwrite=args.overwrite
+            )
 
         if args.merge_single_simul:
             # Merge single breaks with simultaneous breaks
@@ -448,57 +458,6 @@ def main(args):
                 ~total_rmc_transcripts.contains(context_ht.transcript)
             )
 
-            if CURRENT_VERSION == "2.1.1":
-                logger.info("Reading in XG HT (one-off fix in v2.1.1)...")
-                xg_ht = hl.read_table(f"{temp_path}/XG.ht").select(
-                    "total_mu",
-                    "total_exp",
-                    "total_obs",
-                    "cumulative_exp",
-                    "cumulative_obs",
-                    "overall_oe",
-                )
-                no_breaks_ht = no_breaks_ht.annotate(
-                    xg_total_mu=xg_ht[no_breaks_ht.key].total_mu,
-                    xg_total_exp=xg_ht[no_breaks_ht.key].total_exp,
-                    xg_total_obs=xg_ht[no_breaks_ht.key].total_obs,
-                    xg_cum_exp=xg_ht[no_breaks_ht.key].cumulative_exp,
-                    xg_cum_obs=xg_ht[no_breaks_ht.key].cumulative_obs,
-                    xg_oe=xg_ht[no_breaks_ht.key].overall_oe,
-                )
-                no_breaks_ht = no_breaks_ht.transmute(
-                    total_mu=hl.if_else(
-                        hl.is_defined(no_breaks_ht.xg_total_mu),
-                        no_breaks_ht.xg_total_mu,
-                        no_breaks_ht.total_mu,
-                    ),
-                    total_exp=hl.if_else(
-                        hl.is_defined(no_breaks_ht.xg_total_exp),
-                        no_breaks_ht.xg_total_exp,
-                        no_breaks_ht.total_exp,
-                    ),
-                    total_obs=hl.if_else(
-                        hl.is_defined(no_breaks_ht.xg_total_obs),
-                        no_breaks_ht.xg_total_obs,
-                        no_breaks_ht.total_obs,
-                    ),
-                    cumulative_exp=hl.if_else(
-                        hl.is_defined(no_breaks_ht.xg_cum_exp),
-                        no_breaks_ht.xg_cum_exp,
-                        no_breaks_ht.cumulative_exp,
-                    ),
-                    cumulative_obs=hl.if_else(
-                        hl.is_defined(no_breaks_ht.xg_cum_obs),
-                        no_breaks_ht.xg_cum_obs,
-                        no_breaks_ht.cumulative_obs,
-                    ),
-                    overall_oe=hl.if_else(
-                        hl.is_defined(no_breaks_ht.xg_oe),
-                        no_breaks_ht.xg_oe,
-                        no_breaks_ht.overall_oe,
-                    ),
-                )
-
             # TODO: Add section chisq calculation here
             if (breaks_ht.count() + no_breaks_ht.count()) != context_ht.count():
                 raise DataException(
@@ -553,10 +512,10 @@ if __name__ == "__main__":
         help="Search for single significant break in transcripts or transcript subsections.",
         action="store_true",
     )
-    parser.add_argument(
-        "--out-path",
-        help="Path to output bucket for Tables after searching for single break.",
-    )
+    # parser.add_argument(
+    #    "--out-path",
+    #    help="Path to output bucket for Tables after searching for single break.",
+    # )
     parser.add_argument(
         "--search-num",
         help="Search iteration number (e.g., second round of searching for single break would be 2).",
