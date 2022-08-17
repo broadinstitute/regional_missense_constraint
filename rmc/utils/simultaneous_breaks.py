@@ -6,17 +6,13 @@ from typing import List, Optional, Tuple
 import hail as hl
 
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
-from gnomad.utils.reference_genome import get_reference_genome
-from gnomad.resources.resource_utils import DataException
 
 from rmc.resources.basics import (
-    not_one_break_grouped,
     simul_break_over_threshold,
     simul_break_temp,
     simul_break_under_threshold,
 )
 from rmc.utils.constraint import get_dpois_expr, get_obs_exp_expr
-from rmc.utils.generic import get_avg_bases_between_mis
 
 
 logging.basicConfig(
@@ -27,79 +23,35 @@ logger = logging.getLogger("search_for_two_breaks_utils")
 logger.setLevel(logging.INFO)
 
 
-def group_not_one_break_ht(
+def group_no_single_break_found_ht(
     ht: hl.Table,
-    transcript_ht: hl.Table,
-    get_min_window_size: bool = True,
-    get_total_exome_bases: bool = False,
-    get_total_gnomad_missense: bool = False,
-    min_window_size: Optional[int] = None,
-    min_num_obs: Optional[int] = None,
+    out_ht_path: str,
+    group_str: str,
 ) -> None:
     """
-    Group HT with transcripts that don't have a single significant break by transcript and collect annotations into lists.
+    Group HT containing transcripts/transcript sections that don't have a single significant break and collect annotations into lists.
+
+    Group HT by `group_str` and collect positions, cumulative obs, cumulative exp into lists.
 
     This creates the input to the two simultaneous breaks search (`search_for_two_breaks`).
 
     .. note::
-        Expects that input Table is keyed by locus and transcript.
-        This is *required*, as the function expects that loci are sorted in the input Table.
+        - Expects that input Table is keyed by locus and `group_str`.
+            This is *required*, as the function expects that loci are sorted in the input Table.
+        - Expects that input Table is annotated with OE for transcript/transcript section and
+            this annotation is named `section_oe`.
 
-    :param hl.Table ht: Input Table with transcript that didn't have a single significant break.
-    :param hl.Table transcript_ht: Table with start and end positions per transcript.
-    :param bool get_min_window_size: Determine minimum window size for two simultaneous breaks search.
-        Default is True. Must be True if min_window_size is None.
-    :param bool get_total_exome_bases: Get total number of bases in the exome.
-        If True, will pull default value from TOTAL_EXOME_BASES (in basics.py).
-        Default is False.
-    :param bool get_total_gnomad_missense: Get total number of missense variants in gnomAD.
-        If True, will pull default value from TOTAL_GNOMAD_MISSENSE (in basics.py).
-        Default is False.
-    :param Optional[int] min_window_size: Minimum window size for two simultaneous breaks search.
-        Must be specified if get_min_window_size is False.
-        Default is None.
-    :param Optional[int] min_num_obs: Number of observed variants. Used when determining the smallest possible window size.
-        Must be specified if get_min_window_size is False.
-        Default is None.
-    :return: None; writes Table grouped by transcript with cumulative observed, expected missense counts
+    :param ht: Input Table with transcripts/transcript sections that didn't
+        have a single significant break.
+    :param out_ht_path: Path to output Table grouped by transcripts/transcript sections with lists
+        of cumulative observed, expected missense counts.
+    :param group_str: Field used to group observed and expected values.
+    :return: None; writes Table grouped by transcript/transcript section with cumulative observed, expected missense counts
         and all positions collected into lists to resource path.
     """
-    if not get_min_window_size and not min_num_obs:
-        raise DataException(
-            "min_num_obs must be specified if get_min_window_size is True!"
-        )
-    if not min_window_size and not get_min_window_size:
-        raise DataException(
-            "min_window_size must be specified if get_min_window_size is False!"
-        )
-    if get_min_window_size and min_window_size:
-        logger.warning(
-            "get_min_window_size is True but min_window_size was also specified. Proceeding with specified min_window_size value..."
-        )
-
-    # Get number of base pairs needed to observe `num` number of missense variants (on average)
-    # This number is used to determine the min_window_size - which is the smallest allowed distance between simultaneous breaks
-    min_window_size = (
-        (
-            get_avg_bases_between_mis(
-                get_reference_genome(ht.locus).name,
-                get_total_exome_bases,
-                get_total_gnomad_missense,
-            )
-            * min_num_obs
-        )
-        if get_min_window_size
-        else min_window_size
-    )
-    logger.info(
-        "Minimum window size (window size needed to observe %i missense variants on average): %i",
-        min_num_obs,
-        min_window_size,
-    )
-
     # Aggregating values into a struct here to force the positions and observed, expected missense values to stay sorted
     # `hl.agg.collect` does not guarantee order: https://hail.is/docs/0.2/aggregators.html#hail.expr.aggregators.collect
-    group_ht = ht.group_by("transcript").aggregate(
+    group_ht = ht.group_by(group_str).aggregate(
         values=hl.sorted(
             hl.agg.collect(
                 hl.struct(
@@ -111,62 +63,62 @@ def group_not_one_break_ht(
             ),
             key=lambda x: x.locus,
         ),
-        total_oe=hl.agg.take(ht.overall_oe, 1)[0],
+        total_oe=hl.agg.take(ht.section_oe, 1)[0],
     )
-    group_ht = group_ht.annotate_globals(min_window_size=min_window_size)
     group_ht = group_ht.annotate(max_idx=hl.len(group_ht.values.positions) - 1)
-    group_ht = group_ht.annotate(
-        transcript_start=transcript_ht[group_ht.key].start,
-        transcript_end=transcript_ht[group_ht.key].stop,
-    )
     group_ht = group_ht.transmute(
         cum_obs=group_ht.values.cum_obs,
         cum_exp=group_ht.values.cum_exp,
         positions=group_ht.values.positions,
     )
-    group_ht.write(not_one_break_grouped.path, overwrite=True)
+    group_ht.write(out_ht_path, overwrite=True)
 
 
-def split_transcripts_by_len(
+def split_sections_by_len(
     ht: hl.Table,
-    transcript_len_threshold: int,
+    group_str: str,
+    search_num: int,
+    missense_len_threshold: int,
     ttn_id: str,
     overwrite: bool,
 ) -> None:
     """
-    Split transcripts based on the specified number of possible missense variants.
+    Split transcripts/transcript sections based on the specified number of possible missense sites.
 
-    This is necessary because transcripts with more possible missense variants take longer to run through `hl.experimental.loop`.
+    This is necessary because transcripts/transcript sections with more possible missense sites
+    take longer to run through `hl.experimental.loop`.
 
-    :param hl.Table ht: Input Table (Table written using `group_not_one_break_ht`).
-    :param int transcript_len_threshold: Possible number of missense variants cutoff.
-    :param str ttn_id: TTN transcript ID. TTN is large and needs to be processed separately.
-    :param bool overwrite: Whether to overwrite existing SetExpressions.
+    :param ht: Input Table (Table written using `group_no_single_break_found_ht`).
+    :param group_str: Field used to group observed and expected values.
+    :param missense_len_threshold: Cutoff based on possible number of missense sites in section.
+    :param ttn_id: TTN transcript ID. TTN is large and needs to be processed separately.
+    :param overwrite: Whether to overwrite existing SetExpressions.
     :return: None; writes SetExpressions to resource paths (`simul_break_under_threshold`, `simul_break_over_threshold`).
     """
     logger.info("Annotating HT with length of cumulative observed list annotation...")
-    # This length is the number of positions with possible missense variants that need to be searched
-    # Not using transcript size here because transcript size
+    # This length is the number of positions with possible missense sites that need to be searched
+    # Not using transcript/transcript section size here because transcript/transcript section size
     # doesn't necessarily reflect the number of positions that need to be searched
     ht = ht.annotate(missense_list_len=ht.max_idx + 1)
 
     logger.info(
-        "Splitting transcripts into two categories: list length < %i and list length >= %i...",
-        transcript_len_threshold,
-        transcript_len_threshold,
+        "Splitting sections into two categories: list length < %i and list length >= %i...",
+        missense_len_threshold,
+        missense_len_threshold,
     )
     under_threshold = ht.aggregate(
         hl.agg.filter(
-            ht.missense_list_len < transcript_len_threshold,
-            hl.agg.collect_as_set(ht.transcript),
+            ht.missense_list_len < missense_len_threshold,
+            hl.agg.collect_as_set(ht[group_str]),
         )
     )
     over_threshold = ht.aggregate(
         hl.agg.filter(
-            ht.missense_list_len >= transcript_len_threshold,
-            hl.agg.collect_as_set(ht.transcript),
+            ht.missense_list_len >= missense_len_threshold,
+            hl.agg.collect_as_set(ht[group_str]),
         )
     )
+    # TODO: Re-evaluate if this check is necessary for v4
     if ttn_id in list(over_threshold):
         logger.warning(
             "TTN is present in input transcripts! It will need to be run separately."
@@ -174,11 +126,12 @@ def split_transcripts_by_len(
         over_threshold = list(over_threshold)
         over_threshold.remove(ttn_id)
         over_threshold = set(over_threshold)
+    # TODO: Update these resources `simul_break_under_threshold`, `simul_break_over_threshold``
     hl.experimental.write_expression(
-        under_threshold, simul_break_under_threshold, overwrite
+        under_threshold, simul_break_under_threshold(search_num), overwrite
     )
     hl.experimental.write_expression(
-        over_threshold, simul_break_over_threshold, overwrite
+        over_threshold, simul_break_over_threshold(search_num), overwrite
     )
 
 
@@ -610,7 +563,7 @@ def process_transcript_group(
     :param str ht_path: Path to input Table (Table written using `group_not_one_break_ht`).
     :param List[str] transcript_group: List of transcripts to process.
     :param bool over_threshold: Whether input transcripts have more
-        possible missense variants than threshold specified in `run_simultaneous_breaks`.
+        possible missense sites than threshold specified in `run_simultaneous_breaks`.
     :param str output_ht_path: Path to output results Table.
     :param str output_tsv_path: Path to success TSV bucket.
     :param Optional[str] temp_ht_path: Path to temporary Table. Required only if over_threshold is True.
@@ -619,7 +572,7 @@ def process_transcript_group(
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
     :param int split_window_size: Window size to search for transcripts that have more
-        possible missense variants than threshold. Only used if over_threshold is True.
+        possible missense sites than threshold. Only used if over_threshold is True.
     :param bool read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
         Only applies to Table that is input to `search_for_two_breaks`
         (`f"{temp_ht_path}/{transcript_group[0]}_prep.ht"`).
@@ -632,7 +585,7 @@ def process_transcript_group(
     if over_threshold:
         # If transcripts longer than threshold, split transcripts into multiple rows
         # Each row has a window to search
-        # E.g., if a transcript has 1003 possible missense variants, and the `split_window_size` is 500,
+        # E.g., if a transcript has 1003 possible missense sites, and the `split_window_size` is 500,
         # then this section will split that transcript into 9 rows, with the following windows:
         # [i_start=0, j_start=0], [i_start=0, j_start=500], [i_start=0, j_start=1000],
         # [i_start=500, j_start=0], [i_start=500, j_start=500], [i_start=500, j_start=1000],
@@ -659,7 +612,7 @@ def process_transcript_group(
         ht = ht.annotate(
             # NOTE: i_max_idx needs to be adjusted here to be one smaller than the max
             # This is because we don't need to check the situation where i is the last index in a list
-            # For example, if the transcript has 1003 possible missense variants,
+            # For example, if the transcript has 1003 possible missense sites,
             # (1002 is the largest list index)
             # we don't need to check the scenario where i = 1002
             i_max_idx=hl.min(ht.i + split_window_size, ht.max_idx) - 1,
