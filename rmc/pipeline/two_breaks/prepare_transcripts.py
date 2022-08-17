@@ -2,8 +2,8 @@
 This script prepares the inputs to the two simultaneous breaks search.
 
 This script has two possible steps:
-- Create grouped version of not one break Table
-- Split transcripts to search by number of possible missense variants per transcript.
+- Create grouped version of not one single break found Table
+- Split transcripts/transcript/sections based on number of possible missense variants.
 
 Both steps should be run in Dataproc.
 """
@@ -31,7 +31,7 @@ logger.setLevel(logging.INFO)
 
 
 def main(args):
-    """Prepare input Table and transcripts for two simultaneous breaks search."""
+    """Prepare input Table for two simultaneous breaks search."""
     try:
         if args.command == "create-grouped-ht":
             hl.init(
