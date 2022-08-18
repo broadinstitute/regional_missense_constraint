@@ -57,12 +57,17 @@ Path to bucket containing resources related to building MPC score.
 ######################################################################
 ## Amino acid resources
 ######################################################################
-CODON_TABLE_PATH = f"{RESOURCE_PREFIX}/amino_acids/codons_lookup.tsv"
+AMINO_ACIDS_PREFIX = "{RESOURCE_PREFIX}/amino_acids"
+"""
+Path to any amino-acid related resource files used to build MPC.
+"""
+
+CODON_TABLE_PATH = f"{AMINO_ACIDS_PREFIX}/codons_lookup.tsv"
 """
 TSV file containing two columns: codon and three letter amino acid code.
 """
 
-ACID_NAMES_PATH = f"{RESOURCE_PREFIX}/amino_acids/acid_names.tsv"
+ACID_NAMES_PATH = f"{AMINO_ACIDS_PREFIX}/acid_names.tsv"
 """
 TSV file containing amino acid names.
 
@@ -70,13 +75,13 @@ File has three columns: amino acid name, amino acid 3 letter code,
 and amino acid 1 letter code.
 """
 
-blosum_txt_path = f"{RESOURCE_PREFIX}/amino_acids/blosum62.txt"
+blosum_txt_path = f"{AMINO_ACIDS_PREFIX}/blosum62.txt"
 """
 Text file containing matrix of BLOSUM scores for each amino acid pair.
 """
 
 blosum = TableResource(
-    path=f"{RESOURCE_PREFIX}/amino_acids/ht/blosum.ht",
+    path=f"{AMINO_ACIDS_PREFIX}/ht/blosum.ht",
 )
 """
 Table containing BLOSUM scores for each amino acid pair.
@@ -84,13 +89,13 @@ Table containing BLOSUM scores for each amino acid pair.
 Hail Table representation of scores in `blosum_txt_path`.
 """
 
-grantham_txt_path = f"{RESOURCE_PREFIX}/amino_acids/grantham.matrix.txt"
+grantham_txt_path = f"{AMINO_ACIDS_PREFIX}/grantham.matrix.txt"
 """
 Text file containing matrix of Grantham scores for each amino acid pair.
 """
 
 grantham = TableResource(
-    path=f"{RESOURCE_PREFIX}/amino_acids/ht/grantham.ht",
+    path=f"{AMINO_ACIDS_PREFIX}/ht/grantham.ht",
 )
 """
 Table containing Grantham scores for each amino acid pair.
