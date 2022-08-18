@@ -64,7 +64,7 @@ Contains multiple mutation rate annotations:
 """
 
 mutation_rate = TableResource(
-    path=f"{FLAGSHIP_LOF}/model/mutation_rate_methylation_bins.ht",
+    path=f"{FLAGSHIP_LOF_MODEL_PREFIX}/mutation_rate_methylation_bins.ht",
 )
 """
 Table with mutation rate recalculated for gnomAD constraint.
