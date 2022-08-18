@@ -275,7 +275,7 @@ joint_clinvar_gnomad = VersionedTableResource(
 """
 Table containing "population" and "pathogenic" variants.
 
-Table contains common (AF > 0.01) gnomAD variants ("population") and
+Table contains common (AF > 0.001) gnomAD variants ("population") and
 ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes
 that cause severe disease ("pathogenic") with defined CADD, BLOSUM, Grantham, missense observed/expected ratios,
 missense badness, and PolyPhen-2 scores.
