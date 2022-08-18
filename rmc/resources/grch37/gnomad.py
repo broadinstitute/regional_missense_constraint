@@ -10,9 +10,11 @@ FLAGSHIP_LOF = "gs://gnomad-public-requester-pays/papers/2019-flagship-lof/v1.0"
 Path to bucket with gnomAD v2 loss-of-function (LoF) constraint results.
 """
 
-FLAGSHIP_MODEL_PREFIX = f"{FLAGSHIP_LOF}/model"
+FLAGSHIP_LOF_MODEL_PREFIX = f"{FLAGSHIP_LOF}/model"
 
-processed_exomes = TableResource(path=f"{FLAGSHIP_MODEL_PREFIX}/exomes_processed.ht")
+processed_exomes = TableResource(
+    path=f"{FLAGSHIP_LOF_MODEL_PREFIX}/exomes_processed.ht"
+)
 """
 Processed gnomAD exomes Table.
 
@@ -29,7 +31,9 @@ NOTE: This resource is created with `process_vep`, which now filters to non-outl
 However, for v2, this resource contains *all* canonical transcripts (including outliers).
 """
 
-processed_genomes = TableResource(path=f"{FLAGSHIP_MODEL_PREFIX}/genomes_processed.ht")
+processed_genomes = TableResource(
+    path=f"{FLAGSHIP_LOF_MODEL_PREFIX}/genomes_processed.ht"
+)
 """
 Processed gnomAD genomes Table.
 
@@ -38,7 +42,7 @@ Also annotated with context Table (sequence context, transcript information, mos
 """
 
 prop_obs_coverage = TableResource(
-    path=f"{FLAGSHIP_MODEL_PREFIX}/prop_observed_by_coverage_no_common_pass_filtered_bins.ht"
+    path=f"{FLAGSHIP_LOF_MODEL_PREFIX}/prop_observed_by_coverage_no_common_pass_filtered_bins.ht"
 )
 """
 Table with proportion of variants observed by coverage.
@@ -48,7 +52,7 @@ Input for `build_models`.
 """
 
 possible_variants_ht = TableResource(
-    path=f"{FLAGSHIP_MODEL_PREFIX}/possible_data/possible_transcript_pop_standard.ht"
+    path=f"{FLAGSHIP_LOF_MODEL_PREFIX}/possible_data/possible_transcript_pop_standard.ht"
 )
 """
 Table with all observed SNPs in hg19 fasta (context) Table.
