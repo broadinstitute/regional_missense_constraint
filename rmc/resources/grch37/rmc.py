@@ -267,6 +267,9 @@ misbad = VersionedTableResource(
 Table containing all possible amino acid substitutions and their missense badness scores.
 """
 
+####################################################################################
+## MPC related resources
+####################################################################################
 joint_clinvar_gnomad = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
@@ -287,9 +290,6 @@ missense badness, and PolyPhen-2 scores.
 Input to MPC (missense badness, polyphen-2, and constraint) calculations.
 """
 
-####################################################################################
-## MPC related resources
-####################################################################################
 mpc_model_pkl_path = f"{MPC_PREFIX}/{CURRENT_VERSION}/{CURRENT_FREEZE}/mpc_model.pkl"
 """
 Path to model (stored as pickle) that contains relationship of MPC variables.
