@@ -24,7 +24,7 @@ LOGGING_PATH = f"{RMC_PREFIX}/logs"
 Path to bucket for hail logs.
 """
 
-TEMP_PATH = "gs://regional_missense_constraint/temp"
+TEMP_PATH = f"{RMC_PREFIX}/temp"
 """
 Path to bucket for temporary files.
 
