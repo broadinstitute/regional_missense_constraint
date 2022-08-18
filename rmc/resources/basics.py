@@ -40,7 +40,7 @@ Data in this bucket is used to set up regional missense constraint (RMC) calcula
 
 SIMUL_BREAK_TEMP_PATH = f"{TEMP_PATH}/simul_breaks"
 """
-Bucket to store temporary results for simultaneous results.
+Path to bucket to store temporary results for simultaneous results.
 """
 
 CONSTRAINT_PREFIX = f"{RMC_PREFIX}/constraint"
