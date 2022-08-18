@@ -30,20 +30,23 @@ Current RMC/MPC data version.
 ####################################################################################
 ## Original regional missense constraint resource files
 ####################################################################################
-MUTATION_RATE_TABLE_PATH = f"{RESOURCE_PREFIX}/GRCh37/exac/mutation_rate_table.tsv"
+EXAC_PREFIX = f"{RESOURCE_PREFIX}/GRCh37/exac"
+"""
+Path to bucket containing ExAC constraint files.
+"""
+
+MUTATION_RATE_TABLE_PATH = f"{EXAC_PREFIX}/mutation_rate_table.tsv"
 """
 Path to TSV containing ExAC mutation rates.
 """
 
-DIVERGENCE_SCORES_TSV_PATH = (
-    f"{RESOURCE_PREFIX}/GRCh37/exac/divsites_gencodev19_all_transcripts.txt"
-)
+DIVERGENCE_SCORES_TSV_PATH = f"{EXAC_PREFIX}/divsites_gencodev19_all_transcripts.txt"
 """
 Path to text file with divergence scores per transcript.
 """
 
 divergence_scores = TableResource(
-    path=f"{RESOURCE_PREFIX}/GRCh37/exac/ht/div_scores.ht",
+    path=f"{EXAC_PREFIX}/ht/div_scores.ht",
     import_func=hl.import_table,
     import_args={
         "path": DIVERGENCE_SCORES_TSV_PATH,
