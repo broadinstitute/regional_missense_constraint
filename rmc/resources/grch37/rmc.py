@@ -133,14 +133,14 @@ Table containing transcripts with multiple breaks.
 """
 
 simul_break_under_threshold = (
-    f"{MODEL_PREFIX}/{CURRENT_VERSION}/{CURRENT_FREEZE}/transcripts_under_5k.he"
+    f"{MODEL_PREFIX}/{CURRENT_VERSION}/{CURRENT_FREEZE}/transcripts_under_threshold.he"
 )
 """
 SetExpression containing transcripts with fewer possible missense positions than cutoff specified in `run_simultaneous_breaks.py`.
 """
 
 simul_break_over_threshold = (
-    f"{MODEL_PREFIX}/{CURRENT_VERSION}/{CURRENT_FREEZE}/transcripts_over_5k.he"
+    f"{MODEL_PREFIX}/{CURRENT_VERSION}/{CURRENT_FREEZE}/transcripts_over_threshold.he"
 )
 """
 SetExpression containing transcripts with greater than or equal to the cutoff for possible missense positions.
