@@ -27,8 +27,9 @@ CURRENT_FREEZE = 2
 Current RMC/MPC data version.
 """
 
-
-# Original regional missense constraint resource files
+####################################################################################
+## Original regional missense constraint resource files
+####################################################################################
 MUTATION_RATE_TABLE_PATH = f"{RESOURCE_PREFIX}/GRCh37/exac/mutation_rate_table.tsv"
 """
 Path to TSV containing ExAC mutation rates.
@@ -55,8 +56,9 @@ divergence_scores = TableResource(
 Table with divergence score between humans and macaques for each canonical transcript in Gencode v19.
 """
 
-
-# RMC-related resources
+####################################################################################
+## RMC-related resources
+####################################################################################
 constraint_prep = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
@@ -234,7 +236,9 @@ Table containing all transcripts with evidence of regional missense constraint.
 Contains same information as `rmc_results` but has different formatting for gnomAD browser.
 """
 
-# Missense badness related resources
+####################################################################################
+## Missense badness related resources
+####################################################################################
 amino_acids_oe = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
@@ -283,7 +287,9 @@ missense badness, and PolyPhen-2 scores.
 Input to MPC (missense badness, polyphen-2, and constraint) calculations.
 """
 
-# MPC related resources
+####################################################################################
+## MPC related resources
+####################################################################################
 mpc_model_pkl_path = f"{MPC_PREFIX}/{CURRENT_VERSION}/{CURRENT_FREEZE}/mpc_model.pkl"
 """
 Path to model (stored as pickle) that contains relationship of MPC variables.
@@ -347,7 +353,9 @@ Table containing missense variants in canonical transcripts annotated with MPC.
 This Table contains only one row per each unique locus/alleles combination.
 """
 
-# Assessment related resources
+####################################################################################
+## Assessment related resources
+####################################################################################
 oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_FREEZE}/{CURRENT_FREEZE}/oe_bin.tsv"
 """
 TSV with RMC regions grouped by obs/exp (OE) bin.
@@ -357,7 +365,9 @@ proportion de novo missense (case), and proportion ClinVar pathogenic/likely pat
 severe haploinsufficient missense.
 """
 
-# Reference related resources
+####################################################################################
+## Reference related resources
+####################################################################################
 TOTAL_EXOME_BASES = {"GRCh37": 54426835}
 """
 Dictionary containing total number of bases in the exome.
