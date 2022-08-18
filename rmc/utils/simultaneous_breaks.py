@@ -9,7 +9,7 @@ from gnomad.utils.file_utils import file_exists, parallel_file_exists
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.resources.resource_utils import DataException
 
-from rmc.resources.basics import SIMUL_BREAK_TEMP
+from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH
 from rmc.resources.grch37.rmc import (
     not_one_break_grouped,
     simul_break_over_threshold,
@@ -197,7 +197,7 @@ def check_for_successful_transcripts(
     :return: List of transcripts didn't have success TSVs and therefore still need to be processed.
     """
     logger.info("Checking if any transcripts have already been searched...")
-    success_file_path = f"{SIMUL_BREAK_TEMP}/success_files"
+    success_file_path = f"{SIMUL_BREAK_TEMP_PATH}/success_files"
     transcript_success_map = {}
     transcripts_to_run = []
     for transcript in transcripts:

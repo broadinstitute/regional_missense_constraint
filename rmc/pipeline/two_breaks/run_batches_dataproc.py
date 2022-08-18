@@ -17,7 +17,7 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, SIMUL_BREAK_TEMP
+from rmc.resources.basics import LOGGING_PATH, SIMUL_BREAK_TEMP_PATH
 from rmc.resources.grch37.rmc import not_one_break_grouped
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import process_transcript_group
@@ -51,9 +51,9 @@ def main(args):
 
         for counter, group in enumerate(transcript_groups):
             output_ht = (
-                f"{SIMUL_BREAK_TEMP}/hts/simul_break_dataproc_ttn.ht"
+                f"{SIMUL_BREAK_TEMP_PATH}/hts/simul_break_dataproc_ttn.ht"
                 if args.run_ttn
-                else f"{SIMUL_BREAK_TEMP}/hts/simul_break_dataproc_{counter}.ht"
+                else f"{SIMUL_BREAK_TEMP_PATH}/hts/simul_break_dataproc_{counter}.ht"
             )
             if file_exists(output_ht):
                 raise DataException(
@@ -65,8 +65,8 @@ def main(args):
                 transcript_group=group,
                 over_threshold=True,
                 output_ht_path=output_ht,
-                output_tsv_path=f"{SIMUL_BREAK_TEMP}/success_files",
-                temp_ht_path=f"{SIMUL_BREAK_TEMP}",
+                output_tsv_path=f"{SIMUL_BREAK_TEMP_PATH}/success_files",
+                temp_ht_path=f"{SIMUL_BREAK_TEMP_PATH}",
                 chisq_threshold=args.chisq_threshold,
                 split_window_size=args.window_size,
                 read_if_exists=args.read_if_exists,
