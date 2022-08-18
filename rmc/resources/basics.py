@@ -14,7 +14,7 @@ Contains all RMC and MPC score related data.
 MPC stands for Missense badness, Polyphen-2, and Constraint.
 """
 
-RESOURCE_PREFIX = "gs://regional_missense_constraint/resources"
+RESOURCE_PREFIX = f"{RMC_PREFIX}/resources"
 """
 Path to any non-gnomAD or VEP context resource files required for RMC or MPC.
 """
