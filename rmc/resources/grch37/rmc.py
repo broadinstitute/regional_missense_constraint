@@ -17,9 +17,9 @@ from rmc.resources.basics import (
 from rmc.resources.resource_utils import CURRENT_VERSION
 
 
-FREEZES = [1, 2]
+FREEZES = {1: CURRENT_VERSION, 2: CURRENT_VERSION}
 """
-List of RMC/MPC data versions.
+Dictionary of RMC/MPC data versions (key) and gnomAD version used to compute results (value).
 """
 
 CURRENT_FREEZE = 2
