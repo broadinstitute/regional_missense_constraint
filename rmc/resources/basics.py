@@ -19,7 +19,7 @@ RESOURCE_PREFIX = f"{RMC_PREFIX}/resources"
 Path to any non-gnomAD or VEP context resource files required for RMC or MPC.
 """
 
-LOGGING_PATH = "gs://regional_missense_constraint/logs"
+LOGGING_PATH = f"{RMC_PREFIX}/logs"
 """
 Path to bucket for hail logs.
 """
