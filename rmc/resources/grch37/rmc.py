@@ -316,7 +316,7 @@ gnomad_fitted_score_group = VersionedTableResource(
     },
 )
 """
-Table of fitted scores for common (AF > 0.01) variants in gnomAD, grouped by score.
+Table of fitted scores for common (AF > 0.001) variants in gnomAD, grouped by score.
 
 Annotated with the total number of variants with and less than each score.
 """
