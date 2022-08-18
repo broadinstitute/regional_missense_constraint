@@ -14,10 +14,10 @@ from rmc.resources.basics import (
     MPC_PREFIX,
     RESOURCE_PREFIX,
 )
-from rmc.resources.resource_utils import CURRENT_VERSION
+from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
 
-FREEZES = {1: CURRENT_VERSION, 2: CURRENT_VERSION}
+FREEZES = {1: CURRENT_GNOMAD_VERSION, 2: CURRENT_GNOMAD_VERSION}
 """
 Dictionary of RMC/MPC data versions (key) and gnomAD version used to compute results (value).
 """
@@ -66,7 +66,7 @@ constraint_prep = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{MODEL_PREFIX}/{CURRENT_VERSION}/{freeze}/context_obs_exp_annot.ht"
+            path=f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/context_obs_exp_annot.ht"
         )
         for freeze in FREEZES
     },
@@ -81,7 +81,7 @@ one_break = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/one_break.ht"
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/one_break.ht"
         )
         for freeze in FREEZES
     },
@@ -96,7 +96,7 @@ not_one_break = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/not_one_break.ht"
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/not_one_break.ht"
         )
         for freeze in FREEZES
     },
@@ -111,7 +111,7 @@ not_one_break_grouped = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/not_one_break_grouped.ht"
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/not_one_break_grouped.ht"
         )
         for freeze in FREEZES
     },
@@ -126,7 +126,7 @@ multiple_breaks = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/multiple_breaks.ht"
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/multiple_breaks.ht"
         )
         for freeze in FREEZES
     },
@@ -135,16 +135,12 @@ multiple_breaks = VersionedTableResource(
 Table containing transcripts with multiple breaks.
 """
 
-simul_break_under_threshold = (
-    f"{MODEL_PREFIX}/{CURRENT_VERSION}/{CURRENT_FREEZE}/transcripts_under_threshold.he"
-)
+simul_break_under_threshold = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/transcripts_under_threshold.he"
 """
 SetExpression containing transcripts with fewer possible missense positions than cutoff specified in `run_simultaneous_breaks.py`.
 """
 
-simul_break_over_threshold = (
-    f"{MODEL_PREFIX}/{CURRENT_VERSION}/{CURRENT_FREEZE}/transcripts_over_threshold.he"
-)
+simul_break_over_threshold = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/transcripts_over_threshold.he"
 """
 SetExpression containing transcripts with greater than or equal to the cutoff for possible missense positions.
 """
@@ -153,7 +149,7 @@ simul_break = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/simul_break.ht"
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/simul_break.ht"
         )
         for freeze in FREEZES
     },
@@ -166,7 +162,7 @@ no_breaks = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/no_breaks.ht"
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/no_breaks.ht"
         )
         for freeze in FREEZES
     },
@@ -179,7 +175,7 @@ rmc_results = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/all_rmc.ht"
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/all_rmc.ht"
         )
         for freeze in FREEZES
     },
@@ -194,7 +190,7 @@ context_with_oe = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/context_with_oe.ht"
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/context_with_oe.ht"
         )
         for freeze in FREEZES
     },
@@ -210,7 +206,7 @@ context_with_oe_dedup = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/context_with_oe_dedup.ht"
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/context_with_oe_dedup.ht"
         )
         for freeze in FREEZES
     },
@@ -228,7 +224,7 @@ rmc_browser = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/{freeze}/rmc_browser.ht"
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/rmc_browser.ht"
         )
         for freeze in FREEZES
     },
@@ -246,7 +242,7 @@ amino_acids_oe = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_VERSION}/{freeze}/amino_acid_oe.ht"
+            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/amino_acid_oe.ht"
         )
         for freeze in FREEZES
     },
@@ -261,7 +257,7 @@ misbad = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_VERSION}/{freeze}/missense_badness.ht"
+            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/missense_badness.ht"
         )
         for freeze in FREEZES
     },
@@ -277,7 +273,7 @@ joint_clinvar_gnomad = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_VERSION}/{freeze}/joint_clinvar_gnomad.ht"
+            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/joint_clinvar_gnomad.ht"
         )
         for freeze in FREEZES
     },
@@ -293,7 +289,9 @@ missense badness, and PolyPhen-2 scores.
 Input to MPC (missense badness, polyphen-2, and constraint) calculations.
 """
 
-mpc_model_pkl_path = f"{MPC_PREFIX}/{CURRENT_VERSION}/{CURRENT_FREEZE}/mpc_model.pkl"
+mpc_model_pkl_path = (
+    f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/mpc_model.pkl"
+)
 """
 Path to model (stored as pickle) that contains relationship of MPC variables.
 
@@ -304,7 +302,7 @@ gnomad_fitted_score = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_VERSION}/{freeze}/gnomad_fitted_scores.ht"
+            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/gnomad_fitted_scores.ht"
         )
         for freeze in FREEZES
     },
@@ -319,7 +317,7 @@ gnomad_fitted_score_group = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_VERSION}/{freeze}/gnomad_fitted_scores_group.ht"
+            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/gnomad_fitted_scores_group.ht"
         )
         for freeze in FREEZES
     },
@@ -333,7 +331,9 @@ Annotated with the total number of variants with and less than each score.
 mpc_release = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
-        freeze: TableResource(path=f"{MPC_PREFIX}/{CURRENT_VERSION}/{freeze}/mpc.ht")
+        freeze: TableResource(
+            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/mpc.ht"
+        )
         for freeze in FREEZES
     },
 )
@@ -345,7 +345,7 @@ mpc_release_dedup = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_VERSION}/{freeze}/mpc_dedup.ht"
+            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/mpc_dedup.ht"
         )
         for freeze in FREEZES
     },
