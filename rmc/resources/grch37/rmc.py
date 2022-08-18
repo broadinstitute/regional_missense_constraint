@@ -364,21 +364,3 @@ Annotated with proportion coding base pairs, proportion de novo missense (contro
 proportion de novo missense (case), and proportion ClinVar pathogenic/likely pathogenic
 severe haploinsufficient missense.
 """
-
-####################################################################################
-## Reference related resources
-####################################################################################
-TOTAL_EXOME_BASES = {"GRCh37": 54426835}
-"""
-Dictionary containing total number of bases in the exome.
-
-Calculated using `get_exome_bases`.
-"""
-
-
-TOTAL_GNOMAD_MISSENSE = {"2.1.1": 5257859}
-"""
-Dictionary containing total number of missense variants seen in gnomAD.
-
-Calculated by filtering gnomAD release HT to missense variants only and running `ht.count()`.
-"""
