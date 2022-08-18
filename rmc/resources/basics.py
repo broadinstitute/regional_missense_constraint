@@ -38,7 +38,7 @@ Path to bucket containing resources related to building the mutational models.
 Data in this bucket is used to set up regional missense constraint (RMC) calculations.
 """
 
-SIMUL_BREAK_TEMP = f"{TEMP_PATH}/simul_breaks"
+SIMUL_BREAK_TEMP_PATH = f"{TEMP_PATH}/simul_breaks"
 """
 Bucket to store temporary results for simultaneous results.
 """
