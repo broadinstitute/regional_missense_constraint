@@ -251,7 +251,6 @@ def adjust_mu_expr(
 
 def translate_mu_to_exp_expr(
     cumulative_mu_expr: hl.expr.DictExpression,
-    group_str: hl.expr.StringExpression,
     total_mu_expr: hl.expr.Float64Expression,
     total_exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.DictExpression:
@@ -265,8 +264,6 @@ def translate_mu_to_exp_expr(
     (plateau model) and coverage (coverage model).
 
     :param cumulative_mu_expr: DictExpression containing scan expressions for cumulative mutation rate probability.
-    :param group_str: StringExpression containing transcript or transcript subsection information.
-        Used to group observed and expected values.
     :param total_mu_expr: FloatExpression describing total sum of mutation rate probabilities per transcript.
     :param total_exp_expr: FloatExpression describing total expected variant counts per transcript.
     :return: Cumulative expected variants count expression.
@@ -439,7 +436,7 @@ def get_fwd_exprs(
     ht = ht.annotate(mu_scan=adjust_mu_expr(ht.mu_scan, ht[mu_str], ht[group_str]))
     ht = ht.annotate(
         cumulative_exp=translate_mu_to_exp_expr(
-            ht.mu_scan, ht[group_str], ht[total_mu_str], ht[total_exp_str]
+            ht.mu_scan, ht[total_mu_str], ht[total_exp_str]
         )
     )
 
