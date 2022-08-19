@@ -707,6 +707,7 @@ def get_subsection_exprs(
 
     # Translate total mu to total expected per section
     ht = ht.annotate(
+        section_mu=section_counts[ht[section_str]].mu,
         section_exp=(section_counts[ht[section_str]].mu / ht[total_mu_str])
         * ht[total_exp_str],
         section_obs=section_counts[ht[section_str]].obs,
