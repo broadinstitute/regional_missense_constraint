@@ -616,7 +616,7 @@ def search_for_break(
             # Add forwards section null (going through positions from smaller to larger)
             # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
             get_dpois_expr(
-                cond_expr=hl.len(ht.cumulative_obs) != 0,
+                cond_expr=hl.is_defined(ht.cumulative_obs),
                 section_oe_expr=ht.section_oe,
                 obs_expr=ht.cumulative_obs,
                 exp_expr=ht.cumulative_exp,
@@ -633,7 +633,7 @@ def search_for_break(
             # Add forward section alt
             # section_alt = stats.dpois(section_obs, section_exp*section_obs_exp)[0]
             get_dpois_expr(
-                cond_expr=hl.len(ht.cumulative_obs) != 0,
+                cond_expr=hl.is_defined(ht.cumulative_obs),
                 section_oe_expr=ht.forward_oe,
                 obs_expr=ht.cumulative_obs,
                 exp_expr=ht.cumulative_exp,
