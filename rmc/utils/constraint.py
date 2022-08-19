@@ -411,7 +411,9 @@ def get_fwd_exprs(
     :param obs_str: Name of field containing observed variants counts.
     :param mu_str: Name of field containing mutation rate probability per variant.
     :param total_mu_str: Name of field containing total mutation rate per section of interest (transcript or sub-section of transcript).
+        Default is 'section_mu'.
     :param total_exp_str: Name of field containing total expected variants count per section of interest (transcript or sub-section of transcript).
+        Default is 'section_exp'.
     :param group_str: Field used to group Table observed and expected values. Default is "section".
     :return: Table with forward values (cumulative obs, exp, and forward o/e) annotated.
     """
@@ -676,8 +678,8 @@ def get_subsection_exprs(
     section_str: str = "section",
     obs_str: str = "observed",
     mu_str: str = "mu_snp",
-    total_mu_str: str = "total_mu",
-    total_exp_str: str = "total_exp",
+    total_mu_str: str = "section_mu",
+    total_exp_str: str = "section_exp",
 ) -> hl.Table:
     """
     Annotate total observed, expected, and observed/expected (OE) counts for each section of a transcript.
