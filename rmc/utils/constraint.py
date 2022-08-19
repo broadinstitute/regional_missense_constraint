@@ -271,7 +271,7 @@ def translate_mu_to_exp_expr(
     :param total_exp_expr: FloatExpression describing total expected variant counts per transcript.
     :return: Cumulative expected variants count expression.
     """
-    return (cumulative_mu_expr[group_str] / total_mu_expr) * total_exp_expr
+    return (cumulative_mu_expr / total_mu_expr) * total_exp_expr
 
 
 def calculate_exp_per_transcript(
