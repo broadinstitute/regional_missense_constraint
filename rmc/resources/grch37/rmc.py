@@ -135,12 +135,12 @@ multiple_breaks = VersionedTableResource(
 Table containing transcripts with multiple breaks.
 """
 
-simul_break_under_threshold = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/transcripts_under_threshold.he"
+simul_break_under_threshold_path = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/transcripts_under_threshold.he"
 """
 SetExpression containing transcripts with fewer possible missense positions than cutoff specified in `run_simultaneous_breaks.py`.
 """
 
-simul_break_over_threshold = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/transcripts_over_threshold.he"
+simul_break_over_threshold_path = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/transcripts_over_threshold.he"
 """
 SetExpression containing transcripts with greater than or equal to the cutoff for possible missense positions.
 """

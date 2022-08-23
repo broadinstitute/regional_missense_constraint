@@ -12,8 +12,8 @@ from gnomad.resources.resource_utils import DataException
 from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH
 from rmc.resources.grch37.rmc import (
     not_one_break_grouped,
-    simul_break_over_threshold,
-    simul_break_under_threshold,
+    simul_break_over_threshold_path,
+    simul_break_under_threshold_path,
 )
 from rmc.utils.constraint import get_dpois_expr, get_obs_exp_expr
 from rmc.utils.generic import get_avg_bases_between_mis
@@ -142,7 +142,7 @@ def split_transcripts_by_len(
     :param int transcript_len_threshold: Possible number of missense variants cutoff.
     :param str ttn_id: TTN transcript ID. TTN is large and needs to be processed separately.
     :param bool overwrite: Whether to overwrite existing SetExpressions.
-    :return: None; writes SetExpressions to resource paths (`simul_break_under_threshold`, `simul_break_over_threshold`).
+    :return: None; writes SetExpressions to resource paths (`simul_break_under_threshold_path`, `simul_break_over_threshold_path`).
     """
     logger.info("Annotating HT with length of cumulative observed list annotation...")
     # This length is the number of positions with possible missense variants that need to be searched
@@ -175,10 +175,10 @@ def split_transcripts_by_len(
         over_threshold.remove(ttn_id)
         over_threshold = set(over_threshold)
     hl.experimental.write_expression(
-        under_threshold, simul_break_under_threshold, overwrite
+        under_threshold, simul_break_under_threshold_path, overwrite
     )
     hl.experimental.write_expression(
-        over_threshold, simul_break_over_threshold, overwrite
+        over_threshold, simul_break_over_threshold_path, overwrite
     )
 
 

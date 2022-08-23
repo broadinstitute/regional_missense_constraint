@@ -12,8 +12,8 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.grch37.rmc import (
-    simul_break_over_threshold,
-    simul_break_under_threshold,
+    simul_break_over_threshold_path,
+    simul_break_under_threshold_path,
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import check_for_successful_transcripts
@@ -34,8 +34,8 @@ def main(args):
     logger.info("Verifying that all transcripts were processed...")
     transcripts = list(
         hl.eval(
-            hl.experimental.read_expression(simul_break_under_threshold).union(
-                hl.experimental.read_expression(simul_break_over_threshold)
+            hl.experimental.read_expression(simul_break_under_threshold_path).union(
+                hl.experimental.read_expression(simul_break_over_threshold_path)
             )
         )
     )
@@ -45,7 +45,7 @@ def main(args):
         raise DataException(f"{len(missing_transcripts)} are missing! Please rerun.")
 
     # Check if TTN was run and print a warning if it wasn't
-    # TTN ID isn't included in `simul_break_under_threshold` or `simul_break_over_threshold`
+    # TTN ID isn't included in `simul_break_under_threshold_path` or `simul_break_over_threshold_path`
     # It needs to be run separately due to its size
     logger.info("Checking if TTN was processed...")
     ttn_missing = check_for_successful_transcripts(transcripts=[args.ttn])

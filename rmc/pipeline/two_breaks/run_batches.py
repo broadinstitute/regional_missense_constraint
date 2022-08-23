@@ -32,8 +32,8 @@ from gnomad.utils.slack import slack_notifications
 from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH
 from rmc.resources.grch37.rmc import (
     not_one_break_grouped,
-    simul_break_over_threshold,
-    simul_break_under_threshold,
+    simul_break_over_threshold_path,
+    simul_break_under_threshold_path,
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import check_for_successful_transcripts
@@ -608,10 +608,16 @@ def main(args):
     logger.info("Importing SetExpression with transcripts...")
     transcripts_to_run = check_for_successful_transcripts(
         transcripts=(
-            list(hl.eval(hl.experimental.read_expression(simul_break_under_threshold)))
+            list(
+                hl.eval(
+                    hl.experimental.read_expression(simul_break_under_threshold_path)
+                )
+            )
             if args.under_threshold
             else list(
-                hl.eval(hl.experimental.read_expression(simul_break_over_threshold))
+                hl.eval(
+                    hl.experimental.read_expression(simul_break_over_threshold_path)
+                )
             )
         ),
     )
