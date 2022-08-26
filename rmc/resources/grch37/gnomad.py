@@ -2,7 +2,7 @@
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
 
 from rmc.resources.basics import RESOURCE_PREFIX
-from rmc.resources.resource_utils import CURRENT_VERSION
+from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
 
 FLAGSHIP_LOF = "gs://gnomad-public-requester-pays/papers/2019-flagship-lof/v1.0"
@@ -77,9 +77,9 @@ https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constra
 """
 
 constraint_ht = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_GNOMAD_VERSION,
     versions={
-        CURRENT_VERSION: TableResource(
+        CURRENT_GNOMAD_VERSION: TableResource(
             path="gs://gcp-public-data--gnomad/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_transcript.ht"
         )
     },
