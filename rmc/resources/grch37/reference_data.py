@@ -6,7 +6,9 @@ from gnomad.resources.resource_utils import (
 from rmc.resources.resource_utils import RESOURCE_PREFIX
 
 
+####################################################################################
 ## Reference genome related resources
+####################################################################################
 filtered_context = VersionedTableResource(
     default_version="v1",
     versions={
@@ -32,7 +34,9 @@ Table containing transcript start and stop positions displayed in the browser.
 """
 
 
+####################################################################################
 ## Assessment related resources
+####################################################################################
 clinvar_path_mis = TableResource(
     path=f"{RESOURCE_PREFIX}/GRCh37/reference_data/ht/clinvar_pathogenic_missense.ht",
 )
@@ -56,7 +60,9 @@ de_novo = TableResource(
 De novo missense variants from 37,488 cases and 2,179 controls (same as above).
 """
 
+####################################################################################
 ## MPC related resources
+####################################################################################
 cadd = TableResource(
     path="gs://seqr-reference-data/GRCh37/CADD/CADD_snvs_and_indels.v1.6.ht"
 )

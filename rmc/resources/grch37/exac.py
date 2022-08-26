@@ -33,7 +33,7 @@ def _import_coverage(**kwargs) -> hl.Table:
     return coverage
 
 
-# Files for direct comparison with Kaitlin's code
+## Files for direct comparison with Kaitlin's code
 EXAC_PREFIX = f"{RESOURCE_PREFIX}/GRCh37/exac"
 
 exac = TableResource(
