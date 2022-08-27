@@ -246,6 +246,7 @@ def main(args):
             logger.info(
                 "Searching for transcripts or transcript subsections with a single significant break..."
             )
+            # TODO: Accommodate relaxed search in temp paths (same round number?)
             if args.search_num == 1:
                 # Read constraint_prep resource HT if this is the first search
                 ht = constraint_prep.ht()
@@ -340,11 +341,8 @@ def main(args):
             )
 
         if args.merge_single_simul:
+            # Convert simul break breakpoint info to locus-level table with new section annotations
             # Merge single breaks with simultaneous breaks
-            # Update simultaneous breaks write to reformat breakpoints
-            # Also need to add new section annotations (for simul break)
-            # Update merge simul breaks code to do this ^
-            # Update prepare transcripts (and other simul scripts) to be more flexible for simul breaks
             pass
 
         if args.finalize:

@@ -1073,6 +1073,7 @@ def finalize_multiple_breaks(
         Default is FINAL_ANNOTATIONS.
     :return: Table annotated with transcript subsection values and breakpoint positions.
     """
+    # TODO: Update with new flow
     logger.info("Removing outlier transcripts...")
     outlier_transcripts = get_constraint_transcripts(outlier=True)
     ht = ht.filter(~outlier_transcripts.contains(ht.transcript))

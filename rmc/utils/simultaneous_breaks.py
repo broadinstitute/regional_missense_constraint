@@ -178,6 +178,7 @@ def calculate_window_chisq(
     cum_obs: hl.expr.ArrayExpression,
     cum_exp: hl.expr.ArrayExpression,
     total_oe: hl.expr.Float64Expression,
+    min_window_exp: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
     """
     Calculate chi square significance value for each possible simultaneous breaks window.
@@ -191,19 +192,28 @@ def calculate_window_chisq(
     :param hl.expr.Int32Expression j: Larger list index value corresponding to the larger position of the two break window.
     :param hl.expr.ArrayExpression cum_obs: List containing cumulative observed missense values.
     :param hl.expr.ArrayExpression cum_exp: List containing cumulative expected missense values.
-    :param expr.Float64Expression total_oe: Transcript overall observed/expected (OE) missense ratio.
+    :param hl.expr.Float64Expression total_oe: Transcript/transcript section overall observed/expected (OE) missense ratio.
+    :param hl.expr.Float64Expression min_window_exp: Minimum expected missense value for all three windows defined by two possible
+        simultaneous breaks.
     :return: Chi square significance value.
     """
     return (
         hl.case()
         .when(
-            # Return -1 when the window spans the entire transcript
+            # Return -1 when the internal window spans the entire transcript/transcript section
             (i == 0) & (j == max_idx),
             -1,
         )
         .when(
-            # If i index is the smallest position (anchored at one end of transcript),
-            # there are only two transcript subsections: [start_pos, pos[j]], (pos[j], end_pos]
+            # Return -1 when any of the three windows defined by i and j have fewer than `min_window_exp` expected values
+            ((cum_exp[i - 1]) < min_window_exp)
+            | ((cum_exp[j] - cum_exp[i - 1]) < min_window_exp)
+            | ((cum_exp[-1] - cum_exp[j]) < min_window_exp),
+            -1,
+        )
+        .when(
+            # If i index is the smallest position (anchored at one end of transcript/transcript section),
+            # there are only two subsections: [start_pos, pos[j]], (pos[j], end_pos]
             # This is the same chi square calculation as the single break search
             # (TODO: think about whether to keep this calculation or remove and just return -1 here)
             i == 0,
@@ -218,7 +228,7 @@ def calculate_window_chisq(
                             cond_expr=True,
                             section_oe_expr=get_obs_exp_expr(
                                 # Make sure the expected value is NOT 0 here
-                                # When running this code on gnomAD v2, found that some transcripts have expected values of 0
+                                # When running this code on gnomAD v2, found that some sites have expected values of 0
                                 # which broke the chi square calculation
                                 True,
                                 cum_obs[j],
@@ -395,21 +405,23 @@ def calculate_window_chisq(
 def search_for_two_breaks(
     group_ht: hl.Table,
     chisq_threshold: float = 9.2,
+    min_window_exp: float = 10,
 ) -> hl.Table:
     """
-    Search for windows of constraint in transcripts with simultaneous breaks.
+    Search for transcripts/transcript sections with simultaneous breaks.
 
-    This function searches for breaks for all possible window sizes but only keeps break sizes >= `min_window_size`.
-    `min_window_size` is the number of base pairs needed, on average, to see 10 missense variants (by default).
-    For gnomAD v2.1, `min_window_size` is 100bp.
+    This function searches for breaks for all possible window sizes that exceed a minimum threshold of expected missense variants.
 
-    :param hl.Table group_ht: Input Table aggregated by transcript with lists of cumulative observed and expected
-        missense values. HT is filtered to contain only transcripts with simultaneous breaks.
+    :param hl.Table group_ht: Input Table aggregated by transcript/transcript section with lists of cumulative observed
+        and expected missense values. HT is filtered to contain only transcript/sections without
+        a single significant breakpoint.
     :param float chisq_threshold:  Chi-square significance threshold. Default is 9.2.
         This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
-    :return: Table with largest simultaneous break window size annotated per transcript.
+    :param float min_window_exp: Minimum expected missense value for all three windows defined by two possible
+        simultaneous breaks.
+    :return: Table with largest simultaneous break window size annotated per transcript/section.
     :rtype: hl.Table
     """
 
@@ -451,6 +463,7 @@ def search_for_two_breaks(
             group_ht.cum_obs,
             group_ht.cum_exp,
             group_ht.total_oe,
+            min_window_exp,
         )
 
         # Make sure chi square isn't NaN
@@ -465,7 +478,7 @@ def search_for_two_breaks(
         return hl.if_else(
             # Return the best indices at the end of the iteration through the position list
             # Note that max_idx_i has been adjusted to be ht.max_idx - 1 (or i + window_size - 1):
-            # see note in `process_transcript_group`
+            # see note in `process_section_group`
             # Also note that j needs to be checked here to ensure that j is also at the end of its loop
             # (This check is necessary when transcripts have been split into multiple i, j windows
             # across multiple rows)
@@ -524,45 +537,38 @@ def search_for_two_breaks(
     )
     group_ht = group_ht.transmute(
         max_chisq=group_ht.max_break[0],
-        start_pos=group_ht.positions[group_ht.max_break[1]],
-        end_pos=group_ht.positions[group_ht.max_break[2]],
+        # Adjust breakpoint inclusive/exclusiveness to be consistent with single break breakpoints, i.e.
+        # so that the breakpoint site itself is the last site in the left subsection. Thus, the resulting
+        # subsections will be divided as follows:
+        # [section_start, first_break_pos] (first_break_pos, second_break_pos] (second_break_pos, section_end]
+        first_break_pos=group_ht.positions[group_ht.max_break[1] - 1],
+        second_break_pos=group_ht.positions[group_ht.max_break[2]],
     )
     # Remove rows with maximum chi square values below the threshold
-    # or rows where none of the transcript sections is the minimum window size
-    group_ht = group_ht.filter(
-        # Remove rows with maximum chi square values below the threshold
-        (group_ht.max_chisq >= chisq_threshold)
-        & (
-            (group_ht.end_pos - group_ht.start_pos > group_ht.min_window_size)
-            | (group_ht.transcript_end - group_ht.end_pos > group_ht.min_window_size)
-            | (
-                group_ht.start_pos - group_ht.transcript_start
-                > group_ht.min_window_size
-            )
-        )
-    )
+    group_ht = group_ht.filter(group_ht.max_chisq >= chisq_threshold)
     return group_ht
 
 
-def process_transcript_group(
+def process_section_group(
     ht_path: str,
-    transcript_group: List[str],
+    section_group: List[str],
     over_threshold: bool,
     output_ht_path: str,
     output_tsv_path: str,
     temp_ht_path: Optional[str] = None,
     chisq_threshold: float = 9.2,
-    split_window_size: int = 500,
+    min_window_exp: float = 10,
+    split_list_len: int = 500,
     read_if_exists: bool = False,
 ) -> None:
     """
-    Run two simultaneous breaks search on a group of transcripts.
+    Run two simultaneous breaks search on a group of transcripts or transcript sections.
 
     Designed for use with Hail Batch.
 
     :param str ht_path: Path to input Table (Table written using `group_not_one_break_ht`).
-    :param List[str] transcript_group: List of transcripts to process.
-    :param bool over_threshold: Whether input transcripts have more
+    :param List[str] section_group: List of transcripts or transcript sections to process.
+    :param bool over_threshold: Whether input transcript/sections have more
         possible missense sites than threshold specified in `run_simultaneous_breaks`.
     :param str output_ht_path: Path to output results Table.
     :param str output_tsv_path: Path to success TSV bucket.
@@ -571,21 +577,27 @@ def process_transcript_group(
         This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
-    :param int split_window_size: Window size to search for transcripts that have more
-        possible missense sites than threshold. Only used if over_threshold is True.
+    :param float min_window_exp: Minimum expected missense value for all three windows defined by two possible
+        simultaneous breaks.
+    :param int split_list_len: Max length to divide transcript/sections observed or expected missense and position lists into.
+        E.g., if split_list_len is 500, and the list lengths are 998, then the transcript/section will be
+        split into two rows with lists of length 500 and 498.
+        Only used if over_threshold is True. Default is 500.
     :param bool read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
         Only applies to Table that is input to `search_for_two_breaks`
         (`f"{temp_ht_path}/{transcript_group[0]}_prep.ht"`).
         Default is False.
     :return: None; processes Table and writes to path. Also writes success TSV to path.
     """
+    # TODO: Add round number in temp paths
+    # TODO: Accommodate relaxed search in temp paths (same round number?)
     ht = hl.read_table(ht_path)
-    ht = ht.filter(hl.literal(transcript_group).contains(ht.transcript))
+    ht = ht.filter(hl.literal(section_group).contains(ht.section))
 
     if over_threshold:
-        # If transcripts longer than threshold, split transcripts into multiple rows
-        # Each row has a window to search
-        # E.g., if a transcript has 1003 possible missense sites, and the `split_window_size` is 500,
+        # If transcript/sections longer than threshold, split into multiple rows
+        # Each row conducts an independent search within a non-overlapping portion of the transcript/section
+        # E.g., if a transcript has 1003 possible missense sites, and the `split_list_len` is 500,
         # then this section will split that transcript into 9 rows, with the following windows:
         # [i_start=0, j_start=0], [i_start=0, j_start=500], [i_start=0, j_start=1000],
         # [i_start=500, j_start=0], [i_start=500, j_start=500], [i_start=500, j_start=1000],
@@ -597,9 +609,9 @@ def process_transcript_group(
             start_idx=hl.flatmap(
                 lambda i: hl.map(
                     lambda j: hl.struct(i_start=i, j_start=j),
-                    hl.range(0, ht.max_idx + 1, split_window_size),
+                    hl.range(0, ht.max_idx + 1, split_list_len),
                 ),
-                hl.range(0, ht.max_idx + 1, split_window_size),
+                hl.range(0, ht.max_idx + 1, split_list_len),
             )
         )
         # Remove entries in `start_idx` struct where j_start is smaller than i_start
@@ -608,15 +620,15 @@ def process_transcript_group(
         )
         ht = ht.explode("start_idx")
         ht = ht.annotate(i=ht.start_idx.i_start, j=ht.start_idx.j_start)
-        ht = ht._key_by_assert_sorted("transcript", "i", "j")
+        ht = ht._key_by_assert_sorted("section", "i", "j")
         ht = ht.annotate(
             # NOTE: i_max_idx needs to be adjusted here to be one smaller than the max
             # This is because we don't need to check the situation where i is the last index in a list
-            # For example, if the transcript has 1003 possible missense sites,
+            # For example, if the section has 1003 possible missense sites,
             # (1002 is the largest list index)
             # we don't need to check the scenario where i = 1002
-            i_max_idx=hl.min(ht.i + split_window_size, ht.max_idx) - 1,
-            j_max_idx=hl.min(ht.j + split_window_size, ht.max_idx),
+            i_max_idx=hl.min(ht.i + split_list_len, ht.max_idx) - 1,
+            j_max_idx=hl.min(ht.j + split_list_len, ht.max_idx),
         )
         # Adjust j_start in rows where j_start is the same as i_start
         ht = ht.annotate(
@@ -629,9 +641,12 @@ def process_transcript_group(
             ),
         )
         n_rows = ht.count()
+        # NOTE: added repartition here because repartioning on read did not
+        # keep the desired number of partitions
+        # (would sometimes repartition to a lower number of partitions)
         ht = ht.repartition(n_rows)
         ht = ht.checkpoint(
-            f"{temp_ht_path}/{transcript_group[0]}_prep.ht",
+            f"{temp_ht_path}/{section_group[0]}_prep.ht",
             overwrite=not read_if_exists,
             _read_if_exists=read_if_exists,
         )
@@ -646,27 +661,27 @@ def process_transcript_group(
         )
 
     # Search for two simultaneous breaks
-    ht = search_for_two_breaks(ht, chisq_threshold)
+    ht = search_for_two_breaks(ht, chisq_threshold, min_window_exp)
 
     # If over threshold, checkpoint HT and check if there were any breaks
     if over_threshold:
-        ht = ht.checkpoint(
-            f"{temp_ht_path}/{transcript_group[0]}_res.ht", overwrite=True
-        )
+        ht = ht.checkpoint(f"{temp_ht_path}/{section_group[0]}_res.ht", overwrite=True)
         # If any rows had a significant breakpoint,
         # find the one "best" breakpoint (breakpoint with largest chi square value)
         if ht.count() > 0:
-            group_ht = ht.group_by("transcript").aggregate(
-                transcript_max_chisq=hl.agg.max(ht.max_chisq)
+            group_ht = ht.group_by("section").aggregate(
+                section_max_chisq=hl.agg.max(ht.max_chisq)
             )
-            ht = ht.annotate(
-                transcript_max_chisq=group_ht[ht.transcript].transcript_max_chisq
-            )
-            ht = ht.filter(ht.max_chisq == ht.transcript_max_chisq)
+            ht = ht.annotate(section_max_chisq=group_ht[ht.section].section_max_chisq)
+            ht = ht.filter(ht.max_chisq == ht.section_max_chisq)
 
+    ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
+    # TODO: Restructure ht to match locus-level formats from single breaks
     ht.write(output_ht_path, overwrite=True)
+    # TODO: Consider whether we want to write out temp information on chisq values for each potential break combination
+    #   like in single breaks
 
-    for transcript in transcript_group:
-        success_tsv_path = f"{output_tsv_path}/{transcript}.tsv"
+    for section in section_group:
+        success_tsv_path = f"{output_tsv_path}/{section}.tsv"
         with hl.hadoop_open(success_tsv_path, "w") as o:
-            o.write(f"{transcript}\n")
+            o.write(f"{section}\n")

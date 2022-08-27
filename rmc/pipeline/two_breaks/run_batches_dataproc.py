@@ -23,7 +23,7 @@ from rmc.resources.basics import (
     simul_break_temp,
 )
 from rmc.slack_creds import slack_token
-from rmc.utils.simultaneous_breaks import process_transcript_group
+from rmc.utils.simultaneous_breaks import process_section_group
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -63,9 +63,9 @@ def main(args):
                     f"Output already exists at {output_ht}! Double check before running script again."
                 )
 
-            process_transcript_group(
+            process_section_group(
                 ht_path=not_one_break_grouped.path,
-                transcript_group=group,
+                section_group=group,
                 over_threshold=True,
                 output_ht_path=output_ht,
                 output_tsv_path=f"{simul_break_temp}/success_files",
