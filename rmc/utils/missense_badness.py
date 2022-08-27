@@ -7,8 +7,8 @@ from gnomad.utils.file_utils import file_exists
 from gnomad.utils.vep import CSQ_NON_CODING
 
 from rmc.resources.basics import TEMP_PATH
-from rmc.resources.grch37.gnomad import constraint_ht
-from rmc.resources.grch37.rmc import amino_acids_oe, constraint_prep, misbad
+from rmc.resources.gnomad import constraint_ht
+from rmc.resources.rmc import amino_acids_oe, constraint_prep, misbad
 from rmc.utils.constraint import add_obs_annotation, group_rmc_ht_by_section
 from rmc.utils.generic import (
     filter_context_using_gnomad,
@@ -138,7 +138,7 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     logger.info("Reading in VEP context HT...")
     # NOTE: Keeping all variant types here because need synonymous and nonsense variants to calculate missense badness
     context_ht = process_context_ht(
-        build="GRCh37", filter_to_missense=False, add_annotations=False
+        filter_to_missense=False, add_annotations=False
     )
 
     logger.info(

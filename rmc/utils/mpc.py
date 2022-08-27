@@ -20,8 +20,8 @@ from rmc.resources.basics import (
     grantham_txt_path,
     TEMP_PATH,
 )
-from rmc.resources.grch37.reference_data import cadd, clinvar_path_mis
-from rmc.resources.grch37.rmc import (
+from rmc.resources.reference_data import cadd, clinvar_path_mis
+from rmc.resources.rmc import (
     context_with_oe,
     context_with_oe_dedup,
     gnomad_fitted_score,

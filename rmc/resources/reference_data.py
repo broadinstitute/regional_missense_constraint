@@ -1,9 +1,11 @@
-"""Script containing GRCh37 reference resources."""
+"""Script containing reference resources."""
 from gnomad.resources.resource_utils import (
     TableResource,
     VersionedTableResource,
 )
-from rmc.resources.resource_utils import RESOURCE_PREFIX
+
+from rmc.resources.basics import BUILD_RESOURCE_PREFIX
+from rmc.resources.resource_utils import CURRENT_BUILD
 
 
 ####################################################################################
@@ -13,7 +15,7 @@ filtered_context = VersionedTableResource(
     default_version="v1",
     versions={
         "v1": TableResource(
-            path=f"{RESOURCE_PREFIX}/GRCh37/reference_data/ht/context_fasta_snps_only_vep_v1.ht",
+            path=f"{BUILD_RESOURCE_PREFIX}/reference_data/ht/context_fasta_snps_only_vep_v1.ht",
         )
     },
 )
@@ -28,7 +30,7 @@ NOTE: This resource is created with `process_vep`, which now filters to non-outl
 However, for v2, this resource contains *all* canonical transcripts (including outliers).
 """
 
-gene_model = TableResource(path=f"{RESOURCE_PREFIX}/GRCh37/browser/b37_transcripts.ht")
+gene_model = TableResource(path=f"{BUILD_RESOURCE_PREFIX}/browser/b37_transcripts.ht")
 """
 Table containing transcript start and stop positions displayed in the browser.
 """
@@ -38,13 +40,13 @@ Table containing transcript start and stop positions displayed in the browser.
 ## Assessment related resources
 ####################################################################################
 clinvar_path_mis = TableResource(
-    path=f"{RESOURCE_PREFIX}/GRCh37/reference_data/ht/clinvar_pathogenic_missense.ht",
+    path=f"{BUILD_RESOURCE_PREFIX}/reference_data/ht/clinvar_pathogenic_missense.ht",
 )
 """
 ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes that cause severe disease.
 """
 
-de_novo_tsv = f"{RESOURCE_PREFIX}/GRCh37/reference_data/fordist_KES_combined_asc_dd_dnms_2020_04_21_annotated.txt"
+de_novo_tsv = f"{BUILD_RESOURCE_PREFIX}/reference_data/fordist_KES_combined_asc_dd_dnms_2020_04_21_annotated.txt"
 """
 De novo missense variants from 31,058 cases with developmental disorders, 6,430 cases with autism spectrum disorders, and 2,179 controls.
 Controls are the siblings of the autism cases.
@@ -54,7 +56,7 @@ Satterstrom et al. (Large-Scale Exome Sequencing Study Implicates Both Developme
 """
 
 de_novo = TableResource(
-    path=f"{RESOURCE_PREFIX}/GRCh37/reference_data/ht/dd_de_novo.ht",
+    path=f"{BUILD_RESOURCE_PREFIX}/reference_data/ht/dd_de_novo.ht",
 )
 """
 De novo missense variants from 37,488 cases and 2,179 controls (same as above).
@@ -64,7 +66,7 @@ De novo missense variants from 37,488 cases and 2,179 controls (same as above).
 ## MPC related resources
 ####################################################################################
 cadd = TableResource(
-    path="gs://seqr-reference-data/GRCh37/CADD/CADD_snvs_and_indels.v1.6.ht"
+    path=f"gs://seqr-reference-data/{CURRENT_BUILD}/CADD/CADD_snvs_and_indels.v1.6.ht"
 )
 """
 Table with CADD (v1.6) raw and phredd scores.

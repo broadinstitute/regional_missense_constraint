@@ -5,7 +5,7 @@ import hail as hl
 
 from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.slack import slack_notifications
-from rmc.resources.grch37.exac import (
+from rmc.resources.exac import (
     coverage,
     exac,
     filtered_exac,

@@ -8,14 +8,14 @@ from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH
-from rmc.resources.grch37.gnomad import (
+from rmc.resources.gnomad import (
     constraint_ht,
     filtered_exomes,
     processed_exomes,
     prop_obs_coverage,
 )
-from rmc.resources.grch37.reference_data import filtered_context
-from rmc.resources.grch37.rmc import (
+from rmc.resources.reference_data import filtered_context
+from rmc.resources.rmc import (
     constraint_prep,
     multiple_breaks,
     not_one_break,
@@ -63,7 +63,7 @@ def main(args):
             logger.warning("Code currently only processes b37 data!")
 
             logger.info("Preprocessing reference fasta (context) HT...")
-            context_ht = process_context_ht("GRCh37", args.trimers)
+            context_ht = process_context_ht(args.trimers)
 
             logger.info(
                 "Filtering context HT to all covered sites not found or rare in gnomAD exomes"

@@ -54,7 +54,7 @@ def main(args):
         if args.command == "annotate-hts":
             hl.init(log="/annotate_hts.log")
             if args.clinvar:
-                from rmc.resources.grch37.reference_data import clinvar_path_mis
+                from rmc.resources.reference_data import clinvar_path_mis
 
                 annotate_mpc(
                     ht=clinvar_path_mis.ht(),
@@ -63,7 +63,7 @@ def main(args):
                 )
 
             if args.dd:
-                from rmc.resources.grch37.reference_data import de_novo
+                from rmc.resources.reference_data import de_novo
 
                 dd_ht = de_novo.ht()
                 case_ht = dd_ht.filter(dd_ht.case_control != "control")

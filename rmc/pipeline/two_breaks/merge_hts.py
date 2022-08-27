@@ -13,7 +13,7 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, SIMUL_BREAK_TEMP_PATH
-from rmc.resources.grch37.rmc import (
+from rmc.resources.rmc import (
     no_breaks,
     not_one_break,
     simul_break,

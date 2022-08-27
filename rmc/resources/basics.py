@@ -1,6 +1,8 @@
 """Script containing generic resources and Google cloud bucket paths."""
 from gnomad.resources.resource_utils import TableResource
 
+from rmc.resources.resource_utils import CURRENT_BUILD
+
 
 ######################################################################
 ## Google bucket resources
@@ -17,6 +19,11 @@ MPC stands for Missense badness, Polyphen-2, and Constraint.
 RESOURCE_PREFIX = f"{RMC_PREFIX}/resources"
 """
 Path to any non-gnomAD or VEP context resource files required for RMC or MPC.
+"""
+
+BUILD_RESOURCE_PREFIX = f"{RESOURCE_PREFIX}/{CURRENT_BUILD}"
+"""
+Path to bucket for genome build-specific resource files required for RMC or MPC.
 """
 
 LOGGING_PATH = f"{RMC_PREFIX}/logs"

@@ -10,7 +10,7 @@ from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.resources.resource_utils import DataException
 
 from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH
-from rmc.resources.grch37.rmc import (
+from rmc.resources.rmc import (
     not_one_break_grouped,
     simul_break_over_threshold_path,
     simul_break_under_threshold_path,
