@@ -19,7 +19,7 @@ from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
 FREEZES = [1, 2]
 """
-Dictionary of RMC/MPC data versions (key) and gnomAD version used to compute results (value).
+RMC/MPC data versions computed with current gnomAD version.
 """
 
 CURRENT_FREEZE = 2
