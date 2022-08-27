@@ -9,13 +9,7 @@ from gnomad.utils.file_utils import file_exists
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
-from rmc.resources.basics import (
-    multiple_breaks,
-    oe_bin_counts_tsv,
-    rmc_browser,
-    rmc_results,
-    temp_path,
-)
+from rmc.resources.basics import TEMP_PATH
 from rmc.resources.grch37.gnomad import filtered_exomes
 from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo, gene_model
 from rmc.utils.generic import (
@@ -24,6 +18,12 @@ from rmc.utils.generic import (
     keep_criteria,
     import_clinvar_hi_variants,
     import_de_novo_variants,
+)
+from rmc.resources.grch37.rmc import (
+    multiple_breaks,
+    oe_bin_counts_tsv,
+    rmc_browser,
+    rmc_results,
 )
 
 
@@ -688,7 +688,7 @@ def search_for_break(
     # 10.8 (p ~ 10e-3) and is 13.8 (p ~ 10e-4) for two breaks. These currently cannot
     # be adjusted."
     group_ht = ht.group_by(search_field).aggregate(max_chisq=hl.agg.max(ht.chisq))
-    group_ht = group_ht.checkpoint(f"{temp_path}/max_chisq.ht", overwrite=True)
+    group_ht = group_ht.checkpoint(f"{TEMP_PATH}/max_chisq.ht", overwrite=True)
     ht = ht.annotate(max_chisq=group_ht[ht.transcript].max_chisq)
     return ht.annotate(
         is_break=((ht.chisq == ht.max_chisq) & (ht.chisq >= chisq_threshold))
@@ -1132,7 +1132,7 @@ def get_unique_transcripts_per_break(
 
     # Checkpoint to force hail to finish this group by computation
     group_ht = group_ht.checkpoint(
-        f"{temp_path}/breaks_per_transcript.ht", overwrite=True
+        f"{TEMP_PATH}/breaks_per_transcript.ht", overwrite=True
     )
 
     for i in range(1, max_n_breaks + 1):
@@ -1250,12 +1250,12 @@ def finalize_multiple_breaks(
 
     logger.info("Selecting only relevant annotations from HT and checkpointing...")
     ht = ht.select(*annotations)
-    ht = ht.checkpoint(f"{temp_path}/multiple_breaks.ht", overwrite=True)
+    ht = ht.checkpoint(f"{TEMP_PATH}/multiple_breaks.ht", overwrite=True)
 
     logger.info("Getting all breakpoint positions...")
     break_ht = get_all_breakpoint_pos(ht)
     break_ht = break_ht.checkpoint(
-        f"{temp_path}/multiple_breaks_breakpoints.ht", overwrite=True
+        f"{TEMP_PATH}/multiple_breaks_breakpoints.ht", overwrite=True
     )
     ht = ht.annotate(break_pos=break_ht[ht.transcript].break_pos)
 
@@ -1299,7 +1299,7 @@ def finalize_simul_breaks(ht: hl.Table) -> hl.Table:
     """
     logger.info("Get transcript section annotations (obs, exp, OE, chisq)...")
     ht = annotate_transcript_sections(ht, max_n_breaks=2)
-    ht = ht.checkpoint(f"{temp_path}/simul_break_sections.ht", overwrite=True)
+    ht = ht.checkpoint(f"{TEMP_PATH}/simul_break_sections.ht", overwrite=True)
     return ht
 
 
@@ -1330,7 +1330,7 @@ def finalize_all_breaks_results(
     logger.info("Finalizing simultaneous breaks results...")
     simul_breaks_ht = finalize_simul_breaks(simul_breaks_ht)
     ht = breaks_ht.union(simul_breaks_ht, unify=False)
-    ht = ht.checkpoint(f"{temp_path}/breaks.ht", overwrite=True)
+    ht = ht.checkpoint(f"{TEMP_PATH}/breaks.ht", overwrite=True)
 
     logger.info("Reformatting for browser release...")
     ht = reformat_annotations_for_release(ht)
@@ -1416,7 +1416,7 @@ def get_oe_bins(ht: hl.Table, build: str) -> None:
         .default("0.8-1.0")
     )
     # Checkpoint HT here because it becomes a couple tables below
-    ht = ht.checkpoint(f"{temp_path}/breaks_oe_bin.ht", overwrite=True)
+    ht = ht.checkpoint(f"{TEMP_PATH}/breaks_oe_bin.ht", overwrite=True)
 
     # Group HT by section to get number of base pairs per section
     # Need to group by to avoid overcounting
@@ -1429,7 +1429,7 @@ def get_oe_bins(ht: hl.Table, build: str) -> None:
         oe=hl.agg.take(ht.section_oe, 1)[0],
         oe_bin=hl.agg.take(ht.oe_bin, 1)[0],
     )
-    group_ht = group_ht.checkpoint(f"{temp_path}/sections.ht", overwrite=True)
+    group_ht = group_ht.checkpoint(f"{TEMP_PATH}/sections.ht", overwrite=True)
     group_ht = group_ht.annotate(bp=group_ht.end - group_ht.start)
     group_ht = group_ht.group_by("oe_bin").aggregate(bp_sum=hl.agg.sum(group_ht.bp))
 
@@ -1532,7 +1532,7 @@ def group_rmc_ht_by_section(overwrite: bool = False) -> hl.Table:
         section_oe=hl.agg.take(rmc_ht.section_oe, 1)[0],
     )
     rmc_ht = rmc_ht.checkpoint(
-        f"{temp_path}/rmc_group_by_section.ht",
+        f"{TEMP_PATH}/rmc_group_by_section.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )
@@ -1658,5 +1658,5 @@ def fix_xg(
         total_mu_str="total_mu",
         total_exp_str="total_exp",
     )
-    xg = xg.checkpoint(f"{temp_path}/XG.ht", overwrite=True)
+    xg = xg.checkpoint(f"{TEMP_PATH}/XG.ht", overwrite=True)
     return xg

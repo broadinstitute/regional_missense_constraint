@@ -12,12 +12,11 @@ import hail as hl
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import (
-    LOGGING_PATH,
+from rmc.resources.basics import LOGGING_PATH, SIMUL_BREAK_TEMP_PATH
+from rmc.resources.grch37.rmc import (
     no_breaks,
     not_one_break,
     simul_break,
-    simul_break_temp,
 )
 from rmc.slack_creds import slack_token
 
@@ -47,7 +46,7 @@ def main(args):
 
         logger.info("Collecting all HT paths...")
         intermediate_hts = []
-        ht_bucket = f"{simul_break_temp}/hts/"
+        ht_bucket = f"{SIMUL_BREAK_TEMP_PATH}/hts/"
         temp_ht_paths = (
             subprocess.check_output(["gsutil", "ls", ht_bucket])
             .decode("utf8")

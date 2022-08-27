@@ -1,66 +1,87 @@
-import hail as hl
-
-from gnomad.resources.resource_utils import TableResource, VersionedTableResource
-
-from rmc.resources.resource_utils import (
-    CURRENT_VERSION,
-    FLAGSHIP_LOF,
-    GNOMAD_VERSIONS,
-    RESOURCE_PREFIX,
-    RMC_PREFIX,
-)
+"""Script containing generic resources and Google cloud bucket paths."""
+from gnomad.resources.resource_utils import TableResource
 
 
-LOGGING_PATH = "gs://regional_missense_constraint/logs"
+######################################################################
+## Google bucket resources
+######################################################################
+RMC_PREFIX = "gs://regional_missense_constraint"
 """
-Path to bucket that stores hail logs.
+Path to bucket attached to regional missense constraint (RMC) project.
+
+Contains all RMC and MPC score related data.
+
+MPC stands for Missense badness, Polyphen-2, and Constraint.
 """
 
-temp_path = "gs://regional_missense_constraint/temp"
+RESOURCE_PREFIX = f"{RMC_PREFIX}/resources"
 """
-Path to bucket to store temporary files.
-Used when checkpointing intermediate files.
+Path to any non-gnomAD or VEP context resource files required for RMC or MPC.
+"""
+
+LOGGING_PATH = f"{RMC_PREFIX}/logs"
+"""
+Path to bucket for hail logs.
+"""
+
+TEMP_PATH = f"{RMC_PREFIX}/temp"
+"""
+Path to bucket for temporary files.
+
+Used when checkpointing intermediate files that can't be deleted immediately.
+"""
+
+MODEL_PREFIX = f"{RMC_PREFIX}/model"
+"""
+Path to bucket containing resources related to building the mutational models.
+
+Data in this bucket is used to set up regional missense constraint (RMC) calculations.
+"""
+
+SIMUL_BREAK_TEMP_PATH = f"{TEMP_PATH}/simul_breaks"
+"""
+Path to bucket to store temporary results for simultaneous results.
+"""
+
+CONSTRAINT_PREFIX = f"{RMC_PREFIX}/constraint"
+"""
+Path to bucket containing RMC output Tables.
+"""
+
+MPC_PREFIX = f"{RMC_PREFIX}/MPC"
+"""
+Path to bucket containing resources related to building MPC score.
 """
 
 
-## Kaitlin's resources
-# Original regional missense constraint resource files
-MUTATION_RATE_TABLE_PATH = f"{RESOURCE_PREFIX}/GRCh37/exac/mutation_rate_table.tsv"
-DIVERGENCE_SCORES_TSV_PATH = (
-    f"{RESOURCE_PREFIX}/GRCh37/exac/divsites_gencodev19_all_transcripts.txt"
-)
-divergence_scores = TableResource(
-    path=f"{RESOURCE_PREFIX}/GRCh37/exac/ht/div_scores.ht",
-    import_func=hl.import_table,
-    import_args={
-        "path": DIVERGENCE_SCORES_TSV_PATH,
-        "key": "transcript",
-        "min_partitions": 50,
-        "impute": True,
-    },
-)
-"""
-Table with divergence score between humans and macaques for each canonical transcript in Gencode v19.
-"""
-
+######################################################################
 ## Amino acid resources
-CODON_TABLE_PATH = f"{RESOURCE_PREFIX}/amino_acids/codons_lookup.tsv"
+######################################################################
+AMINO_ACIDS_PREFIX = "{RESOURCE_PREFIX}/amino_acids"
+"""
+Path to any amino-acid related resource files used to build MPC.
+"""
+
+CODON_TABLE_PATH = f"{AMINO_ACIDS_PREFIX}/codons_lookup.tsv"
 """
 TSV file containing two columns: codon and three letter amino acid code.
 """
 
-ACID_NAMES_PATH = f"{RESOURCE_PREFIX}/amino_acids/acid_names.tsv"
+ACID_NAMES_PATH = f"{AMINO_ACIDS_PREFIX}/acid_names.tsv"
 """
-TSV file containing three columns: amino acid name, amino acid 3 letter code, and amino acid 1 letter code.
+TSV file containing amino acid names.
+
+File has three columns: amino acid name, amino acid 3 letter code,
+and amino acid 1 letter code.
 """
 
-blosum_txt_path = f"{RESOURCE_PREFIX}/amino_acids/blosum62.txt"
+blosum_txt_path = f"{AMINO_ACIDS_PREFIX}/blosum62.txt"
 """
 Text file containing matrix of BLOSUM scores for each amino acid pair.
 """
 
 blosum = TableResource(
-    path=f"{RESOURCE_PREFIX}/amino_acids/ht/blosum.ht",
+    path=f"{AMINO_ACIDS_PREFIX}/ht/blosum.ht",
 )
 """
 Table containing BLOSUM scores for each amino acid pair.
@@ -68,13 +89,13 @@ Table containing BLOSUM scores for each amino acid pair.
 Hail Table representation of scores in `blosum_txt_path`.
 """
 
-grantham_txt_path = f"{RESOURCE_PREFIX}/amino_acids/grantham.matrix.txt"
+grantham_txt_path = f"{AMINO_ACIDS_PREFIX}/grantham.matrix.txt"
 """
 Text file containing matrix of Grantham scores for each amino acid pair.
 """
 
 grantham = TableResource(
-    path=f"{RESOURCE_PREFIX}/amino_acids/ht/grantham.ht",
+    path=f"{AMINO_ACIDS_PREFIX}/ht/grantham.ht",
 )
 """
 Table containing Grantham scores for each amino acid pair.
@@ -82,324 +103,12 @@ Table containing Grantham scores for each amino acid pair.
 Hail Table representation of scores in `grantham_txt_path`.
 """
 
-## gnomAD resources
-mutation_rate = TableResource(
-    path=f"{FLAGSHIP_LOF}/model/mutation_rate_methylation_bins.ht",
-)
-"""
-Table with mutation rate recalculated for gnomAD constraint.
-
-This was calculated with `calculate_mu_by_downsampling` in
-https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constraint_basics.py.
-"""
-
-MODEL_PREFIX = f"{RMC_PREFIX}/model"
-"""
-Path to bucket containing resources related to building the mutational models and setting up for regional missense constraint calculations.
-"""
-
-
-MPC_PREFIX = f"{RMC_PREFIX}/MPC"
-"""
-Path to bucket containing resources related to building MPC (missense badness, Polyphen-2, and Constraint) score.
-"""
-
-constraint_prep = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(
-            path=f"{MODEL_PREFIX}/{version}/context_obs_exp_annot.ht"
-        )
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Context Table ready for RMC calculations.
-
-HT is annotated with observed and expected variant counts per base.
-"""
-
+######################################################################
+## Gene/transcript resources
+######################################################################
 hi_genes = f"{RESOURCE_PREFIX}/HI_genes.rCNV.txt"
 """
 Path to haploinsufficient genes that cause severe disease.
 
 List is from Ryan Collins.
-"""
-
-## Constraint related resources
-CONSTRAINT_PREFIX = f"{RMC_PREFIX}/constraint"
-one_break = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/one_break.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing transcripts with at least one break.
-
-Found when searching constraint_prep HT for transcripts for a single (first) break.
-"""
-
-not_one_break = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/not_one_break.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing transcripts without one significant break.
-
-Transcripts in this table will be processed to check for two simultaneous breaks.
-"""
-
-not_one_break_grouped = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        CURRENT_VERSION: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/not_one_break_grouped.ht"
-        ),
-    },
-)
-"""
-Not one break Table grouped by transcript with observed missense, expected missense, and positions collected into lists.
-
-Input to searching for simultaneous breaks.
-"""
-
-multiple_breaks = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/multiple_breaks.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing transcripts with multiple breaks.
-"""
-
-simul_break_under_threshold = (
-    f"{MODEL_PREFIX}/{CURRENT_VERSION}/transcripts_under_5k.he"
-)
-"""
-SetExpression containing transcripts with fewer possible missense positions than cutoff specified in `run_simultaneous_breaks.py`.
-"""
-
-simul_break_over_threshold = f"{MODEL_PREFIX}/{CURRENT_VERSION}/transcripts_over_5k.he"
-"""
-SetExpression containing transcripts with greater than or equal to the cutoff for possible missense positions.
-"""
-
-simul_break_temp = f"{temp_path}/simul_breaks"
-"""
-Bucket to store temporary results for simultaneous results.
-"""
-
-simul_break = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/simul_break.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing transcripts with two simultaneous breaks.
-"""
-
-no_breaks = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/no_breaks.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing transcripts with no significant breaks.
-"""
-
-rmc_results = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/all_rmc.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing all transcripts with evidence of regional missense constraint.
-
-Contains transcripts with one or additional breaks plus simultaneous breaks results.
-"""
-
-context_with_oe = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{CONSTRAINT_PREFIX}/{version}/context_with_oe.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing missense variants in canonical transcripts annotated with missense OE.
-
-Each row is annotated with RMC transcript subsection missense OE if it exists, otherwise
-the transcript level missense OE.
-"""
-
-context_with_oe_dedup = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{version}/context_with_oe_dedup.ht"
-        )
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Deduplicated version of `context_with_oe`.
-
-Some locus/alleles combinations are present more than once in `context_with_oe` if they have
-a most severe consequence of 'missense_variant' in more than one canonical transcript.
-
-This Table contains only one row per each unique locus/alleles combination.
-"""
-
-rmc_browser = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/rmc_browser.ht"
-        )
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing all transcripts with evidence of regional missense constraint.
-
-Contains same information as `rmc_results` but has different formatting for gnomAD browser.
-"""
-
-amino_acids_oe = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{MPC_PREFIX}/{version}/amino_acid_oe.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing all possible amino acid substitutions and their missense OE ratio.
-
-Input to missense badness calculations.
-"""
-
-misbad = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{MPC_PREFIX}/{version}/missense_badness.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing all possible amino acid substitutions and their missense badness scores.
-"""
-
-joint_clinvar_gnomad = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{MPC_PREFIX}/{version}/joint_clinvar_gnomad.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing "population" and "pathogenic" variants.
-
-Table contains common (AF > 0.01) gnomAD variants ("population") and
-ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes
-that cause severe disease ("pathogenic") with defined CADD, BLOSUM, Grantham, missense observed/expected ratios,
-missense badness, and PolyPhen-2 scores.
-
-Input to MPC (missense badness, polyphen-2, and constraint) calculations.
-"""
-
-mpc_model_pkl_path = f"{MPC_PREFIX}/{CURRENT_VERSION}/mpc_model.pkl"
-"""
-Path to model (stored as pickle) that contains relationship of MPC variables.
-
-Created using logistic regression.
-"""
-
-gnomad_fitted_score = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{MPC_PREFIX}/{version}/gnomad_fitted_scores.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table of gnomAD variants and their fitted scores (from MPC model regression).
-
-Input to MPC (missense badness, polyphen-2, and constraint) calculations on other datasets.
-"""
-
-gnomad_fitted_score_group = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(
-            path=f"{MPC_PREFIX}/{version}/gnomad_fitted_scores_group.ht"
-        )
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table of fitted scores for common (AF > 0.01) variants in gnomAD, grouped by score.
-
-Annotated with the total number of variants with and less than each score.
-"""
-
-mpc_release = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{MPC_PREFIX}/{version}/mpc.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing missense variants in canonical transcripts annotated with MPC.
-"""
-
-mpc_release_dedup = VersionedTableResource(
-    default_version=CURRENT_VERSION,
-    versions={
-        version: TableResource(path=f"{MPC_PREFIX}/{version}/mpc_dedup.ht")
-        for version in GNOMAD_VERSIONS
-    },
-)
-"""
-Table containing missense variants in canonical transcripts annotated with MPC.
-
-This Table contains only one row per each unique locus/alleles combination.
-"""
-
-oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_VERSION}/oe_bin.tsv"
-"""
-TSV with RMC regions grouped by obs/exp (OE) bin.
-
-Annotated with proportion coding base pairs, proportion de novo missense (controls),
-proportion de novo missense (case), and proportion ClinVar pathogenic/likely pathogenic
-severe haploinsufficient missense.
-"""
-
-
-TOTAL_EXOME_BASES = {"GRCh37": 54426835}
-"""
-Dictionary containing total number of bases in the exome.
-
-Calculated using `get_exome_bases`.
-"""
-
-
-TOTAL_GNOMAD_MISSENSE = {"2.1.1": 5257859}
-"""
-Dictionary containing total number of missense variants seen in gnomAD.
-
-Calculated by filtering gnomAD release HT to missense variants only and running `ht.count()`.
 """

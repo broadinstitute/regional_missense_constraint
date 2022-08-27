@@ -16,20 +16,22 @@ from gnomad.utils.file_utils import file_exists
 from rmc.resources.basics import (
     blosum,
     blosum_txt_path,
+    grantham,
+    grantham_txt_path,
+    TEMP_PATH,
+)
+from rmc.resources.grch37.reference_data import cadd, clinvar_path_mis
+from rmc.resources.grch37.rmc import (
     context_with_oe,
     context_with_oe_dedup,
     gnomad_fitted_score,
     gnomad_fitted_score_group,
-    grantham,
-    grantham_txt_path,
     joint_clinvar_gnomad,
     misbad,
     mpc_model_pkl_path,
     mpc_release,
     mpc_release_dedup,
-    temp_path,
 )
-from rmc.resources.grch37.reference_data import cadd, clinvar_path_mis
 from rmc.resources.resource_utils import MISSENSE
 from rmc.utils.generic import get_aa_map, get_constraint_transcripts, process_vep
 from rmc.utils.missense_badness import annotate_and_filter_codons, get_oe_annotation
@@ -305,7 +307,7 @@ def prepare_pop_path_ht(
 
     logger.info("Joining ClinVar and gnomAD HTs...")
     ht = clinvar_ht.select("pop_v_path").union(gnomad_ht.select("pop_v_path"))
-    ht = ht.checkpoint(f"{temp_path}/joint_clinvar_gnomad.ht", overwrite=True)
+    ht = ht.checkpoint(f"{TEMP_PATH}/joint_clinvar_gnomad.ht", overwrite=True)
 
     logger.info("Adding CADD...")
     # TODO: Make sure future CADD HTs have already been split
@@ -326,7 +328,7 @@ def prepare_pop_path_ht(
     context_ht = context_with_oe_dedup.ht()
     ht = ht.annotate(transcript=context_ht[ht.key].transcript)
     ht = ht.checkpoint(
-        f"{temp_path}/joint_clinvar_gnomad_transcript.ht", overwrite=True
+        f"{TEMP_PATH}/joint_clinvar_gnomad_transcript.ht", overwrite=True
     )
 
     logger.info(
@@ -337,7 +339,7 @@ def prepare_pop_path_ht(
     context_ht = context_ht.key_by("locus", "alleles", "transcript")
     ht = ht.annotate(**context_ht[ht.locus, ht.alleles, ht.transcript])
     ht = ht.checkpoint(
-        f"{temp_path}/joint_clinvar_gnomad_transcript_aa.ht", overwrite=True
+        f"{TEMP_PATH}/joint_clinvar_gnomad_transcript_aa.ht", overwrite=True
     )
 
     logger.info("Getting missense badness annotation...")
@@ -355,7 +357,7 @@ def prepare_pop_path_ht(
         blosum=blosum_ht[ht.ref, ht.alt].score,
         grantham=grantham_ht[ht.ref, ht.alt].score,
     )
-    ht = ht.checkpoint(f"{temp_path}/joint_clinvar_gnomad_full.ht", overwrite=True)
+    ht = ht.checkpoint(f"{TEMP_PATH}/joint_clinvar_gnomad_full.ht", overwrite=True)
 
     logger.info("Filtering to rows with defined annotations and writing out...")
     ht = ht.filter(
@@ -584,7 +586,7 @@ def calculate_fitted_scores(
         filter_expr &= hl.is_defined(ht[field])
     ht = ht.filter(filter_expr)
     # Checkpoint here to force missense badness join and filter to complete
-    ht = ht.checkpoint(f"{temp_path}/fitted_score_temp_join.ht", overwrite=True)
+    ht = ht.checkpoint(f"{TEMP_PATH}/fitted_score_temp_join.ht", overwrite=True)
 
     logger.info("Annotating fitted scores...")
     variable_dict = {
@@ -692,7 +694,7 @@ def create_mpc_release_ht(
     # Annotate HT with sorted array of gnomAD fitted scores
     ht = ht.annotate_globals(gnomad_scores=scores)
     # Checkpoint here to force the gnomAD join to complete
-    ht = ht.checkpoint(f"{temp_path}/mpc_temp_gnomad.ht", overwrite=True)
+    ht = ht.checkpoint(f"{TEMP_PATH}/mpc_temp_gnomad.ht", overwrite=True)
 
     # Search all gnomAD scores to find first score that is
     # greater than or equal to score to be annotated
@@ -714,7 +716,7 @@ def create_mpc_release_ht(
         )
     )
     # Checkpoint here to force the binary search to compute
-    ht = ht.checkpoint(f"{temp_path}/mpc_temp_binary.ht", overwrite=True)
+    ht = ht.checkpoint(f"{TEMP_PATH}/mpc_temp_binary.ht", overwrite=True)
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
     ht = ht.checkpoint(mpc_release.path, overwrite=overwrite)
 

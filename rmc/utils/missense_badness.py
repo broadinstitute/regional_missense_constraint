@@ -6,13 +6,9 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.vep import CSQ_NON_CODING
 
-from rmc.resources.basics import (
-    amino_acids_oe,
-    constraint_prep,
-    misbad,
-    temp_path,
-)
+from rmc.resources.basics import TEMP_PATH
 from rmc.resources.grch37.gnomad import constraint_ht
+from rmc.resources.grch37.rmc import amino_acids_oe, constraint_prep, misbad
 from rmc.utils.constraint import add_obs_annotation, group_rmc_ht_by_section
 from rmc.utils.generic import (
     filter_context_using_gnomad,
@@ -165,7 +161,7 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     context_ht = annotate_and_filter_codons(context_ht)
 
     logger.info("Checkpointing HT before joining with gnomAD data...")
-    context_ht = context_ht.checkpoint(f"{temp_path}/codons.ht", overwrite=True)
+    context_ht = context_ht.checkpoint(f"{TEMP_PATH}/codons.ht", overwrite=True)
 
     logger.info("Filtering sites using gnomAD %s...", gnomad_data_type)
     context_ht = filter_context_using_gnomad(
@@ -177,7 +173,7 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     context_ht = add_obs_annotation(context_ht)
 
     logger.info("Checkpointing HT after joining with gnomAD data...")
-    context_ht = context_ht.checkpoint(f"{temp_path}/codons_filt.ht", overwrite=True)
+    context_ht = context_ht.checkpoint(f"{TEMP_PATH}/codons_filt.ht", overwrite=True)
 
     logger.info(
         "Getting observed to expected ratio, rekeying Table, and writing to output path..."
@@ -300,11 +296,11 @@ def calculate_misbad(use_exac_oe_cutoffs: bool, oe_threshold: float = 0.6) -> No
     )
     logger.info("Creating high missense OE (OE > %s) HT...", oe_threshold)
     high_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=True)
-    high_ht = high_ht.checkpoint(f"{temp_path}/amino_acids_high_oe.ht", overwrite=True)
+    high_ht = high_ht.checkpoint(f"{TEMP_PATH}/amino_acids_high_oe.ht", overwrite=True)
 
     logger.info("Creating low missense OE (OE <= %s) HT...", oe_threshold)
     low_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=False)
-    low_ht = low_ht.checkpoint(f"{temp_path}/amino_acids_low_oe.ht", overwrite=True)
+    low_ht = low_ht.checkpoint(f"{TEMP_PATH}/amino_acids_low_oe.ht", overwrite=True)
 
     logger.info("Re-joining split HTs to calculate missense badness...")
     high_ht = high_ht.transmute(
