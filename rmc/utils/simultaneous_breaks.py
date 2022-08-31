@@ -197,19 +197,13 @@ def calculate_window_chisq(
         simultaneous breaks.
     :return: Chi square significance value.
     """
-    return (
+    return
+    (
         hl.case()
         .when(
-            # Return -1 when the internal window spans the entire transcript/transcript section
+            # Return missing when the internal window spans the entire transcript/transcript section
             (i == 0) & (j == max_idx),
-            -1,
-        )
-        .when(
-            # Return -1 when any of the three windows defined by i and j have fewer than `min_num_exp_mis` expected values
-            ((cum_exp[i - 1]) < min_num_exp_mis)
-            | ((cum_exp[j] - cum_exp[i - 1]) < min_num_exp_mis)
-            | ((cum_exp[-1] - cum_exp[j]) < min_num_exp_mis),
-            -1,
+            hl.missing(hl.tfloat64),
         )
         .when(
             # If i index is the smallest position (anchored at one end of transcript/transcript section),
@@ -217,11 +211,14 @@ def calculate_window_chisq(
             # This is the same chi square calculation as the single break search
             # (TODO: think about whether to keep this calculation or remove and just return -1 here)
             i == 0,
-            (
+            hl.or_missing(
+                # Make sure both sections have >= min_num_exp_mis
+                (cum_exp[j] >= min_num_exp_mis)
+                & ((cum_exp[-1] - cum_exp[j]) >= min_num_exp_mis),
                 2
                 * (
                     # Create alt distribution
-                    hl.log10(
+                    (
                         # Create alt distribution for section [start_pos, pos[j]]
                         # The missense values for this section are just the cumulative values at index j
                         get_dpois_expr(
@@ -240,7 +237,7 @@ def calculate_window_chisq(
                         # Create alt distribution for section (pos[j], end_pos]
                         # The missense values for this section are the cumulative values at the last index
                         # minus the values at index j
-                        * get_dpois_expr(
+                        + get_dpois_expr(
                             cond_expr=True,
                             section_oe_expr=get_obs_exp_expr(
                                 True,
@@ -251,8 +248,8 @@ def calculate_window_chisq(
                             exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                         )
                     )
-                    # Create null distribution
-                    - hl.log10(
+                    - (
+                        # Create null distribution
                         get_dpois_expr(
                             cond_expr=True,
                             section_oe_expr=total_oe,
@@ -260,14 +257,14 @@ def calculate_window_chisq(
                             # Make sure expected value is NOT 0
                             exp_expr=hl.max(cum_exp[j], 1e-09),
                         )
-                        * get_dpois_expr(
+                        + get_dpois_expr(
                             cond_expr=True,
                             section_oe_expr=total_oe,
                             obs_expr=cum_obs[-1] - cum_obs[j],
                             exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                         )
                     )
-                )
+                ),
             ),
         )
         .when(
@@ -276,127 +273,136 @@ def calculate_window_chisq(
             # This is the same chi square calculation as the single break search
             # (TODO: think about whether to keep this calculation or remove and just return -1 here)
             j == max_idx,
-            (
-                2
-                * (
-                    # Create alt distribution
-                    hl.log10(
-                        # Create alt distribution for section [start_pos, pos[i])
-                        # The missense values for this section are the cumulative values at
-                        # one index smaller than index i
-                        get_dpois_expr(
-                            cond_expr=True,
-                            section_oe_expr=get_obs_exp_expr(
-                                True,
-                                cum_obs[i - 1],
-                                hl.max(cum_exp[i - 1], 1e-09),
-                            ),
-                            obs_expr=cum_obs[i - 1],
-                            exp_expr=hl.max(cum_exp[i - 1], 1e-09),
+            hl.or_missing(
+                (cum_exp[i - 1] >= min_num_exp_mis)
+                & ((cum_exp[-1] - cum_exp[i - 1]) >= min_num_exp_mis),
+                (
+                    2
+                    * (
+                        # Create alt distribution
+                        (
+                            # Create alt distribution for section [start_pos, pos[i])
+                            # The missense values for this section are the cumulative values at
+                            # one index smaller than index i
+                            get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=get_obs_exp_expr(
+                                    True,
+                                    cum_obs[i - 1],
+                                    hl.max(cum_exp[i - 1], 1e-09),
+                                ),
+                                obs_expr=cum_obs[i - 1],
+                                exp_expr=hl.max(cum_exp[i - 1], 1e-09),
+                            )
+                            # Create alt distribution for section [pos[i], end_pos]
+                            # The missense values for this section are the cumulative values at
+                            # the last index minus the cumulative values at index i - 1
+                            + get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=get_obs_exp_expr(
+                                    True,
+                                    (cum_obs[-1] - cum_obs[i - 1]),
+                                    hl.max(cum_exp[-1] - cum_exp[i - 1], 1e-09),
+                                ),
+                                obs_expr=cum_obs[-1] - cum_obs[i - 1],
+                                exp_expr=hl.max(cum_exp[-1] - cum_exp[i - 1], 1e-09),
+                            )
                         )
-                        # Create alt distribution for section [pos[i], end_pos]
-                        # The missense values for this section are the cumulative values at
-                        # the last index minus the cumulative values at index i - 1
-                        * get_dpois_expr(
-                            cond_expr=True,
-                            section_oe_expr=get_obs_exp_expr(
-                                True,
-                                (cum_obs[-1] - cum_obs[i - 1]),
-                                hl.max(cum_exp[-1] - cum_exp[i - 1], 1e-09),
-                            ),
-                            obs_expr=cum_obs[-1] - cum_obs[i - 1],
-                            exp_expr=hl.max(cum_exp[-1] - cum_exp[i - 1], 1e-09),
+                        # Create null distribution
+                        - (
+                            get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=total_oe,
+                                obs_expr=cum_obs[i - 1],
+                                exp_expr=hl.max(cum_exp[i - 1], 1e-09),
+                            )
+                            + get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=total_oe,
+                                obs_expr=cum_obs[-1] - cum_obs[i - 1],
+                                exp_expr=hl.max(cum_exp[-1] - cum_exp[i - 1], 1e-09),
+                            )
                         )
                     )
-                    # Create null distribution
-                    - hl.log10(
-                        get_dpois_expr(
-                            cond_expr=True,
-                            section_oe_expr=total_oe,
-                            obs_expr=cum_obs[i - 1],
-                            exp_expr=hl.max(cum_exp[i - 1], 1e-09),
-                        )
-                        * get_dpois_expr(
-                            cond_expr=True,
-                            section_oe_expr=total_oe,
-                            obs_expr=cum_obs[-1] - cum_obs[i - 1],
-                            exp_expr=hl.max(cum_exp[-1] - cum_exp[i - 1], 1e-09),
-                        )
-                    )
-                )
+                ),
             ),
         )
         .default(
             # Neither index is the smallest or largest position,
             # so there are three transcript subsections:
             # [start_pos, pos[i]), [pos[i], pos[j]], (pos[j], end_pos]
-            (
-                2
-                * (
-                    # Create alt distribution
-                    hl.log10(
-                        # Create alt distribution for section [start_pos, pos[i])
-                        # The missense values for this section are the cumulative values at
-                        # one index smaller than index i
-                        get_dpois_expr(
-                            cond_expr=True,
-                            section_oe_expr=get_obs_exp_expr(
-                                True,
-                                cum_obs[i - 1],
-                                hl.max(cum_exp[i - 1], 1e-09),
-                            ),
-                            obs_expr=cum_obs[i - 1],
-                            exp_expr=hl.max(cum_exp[i - 1], 1e-09),
+            hl.or_missing(
+                (cum_exp[i - 1] >= min_num_exp_mis)
+                & ((cum_exp[j] - cum_exp[i - 1]) >= min_num_exp_mis)
+                & ((cum_exp[-1] - cum_exp[j]) >= min_num_exp_mis),
+                (
+                    2
+                    * (
+                        # Create alt distribution
+                        (
+                            # Create alt distribution for section [start_pos, pos[i])
+                            # The missense values for this section are the cumulative values at
+                            # one index smaller than index i
+                            get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=get_obs_exp_expr(
+                                    True,
+                                    cum_obs[i - 1],
+                                    hl.max(cum_exp[i - 1], 1e-09),
+                                ),
+                                obs_expr=cum_obs[i - 1],
+                                exp_expr=hl.max(cum_exp[i - 1], 1e-09),
+                            )
+                            # Create alt distribution for section [pos[i], pos[j]]
+                            # The missense values for this section are the cumulative values at index j
+                            # minus the cumulative values at index i -1
+                            + get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=get_obs_exp_expr(
+                                    True,
+                                    (cum_obs[j] - cum_obs[i - 1]),
+                                    hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
+                                ),
+                                obs_expr=cum_obs[j] - cum_obs[i - 1],
+                                exp_expr=hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
+                            )
+                            # Create alt distribution for section (pos[j], end_pos]
+                            # The missense values for this section are the cumulative values at the last index
+                            # minus the cumulative values at index j
+                            + get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=get_obs_exp_expr(
+                                    True,
+                                    (cum_obs[-1] - cum_obs[j]),
+                                    hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
+                                ),
+                                obs_expr=cum_obs[-1] - cum_obs[j],
+                                exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
+                            )
                         )
-                        # Create alt distribution for section [pos[i], pos[j]]
-                        # The missense values for this section are the cumulative values at index j
-                        # minus the cumulative values at index i -1
-                        * get_dpois_expr(
-                            cond_expr=True,
-                            section_oe_expr=get_obs_exp_expr(
-                                True,
-                                (cum_obs[j] - cum_obs[i - 1]),
-                                hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
-                            ),
-                            obs_expr=cum_obs[j] - cum_obs[i - 1],
-                            exp_expr=hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
-                        )
-                        # Create alt distribution for section (pos[j], end_pos]
-                        # The missense values for this section are the cumulative values at the last index
-                        # minus the cumulative values at index j
-                        * get_dpois_expr(
-                            cond_expr=True,
-                            section_oe_expr=get_obs_exp_expr(
-                                True,
-                                (cum_obs[-1] - cum_obs[j]),
-                                hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
-                            ),
-                            obs_expr=cum_obs[-1] - cum_obs[j],
-                            exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
+                        # Create null distribution
+                        - (
+                            get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=total_oe,
+                                obs_expr=cum_obs[i - 1],
+                                exp_expr=hl.max(cum_exp[i - 1], 1e-09),
+                            )
+                            + get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=total_oe,
+                                obs_expr=cum_obs[j] - cum_obs[i - 1],
+                                exp_expr=hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
+                            )
+                            + get_dpois_expr(
+                                cond_expr=True,
+                                section_oe_expr=total_oe,
+                                obs_expr=cum_obs[-1] - cum_obs[j],
+                                exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
+                            )
                         )
                     )
-                    # Create null distribution
-                    - hl.log10(
-                        get_dpois_expr(
-                            cond_expr=True,
-                            section_oe_expr=total_oe,
-                            obs_expr=cum_obs[i - 1],
-                            exp_expr=hl.max(cum_exp[i - 1], 1e-09),
-                        )
-                        * get_dpois_expr(
-                            cond_expr=True,
-                            section_oe_expr=total_oe,
-                            obs_expr=cum_obs[j] - cum_obs[i - 1],
-                            exp_expr=hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
-                        )
-                        * get_dpois_expr(
-                            cond_expr=True,
-                            section_oe_expr=total_oe,
-                            obs_expr=cum_obs[-1] - cum_obs[j],
-                            exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
-                        )
-                    )
-                )
+                ),
             )
         )
     )
