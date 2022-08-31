@@ -1,3 +1,4 @@
+# TODO: sync code with changes in rmc.utils.simultaneous_breaks (once those changes are finalized)
 """
 This script searches for two simultaneous breaks in groups of transcripts using Hail Batch.
 
