@@ -578,13 +578,16 @@ def search_for_break(
     """
     Search for breakpoints in a transcript or within a transcript subsection.
 
-    Expects input context HT to contain the following fields:
+    Table also checkpoints intermediate table with max chi square values per transcript
+    or transcript subsection.
+
+    Expects input HT to contain the following fields:
         - locus
         - alleles
         - transcript or section
-        - coverage (median)
         - mu_snp
-        - scan_counts struct
+        - cumulative_exp
+        - cumulative_obs
         - section_oe
         - forward_oe
         - reverse struct
@@ -593,15 +596,15 @@ def search_for_break(
         - section_exp
 
     Also expects:
-        - multiallelic variants in input HT have been split.
+        - Input HT was created using a VEP context HT.
+        - Multiallelic variants in input HT have been split.
         - Input HT is autosomes/PAR only, X non-PAR only, or Y non-PAR only.
 
-    :param ht: Input context Table.
+    :param ht: Input Table.
     :param chisq_threshold: Chi-square significance threshold.
-        Value should be 6.6 (single break) and 8.2 (two breaks) (p = 0.01).
-        Default is 6.6.
+        Default is 6.6 (single break; p = 0.01).
     :param group_str: Field used to group Table observed and expected values. Default is 'section'.
-    :return: Table annotated with whether position is a breakpoint.
+    :return: Table annotated with whether position is a breakpoint (`is_break`).
     """
     logger.info(
         "Creating section null (no regional variability in missense depletion)\
