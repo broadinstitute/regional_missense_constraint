@@ -513,67 +513,41 @@ def get_dpois_expr(
     All parameter values depend on the direction of calculation (forward/reverse) and
     number of breaks (searching for first break or searching for additional break).
 
-    For forward null/alts, values for obs_expr and and exp_expr should be:
-        - Expression containing cumulative numbers for entire transcript.
-        - Expression containing cumulative numbers for section of transcript
-            between the beginning or end of the transcript and the first breakpoint.
-
-    For reverse null/alts, values for obs_expr and and exp_expr should be:
-        - Reverse counts for entire transcript.
-        - Reverse counts for section of transcript.
-
-    For forward null/alts, value for section_oe_expr should be:
-        - Expression containing observed/expected value for entire transcript and
-            expression containing observed/expected value calculated on cumulative observed and expected
-            variants at each position.
-        - Expression containing observed/expected value for section of transcript.
-
-    For reverse null/alts, value for section_oe_expr should be:
-        - Expression containing observed/expected value for entire transcript and
-            expression containing observed/expected value calculated on reverse observed variants value
-            (total observed - cumulative observed count).
-        - Expression containing observed/expected value for section of transcript and
-            expression containing reverse observed/expected value for section of transcript.
-
-    For forward null/alts, cond_expr should check:
-        - That the length of the obs_expr isn't 0 when searching for the first break.
-        - That the length of the obs_expr is 2 when searching for a second additional break.
-
-    For reverse null/alts, cond_expr should check:
-        - That the reverse observed value for the entire transcript is defined when searching for the first break.
-        - That the reverse observed value for the section between the first breakpoint and the end of the transcript
-             is defined when searching for a second additional break.
-
     :param cond_expr: Conditional expression to check before calculating null and alt values.
     :param section_oe_expr: Expression of section observed/expected value.
     :param obs_expr: Expression containing observed variants count.
     :param exp_expr: Expression containing expected variants count.
     :return: Struct containing forward or reverse null and alt values (either when searching for first or second break).
     """
-    return hl.or_missing(cond_expr, hl.dpois(obs_expr, exp_expr * section_oe_expr))
+    # log_p = True returns the natural logarithm of the probability density
+    # Multiply this value by hl.log(10) to convert to log base 10
+    return hl.or_missing(
+        cond_expr,
+        hl.dpois(obs_expr, exp_expr * section_oe_expr, log_p=True) * hl.log(10),
+    )
 
 
 def get_section_expr(
     dpois_expr: hl.expr.ArrayExpression,
 ) -> hl.expr.Float64Expression:
     """
-    Build null or alt model by multiplying all section null or alt distributions.
+    Build null or alt model by adding all section null or alt distributions.
 
-    For example, when checking for the first break in a transcript, the transcript is broken into two sections:
-    pre-breakpoint and post-breakpoint. Each section's null and alt distributions must be multiplied
-    to later test the significance of the break.
+    .. note::
+        Function assumes `dpois_expr` is a logarithmic (base 10) value.
 
     :param dpois_expr: ArrayExpression that contains all section nulls or alts.
-        Needs to be reduced to single float by multiplying each number in the array.
+        Needs to be reduced to single float by adding each number in the array.
     :return: Overall section distribution.
     """
-    return hl.fold(lambda i, j: i * j, 1, dpois_expr)
+    return hl.fold(lambda i, j: i + j, 1, dpois_expr)
 
 
 def search_for_break(
     ht: hl.Table,
     chisq_threshold: float = 6.6,
     group_str: str = "section",
+    min_num_exp_mis: int = 10,
 ) -> hl.Table:
     """
     Search for breakpoints in a transcript or within a transcript subsection.
@@ -604,18 +578,27 @@ def search_for_break(
     :param chisq_threshold: Chi-square significance threshold.
         Default is 6.6 (single break; p = 0.01).
     :param group_str: Field used to group Table observed and expected values. Default is 'section'.
+    :param min_num_exp_mis: Minimum number of expected missense per transcript section.
+        Sections that have fewer than this number of expected missense variants will not
+        be computed (chi square will be annotated as -1).
+        Default is 10.
     :return: Table annotated with whether position is a breakpoint (`is_break`).
     """
     logger.info(
         "Creating section null (no regional variability in missense depletion)\
         and alt (evidence of domains of missense constraint) expressions..."
     )
-
+    logger.info(
+        "Skipping breakpoints that create at least one section\
+        that has < %i expected missense variants...",
+        min_num_exp_mis,
+    )
     # Split transcript or transcript subsection into two sections
     # Split transcript when searching for first break
     # Split transcript subsection when searching for additional breaks
     ht = ht.annotate(
-        section_nulls=[
+        total_nulls=hl.or_missing(
+            ht.cumulative_exp >= 10 | ht.reverse.exp >= 10,
             # Add forwards section null (going through positions from smaller to larger)
             # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
             get_dpois_expr(
@@ -623,16 +606,19 @@ def search_for_break(
                 section_oe_expr=ht.section_oe,
                 obs_expr=ht.cumulative_obs,
                 exp_expr=ht.cumulative_exp,
-            ),
+            )
             # Add reverse section null (going through positions larger to smaller)
-            get_dpois_expr(
+            + get_dpois_expr(
                 cond_expr=hl.is_defined(ht.reverse.obs),
                 section_oe_expr=ht.section_oe,
                 obs_expr=ht.reverse.obs,
                 exp_expr=ht.reverse.exp,
             ),
-        ],
-        section_alts=[
+        )
+    )
+    ht = ht.annotate(
+        total_alts=hl.or_missing(
+            hl.is_defined(ht.section_nulls),
             # Add forward section alt
             # section_alt = stats.dpois(section_obs, section_exp*section_obs_exp)[0]
             get_dpois_expr(
@@ -640,31 +626,25 @@ def search_for_break(
                 section_oe_expr=ht.forward_oe,
                 obs_expr=ht.cumulative_obs,
                 exp_expr=ht.cumulative_exp,
-            ),
+            )
             # Add reverse section alt
-            get_dpois_expr(
+            + get_dpois_expr(
                 cond_expr=hl.is_defined(ht.reverse.obs),
                 section_oe_expr=ht.reverse_obs_exp,
                 obs_expr=ht.reverse.obs,
                 exp_expr=ht.reverse.exp,
             ),
-        ],
+        )
     )
 
-    logger.info("Multiplying all section nulls and all section alts...")
-    # Kaitlin stores all nulls/alts in section_null and section_alt and then multiplies
-    # e.g., p1 = prod(section_null_ps)
+    logger.info("Adding chisq annotation and getting max chisq per section...")
     ht = ht.annotate(
-        total_null=get_section_expr(ht.section_nulls),
-        total_alt=get_section_expr(ht.section_alts),
+        chisq=hl.or_missing(
+            hl.is_defined(ht.total_alt),
+            2 * (ht.total_alt - ht.total_null),
+        )
     )
-
-    logger.info("Adding chisq value and getting max chisq...")
-    ht = ht.annotate(chisq=(2 * (hl.log10(ht.total_alt) - hl.log10(ht.total_null))))
-
-    # "The default chi-squared value for one break to be considered significant is
-    # 10.8 (p ~ 10e-3) and is 13.8 (p ~ 10e-4) for two breaks. These currently cannot
-    # be adjusted."
+    # hl.agg.max ignores NaNs
     group_ht = ht.group_by(group_str).aggregate(max_chisq=hl.agg.max(ht.chisq))
     group_ht = group_ht.checkpoint(f"{temp_path}/max_chisq.ht", overwrite=True)
     ht = ht.annotate(max_chisq=group_ht[ht[group_str]].max_chisq)
