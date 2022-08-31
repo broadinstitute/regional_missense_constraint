@@ -178,7 +178,7 @@ def calculate_window_chisq(
     cum_obs: hl.expr.ArrayExpression,
     cum_exp: hl.expr.ArrayExpression,
     total_oe: hl.expr.Float64Expression,
-    min_window_exp: hl.expr.Float64Expression,
+    min_num_exp_mis: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
     """
     Calculate chi square significance value for each possible simultaneous breaks window.
@@ -193,7 +193,7 @@ def calculate_window_chisq(
     :param hl.expr.ArrayExpression cum_obs: List containing cumulative observed missense values.
     :param hl.expr.ArrayExpression cum_exp: List containing cumulative expected missense values.
     :param hl.expr.Float64Expression total_oe: Transcript/transcript section overall observed/expected (OE) missense ratio.
-    :param hl.expr.Float64Expression min_window_exp: Minimum expected missense value for all three windows defined by two possible
+    :param hl.expr.Float64Expression min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
     :return: Chi square significance value.
     """
@@ -205,10 +205,10 @@ def calculate_window_chisq(
             -1,
         )
         .when(
-            # Return -1 when any of the three windows defined by i and j have fewer than `min_window_exp` expected values
-            ((cum_exp[i - 1]) < min_window_exp)
-            | ((cum_exp[j] - cum_exp[i - 1]) < min_window_exp)
-            | ((cum_exp[-1] - cum_exp[j]) < min_window_exp),
+            # Return -1 when any of the three windows defined by i and j have fewer than `min_num_exp_mis` expected values
+            ((cum_exp[i - 1]) < min_num_exp_mis)
+            | ((cum_exp[j] - cum_exp[i - 1]) < min_num_exp_mis)
+            | ((cum_exp[-1] - cum_exp[j]) < min_num_exp_mis),
             -1,
         )
         .when(
@@ -405,7 +405,7 @@ def calculate_window_chisq(
 def search_for_two_breaks(
     group_ht: hl.Table,
     chisq_threshold: float = 9.2,
-    min_window_exp: float = 10,
+    min_num_exp_mis: float = 10,
 ) -> hl.Table:
     """
     Search for transcripts/transcript sections with simultaneous breaks.
@@ -419,7 +419,7 @@ def search_for_two_breaks(
         This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
-    :param float min_window_exp: Minimum expected missense value for all three windows defined by two possible
+    :param float min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
     :return: Table with largest simultaneous break window size annotated per transcript/section.
     :rtype: hl.Table
@@ -463,7 +463,7 @@ def search_for_two_breaks(
             group_ht.cum_obs,
             group_ht.cum_exp,
             group_ht.total_oe,
-            min_window_exp,
+            min_num_exp_mis,
         )
 
         # Make sure chi square isn't NaN
@@ -557,7 +557,7 @@ def process_section_group(
     output_tsv_path: str,
     temp_ht_path: Optional[str] = None,
     chisq_threshold: float = 9.2,
-    min_window_exp: float = 10,
+    min_num_exp_mis: float = 10,
     split_list_len: int = 500,
     read_if_exists: bool = False,
 ) -> None:
@@ -577,7 +577,7 @@ def process_section_group(
         This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
-    :param float min_window_exp: Minimum expected missense value for all three windows defined by two possible
+    :param float min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
     :param int split_list_len: Max length to divide transcript/sections observed or expected missense and position lists into.
         E.g., if split_list_len is 500, and the list lengths are 998, then the transcript/section will be
@@ -661,7 +661,7 @@ def process_section_group(
         )
 
     # Search for two simultaneous breaks
-    ht = search_for_two_breaks(ht, chisq_threshold, min_window_exp)
+    ht = search_for_two_breaks(ht, chisq_threshold, min_num_exp_mis)
 
     # If over threshold, checkpoint HT and check if there were any breaks
     if over_threshold:
