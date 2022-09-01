@@ -54,9 +54,9 @@ def main(args):
 
         for counter, group in enumerate(transcript_groups):
             output_ht = (
-                f"{simul_break_temp}/hts/simul_break_dataproc_ttn.ht"
+                f"{simul_break_temp}/hts/{args.search_num}/simul_break_dataproc_ttn.ht"
                 if args.run_ttn
-                else f"{simul_break_temp}/hts/simul_break_dataproc_{counter}.ht"
+                else f"{simul_break_temp}/hts/{args.search_num}/simul_break_dataproc_{counter}.ht"
             )
             if file_exists(output_ht):
                 raise DataException(
@@ -101,7 +101,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
-        default="@kc (she/her)",
+    )
+    parser.add_argument(
+        "--search-num",
+        help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
+        type=int,
     )
 
     parser.add_argument(

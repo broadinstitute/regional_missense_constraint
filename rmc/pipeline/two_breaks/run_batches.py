@@ -659,7 +659,7 @@ def main(args):
                 not_one_break_grouped.path,
                 group,
                 args.over_threshold,
-                f"{simul_break_temp}/hts/simul_break_{job_name}.ht",
+                f"{simul_break_temp}/hts/{args.search_num}/simul_break_{job_name}.ht",
                 f"{simul_break_temp}/success_files",
                 None,
                 args.chisq_threshold,
@@ -686,7 +686,7 @@ def main(args):
                 not_one_break_grouped.path,
                 group,
                 args.over_threshold,
-                f"{simul_break_temp}/hts/simul_break_{group[0]}.ht",
+                f"{simul_break_temp}/hts/{args.search_num}/simul_break_{group[0]}.ht",
                 f"{simul_break_temp}/success_files",
                 f"{simul_break_temp}",
                 args.chisq_threshold,
@@ -713,7 +713,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
-        default="@kc (she/her)",
+    )
+    parser.add_argument(
+        "--search-num",
+        help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
+        type=int,
     )
 
     transcript_size = parser.add_mutually_exclusive_group(required=True)
