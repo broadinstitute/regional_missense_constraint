@@ -47,7 +47,7 @@ def main(args):
 
         logger.info("Collecting all HT paths...")
         intermediate_hts = []
-        ht_bucket = f"{simul_break_temp}/hts/"
+        ht_bucket = f"{simul_break_temp}/hts/{args.search_num}/"
         temp_ht_paths = (
             subprocess.check_output(["gsutil", "ls", ht_bucket])
             .decode("utf8")
@@ -65,16 +65,14 @@ def main(args):
                     # Tables containing transcripts that are over the transcript length threshold are keyed by transcript, i, j
                     # Tables containing transcripts that are under the length threshold are keyed only by transcript
                     # Rekey all tables here and select only the required fields to ensure the union on line 83 is able to work
-                    # A normal `.key_by` should work here, since transcripts are already part of the key fields
-                    # (see https://github.com/hail-is/hail/blob/master/hail/src/main/scala/is/hail/expr/ir/TableIR.scala#L812)
-                    # However, using `.key_by_assert_sorted` to explicitly avoid shuffling on this rekey
-                    temp = temp._key_by_assert_sorted("transcript")
+                    # This `key_by` should not shuffle because `transcript` is already the first key for both Tables
+                    temp = temp.key_by("transcript")
                     row_fields = set(temp.row)
                     if len(ANNOTATIONS.intersection(row_fields)) < 3:
                         raise DataException(
                             f"The following fields are missing from the temp table: {ANNOTATIONS.difference(row_fields)}!"
                         )
-                    temp = temp.select("max_chisq", "start_pos", "end_pos")
+                    temp = temp.select(*ANNOTATIONS)
                     intermediate_hts.append(temp)
                 else:
                     logger.warning("%s had 0 rows", ht_path)
@@ -96,14 +94,16 @@ def main(args):
         )
         simul_break_transcripts = hl.literal(simul_break_transcripts)
 
-        logger.info(
-            "Getting transcripts with no evidence of regional missense constraint..."
-        )
-        context_ht = not_one_break.ht()
-        context_ht = context_ht.filter(
-            ~simul_break_transcripts.contains(context_ht.transcript)
-        )
-        context_ht.write(no_breaks.path, overwrite=args.overwrite)
+        if args.create_no_breaks_ht:
+            # TODO: Update this section
+            logger.info(
+                "Getting transcripts with no evidence of regional missense constraint..."
+            )
+            context_ht = not_one_break.ht()
+            context_ht = context_ht.filter(
+                ~simul_break_transcripts.contains(context_ht.transcript)
+            )
+            context_ht.write(no_breaks.path, overwrite=args.overwrite)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -121,7 +121,20 @@ if __name__ == "__main__":
     parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
-        default="@kc (she/her)",
+    )
+    parser.add_argument(
+        "--search-num",
+        help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
+        type=int,
+    )
+    parser.add_argument(
+        "--create-no-breaks-ht",
+        help="""
+        Create Table containing transcripts that have no evidence of RMC.
+        This step should only be run after the final round of searching for breaks
+        (final round of searching with p = 0.025 significance threshold).
+        """,
+        action="store_true",
     )
 
     args = parser.parse_args()
