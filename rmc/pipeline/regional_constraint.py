@@ -345,7 +345,19 @@ def main(args):
         if args.merge_single_simul:
             # Convert simul break breakpoint info to locus-level table with new section annotations
             # Merge single breaks with simultaneous breaks
-            pass
+            logger.info("Creating simultaneous breaks HT to prepare for merge...")
+            # Read in sections with breaks
+            # TODO: think about whether section annotation will always be consistent
+            simul_sections = hl.experimental.read_expression(
+                f"{simul_break_temp}/hts/{args.search_num}_sections.he"
+            )
+            simul_ht = hl.read_table(no_break_found_path(args.search_num))
+            simul_ht = simul_ht.filter(simul_sections.contains(simul_ht.section))
+            # NOTE: ran out of time, broad next steps:
+            # 1. Annotate this newly found simul_ht with same annotations as on break_found_ht
+            # 2. Merge simul_ht with break_found_ht and write
+            # 3. Add validity checks that we haven't dropped any transcripts/sections
+            # 4. Create and write final no break found ht for this round number
 
         if args.finalize:
             hl.init(log="/RMC_finalize.log")

@@ -551,7 +551,6 @@ def search_for_two_breaks(
             group_ht.group_ht.positions[group_ht.max_break[2]],
         ),
     )
-    group_ht = group_ht.key_by(section=group_ht.section_1)
 
     # TODO: Revisit the breakpoint inclusiveness/exclusiveness update below
     group_ht = group_ht.transmute(

@@ -29,13 +29,16 @@ logger = logging.getLogger("merge_hts")
 logger.setLevel(logging.INFO)
 
 
-ANNOTATIONS = {"max_chisq", "section", "breakpoints"}
+ANNOTATIONS = {"max_chisq", "section", "section_1", "breakpoints"}
 """
 Set of annotations to keep from two simultaneous breaks search.
 
 `max_chisq`: Chi square value associated with two breaks.
 `section`: Transcript section annotation.
-    Format: <transcript>_<first break position>_<second break position>.
+    Format: <transcript>_<start position>_<end position>.
+`section_1`: New transcript section annotation generated after two breaks search.
+    Same format as above, but start position is newly found first breakpoint position,
+    and end position is newly found second breakpoint position.
 `breakpoints`: Tuple of breakpoints with adjusted inclusiveness/exclusiveness.
 """
 
@@ -99,6 +102,11 @@ def main(args):
             len(simul_break_transcripts),
         )
         simul_break_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
+        hl.experimental.write_expression(
+            simul_break_sections,
+            f"{simul_break_temp}/hts/{args.search_num}_sections.he",
+            overwrite=args.overwrite,
+        )
         logger.info(
             "%i transcript sections had two simultaneous breaks",
             len(simul_break_sections),
