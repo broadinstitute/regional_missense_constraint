@@ -16,7 +16,6 @@ from rmc.resources.basics import (
     LOGGING_PATH,
     no_breaks,
     not_one_break,
-    simul_break,
     simul_break_temp,
 )
 from rmc.slack_creds import slack_token
@@ -30,13 +29,14 @@ logger = logging.getLogger("merge_hts")
 logger.setLevel(logging.INFO)
 
 
-ANNOTATIONS = {"max_chisq", "start_pos", "end_pos"}
+ANNOTATIONS = {"max_chisq", "section", "breakpoints"}
 """
-Set of annotations added during two simultaneous breaks search.
+Set of annotations to keep from two simultaneous breaks search.
 
 `max_chisq`: Chi square value associated with two breaks.
-`start_pos`: Start position of two break window.
-`end_pos`: End position of two break window.
+`section`: Transcript section annotation.
+    Format: <transcript>_<first break position>_<second break position>.
+`breakpoints`: Tuple of breakpoints with adjusted inclusiveness/exclusiveness.
 """
 
 
@@ -62,11 +62,13 @@ def main(args):
                 logger.info("Working on %s", ht_path)
                 temp = hl.read_table(ht_path)
                 if temp.count() > 0:
-                    # Tables containing transcripts that are over the transcript length threshold are keyed by transcript, i, j
-                    # Tables containing transcripts that are under the length threshold are keyed only by transcript
+                    # Tables containing transcripts/transcript sections that are over the transcript length threshold
+                    # are keyed by section, i, j
+                    # Tables containing transcripts/transcript sections that are under the length threshold are keyed
+                    # only by section
                     # Rekey all tables here and select only the required fields to ensure the union on line 83 is able to work
-                    # This `key_by` should not shuffle because `transcript` is already the first key for both Tables
-                    temp = temp.key_by("transcript")
+                    # This `key_by` should not shuffle because `section` is already the first key for both Tables
+                    temp = temp.key_by("section")
                     row_fields = set(temp.row)
                     if len(ANNOTATIONS.intersection(row_fields)) < 3:
                         raise DataException(
@@ -83,16 +85,24 @@ def main(args):
                 "All temp tables had 0 rows. Please double check the temp tables!"
             )
         ht = intermediate_hts[0].union(*intermediate_hts[1:])
-        ht = ht.checkpoint(simul_break.path, overwrite=args.overwrite)
-        logger.info("Wrote simultaneous breaks HT with %i lines", ht.count())
+        ht = ht.checkpoint(
+            f"{simul_break_temp}/hts/{args.search_num}/merged.ht",
+            overwrite=args.overwrite,
+        )
+        logger.info("Wrote temp simultaneous breaks HT with %i lines", ht.count())
 
-        # Collect all transcripts with two simultaneous breaks
+        # Collect all transcripts and sections with two simultaneous breaks
+        ht = ht.annotate(transcript=ht.section.split("_")[0])
         simul_break_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
         logger.info(
             "%i transcripts had two simultaneous breaks",
             len(simul_break_transcripts),
         )
-        simul_break_transcripts = hl.literal(simul_break_transcripts)
+        simul_break_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
+        logger.info(
+            "%i transcript sections had two simultaneous breaks",
+            len(simul_break_sections),
+        )
 
         if args.create_no_breaks_ht:
             # TODO: Update this section
