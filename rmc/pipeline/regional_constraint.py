@@ -305,7 +305,7 @@ def main(args):
             )
             break_found_ht = ht.filter(hl.is_defined(ht.breakpoint))
             break_found_ht = break_found_ht.annotate(
-                section=hl.if_else(
+                section_1=hl.if_else(
                     break_found_ht.locus.position > break_found_ht.breakpoint,
                     hl.format(
                         "%s_%s_%s",
@@ -321,6 +321,8 @@ def main(args):
                     ),
                 )
             )
+            # Rekey by new section annotation
+            break_found_ht = break_found_ht.key_by(section=break_found_ht.section_1)
             logger.info("Writing out sections with single significant break...")
             break_found_ht.write(
                 break_found_path(args.search_num), overwrite=args.overwrite
