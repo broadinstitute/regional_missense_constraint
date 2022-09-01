@@ -597,8 +597,8 @@ def search_for_break(
     # Split transcript when searching for first break
     # Split transcript subsection when searching for additional breaks
     ht = ht.annotate(
-        total_nulls=hl.or_missing(
-            ht.cumulative_exp >= 10 | ht.reverse.exp >= 10,
+        total_null=hl.or_missing(
+            (ht.cumulative_exp >= 10) | (ht.reverse.exp >= 10),
             # Add forwards section null (going through positions from smaller to larger)
             # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
             get_dpois_expr(
@@ -617,8 +617,8 @@ def search_for_break(
         )
     )
     ht = ht.annotate(
-        total_alts=hl.or_missing(
-            hl.is_defined(ht.section_nulls),
+        total_alt=hl.or_missing(
+            hl.is_defined(ht.total_null),
             # Add forward section alt
             # section_alt = stats.dpois(section_obs, section_exp*section_obs_exp)[0]
             get_dpois_expr(
