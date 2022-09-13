@@ -37,7 +37,9 @@ def main(args):
     """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
     try:
         logger.warning("This step should be run on an autoscaling cluster!")
-        hl.init(log="/search_for_two_breaks_run_batches_dataproc.log")
+        hl.init(
+            log=f"/round{args.search_num}_search_for_two_breaks_run_batches_dataproc.log"
+        )
         if args.run_ttn:
             transcript_groups = [[args.ttn_id]]
         else:
@@ -96,9 +98,6 @@ if __name__ == "__main__":
         default=9.2,
     )
     parser.add_argument(
-        "--overwrite", help="Overwrite existing data.", action="store_true"
-    )
-    parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
     )
@@ -107,7 +106,6 @@ if __name__ == "__main__":
         help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
         type=int,
     )
-
     parser.add_argument(
         "--group-size",
         help="""
@@ -120,7 +118,7 @@ if __name__ == "__main__":
         help="Size of windows to split transcripts. Default is 500.",
         type=int,
         default=500,
-    )
+    )    
     transcript_ids = parser.add_mutually_exclusive_group()
     transcript_ids.add_argument(
         "--transcripts-to-run", help="Comma separated list of transcript IDs to run."
