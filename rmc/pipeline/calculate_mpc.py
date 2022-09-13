@@ -12,7 +12,7 @@ import hail as hl
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX
-from rmc.resources.resource_utils import CURRENT_VERSION
+from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 from rmc.slack_creds import slack_token
 from rmc.utils.mpc import (
     annotate_mpc,
@@ -54,28 +54,28 @@ def main(args):
         if args.command == "annotate-hts":
             hl.init(log="/annotate_hts.log")
             if args.clinvar:
-                from rmc.resources.grch37.reference_data import clinvar_path_mis
+                from rmc.resources.reference_data import clinvar_path_mis
 
                 annotate_mpc(
                     ht=clinvar_path_mis.ht(),
-                    output_path=f"{MPC_PREFIX}/{CURRENT_VERSION}/clinvar_mpc_annot.ht",
+                    output_path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/clinvar_mpc_annot.ht",
                     overwrite=args.overwrite,
                 )
 
             if args.dd:
-                from rmc.resources.grch37.reference_data import de_novo
+                from rmc.resources.reference_data import de_novo
 
                 dd_ht = de_novo.ht()
                 case_ht = dd_ht.filter(dd_ht.case_control != "control")
                 annotate_mpc(
                     ht=case_ht,
-                    output_path=f"{MPC_PREFIX}/{CURRENT_VERSION}/dd_case_mpc_annot.ht",
+                    output_path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/dd_case_mpc_annot.ht",
                     overwrite=args.overwrite,
                 )
                 control_ht = dd_ht.filter(dd_ht.case_control == "control")
                 annotate_mpc(
                     ht=control_ht,
-                    output_path=f"{MPC_PREFIX}/{CURRENT_VERSION}/dd_control_mpc_annot.ht",
+                    output_path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/dd_control_mpc_annot.ht",
                     overwrite=args.overwrite,
                 )
 
@@ -85,7 +85,7 @@ def main(args):
                 ht = public_release("exomes").ht()
                 annotate_mpc(
                     ht=ht,
-                    output_path=f"{MPC_PREFIX}/{CURRENT_VERSION}/gnomAD_mpc_annot.ht",
+                    output_path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/gnomAD_mpc_annot.ht",
                     overwrite=args.overwrite,
                 )
 

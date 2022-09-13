@@ -1,8 +1,8 @@
-"""Script containing GRCh37 gnomAD resources."""
+"""Script containing resources for the current gnomAD version."""
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
 
-from rmc.resources.basics import RESOURCE_PREFIX
-from rmc.resources.resource_utils import CURRENT_VERSION
+from rmc.resources.basics import RESOURCE_BUILD_PREFIX
+from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
 
 FLAGSHIP_LOF = "gs://gnomad-public-requester-pays/papers/2019-flagship-lof/v1.0"
@@ -22,7 +22,7 @@ Dropped colocated variants in vep annotation and removed all non-pass variants.
 Also annotated with context Table (sequence context, transcript information, most severe consequence).
 """
 filtered_exomes = TableResource(
-    path=f"{RESOURCE_PREFIX}/GRCh37/gnomad/ht/exomes_missense_only.ht"
+    path=f"{RESOURCE_BUILD_PREFIX}/gnomad/ht/exomes_missense_only.ht"
 )
 """
 Processed gnomAD exomes Table filtered to rare (AF < 0.001) missense variants in canonical transcripts only.
@@ -77,9 +77,9 @@ https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constra
 """
 
 constraint_ht = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_GNOMAD_VERSION,
     versions={
-        CURRENT_VERSION: TableResource(
+        CURRENT_GNOMAD_VERSION: TableResource(
             path="gs://gcp-public-data--gnomad/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_transcript.ht"
         )
     },

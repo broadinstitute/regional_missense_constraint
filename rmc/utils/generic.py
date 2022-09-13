@@ -23,16 +23,13 @@ from rmc.resources.basics import (
     CODON_TABLE_PATH,
     hi_genes,
 )
-from rmc.resources.grch37.gnomad import constraint_ht, filtered_exomes, mutation_rate
-from rmc.resources.grch37.rmc import (
+from rmc.resources.gnomad import constraint_ht, filtered_exomes, mutation_rate
+from rmc.resources.rmc import (
     DIVERGENCE_SCORES_TSV_PATH,
     MUTATION_RATE_TABLE_PATH,
-    TOTAL_EXOME_BASES,
-    TOTAL_GNOMAD_MISSENSE,
 )
-import rmc.resources.grch37.reference_data as grch37
-import rmc.resources.grch38.reference_data as grch38
-from rmc.resources.resource_utils import BUILDS, CURRENT_VERSION, MISSENSE
+import rmc.resources.reference_data as reference_data
+from rmc.resources.resource_utils import MISSENSE
 
 
 logging.basicConfig(
@@ -114,7 +111,6 @@ def get_divergence_scores() -> Dict[str, float]:
 
 ## Functions to process reference genome related resources
 def process_context_ht(
-    build: str,
     trimers: bool = True,
     filter_to_missense: bool = True,
     missense_str: str = MISSENSE,
@@ -129,7 +125,6 @@ def process_context_ht(
     .. note::
         `trimers` needs to be True for gnomAD v2.
 
-    :param str build: Reference genome build; must be one of BUILDS.
     :param bool trimers: Whether to filter to trimers (if set to True) or heptamers. Default is True.
     :param bool filter_to_missense: Whether to filter Table to missense variants only. Default is True.
     :param bool add_annotations: Whether to add ref, alt, methylation_level, exome_coverage, cpg, transition,
@@ -138,14 +133,8 @@ def process_context_ht(
         mutation rate, CpG status, and methylation level annotations.
     :rtype: hl.Table
     """
-    if build not in BUILDS:
-        raise DataException(f"Build must be one of {BUILDS}.")
-
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
-    if build == "GRCh37":
-        ht = vep_context.ht().select_globals()
-    else:
-        ht = grch38.full_context.ht()
+    ht = vep_context.ht().select_globals()
 
     logger.info(
         "Filtering to canonical transcripts and annotating with most severe consequence...",
@@ -236,24 +225,17 @@ def filter_context_using_gnomad(
 
 
 ## Functions for obs/exp related resources
-def get_exome_bases(build: str) -> int:
+def get_exome_bases() -> int:
     """
     Get number of bases in the exome.
 
     Read in context HT (containing all coding bases in the genome), remove outlier transcripts, and filter to median coverage >= 5.
 
-    :param str build: Reference genome build; must be one of BUILDS.
     :return: Number of bases in the exome.
     :rtype: int
     """
-    if build not in BUILDS:
-        raise DataException(f"Build must be one of {BUILDS}.")
-
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
-    if build == "GRCh37":
-        ht = vep_context.ht()
-    else:
-        ht = grch38.full_context.ht()
+    ht = vep_context.ht()
 
     logger.info("Filtering to canonical transcripts...")
     ht = fast_filter_vep(
@@ -281,9 +263,6 @@ def get_exome_bases(build: str) -> int:
 
 
 def get_avg_bases_between_mis(
-    build: str,
-    get_total_exome_bases: bool = False,
-    get_total_gnomad_missense: bool = False,
 ) -> int:
     """
     Return average number of bases between observed missense variation.
@@ -294,30 +273,18 @@ def get_avg_bases_between_mis(
     This function is used to determine the minimum size window to check for significant missense depletion
     when searching for two simultaneous breaks.
 
-    :param str build: Reference genome build; must be one of BUILDS.
-    :param bool get_total_exome_bases: Boolean for whether to recalculate total number of bases in exome.
-        If False, will use value from `TOTAL_EXOME_BASES`. Default is False.
-    :param bool get_total_gnomad_missense: Boolean for whether to recount total number of missense variants in gnomAD.
-        If False, will use value from `TOTAL_GNOMAD_MISSENSE`. Default is False.
     :return: Average number of bases between observed missense variants, rounded to the nearest integer,
     :rtype: int
     """
-    total_variants = TOTAL_GNOMAD_MISSENSE[CURRENT_VERSION]
-    total_bases = TOTAL_EXOME_BASES[build]
 
-    if get_total_exome_bases:
-        if build not in BUILDS:
-            raise DataException(f"Build must be one of {BUILDS}.")
-
-        logger.info(
-            "Getting total number of bases in the exome from full context HT..."
-        )
-        total_bases = get_exome_bases(build=build)
-
-    if get_total_gnomad_missense:
-        ht = filtered_exomes.ht()
-        logger.info("Getting total number of missense variants in gnomAD...")
-        total_variants = ht.count()
+    logger.info(
+        "Getting total number of bases in the exome from full context HT..."
+    )
+    total_bases = get_exome_bases()
+    
+    ht = filtered_exomes.ht()
+    logger.info("Getting total number of missense variants in gnomAD...")
+    total_variants = ht.count()
 
     logger.info("Total number of bases in the exome: %i", total_bases)
     logger.info(
@@ -559,27 +526,19 @@ def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
 
 
 ## Assessment utils
-def import_clinvar_hi_variants(build: str, overwrite: bool) -> None:
+def import_clinvar_hi_variants(overwrite: bool) -> None:
     """
     Import ClinVar HT and filter to pathogenic/likely pathogenic missense variants in haploinsufficient genes.
 
     .. note::
         This function currently only works for build GRCh37.
 
-    :param str build: Reference genome build; must be one of BUILDS.
     :param bool overwrite: Whether to overwrite ClinVar HT.
     :return: None; writes HT to resource path.
     """
-    if build not in BUILDS:
-        raise DataException(f"Build must be one of {BUILDS}.")
-    if build == "GRCh37":
-        from gnomad.resources.grch37.reference_data import clinvar
+    from gnomad.resources.grch37.reference_data import clinvar
 
-        clinvar_ht_path = grch37.clinvar_path_mis.path
-    else:
-        from gnomad.resources.grch38.reference_data import clinvar
-
-        raise DataException("ClinVar files currently only exist for GRCh37!")
+    clinvar_ht_path = reference_data.clinvar_path_mis.path
 
     if not file_exists(clinvar_ht_path) or overwrite:
         logger.info("Reading in ClinVar HT...")
@@ -612,7 +571,6 @@ def import_clinvar_hi_variants(build: str, overwrite: bool) -> None:
 
 
 def import_de_novo_variants(
-    build: str,
     overwrite: bool,
     csq_str: str = "consequence",
     missense_str: str = MISSENSE,
@@ -623,20 +581,14 @@ def import_de_novo_variants(
     .. note::
         These files currently only exist for build GRCh37.
 
-    :param str build: Reference genome build; must be one of BUILDS.
     :param bool overwrite: Whether to overwrite de novo Table.
     :param str csq_str: Name of field in de novo TSV that contains variant consequence.
         Default is 'consequence'.
     :param str missense_str: String representing missense variant effect. Default is MISSENSE.
     :return: None; writes HT to resource path.
     """
-    if build not in BUILDS:
-        raise DataException(f"Build must be one of {BUILDS}.")
-    if build == "GRCh37":
-        import grch37.de_novo_tsv as tsv_path
-        import grch37.de_novo.path as ht_path
-    else:
-        raise DataException("De novo TSV does not exist for GRCh38!")
+    import reference_data.de_novo_tsv as tsv_path
+    import reference_data.de_novo.path as ht_path
 
     dn_ht = hl.import_table(tsv_path, impute=True)
     dn_ht = dn_ht.filter(dn_ht[csq_str] == missense_str)

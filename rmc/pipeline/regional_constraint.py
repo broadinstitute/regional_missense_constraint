@@ -8,21 +8,21 @@ from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH
-from rmc.resources.grch37.gnomad import (
+from rmc.resources.gnomad import (
     constraint_ht,
     filtered_exomes,
     processed_exomes,
     prop_obs_coverage,
 )
-from rmc.resources.grch37.reference_data import filtered_context
-from rmc.resources.grch37.rmc import (
+from rmc.resources.reference_data import filtered_context
+from rmc.resources.rmc import (
     constraint_prep,
     multiple_breaks,
     not_one_break,
     one_break,
     simul_break,
 )
-from rmc.resources.resource_utils import CURRENT_VERSION, MISSENSE
+from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION, MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     add_obs_annotation,
@@ -63,7 +63,7 @@ def main(args):
             logger.warning("Code currently only processes b37 data!")
 
             logger.info("Preprocessing reference fasta (context) HT...")
-            context_ht = process_context_ht("GRCh37", args.trimers)
+            context_ht = process_context_ht(args.trimers)
 
             logger.info(
                 "Filtering context HT to all covered sites not found or rare in gnomAD exomes"
@@ -517,7 +517,7 @@ def main(args):
                 ~total_rmc_transcripts.contains(context_ht.transcript)
             )
 
-            if CURRENT_VERSION == "2.1.1":
+            if CURRENT_GNOMAD_VERSION == "2.1.1":
                 logger.info("Reading in XG HT (one-off fix in v2.1.1)...")
                 xg_ht = hl.read_table(f"{TEMP_PATH}/XG.ht").select(
                     "total_mu",
