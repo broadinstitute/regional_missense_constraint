@@ -484,7 +484,7 @@ def process_transcript_group(
 
     Designed for use with Hail Batch.
 
-    :param str ht_path: Path to input Table (Table written using `group_not_one_break_ht`).
+    :param str ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param List[str] transcript_group: List of transcripts to process.
     :param bool over_threshold: Whether input transcripts have more
         possible missense variants than threshold specified in `run_simultaneous_breaks`.

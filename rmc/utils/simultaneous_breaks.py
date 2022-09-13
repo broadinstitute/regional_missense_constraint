@@ -586,7 +586,7 @@ def process_section_group(
 
     Designed for use with Hail Batch.
 
-    :param str ht_path: Path to input Table (Table written using `group_not_one_break_ht`).
+    :param str ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param List[str] section_group: List of transcripts or transcript sections to process.
     :param bool over_threshold: Whether input transcript/sections have more
         possible missense sites than threshold specified in `run_simultaneous_breaks`.
