@@ -6,7 +6,6 @@ from typing import List, Optional, Tuple
 import hail as hl
 
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
-from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.resources.resource_utils import DataException
 
 from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH
@@ -31,8 +30,6 @@ def group_not_one_break_ht(
     ht: hl.Table,
     transcript_ht: hl.Table,
     get_min_window_size: bool = True,
-    get_total_exome_bases: bool = False,
-    get_total_gnomad_missense: bool = False,
     min_window_size: Optional[int] = None,
     min_num_obs: Optional[int] = None,
 ) -> None:
@@ -49,12 +46,6 @@ def group_not_one_break_ht(
     :param hl.Table transcript_ht: Table with start and end positions per transcript.
     :param bool get_min_window_size: Determine minimum window size for two simultaneous breaks search.
         Default is True. Must be True if min_window_size is None.
-    :param bool get_total_exome_bases: Get total number of bases in the exome.
-        If True, will pull default value from TOTAL_EXOME_BASES (in basics.py).
-        Default is False.
-    :param bool get_total_gnomad_missense: Get total number of missense variants in gnomAD.
-        If True, will pull default value from TOTAL_GNOMAD_MISSENSE (in basics.py).
-        Default is False.
     :param Optional[int] min_window_size: Minimum window size for two simultaneous breaks search.
         Must be specified if get_min_window_size is False.
         Default is None.
@@ -81,12 +72,7 @@ def group_not_one_break_ht(
     # This number is used to determine the min_window_size - which is the smallest allowed distance between simultaneous breaks
     min_window_size = (
         (
-            get_avg_bases_between_mis(
-                get_reference_genome(ht.locus).name,
-                get_total_exome_bases,
-                get_total_gnomad_missense,
-            )
-            * min_num_obs
+            get_avg_bases_between_mis() * min_num_obs
         )
         if get_min_window_size
         else min_window_size

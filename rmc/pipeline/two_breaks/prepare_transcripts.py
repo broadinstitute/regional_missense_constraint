@@ -54,8 +54,6 @@ def main(args):
                     ht=not_one_break.ht(),
                     transcript_ht=gene_model.ht(),
                     get_min_window_size=args.get_min_window_size,
-                    get_total_exome_bases=args.get_total_exome_bases,
-                    get_total_gnomad_missense=args.get_total_gnomad_missense,
                     min_window_size=args.min_window_size,
                     min_num_obs=args.min_num_obs,
                 )
@@ -110,16 +108,6 @@ if __name__ == "__main__":
     min_window_group.add_argument(
         "--get-min-window-size",
         help="Determine smallest possible window size for simultaneous breaks.",
-        action="store_true",
-    )
-    create_grouped_ht.add_argument(
-        "--get-total-exome-bases",
-        help="Get total number of bases in the exome. If not set, will pull default value from TOTAL_EXOME_BASES.",
-        action="store_true",
-    )
-    create_grouped_ht.add_argument(
-        "--get-total-gnomad-missense",
-        help="Get total number of missense variants in gnomAD. If not set, will pull default value from TOTAL_GNOMAD_MISSENSE.",
         action="store_true",
     )
     create_grouped_ht.add_argument(

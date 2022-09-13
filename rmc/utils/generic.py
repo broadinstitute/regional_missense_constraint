@@ -27,11 +27,9 @@ from rmc.resources.gnomad import constraint_ht, filtered_exomes, mutation_rate
 from rmc.resources.rmc import (
     DIVERGENCE_SCORES_TSV_PATH,
     MUTATION_RATE_TABLE_PATH,
-    TOTAL_EXOME_BASES,
-    TOTAL_GNOMAD_MISSENSE,
 )
 import rmc.resources.reference_data as reference_data
-from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION, MISSENSE
+from rmc.resources.resource_utils import MISSENSE
 
 
 logging.basicConfig(
@@ -265,8 +263,6 @@ def get_exome_bases() -> int:
 
 
 def get_avg_bases_between_mis(
-    get_total_exome_bases: bool = False,
-    get_total_gnomad_missense: bool = False,
 ) -> int:
     """
     Return average number of bases between observed missense variation.
@@ -277,26 +273,18 @@ def get_avg_bases_between_mis(
     This function is used to determine the minimum size window to check for significant missense depletion
     when searching for two simultaneous breaks.
 
-    :param bool get_total_exome_bases: Boolean for whether to recalculate total number of bases in exome.
-        If False, will use value from `TOTAL_EXOME_BASES`. Default is False.
-    :param bool get_total_gnomad_missense: Boolean for whether to recount total number of missense variants in gnomAD.
-        If False, will use value from `TOTAL_GNOMAD_MISSENSE`. Default is False.
     :return: Average number of bases between observed missense variants, rounded to the nearest integer,
     :rtype: int
     """
-    total_variants = TOTAL_GNOMAD_MISSENSE[CURRENT_GNOMAD_VERSION]
-    total_bases = TOTAL_EXOME_BASES[build]
 
-    if get_total_exome_bases:
-        logger.info(
-            "Getting total number of bases in the exome from full context HT..."
-        )
-        total_bases = get_exome_bases()
-
-    if get_total_gnomad_missense:
-        ht = filtered_exomes.ht()
-        logger.info("Getting total number of missense variants in gnomAD...")
-        total_variants = ht.count()
+    logger.info(
+        "Getting total number of bases in the exome from full context HT..."
+    )
+    total_bases = get_exome_bases()
+    
+    ht = filtered_exomes.ht()
+    logger.info("Getting total number of missense variants in gnomAD...")
+    total_variants = ht.count()
 
     logger.info("Total number of bases in the exome: %i", total_bases)
     logger.info(
