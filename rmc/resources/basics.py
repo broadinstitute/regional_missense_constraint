@@ -21,7 +21,7 @@ RESOURCE_PREFIX = f"{RMC_PREFIX}/resources"
 Path to any non-gnomAD or VEP context resource files required for RMC or MPC.
 """
 
-BUILD_RESOURCE_PREFIX = f"{RESOURCE_PREFIX}/{CURRENT_BUILD}"
+RESOURCE_BUILD_PREFIX = f"{RESOURCE_PREFIX}/{CURRENT_BUILD}"
 """
 Path to bucket for genome build-specific resource files required for RMC or MPC.
 """
