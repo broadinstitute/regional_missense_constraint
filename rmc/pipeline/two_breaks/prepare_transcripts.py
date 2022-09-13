@@ -2,8 +2,8 @@
 This script prepares the inputs to the two simultaneous breaks search.
 
 This script has two possible steps:
-- Create grouped version of not one single break found Table
-- Split transcripts/transcript/sections based on number of possible missense variants.
+- Group not one single break found Table by transcript/transcript section.
+- Split transcripts/transcript sections in this Table based on number of possible missense variants.
 
 Both steps should be run in Dataproc.
 """
