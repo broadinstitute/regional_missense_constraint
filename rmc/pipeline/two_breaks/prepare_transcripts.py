@@ -77,6 +77,11 @@ if __name__ == "__main__":
         "--slack-channel",
         help="Send message to Slack channel/user.",
     )
+    parser.add_argument(
+        "--search-num",
+        help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
+        type=int,
+    )
 
     # Create subparsers for each step
     # Need to specify `dest` to be able to check which subparser is being invoked
