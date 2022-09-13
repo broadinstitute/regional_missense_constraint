@@ -43,7 +43,7 @@ def main(args):
             )
             group_no_single_break_found_ht(
                 ht=no_single_break_found_path(args.search_num),
-                out_ht=no_single_break_found_path(args.search_num, grouped=True),
+                out_ht_path=no_single_break_found_path(args.search_num, grouped=True),
                 group_str="section" if args.search_num > 1 else "transcript",
             )
 
