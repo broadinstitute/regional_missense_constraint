@@ -50,7 +50,7 @@ def main(args):
 
         logger.info("Collecting all HT paths...")
         intermediate_hts = []
-        ht_bucket = f"{simul_break_temp}/hts/{args.search_num}/"
+        ht_bucket = f"{simul_break_temp}/hts/round{args.search_num}/"
         temp_ht_paths = (
             subprocess.check_output(["gsutil", "ls", ht_bucket])
             .decode("utf8")
@@ -89,7 +89,7 @@ def main(args):
             )
         ht = intermediate_hts[0].union(*intermediate_hts[1:])
         ht = ht.checkpoint(
-            f"{simul_break_temp}/hts/{args.search_num}/merged.ht",
+            f"{simul_break_temp}/hts/round{args.search_num}/merged.ht",
             overwrite=args.overwrite,
         )
         logger.info("Wrote temp simultaneous breaks HT with %i lines", ht.count())
@@ -104,7 +104,7 @@ def main(args):
         simul_break_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
         hl.experimental.write_expression(
             simul_break_sections,
-            f"{simul_break_temp}/hts/{args.search_num}_sections.he",
+            f"{simul_break_temp}/hts/round{args.search_num}_sections.he",
             overwrite=args.overwrite,
         )
         logger.info(

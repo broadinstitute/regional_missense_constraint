@@ -349,7 +349,7 @@ def main(args):
             # Read in sections with breaks
             # TODO: think about whether section annotation will always be consistent
             simul_sections = hl.experimental.read_expression(
-                f"{simul_break_temp}/hts/{args.search_num}_sections.he"
+                f"{simul_break_temp}/hts/round{args.search_num}_sections.he"
             )
             simul_ht = hl.read_table(no_break_found_path(args.search_num))
             simul_ht = simul_ht.filter(simul_sections.contains(simul_ht.section))

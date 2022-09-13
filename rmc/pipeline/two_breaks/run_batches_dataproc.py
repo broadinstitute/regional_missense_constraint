@@ -56,9 +56,9 @@ def main(args):
 
         for counter, group in enumerate(transcript_groups):
             output_ht = (
-                f"{simul_break_temp}/hts/{args.search_num}/simul_break_dataproc_ttn.ht"
+                f"{simul_break_temp}/hts/round{args.search_num}/simul_break_dataproc_ttn.ht"
                 if args.run_ttn
-                else f"{simul_break_temp}/hts/{args.search_num}/simul_break_dataproc_{counter}.ht"
+                else f"{simul_break_temp}/hts/round{args.search_num}/simul_break_dataproc_{counter}.ht"
             )
             if file_exists(output_ht):
                 raise DataException(
