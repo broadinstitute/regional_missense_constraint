@@ -28,16 +28,13 @@ logger = logging.getLogger("merge_hts")
 logger.setLevel(logging.INFO)
 
 
-ANNOTATIONS = {"max_chisq", "section", "section_1", "breakpoints"}
+ANNOTATIONS = {"max_chisq", "section", "breakpoints"}
 """
 Set of annotations to keep from two simultaneous breaks search.
 
 `max_chisq`: Chi square value associated with two breaks.
-`section`: Transcript section annotation.
+`section`: Transcript section that was searched.
     Format: <transcript>_<start position>_<end position>.
-`section_1`: New transcript section annotation generated after two breaks search.
-    Same format as above, but start position is newly found first breakpoint position,
-    and end position is newly found second breakpoint position.
 `breakpoints`: Tuple of breakpoints with adjusted inclusiveness/exclusiveness.
 """
 
@@ -67,7 +64,7 @@ def main(args):
                 logger.info("Working on %s", ht_path)
                 temp = hl.read_table(ht_path)
                 if temp.count() > 0:
-                    # Tables containing transcripts/transcript sections that are over the transcript length threshold
+                    # Tables containing transcripts/transcript sections that are over the transcript/section length threshold
                     # are keyed by section, i, j
                     # Tables containing transcripts/transcript sections that are under the length threshold are keyed
                     # only by section
@@ -100,7 +97,7 @@ def main(args):
         ht = ht.annotate(transcript=ht.section.split("_")[0])
         simul_break_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
         logger.info(
-            "%i transcripts had two simultaneous breaks",
+            "%i transcripts had two simultaneous breaks in this round",
             len(simul_break_transcripts),
         )
         simul_break_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
@@ -110,7 +107,7 @@ def main(args):
             overwrite=args.overwrite,
         )
         logger.info(
-            "%i transcript sections had two simultaneous breaks",
+            "%i transcript sections had two simultaneous breaks in this round",
             len(simul_break_sections),
         )
 
