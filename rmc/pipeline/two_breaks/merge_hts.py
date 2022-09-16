@@ -46,7 +46,9 @@ Set of annotations to keep from two simultaneous breaks search.
 def main(args):
     """Merge all simultaneous breaks intermediate results into single Table."""
     try:
-        hl.init(log="/search_for_two_breaks_merge_hts.log")
+        hl.init(
+            log=f"/round{args.search_num}_search_for_two_breaks_merge_hts.log"
+        )
 
         logger.info("Collecting all HT paths...")
         intermediate_hts = []
