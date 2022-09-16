@@ -22,8 +22,10 @@ from rmc.resources.gnomad import (
 from rmc.resources.reference_data import filtered_context, gene_model
 from rmc.resources.rmc import (
     constraint_prep,
+    merged_search_ht_path,
     multiple_breaks,
     simul_break,
+    single_search_ht_path,
 )
 from rmc.resources.resource_utils import MISSENSE
 from rmc.slack_creds import slack_token
@@ -238,6 +240,7 @@ def main(args):
             )
 
         if args.search_for_single_break:
+            is_rescue = args.is_rescue
             hl.init(
                 log=f"/round{args.search_num}_single_break_search.log",
                 tmp_dir=TEMP_PATH_WITH_DEL,
@@ -246,10 +249,18 @@ def main(args):
             logger.info(
                 "Searching for transcripts or transcript subsections with a single significant break..."
             )
-            # TODO: Accommodate relaxed search in temp paths (same round number?)
             if args.search_num == 1:
-                # Read constraint_prep resource HT if this is the first search
-                ht = constraint_prep.ht()
+                if is_rescue:
+                    ht = hl.read_table(
+                        merged_search_ht_path(
+                            search_num=args.prev_search_num,
+                            is_break_found=False,
+                            is_rescue=is_rescue,
+                        )
+                    )
+                else:
+                    # Read constraint_prep resource HT if this is the first search
+                    ht = constraint_prep.ht()
 
                 logger.info(
                     "Adding section annotation before searching for first break..."
@@ -262,18 +273,20 @@ def main(args):
                 ).drop("start", "stop")
             else:
                 # Read in merged single and simultaneous breaks results HT
-                ht_path = (
-                    f"{args.out_path}/round{args.search_num - 1}_merged_break_found.ht"
+                ht = hl.read_table(
+                    merged_search_ht_path(
+                        search_num=args.search_num - 1,
+                        is_break_found=True,
+                        is_rescue=is_rescue,
+                    ),
                 )
-                ht = hl.read_table(ht_path)
 
             logger.info(
                 "Calculating nulls, alts, and chi square values and checkpointing..."
             )
             ht = process_sections(ht, args.chisq_threshold)
-            # TODO: Update this to write to gnomad-tmp-4day
             ht = ht.checkpoint(
-                f"{TEMP_PATH}/round{args.search_num}_temp.ht", overwrite=True
+                f"{TEMP_PATH_WITH_DEL}/round{args.search_num}_temp.ht", overwrite=True
             )
 
             logger.info(
@@ -286,18 +299,18 @@ def main(args):
             )
             breakpoint_ht = breakpoint_ht.key_by("section")
             breakpoint_ht = breakpoint_ht.checkpoint(
-                # TODO: write this to a resource path
-                f"{TEMP_PATH}/round{args.search_num}_single_breakpoint.ht",
-                overwrite=True,
+                single_search_ht_path(
+                    search_num=args.search_num,
+                    is_break_found=True,
+                    is_breakpoint_only=True,
+                    is_rescue=is_rescue,
+                ),
+                overwrite=args.overwrite,
             )
 
             logger.info(
                 "Filtering to transcripts or transcript subsections with breaks and checkpointing..."
             )
-            # TODO: Make out_path a resource path rather than using args
-            # break_found_path = (
-            #    f"{args.out_path}/round{args.search_num}_single_break_found.ht"
-            # )
             ht = ht.annotate(breakpoint=breakpoint_ht[ht.section].locus.position)
             # Possible checkpoint here if necessary
             logger.info(
@@ -325,21 +338,28 @@ def main(args):
             break_found_ht = break_found_ht.key_by(section=break_found_ht.section_1)
             logger.info("Writing out sections with single significant break...")
             break_found_ht.write(
-                break_found_path(args.search_num), overwrite=args.overwrite
+                single_search_ht_path(
+                    search_num=args.search_num,
+                    is_break_found=True,
+                    is_breakpoint_only=False,
+                    is_rescue=is_rescue,
+                ),
+                overwrite=args.overwrite,
             )
 
             logger.info(
                 "Filtering HT to sections without a significant break and writing..."
             )
-            # TODO: Convert `no_break_found_path`, and paths for `breakpoint_ht`, merged_break_found hts
-            # to functions
-            # no_break_found_path = (
-            #     f"{args.out_path}/round{args.search_num}_single_no_break_found.ht"
-            # )
             no_break_found_ht = ht.filter(hl.is_missing(ht.breakpoint))
             no_break_found_ht = no_break_found_ht.drop("breakpoint")
             no_break_found_ht.write(
-                no_break_found_path(args.search_num), overwrite=args.overwrite
+                single_search_ht_path(
+                    search_num=args.search_num,
+                    is_break_found=False,
+                    is_breakpoint_only=False,
+                    is_rescue=is_rescue,
+                ),
+                overwrite=args.overwrite,
             )
 
         if args.merge_single_simul:
@@ -351,7 +371,14 @@ def main(args):
             simul_sections = hl.experimental.read_expression(
                 f"{SIMUL_BREAK_TEMP_PATH}/hts/{args.search_num}_sections.he"
             )
-            simul_ht = hl.read_table(no_break_found_path(args.search_num))
+            simul_ht = hl.read_table(
+                single_search_ht_path(
+                    search_num=args.search_num,
+                    is_break_found=False,
+                    is_breakpoint_only=False,
+                    is_rescue=args.is_rescue,
+                ),
+            )
             simul_ht = simul_ht.filter(simul_sections.contains(simul_ht.section))
             # NOTE: ran out of time, broad next steps:
             # 1. Annotate this newly found simul_ht with same annotations as on break_found_ht
@@ -524,13 +551,27 @@ if __name__ == "__main__":
         help="Search for single significant break in transcripts or transcript subsections.",
         action="store_true",
     )
-    # parser.add_argument(
-    #    "--out-path",
-    #    help="Path to output bucket for Tables after searching for single break.",
-    # )
+    parser.add_argument(
+        "--is-rescue",
+        help="""
+        Whether search is part of the 'rescue' pathway (pathway
+        with lower chi square significance cutoff).
+        """,
+        action="store_true",
+    )
     parser.add_argument(
         "--search-num",
         help="Search iteration number (e.g., second round of searching for single break would be 2).",
+        type=int,
+    )
+    parser.add_argument(
+        "--prev-search-num",
+        help="""
+        Largest search iteration number achieved in initial breaks searches
+        (single and simultaneous).
+        Used in rescue pathway only to find correct input Table path.
+        """,
+        type=int,
     )
     parser.add_argument(
         "--finalize",
