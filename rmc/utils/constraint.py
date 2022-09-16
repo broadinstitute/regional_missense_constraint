@@ -417,7 +417,7 @@ def get_fwd_exprs(
     logger.info("Getting cumulative observed variant counts...")
     ht = ht.annotate(
         obs_scan=get_cumulative_obs_expr(
-            group_str=ht[group_str],
+            group_str=group_str,
             observed_expr=ht[obs_str],
         )
     )
