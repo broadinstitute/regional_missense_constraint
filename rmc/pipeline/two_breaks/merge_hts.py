@@ -64,7 +64,7 @@ def main(args):
                 logger.info("Working on %s", ht_path)
                 temp = hl.read_table(ht_path)
                 if temp.count() > 0:
-                    # Tables containing transcripts/transcript sections that are over the transcript length threshold
+                    # Tables containing transcripts/transcript sections that are over the transcript/section length threshold
                     # are keyed by section, i, j
                     # Tables containing transcripts/transcript sections that are under the length threshold are keyed
                     # only by section
@@ -97,7 +97,7 @@ def main(args):
         ht = ht.annotate(transcript=ht.section.split("_")[0])
         simul_break_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
         logger.info(
-            "%i transcripts had two simultaneous breaks",
+            "%i transcripts had two simultaneous breaks in this round",
             len(simul_break_transcripts),
         )
         simul_break_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
@@ -107,7 +107,7 @@ def main(args):
             overwrite=args.overwrite,
         )
         logger.info(
-            "%i transcript sections had two simultaneous breaks",
+            "%i transcript sections had two simultaneous breaks in this round",
             len(simul_break_sections),
         )
 
