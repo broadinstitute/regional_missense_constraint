@@ -376,7 +376,7 @@ def main(args):
             logger.info("Reading in context HT...")
             # Drop extra annotations from context HT
             context_ht = filtered_context.ht().drop(
-                "_obs_scan", "_mu_scan", "forward_oe", "values"
+                "obs_scan", "mu_scan", "forward_oe", "values"
             )
             context_ht = context_ht.filter(
                 ~outlier_transcripts.contains(context_ht.transcript)
