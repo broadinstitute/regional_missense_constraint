@@ -253,9 +253,9 @@ def main(args):
                 if is_rescue:
                     ht = hl.read_table(
                         merged_search_ht_path(
-                            search_num=args.prev_search_num,
+                            search_num=args.search_num,
                             is_break_found=False,
-                            is_rescue=is_rescue,
+                            is_rescue=not is_rescue,
                         )
                     )
                 else:
@@ -564,15 +564,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--search-num",
         help="Search iteration number (e.g., second round of searching for single break would be 2).",
-        type=int,
-    )
-    parser.add_argument(
-        "--prev-search-num",
-        help="""
-        Largest search iteration number achieved in initial breaks searches
-        (single and simultaneous).
-        Used in rescue pathway only to find correct input Table path.
-        """,
         type=int,
     )
     parser.add_argument(
