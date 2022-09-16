@@ -508,19 +508,17 @@ def get_dpois_expr(
     ],
 ) -> hl.expr.StructExpression:
     """
-    Calculate null and alt values in preparation for chi-squared test to find significant breaks.
+    Calculate probabilities (in log10 space) of the observed values under a Poisson model with rate given by
+    expected * section observed/expected values.
 
-    All parameter values depend on the direction of calculation (forward/reverse) and
-    number of breaks (searching for first break or searching for additional break).
-
-    :param cond_expr: Conditional expression to check before calculating null and alt values.
+    :param cond_expr: Conditional expression to check before calculating probability.
     :param section_oe_expr: Expression of section observed/expected value.
     :param obs_expr: Expression containing observed variants count.
     :param exp_expr: Expression containing expected variants count.
-    :return: Struct containing forward or reverse null and alt values (either when searching for first or second break).
+    :return: log10 of the probability under Poisson model.
     """
     # log_p = True returns the natural logarithm of the probability density
-    # Multiply this value by hl.log(10) to convert to log base 10
+    # Divide this value by hl.log(10) to convert to log base 10
     return hl.or_missing(
         cond_expr,
         hl.dpois(obs_expr, exp_expr * section_oe_expr, log_p=True) / hl.log(10),
