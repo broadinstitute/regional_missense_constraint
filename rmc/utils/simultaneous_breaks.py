@@ -410,18 +410,6 @@ def search_for_two_breaks(
             0,
         )
     )
-    # Update section annotation and rekey by updated annotation
-    # Section format: <transcript>_<first break pos>_<second break pos>
-    group_ht = group_ht.annotate(
-        section_1=hl.format(
-            "%s_%s_%s",
-            group_ht.section.split("_")[0],
-            group_ht.group_ht.positions[group_ht.max_break[1]],
-            group_ht.group_ht.positions[group_ht.max_break[2]],
-        ),
-    )
-
-    # TODO: Revisit the breakpoint inclusiveness/exclusiveness update below
     group_ht = group_ht.transmute(
         max_chisq=group_ht.max_break[0],
         # Adjust breakpoint inclusive/exclusiveness to be consistent with single break breakpoints, i.e.
@@ -429,7 +417,7 @@ def search_for_two_breaks(
         # subsections will be divided as follows:
         # [section_start, first_break_pos] (first_break_pos, second_break_pos] (second_break_pos, section_end]
         breakpoints=(
-            group_ht.positions[group_ht.max_break[1] - 1],
+            group_ht.positions[group_ht.max_break[1]] - 1,
             group_ht.positions[group_ht.max_break[2]],
         ),
     )
