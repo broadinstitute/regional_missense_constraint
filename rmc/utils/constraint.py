@@ -536,13 +536,12 @@ def search_for_break(
     """
     Search for breakpoints in a transcript or within a transcript subsection.
 
-    Table also checkpoints intermediate table with max chi square values per transcript
+    Also checkpoints intermediate table with max chi square values per transcript
     or transcript subsection.
 
     Expects input HT to contain the following fields:
         - locus
-        - alleles
-        - transcript or section
+        - section
         - mu_snp
         - cumulative_exp
         - cumulative_obs
@@ -562,7 +561,7 @@ def search_for_break(
     :param chisq_threshold: Chi-square significance threshold.
         Default is 6.6 (single break; p = 0.01).
     :param group_str: Field used to group Table observed and expected values. Default is 'section'.
-    :param min_num_exp_mis: Minimum number of expected missense per transcript section.
+    :param min_num_exp_mis: Minimum number of expected missense per transcript/transcript section.
         Sections that have fewer than this number of expected missense variants will not
         be computed (chi square will be annotated as -1).
         Default is 10.
