@@ -7,22 +7,20 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import (
-    constraint_prep,
-    LOGGING_PATH,
-    multiple_breaks,
-    simul_break,
-    temp_path,
-)
-from rmc.resources.grch37.exac import filtered_exac
-from rmc.resources.grch37.gnomad import (
+from rmc.resources.basics import LOGGING_PATH, SIMUL_BREAK_TEMP_PATH, TEMP_PATH
+from rmc.resources.gnomad import (
     constraint_ht,
     filtered_exomes,
     processed_exomes,
     prop_obs_coverage,
 )
-from rmc.resources.grch37.reference_data import filtered_context, gene_model
-from rmc.resources.resource_utils import CURRENT_VERSION, MISSENSE
+from rmc.resources.reference_data import filtered_context, gene_model
+from rmc.resources.rmc import (
+    constraint_prep,
+    multiple_breaks,
+    simul_break,
+)
+from rmc.resources.resource_utils import MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     add_obs_annotation,
@@ -53,8 +51,6 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
-    exac = args.exac
-
     try:
         if args.pre_process_data:
             hl.init(log="/RMC_pre_process.log")
@@ -62,7 +58,7 @@ def main(args):
             logger.warning("Code currently only processes b37 data!")
 
             logger.info("Preprocessing reference fasta (context) HT...")
-            context_ht = process_context_ht("GRCh37", args.trimers)
+            context_ht = process_context_ht(args.trimers)
 
             logger.info(
                 "Filtering context HT to all covered sites not found or rare in gnomAD exomes"
@@ -94,11 +90,7 @@ def main(args):
         if args.prep_for_constraint:
             hl.init(log="/RMC_prep_for_constraint.log")
             logger.info("Reading in exome HT...")
-            if exac:
-                exome_ht = filtered_exac.ht()
-
-            else:
-                exome_ht = filtered_exomes.ht()
+            exome_ht = filtered_exomes.ht()
 
             logger.info("Reading in context HT...")
             context_ht = filtered_context.ht()
@@ -273,7 +265,7 @@ def main(args):
             ht = process_sections(ht, args.chisq_threshold)
             # TODO: Update this to write to gnomad-tmp-4day
             ht = ht.checkpoint(
-                f"{temp_path}/round{args.search_num}_temp.ht", overwrite=True
+                f"{TEMP_PATH}/round{args.search_num}_temp.ht", overwrite=True
             )
 
             logger.info(
@@ -287,7 +279,7 @@ def main(args):
             breakpoint_ht = breakpoint_ht.key_by("section")
             breakpoint_ht = breakpoint_ht.checkpoint(
                 # TODO: write this to a resource path
-                f"{temp_path}/round{args.search_num}_single_breakpoint.ht",
+                f"{TEMP_PATH}/round{args.search_num}_single_breakpoint.ht",
                 overwrite=True,
             )
 
@@ -349,7 +341,7 @@ def main(args):
             # Read in sections with breaks
             # TODO: think about whether section annotation will always be consistent
             simul_sections = hl.experimental.read_expression(
-                f"{simul_break_temp}/hts/{args.search_num}_sections.he"
+                f"{SIMUL_BREAK_TEMP_PATH}/hts/{args.search_num}_sections.he"
             )
             simul_ht = hl.read_table(no_break_found_path(args.search_num))
             simul_ht = simul_ht.filter(simul_sections.contains(simul_ht.section))
@@ -365,7 +357,7 @@ def main(args):
             logger.info(
                 "Getting start and end positions and total size for each transcript..."
             )
-            if not file_exists(f"{temp_path}/transcript.ht"):
+            if not file_exists(f"{TEMP_PATH}/transcript.ht"):
                 raise DataException(
                     "Transcript HT doesn't exist. Please double check and recreate!"
                 )
@@ -406,7 +398,7 @@ def main(args):
             ].sort()
             rmc_transcripts = []
             for break_num in n_breaks:
-                ht = hl.read_table(f"{temp_path}/break_{break_num}.ht")
+                ht = hl.read_table(f"{TEMP_PATH}/break_{break_num}.ht")
                 ht = ht.filter(ht.is_break)
                 rmc_transcripts.append(
                     ht.aggregate(hl.agg.collect_as_set(ht.transcript), _localize=False)
@@ -477,9 +469,9 @@ def main(args):
                 )
 
             logger.info("Checkpointing HTs...")
-            breaks_ht = breaks_ht.checkpoint(f"{temp_path}/breaks.ht", overwrite=True)
+            breaks_ht = breaks_ht.checkpoint(f"{TEMP_PATH}/breaks.ht", overwrite=True)
             no_breaks_ht = no_breaks_ht.checkpoint(
-                f"{temp_path}/no_breaks.ht", overwrite=True
+                f"{TEMP_PATH}/no_breaks.ht", overwrite=True
             )
 
     finally:
@@ -557,4 +549,3 @@ if __name__ == "__main__":
             main(args)
     else:
         main(args)
-# # # # # # # # # #

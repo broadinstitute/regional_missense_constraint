@@ -1,13 +1,20 @@
+"""Script containing resources for the current gnomAD version."""
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
 
-from rmc.resources.resource_utils import CURRENT_VERSION, FLAGSHIP_LOF, RESOURCE_PREFIX
+from rmc.resources.basics import RESOURCE_BUILD_PREFIX
+from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
 
-## Konrad's resources
-# LoF constraint resource files
-FLAGSHIP_MODEL_PREFIX = f"{FLAGSHIP_LOF}/model"
+FLAGSHIP_LOF = "gs://gnomad-public-requester-pays/papers/2019-flagship-lof/v1.0"
+"""
+Path to bucket with gnomAD v2 loss-of-function (LoF) constraint results.
+"""
 
-processed_exomes = TableResource(path=f"{FLAGSHIP_MODEL_PREFIX}/exomes_processed.ht")
+FLAGSHIP_LOF_MODEL_PREFIX = f"{FLAGSHIP_LOF}/model"
+
+processed_exomes = TableResource(
+    path=f"{FLAGSHIP_LOF_MODEL_PREFIX}/exomes_processed.ht"
+)
 """
 Processed gnomAD exomes Table.
 
@@ -15,7 +22,7 @@ Dropped colocated variants in vep annotation and removed all non-pass variants.
 Also annotated with context Table (sequence context, transcript information, most severe consequence).
 """
 filtered_exomes = TableResource(
-    path=f"{RESOURCE_PREFIX}/GRCh37/gnomad/ht/exomes_missense_only.ht"
+    path=f"{RESOURCE_BUILD_PREFIX}/gnomad/ht/exomes_missense_only.ht"
 )
 """
 Processed gnomAD exomes Table filtered to rare (AF < 0.001) missense variants in canonical transcripts only.
@@ -24,7 +31,9 @@ NOTE: This resource is created with `process_vep`, which now filters to non-outl
 However, for v2, this resource contains *all* canonical transcripts (including outliers).
 """
 
-processed_genomes = TableResource(path=f"{FLAGSHIP_MODEL_PREFIX}/genomes_processed.ht")
+processed_genomes = TableResource(
+    path=f"{FLAGSHIP_LOF_MODEL_PREFIX}/genomes_processed.ht"
+)
 """
 Processed gnomAD genomes Table.
 
@@ -33,7 +42,7 @@ Also annotated with context Table (sequence context, transcript information, mos
 """
 
 prop_obs_coverage = TableResource(
-    path=f"{FLAGSHIP_MODEL_PREFIX}/prop_observed_by_coverage_no_common_pass_filtered_bins.ht"
+    path=f"{FLAGSHIP_LOF_MODEL_PREFIX}/prop_observed_by_coverage_no_common_pass_filtered_bins.ht"
 )
 """
 Table with proportion of variants observed by coverage.
@@ -43,7 +52,7 @@ Input for `build_models`.
 """
 
 possible_variants_ht = TableResource(
-    path=f"{FLAGSHIP_MODEL_PREFIX}/possible_data/possible_transcript_pop_standard.ht"
+    path=f"{FLAGSHIP_LOF_MODEL_PREFIX}/possible_data/possible_transcript_pop_standard.ht"
 )
 """
 Table with all observed SNPs in hg19 fasta (context) Table.
@@ -57,10 +66,20 @@ Contains multiple mutation rate annotations:
 	- mu: `mu_agg` multipled by coverage correction.
 """
 
+mutation_rate = TableResource(
+    path=f"{FLAGSHIP_LOF_MODEL_PREFIX}/mutation_rate_methylation_bins.ht",
+)
+"""
+Table with mutation rate recalculated for gnomAD constraint.
+
+This was calculated with `calculate_mu_by_downsampling` in
+https://github.com/macarthur-lab/gnomad_lof/blob/master/constraint_utils/constraint_basics.py.
+"""
+
 constraint_ht = VersionedTableResource(
-    default_version=CURRENT_VERSION,
+    default_version=CURRENT_GNOMAD_VERSION,
     versions={
-        CURRENT_VERSION: TableResource(
+        CURRENT_GNOMAD_VERSION: TableResource(
             path="gs://gcp-public-data--gnomad/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_transcript.ht"
         )
     },

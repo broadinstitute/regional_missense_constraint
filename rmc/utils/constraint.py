@@ -9,21 +9,21 @@ from gnomad.utils.file_utils import file_exists
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
-from rmc.resources.basics import (
-    multiple_breaks,
-    oe_bin_counts_tsv,
-    rmc_browser,
-    rmc_results,
-    temp_path,
-)
-from rmc.resources.grch37.gnomad import filtered_exomes
-from rmc.resources.grch37.reference_data import clinvar_path_mis, de_novo, gene_model
+from rmc.resources.basics import TEMP_PATH
+from rmc.resources.gnomad import filtered_exomes
+from rmc.resources.reference_data import clinvar_path_mis, de_novo, gene_model
 from rmc.utils.generic import (
     get_constraint_transcripts,
     get_coverage_correction_expr,
     keep_criteria,
     import_clinvar_hi_variants,
     import_de_novo_variants,
+)
+from rmc.resources.rmc import (
+    multiple_breaks,
+    oe_bin_counts_tsv,
+    rmc_browser,
+    rmc_results,
 )
 
 
@@ -556,7 +556,6 @@ def search_for_break(
     Also expects:
         - Input HT was created using a VEP context HT.
         - Multiallelic variants in input HT have been split.
-        - Input HT is autosomes/PAR only, X non-PAR only, or Y non-PAR only.
 
     :param ht: Input Table.
     :param chisq_threshold: Chi-square significance threshold.
@@ -630,7 +629,7 @@ def search_for_break(
     )
     # hl.agg.max ignores NaNs
     group_ht = ht.group_by(group_str).aggregate(max_chisq=hl.agg.max(ht.chisq))
-    group_ht = group_ht.checkpoint(f"{temp_path}/max_chisq.ht", overwrite=True)
+    group_ht = group_ht.checkpoint(f"{TEMP_PATH}/max_chisq.ht", overwrite=True)
     ht = ht.annotate(max_chisq=group_ht[ht[group_str]].max_chisq)
     return ht.annotate(
         is_break=((ht.chisq == ht.max_chisq) & (ht.chisq >= chisq_threshold))
@@ -946,7 +945,7 @@ def get_unique_transcripts_per_break(
 
     # Checkpoint to force hail to finish this group by computation
     group_ht = group_ht.checkpoint(
-        f"{temp_path}/breaks_per_transcript.ht", overwrite=True
+        f"{TEMP_PATH}/breaks_per_transcript.ht", overwrite=True
     )
 
     for i in range(1, max_n_breaks + 1):
@@ -1063,12 +1062,12 @@ def finalize_multiple_breaks(
 
     logger.info("Selecting only relevant annotations from HT and checkpointing...")
     ht = ht.select(*annotations)
-    ht = ht.checkpoint(f"{temp_path}/multiple_breaks.ht", overwrite=True)
+    ht = ht.checkpoint(f"{TEMP_PATH}/multiple_breaks.ht", overwrite=True)
 
     logger.info("Getting all breakpoint positions...")
     break_ht = get_all_breakpoint_pos(ht)
     break_ht = break_ht.checkpoint(
-        f"{temp_path}/multiple_breaks_breakpoints.ht", overwrite=True
+        f"{TEMP_PATH}/multiple_breaks_breakpoints.ht", overwrite=True
     )
     ht = ht.annotate(break_pos=break_ht[ht.transcript].break_pos)
 
@@ -1111,7 +1110,7 @@ def finalize_simul_breaks(ht: hl.Table) -> hl.Table:
     """
     logger.info("Get transcript section annotations (obs, exp, OE, chisq)...")
     ht = annotate_transcript_sections(ht, max_n_breaks=2)
-    ht = ht.checkpoint(f"{temp_path}/simul_break_sections.ht", overwrite=True)
+    ht = ht.checkpoint(f"{TEMP_PATH}/simul_break_sections.ht", overwrite=True)
     return ht
 
 
@@ -1142,7 +1141,7 @@ def finalize_all_breaks_results(
     logger.info("Finalizing simultaneous breaks results...")
     simul_breaks_ht = finalize_simul_breaks(simul_breaks_ht)
     ht = breaks_ht.union(simul_breaks_ht, unify=False)
-    ht = ht.checkpoint(f"{temp_path}/breaks.ht", overwrite=True)
+    ht = ht.checkpoint(f"{TEMP_PATH}/breaks.ht", overwrite=True)
 
     logger.info("Reformatting for browser release...")
     ht = reformat_annotations_for_release(ht)
@@ -1164,7 +1163,7 @@ def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Tab
     return ht1.annotate(**{f"{annot_str}": hl.int(hl.is_defined(ht2[ht1.locus]))})
 
 
-def get_oe_bins(ht: hl.Table, build: str) -> None:
+def get_oe_bins(ht: hl.Table) -> None:
     """
     Group RMC results HT by obs/exp (OE) bin and annotate.
 
@@ -1177,23 +1176,17 @@ def get_oe_bins(ht: hl.Table, build: str) -> None:
         - `section_start`: Start position for transcript subsection
         - `section_end`: End position for transcript subsection
         - `section_obs`: Number of observed missense variants within transcript subsection
-        - `section_exp`: Proportion of expected missense variatns within transcript subsection
+        - `section_exp`: Proportion of expected missense variants within transcript subsection
         - `section_oe`: Observed/expected missense variation ratio within transcript subsection
 
-    :param ht: Input Table containing all breaks results.
-    :param build: Reference genome build.
+    :param hl.Table ht: Input Table containing all breaks results.
     :return: None; writes TSV with OE bins + annotations to `oe_bin_counts_tsv` resource path.
     """
-    if build != "GRCh37":
-        raise DataException(
-            "ClinVar and de novo files currently only exist for GRCh37!"
-        )
-
     logger.info("Reading in ClinVar, de novo missense, and transcript HTs...")
     if not file_exists(clinvar_path_mis.path):
-        import_clinvar_hi_variants(build="GRCh37", overwrite=True)
+        import_clinvar_hi_variants(overwrite=True)
     if not file_exists(de_novo.path):
-        import_de_novo_variants(build="GRCh37", overwrite=True)
+        import_de_novo_variants(overwrite=True)
 
     clinvar_ht = clinvar_path_mis.ht()
     dn_ht = de_novo.ht()
@@ -1226,7 +1219,7 @@ def get_oe_bins(ht: hl.Table, build: str) -> None:
         .default("0.8-1.0")
     )
     # Checkpoint HT here because it becomes a couple tables below
-    ht = ht.checkpoint(f"{temp_path}/breaks_oe_bin.ht", overwrite=True)
+    ht = ht.checkpoint(f"{TEMP_PATH}/breaks_oe_bin.ht", overwrite=True)
 
     # Group HT by section to get number of base pairs per section
     # Need to group by to avoid overcounting
@@ -1239,7 +1232,7 @@ def get_oe_bins(ht: hl.Table, build: str) -> None:
         oe=hl.agg.take(ht.section_oe, 1)[0],
         oe_bin=hl.agg.take(ht.oe_bin, 1)[0],
     )
-    group_ht = group_ht.checkpoint(f"{temp_path}/sections.ht", overwrite=True)
+    group_ht = group_ht.checkpoint(f"{TEMP_PATH}/sections.ht", overwrite=True)
     group_ht = group_ht.annotate(bp=group_ht.end - group_ht.start)
     group_ht = group_ht.group_by("oe_bin").aggregate(bp_sum=hl.agg.sum(group_ht.bp))
 
@@ -1341,7 +1334,7 @@ def group_rmc_ht_by_section(overwrite: bool = False) -> hl.Table:
         section_oe=hl.agg.take(rmc_ht.section_oe, 1)[0],
     )
     rmc_ht = rmc_ht.checkpoint(
-        f"{temp_path}/rmc_group_by_section.ht",
+        f"{TEMP_PATH}/rmc_group_by_section.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )

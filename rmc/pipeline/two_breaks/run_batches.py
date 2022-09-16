@@ -30,11 +30,11 @@ import hailtop.batch as hb
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import (
+from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH
+from rmc.resources.rmc import (
     not_one_break_grouped,
-    simul_break_over_threshold,
-    simul_break_temp,
-    simul_break_under_threshold,
+    simul_break_over_threshold_path,
+    simul_break_under_threshold_path,
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import check_for_successful_transcripts
@@ -609,10 +609,16 @@ def main(args):
     logger.info("Importing SetExpression with transcripts...")
     transcripts_to_run = check_for_successful_transcripts(
         transcripts=(
-            list(hl.eval(hl.experimental.read_expression(simul_break_under_threshold)))
+            list(
+                hl.eval(
+                    hl.experimental.read_expression(simul_break_under_threshold_path)
+                )
+            )
             if args.under_threshold
             else list(
-                hl.eval(hl.experimental.read_expression(simul_break_over_threshold))
+                hl.eval(
+                    hl.experimental.read_expression(simul_break_over_threshold_path)
+                )
             )
         ),
     )
@@ -659,8 +665,8 @@ def main(args):
                 not_one_break_grouped.path,
                 group,
                 args.over_threshold,
-                f"{simul_break_temp}/hts/{args.search_num}/simul_break_{job_name}.ht",
-                f"{simul_break_temp}/success_files",
+                f"{SIMUL_BREAK_TEMP_PATH}/hts/{args.search_num}/simul_break_{job_name}.ht",
+                f"{SIMUL_BREAK_TEMP_PATH}/success_files",
                 None,
                 args.chisq_threshold,
                 split_window_size,
@@ -686,9 +692,9 @@ def main(args):
                 not_one_break_grouped.path,
                 group,
                 args.over_threshold,
-                f"{simul_break_temp}/hts/{args.search_num}/simul_break_{group[0]}.ht",
-                f"{simul_break_temp}/success_files",
-                f"{simul_break_temp}",
+                f"{SIMUL_BREAK_TEMP_PATH}/hts/{args.search_num}/simul_break_{group[0]}.ht",
+                f"{SIMUL_BREAK_TEMP_PATH}/success_files",
+                f"{SIMUL_BREAK_TEMP_PATH}",
                 args.chisq_threshold,
                 args.group_size,
             )

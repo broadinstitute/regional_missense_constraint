@@ -7,10 +7,10 @@ import hail as hl
 
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
 
-from rmc.resources.basics import (
-    simul_break_over_threshold,
-    simul_break_temp,
-    simul_break_under_threshold,
+from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH
+from rmc.resources.rmc import (
+    simul_break_over_threshold_path,
+    simul_break_under_threshold_path,
 )
 from rmc.utils.constraint import get_dpois_expr, get_obs_exp_expr
 
@@ -93,7 +93,7 @@ def split_sections_by_len(
     :param missense_len_threshold: Cutoff based on possible number of missense sites in section.
     :param ttn_id: TTN transcript ID. TTN is large and needs to be processed separately.
     :param overwrite: Whether to overwrite existing SetExpressions.
-    :return: None; writes SetExpressions to resource paths (`simul_break_under_threshold`, `simul_break_over_threshold`).
+    :return: None; writes SetExpressions to resource paths (`simul_break_under_threshold_path`, `simul_break_over_threshold_path`).
     """
     logger.info("Annotating HT with length of cumulative observed list annotation...")
     # This length is the number of positions with possible missense sites that need to be searched
@@ -128,10 +128,10 @@ def split_sections_by_len(
         over_threshold = set(over_threshold)
     # TODO: Update these resources `simul_break_under_threshold`, `simul_break_over_threshold``
     hl.experimental.write_expression(
-        under_threshold, simul_break_under_threshold(search_num), overwrite
+        under_threshold, simul_break_under_threshold_path(search_num), overwrite
     )
     hl.experimental.write_expression(
-        over_threshold, simul_break_over_threshold(search_num), overwrite
+        over_threshold, simul_break_over_threshold_path(search_num), overwrite
     )
 
 
@@ -150,7 +150,7 @@ def check_for_successful_transcripts(
     :return: List of transcripts didn't have success TSVs and therefore still need to be processed.
     """
     logger.info("Checking if any transcripts have already been searched...")
-    success_file_path = f"{simul_break_temp}/success_files"
+    success_file_path = f"{SIMUL_BREAK_TEMP_PATH}/success_files"
     transcript_success_map = {}
     transcripts_to_run = []
     for transcript in transcripts:
@@ -197,8 +197,7 @@ def calculate_window_chisq(
         simultaneous breaks.
     :return: Chi square significance value.
     """
-    return
-    (
+    return (
         hl.case()
         .when(
             # Return missing when the internal window spans the entire transcript/transcript section
