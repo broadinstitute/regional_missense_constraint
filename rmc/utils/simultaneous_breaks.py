@@ -299,7 +299,8 @@ def search_for_two_breaks(
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
     :param float min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
-    :return: Table with largest simultaneous break window size annotated per transcript/section.
+    :return: Table filtered to transcript/sections with significant simultaneous breakpoints
+        and annotated with breakpoint information.
     :rtype: hl.Table
     """
 
