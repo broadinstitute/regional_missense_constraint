@@ -197,8 +197,7 @@ def calculate_window_chisq(
         simultaneous breaks.
     :return: Chi square significance value.
     """
-    return
-    (
+    return (
         hl.case()
         .when(
             # Return missing when the internal window spans the entire transcript/transcript section
