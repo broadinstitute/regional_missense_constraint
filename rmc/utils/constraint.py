@@ -390,8 +390,8 @@ def get_fwd_exprs(
     ht: hl.Table,
     obs_str: str,
     mu_str: str,
-    total_mu_str: str,
-    total_exp_str: str,
+    total_mu_str: str = "section_mu",
+    total_exp_str: str = "section_exp",
     group_str: str = "section",
 ) -> hl.Table:
     """
