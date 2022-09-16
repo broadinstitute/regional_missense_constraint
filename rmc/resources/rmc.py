@@ -13,6 +13,7 @@ from rmc.resources.basics import (
     MODEL_PREFIX,
     MPC_PREFIX,
     RESOURCE_PREFIX,
+    SINGLE_BREAK_TEMP_PATH,
 )
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
@@ -56,7 +57,8 @@ divergence_scores = TableResource(
     },
 )
 """
-Table with divergence score between humans and macaques for each canonical transcript in Gencode v19.
+Table with divergence score between humans and macaques
+for each canonical transcript in Gencode v19.
 """
 
 ####################################################################################
@@ -76,6 +78,70 @@ Context Table ready for RMC calculations.
 
 HT is annotated with observed and expected variant counts per base.
 """
+
+
+def single_search_ht_path(
+    search_num: int,
+    is_break_found: bool,
+    is_breakpoint_only: bool,
+    is_rescue: bool,
+) -> str:
+    """
+    Return path to Table associated for specified round of search.
+
+    Function returns path to HT based on search number, break status,
+    breakpoint status, and whether HT is associated with "rescue" pathway
+    (pathway with lowered chi square significance cutoff).
+
+    Break status refers to whether transcripts/sections in HT have at least one
+    single significant breakpoint.
+
+    Breakpoint status refers to whether HT contains breakpoint positions only
+    or all positions in transcripts/sections.
+
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :param is_break_found: Whether to return path to HT with transcript/sections
+        that have significant single break results.
+    :param is_breakpoint_only: Whether to return path to HT with breakpoint positions
+        only.
+    :param is_rescue: Whether to return path to HT created in rescue pathway.
+    :return: Path to specified single break found or no single break found HT.
+    """
+    rescue = "rescue_" if is_rescue else ""
+    break_status = "break_found" if is_break_found else "no_break_found"
+    breakpoint_status = "_breakpoint_only" if is_breakpoint_only else ""
+    return f"{SINGLE_BREAK_TEMP_PATH}/{rescue}round{search_num}_single_{break_status}{breakpoint_status}.ht"
+
+
+def merged_search_ht_path(
+    search_num: int,
+    is_break_found: bool,
+    is_rescue: bool,
+) -> str:
+    """
+    Return path to Table with merged single and simultaneous breaks search results.
+
+    Function returns path to HT based on search number, break status,
+    and whether HT is associated with "rescue" pathway
+    (pathway with lowered chi square significance cutoff).
+
+    Break status refers to whether transcripts/sections in HT have at least one
+    single significant breakpoint.
+
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :param is_break_found: Whether to return path to HT with transcript/sections
+        that have significant single break results.
+    :param is_rescue: Whether to return path to HT created in rescue pathway.
+    :return: Path to merged break found HT or no break found HT.
+    """
+    rescue = "rescue_" if is_rescue else ""
+    break_status = "break_found" if is_break_found else "no_break_found"
+    return (
+        f"{SINGLE_BREAK_TEMP_PATH}/{rescue}round{search_num}_merged_{break_status}.ht"
+    )
+
 
 one_break = VersionedTableResource(
     default_version=CURRENT_FREEZE,
