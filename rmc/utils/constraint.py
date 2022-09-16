@@ -707,7 +707,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float, group_str: str = "sec
 
     :param ht: Input Table.
     :param chisq_threshold: Chi-square significance threshold.
-        Value should be 6.6 (single break) and 9.2 (two breaks) (p = 0.01).
+        Value should be 6.6 (single break) or 9.2 (two breaks) (p = 0.01).
     :param group_str: Field used to group observed and expected values. Default is 'section'.
     :return: Table annotated with whether position is a breakpoint.
     """
@@ -719,7 +719,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float, group_str: str = "sec
     ht = get_subsection_exprs(ht)
 
     logger.info(
-        "Annotating post breakpoint HT with cumulative observed and expected counts..."
+        "Annotating cumulative observed and expected counts..."
     )
     ht = get_fwd_exprs(
         ht=ht,
@@ -731,7 +731,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float, group_str: str = "sec
     )
 
     logger.info(
-        "Annotating pre and post breakpoint HTs with reverse observed and expected counts..."
+        "Annotating reverse observed and expected counts..."
     )
     ht = get_reverse_exprs(
         ht=ht,

@@ -539,7 +539,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--chisq-threshold",
-        help="Chi-square significance threshold. Value should be 6.6 (single break) and 9.2 (two breaks) (p = 0.01).",
+        help="Chi-square significance threshold. Value should be 6.6 (single break) or 9.2 (two breaks) (p = 0.01).",
         type=float,
         default=6.6,
     )
