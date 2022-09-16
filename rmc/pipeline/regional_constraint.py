@@ -322,7 +322,7 @@ def main(args):
                 )
             )
             # Rekey by new section annotation
-            break_found_ht = break_found_ht.key_by(section=break_found_ht.section_1)
+            break_found_ht = break_found_ht.key_by(section=break_found_ht.section_1).drop("section_1")
             logger.info("Writing out sections with single significant break...")
             break_found_ht.write(
                 break_found_path(args.search_num), overwrite=args.overwrite
