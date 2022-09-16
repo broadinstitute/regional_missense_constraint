@@ -714,7 +714,6 @@ def process_sections(ht: hl.Table, chisq_threshold: float, group_str: str = "sec
     # TODO: When re-running, make sure `get_subsection_exprs`,
     # `get_fwd_exprs` don't run again for first break search only
     # Also rename total to section for this run
-    # TODO: Rename overall_oe to section_oe
     # TODO: update code to stop continually finding first break (we still need a break_list annotation or something similar)
     ht = get_subsection_exprs(ht)
 
