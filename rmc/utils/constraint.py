@@ -172,7 +172,7 @@ def adjust_obs_expr(
     cumulative_obs_expr: hl.expr.DictExpression,
     obs_expr: hl.expr.Int64Expression,
     group_str: str = "section",
-) -> hl.expr.DictExpression:
+) -> hl.expr.Int64Expression:
     """
     Adjust the scan with the cumulative number of observed variants.
 
