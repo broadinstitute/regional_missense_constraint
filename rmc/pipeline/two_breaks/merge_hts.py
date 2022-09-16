@@ -34,7 +34,7 @@ ANNOTATIONS = {"max_chisq", "section", "breakpoints"}
 Set of annotations to keep from two simultaneous breaks search.
 
 `max_chisq`: Chi square value associated with two breaks.
-`section`: Transcript section annotation.
+`section`: Transcript section that was searched.
     Format: <transcript>_<start position>_<end position>.
 `breakpoints`: Tuple of breakpoints with adjusted inclusiveness/exclusiveness.
 """
