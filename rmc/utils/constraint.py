@@ -529,7 +529,7 @@ def search_for_break(
     ht: hl.Table,
     chisq_threshold: float = 6.6,
     group_str: str = "section",
-    min_num_exp_mis: int = 10,
+    min_num_exp_mis: float = 10,
 ) -> hl.Table:
     """
     Search for breakpoints in a transcript or within a transcript subsection.
