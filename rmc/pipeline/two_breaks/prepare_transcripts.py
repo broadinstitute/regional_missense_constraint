@@ -2,8 +2,8 @@
 This script prepares the inputs to the two simultaneous breaks search.
 
 This script has two possible steps:
-- Create grouped version of not one single break found Table
-- Split transcripts/transcript/sections based on number of possible missense variants.
+- Group not one single break found Table by transcript/transcript section.
+- Split transcripts/transcript sections in this Table based on number of possible missense variants.
 
 Both steps should be run in Dataproc.
 """
@@ -44,7 +44,7 @@ def main(args):
             )
             group_no_single_break_found_ht(
                 ht=no_single_break_found_path(args.search_num),
-                out_ht=no_single_break_found_path(args.search_num, grouped=True),
+                out_ht_path=no_single_break_found_path(args.search_num, grouped=True),
                 group_str="section" if args.search_num > 1 else "transcript",
             )
 
@@ -78,6 +78,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
+    )
+    parser.add_argument(
+        "--search-num",
+        help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
+        type=int,
     )
 
     # Create subparsers for each step

@@ -335,7 +335,9 @@ def main(args):
                 )
             )
             # Rekey by new section annotation
-            break_found_ht = break_found_ht.key_by(section=break_found_ht.section_1)
+            break_found_ht = break_found_ht.key_by(
+                section=break_found_ht.section_1
+            ).drop("section_1")
             logger.info("Writing out sections with single significant break...")
             break_found_ht.write(
                 single_search_ht_path(
@@ -369,7 +371,7 @@ def main(args):
             # Read in sections with breaks
             # TODO: think about whether section annotation will always be consistent
             simul_sections = hl.experimental.read_expression(
-                f"{SIMUL_BREAK_TEMP_PATH}/hts/{args.search_num}_sections.he"
+                f"{SIMUL_BREAK_TEMP_PATH}/hts/round{args.search_num}_sections.he"
             )
             simul_ht = hl.read_table(
                 single_search_ht_path(
@@ -403,7 +405,7 @@ def main(args):
             logger.info("Reading in context HT...")
             # Drop extra annotations from context HT
             context_ht = filtered_context.ht().drop(
-                "_obs_scan", "_mu_scan", "forward_oe", "values"
+                "obs_scan", "mu_scan", "forward_oe", "values"
             )
             context_ht = context_ht.filter(
                 ~outlier_transcripts.contains(context_ht.transcript)
@@ -580,7 +582,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--chisq-threshold",
-        help="Chi-square significance threshold. Value should be 6.6 (single break) and 9.2 (two breaks) (p = 0.01).",
+        help="Chi-square significance threshold. Value should be 6.6 (single break) or 9.2 (two breaks) (p = 0.01).",
         type=float,
         default=6.6,
     )

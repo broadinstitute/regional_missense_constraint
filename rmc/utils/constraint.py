@@ -172,7 +172,7 @@ def adjust_obs_expr(
     cumulative_obs_expr: hl.expr.DictExpression,
     obs_expr: hl.expr.Int64Expression,
     group_str: str = "section",
-) -> hl.expr.DictExpression:
+) -> hl.expr.Int64Expression:
     """
     Adjust the scan with the cumulative number of observed variants.
 
@@ -221,9 +221,9 @@ def get_cumulative_mu_expr(
 
 def adjust_mu_expr(
     cumulative_mu_expr: hl.expr.DictExpression,
-    mu_expr: hl.expr.Int32Expression,
+    mu_expr: hl.expr.Float64Expression,
     group_str: hl.expr.StringExpression,
-) -> hl.expr.DictExpression:
+) -> hl.expr.Float64Expression:
     """
     Adjust the scan with the cumulative number mutation rate probability.
 
@@ -390,8 +390,8 @@ def get_fwd_exprs(
     ht: hl.Table,
     obs_str: str,
     mu_str: str,
-    total_mu_str: str,
-    total_exp_str: str,
+    total_mu_str: str = "section_mu",
+    total_exp_str: str = "section_exp",
     group_str: str = "section",
 ) -> hl.Table:
     """
@@ -508,19 +508,18 @@ def get_dpois_expr(
     ],
 ) -> hl.expr.StructExpression:
     """
-    Calculate null and alt values in preparation for chi-squared test to find significant breaks.
+    Calculate probabilities (in log10 space) of the observed values under a Poisson model.
 
-    All parameter values depend on the direction of calculation (forward/reverse) and
-    number of breaks (searching for first break or searching for additional break).
+    Rate in model given by expected * section observed/expected values.
 
-    :param cond_expr: Conditional expression to check before calculating null and alt values.
+    :param cond_expr: Conditional expression to check before calculating probability.
     :param section_oe_expr: Expression of section observed/expected value.
     :param obs_expr: Expression containing observed variants count.
     :param exp_expr: Expression containing expected variants count.
-    :return: Struct containing forward or reverse null and alt values (either when searching for first or second break).
+    :return: log10 of the probability under Poisson model.
     """
     # log_p = True returns the natural logarithm of the probability density
-    # Multiply this value by hl.log(10) to convert to log base 10
+    # Divide this value by hl.log(10) to convert to log base 10
     return hl.or_missing(
         cond_expr,
         hl.dpois(obs_expr, exp_expr * section_oe_expr, log_p=True) / hl.log(10),
@@ -536,13 +535,12 @@ def search_for_break(
     """
     Search for breakpoints in a transcript or within a transcript subsection.
 
-    Table also checkpoints intermediate table with max chi square values per transcript
+    Also checkpoints intermediate table with max chi square values per transcript
     or transcript subsection.
 
     Expects input HT to contain the following fields:
         - locus
-        - alleles
-        - transcript or section
+        - section
         - mu_snp
         - cumulative_exp
         - cumulative_obs
@@ -561,9 +559,9 @@ def search_for_break(
     :param chisq_threshold: Chi-square significance threshold.
         Default is 6.6 (single break; p = 0.01).
     :param group_str: Field used to group Table observed and expected values. Default is 'section'.
-    :param min_num_exp_mis: Minimum number of expected missense per transcript section.
+    :param min_num_exp_mis: Minimum number of expected missense per transcript/transcript section.
         Sections that have fewer than this number of expected missense variants will not
-        be computed (chi square will be annotated as -1).
+        be computed (chi square will be annotated as a missing value).
         Default is 10.
     :return: Table annotated with whether position is a breakpoint (`is_break`).
     """
@@ -581,7 +579,8 @@ def search_for_break(
     # Split transcript subsection when searching for additional breaks
     ht = ht.annotate(
         total_null=hl.or_missing(
-            (ht.cumulative_exp >= 10) | (ht.reverse.exp >= 10),
+            (ht.cumulative_exp >= min_num_exp_mis)
+            & (ht.reverse.exp >= min_num_exp_mis),
             # Add forwards section null (going through positions from smaller to larger)
             # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
             get_dpois_expr(
@@ -706,20 +705,17 @@ def process_sections(ht: hl.Table, chisq_threshold: float, group_str: str = "sec
 
     :param ht: Input Table.
     :param chisq_threshold: Chi-square significance threshold.
-        Value should be 6.6 (single break) and 9.2 (two breaks) (p = 0.01).
+        Value should be 6.6 (single break) or 9.2 (two breaks) (p = 0.01).
     :param group_str: Field used to group observed and expected values. Default is 'section'.
     :return: Table annotated with whether position is a breakpoint.
     """
     # TODO: When re-running, make sure `get_subsection_exprs`,
     # `get_fwd_exprs` don't run again for first break search only
     # Also rename total to section for this run
-    # TODO: Rename overall_oe to section_oe
     # TODO: update code to stop continually finding first break (we still need a break_list annotation or something similar)
     ht = get_subsection_exprs(ht)
 
-    logger.info(
-        "Annotating post breakpoint HT with cumulative observed and expected counts..."
-    )
+    logger.info("Annotating cumulative observed and expected counts...")
     ht = get_fwd_exprs(
         ht=ht,
         group_str="section",
@@ -729,9 +725,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float, group_str: str = "sec
         total_exp_str="section_exp",
     )
 
-    logger.info(
-        "Annotating pre and post breakpoint HTs with reverse observed and expected counts..."
-    )
+    logger.info("Annotating reverse observed and expected counts...")
     ht = get_reverse_exprs(
         ht=ht,
         total_obs_expr=ht.section_obs,

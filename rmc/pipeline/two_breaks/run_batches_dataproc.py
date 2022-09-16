@@ -35,7 +35,7 @@ def main(args):
     try:
         logger.warning("This step should be run on an autoscaling cluster!")
         hl.init(
-            log="/search_for_two_breaks_run_batches_dataproc.log",
+            log=f"/round{args.search_num}search_for_two_breaks_run_batches_dataproc.log",
             tmp_dir=TEMP_PATH_WITH_DEL,
         )
         if args.run_ttn:
@@ -54,9 +54,9 @@ def main(args):
 
         for counter, group in enumerate(transcript_groups):
             output_ht = (
-                f"{SIMUL_BREAK_TEMP_PATH}/hts/{args.search_num}/simul_break_dataproc_ttn.ht"
+                f"{SIMUL_BREAK_TEMP_PATH}/hts/round{args.search_num}/simul_break_dataproc_ttn.ht"
                 if args.run_ttn
-                else f"{SIMUL_BREAK_TEMP_PATH}/hts/{args.search_num}/simul_break_dataproc_{counter}.ht"
+                else f"{SIMUL_BREAK_TEMP_PATH}/hts/round{args.search_num}/simul_break_dataproc_{counter}.ht"
             )
             if file_exists(output_ht):
                 raise DataException(
@@ -96,9 +96,6 @@ if __name__ == "__main__":
         default=9.2,
     )
     parser.add_argument(
-        "--overwrite", help="Overwrite existing data.", action="store_true"
-    )
-    parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
     )
@@ -107,7 +104,6 @@ if __name__ == "__main__":
         help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
         type=int,
     )
-
     parser.add_argument(
         "--group-size",
         help="""

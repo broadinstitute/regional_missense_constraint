@@ -484,7 +484,7 @@ def process_transcript_group(
 
     Designed for use with Hail Batch.
 
-    :param str ht_path: Path to input Table (Table written using `group_not_one_break_ht`).
+    :param str ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param List[str] transcript_group: List of transcripts to process.
     :param bool over_threshold: Whether input transcripts have more
         possible missense variants than threshold specified in `run_simultaneous_breaks`.
@@ -665,7 +665,7 @@ def main(args):
                 not_one_break_grouped.path,
                 group,
                 args.over_threshold,
-                f"{SIMUL_BREAK_TEMP_PATH}/hts/{args.search_num}/simul_break_{job_name}.ht",
+                f"{SIMUL_BREAK_TEMP_PATH}/hts/round{args.search_num}/simul_break_{job_name}.ht",
                 f"{SIMUL_BREAK_TEMP_PATH}/success_files",
                 None,
                 args.chisq_threshold,
@@ -692,7 +692,7 @@ def main(args):
                 not_one_break_grouped.path,
                 group,
                 args.over_threshold,
-                f"{SIMUL_BREAK_TEMP_PATH}/hts/{args.search_num}/simul_break_{group[0]}.ht",
+                f"{SIMUL_BREAK_TEMP_PATH}/hts/round{args.search_num}/simul_break_{group[0]}.ht",
                 f"{SIMUL_BREAK_TEMP_PATH}/success_files",
                 f"{SIMUL_BREAK_TEMP_PATH}",
                 args.chisq_threshold,
