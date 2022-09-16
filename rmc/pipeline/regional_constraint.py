@@ -7,7 +7,12 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, SIMUL_BREAK_TEMP_PATH, TEMP_PATH
+from rmc.resources.basics import (
+    LOGGING_PATH,
+    SIMUL_BREAK_TEMP_PATH,
+    TEMP_PATH,
+    TEMP_PATH_WITH_DEL,
+)
 from rmc.resources.gnomad import (
     constraint_ht,
     filtered_exomes,
@@ -53,7 +58,7 @@ def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
     try:
         if args.pre_process_data:
-            hl.init(log="/RMC_pre_process.log")
+            hl.init(log="/RMC_pre_process.log", tmp_dir=TEMP_PATH_WITH_DEL)
             # TODO: Add code to create annotations necessary for constraint_flag_expr and filter transcripts prior to running constraint
             logger.warning("Code currently only processes b37 data!")
 
@@ -88,7 +93,7 @@ def main(args):
             logger.info("Done preprocessing files")
 
         if args.prep_for_constraint:
-            hl.init(log="/RMC_prep_for_constraint.log")
+            hl.init(log="/RMC_prep_for_constraint.log", tmp_dir=TEMP_PATH_WITH_DEL)
             logger.info("Reading in exome HT...")
             exome_ht = filtered_exomes.ht()
 
@@ -233,7 +238,10 @@ def main(args):
             )
 
         if args.search_for_single_break:
-            hl.init(log=f"/round{args.search_num}_single_break_search.log")
+            hl.init(
+                log=f"/round{args.search_num}_single_break_search.log",
+                tmp_dir=TEMP_PATH_WITH_DEL,
+            )
 
             logger.info(
                 "Searching for transcripts or transcript subsections with a single significant break..."
@@ -352,7 +360,7 @@ def main(args):
             # 4. Create and write final no break found ht for this round number
 
         if args.finalize:
-            hl.init(log="/RMC_finalize.log")
+            hl.init(log="/RMC_finalize.log", tmp_dir=TEMP_PATH_WITH_DEL)
 
             logger.info(
                 "Getting start and end positions and total size for each transcript..."

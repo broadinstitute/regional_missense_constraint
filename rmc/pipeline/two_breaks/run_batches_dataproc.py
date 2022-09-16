@@ -17,7 +17,7 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, SIMUL_BREAK_TEMP_PATH
+from rmc.resources.basics import LOGGING_PATH, SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import not_one_break_grouped
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import process_section_group
@@ -34,7 +34,10 @@ def main(args):
     """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
     try:
         logger.warning("This step should be run on an autoscaling cluster!")
-        hl.init(log="/search_for_two_breaks_run_batches_dataproc.log")
+        hl.init(
+            log="/search_for_two_breaks_run_batches_dataproc.log",
+            tmp_dir=TEMP_PATH_WITH_DEL,
+        )
         if args.run_ttn:
             transcript_groups = [[args.ttn_id]]
         else:

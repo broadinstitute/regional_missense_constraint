@@ -10,7 +10,7 @@ import hail as hl
 
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH
+from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
 from rmc.slack_creds import slack_token
 from rmc.utils.missense_badness import calculate_misbad, prepare_amino_acid_ht
 
@@ -25,13 +25,14 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Calculate missense badness."""
+    temp_dir = f"{TEMP_PATH_WITH_DEL}/mb/"
     try:
         if args.command == "prepare-ht":
-            hl.init(log="/calc_misbad_prep_context_gamma_ht.log")
+            hl.init(log="/calc_misbad_prep_context_gamma_ht.log", tmp_dir=temp_dir)
             prepare_amino_acid_ht()
 
         if args.command == "create-misbad":
-            hl.init(log="/calc_misbad_create_score.log")
+            hl.init(log="/calc_misbad_create_score.log", tmp_dir=temp_dir)
             calculate_misbad(args.use_exac_oe_cutoffs)
 
     finally:

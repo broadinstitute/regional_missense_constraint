@@ -12,7 +12,7 @@ import hail as hl
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, SIMUL_BREAK_TEMP_PATH
+from rmc.resources.basics import LOGGING_PATH, SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
     no_breaks,
     not_one_break,
@@ -45,7 +45,7 @@ Set of annotations to keep from two simultaneous breaks search.
 def main(args):
     """Merge all simultaneous breaks intermediate results into single Table."""
     try:
-        hl.init(log="/search_for_two_breaks_merge_hts.log")
+        hl.init(log="/search_for_two_breaks_merge_hts.log", tmp_dir=TEMP_PATH_WITH_DEL)
 
         logger.info("Collecting all HT paths...")
         intermediate_hts = []

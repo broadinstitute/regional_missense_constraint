@@ -11,6 +11,7 @@ import hail as hl
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
+from rmc.resources.basics import TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
     simul_break_over_threshold_path,
     simul_break_under_threshold_path,
@@ -29,7 +30,9 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Verify that all transcripts were run through the two simultaneous breaks search."""
-    hl.init(log="search_for_two_breaks_verify_transcripts.log")
+    hl.init(
+        log="search_for_two_breaks_verify_transcripts.log", tmp_dir=TEMP_PATH_WITH_DEL
+    )
 
     logger.info("Verifying that all transcripts were processed...")
     transcripts = list(

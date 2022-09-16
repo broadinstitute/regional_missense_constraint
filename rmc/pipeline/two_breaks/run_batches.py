@@ -30,7 +30,7 @@ import hailtop.batch as hb
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH
+from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
     not_one_break_grouped,
     simul_break_over_threshold_path,
@@ -598,7 +598,7 @@ def process_transcript_group(
 
 def main(args):
     """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
-    hl.init(log="search_for_two_breaks_run_batches.log")
+    hl.init(log="search_for_two_breaks_run_batches.log", tmp_dir=TEMP_PATH_WITH_DEL)
 
     # Make sure custom machine wasn't specified with under threshold
     if args.under_threshold and args.use_custom_machine:
