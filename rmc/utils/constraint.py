@@ -221,9 +221,9 @@ def get_cumulative_mu_expr(
 
 def adjust_mu_expr(
     cumulative_mu_expr: hl.expr.DictExpression,
-    mu_expr: hl.expr.Int32Expression,
+    mu_expr: hl.expr.Float64Expression,
     group_str: hl.expr.StringExpression,
-) -> hl.expr.DictExpression:
+) -> hl.expr.Float64Expression:
     """
     Adjust the scan with the cumulative number mutation rate probability.
 
