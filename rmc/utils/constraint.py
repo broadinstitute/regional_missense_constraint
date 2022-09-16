@@ -561,7 +561,7 @@ def search_for_break(
     :param group_str: Field used to group Table observed and expected values. Default is 'section'.
     :param min_num_exp_mis: Minimum number of expected missense per transcript/transcript section.
         Sections that have fewer than this number of expected missense variants will not
-        be computed (chi square will be annotated as -1).
+        be computed (chi square will be annotated as a missing value).
         Default is 10.
     :return: Table annotated with whether position is a breakpoint (`is_break`).
     """
