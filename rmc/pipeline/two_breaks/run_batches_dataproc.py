@@ -71,7 +71,7 @@ def main(args):
                 output_tsv_path=f"{SIMUL_BREAK_TEMP_PATH}/success_files",
                 temp_ht_path=f"{SIMUL_BREAK_TEMP_PATH}",
                 chisq_threshold=args.chisq_threshold,
-                split_window_size=args.window_size,
+                split_list_len=args.window_size,
                 read_if_exists=args.read_if_exists,
             )
 
@@ -112,8 +112,8 @@ if __name__ == "__main__":
         type=int,
     )
     parser.add_argument(
-        "--window-size",
-        help="Size of windows to split transcripts. Default is 500.",
+        "--split-list-len",
+        help="Max length to divide transcript/sections observed or expected missense and position lists into.",
         type=int,
         default=500,
     )
