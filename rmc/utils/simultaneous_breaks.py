@@ -128,7 +128,6 @@ def split_sections_by_len(
         over_threshold = list(over_threshold)
         over_threshold.remove(ttn_id)
         over_threshold = set(over_threshold)
-    # TODO: Update these resources `simul_break_under_threshold`, `simul_break_over_threshold``
     hl.experimental.write_expression(
         under_threshold, simul_break_under_threshold_path(search_num), overwrite
     )
@@ -469,8 +468,6 @@ def process_section_group(
         Default is False.
     :return: None; processes Table and writes to path. Also writes success TSV to path.
     """
-    # TODO: Add round number in temp paths
-    # TODO: Accommodate relaxed search in temp paths (same round number?)
     ht = hl.read_table(ht_path)
     ht = ht.filter(hl.literal(section_group).contains(ht.section))
 
