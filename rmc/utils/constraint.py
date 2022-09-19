@@ -718,7 +718,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float, group_str: str = "sec
     logger.info("Annotating cumulative observed and expected counts...")
     ht = get_fwd_exprs(
         ht=ht,
-        group_str="section",
+        group_str=group_str,
         obs_str="observed",
         mu_str="mu_snp",
         total_mu_str="section_mu",
