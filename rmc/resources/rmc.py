@@ -15,6 +15,7 @@ from rmc.resources.basics import (
     RESOURCE_PREFIX,
     SIMUL_BREAK_TEMP_PATH,
     SINGLE_BREAK_TEMP_PATH,
+    TEMP_PATH,
 )
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
@@ -163,7 +164,7 @@ def merged_search_ht_path(
     rescue = "rescue_" if is_rescue else ""
     break_status = "break_found" if is_break_found else "no_break_found"
     return (
-        f"{SINGLE_BREAK_TEMP_PATH}/{rescue}round{search_num}_merged_{break_status}.ht"
+        f"{TEMP_PATH}/{rescue}round{search_num}_merged_{break_status}.ht"
     )
 
 
