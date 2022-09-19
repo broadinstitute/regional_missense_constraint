@@ -24,7 +24,7 @@ logger.setLevel(logging.INFO)
 
 
 def group_no_single_break_found_ht(
-    ht: hl.Table,
+    ht_path: str,
     out_ht_path: str,
     group_str: str,
 ) -> None:
@@ -41,7 +41,7 @@ def group_no_single_break_found_ht(
         - Expects that input Table is annotated with OE for transcript/transcript section and
             this annotation is named `section_oe`.
 
-    :param ht: Input Table with transcripts/transcript sections that didn't
+    :param ht_path: Path to input Table with transcripts/transcript sections that didn't
         have a single significant break.
     :param out_ht_path: Path to output Table grouped by transcripts/transcript sections with lists
         of cumulative observed, expected missense counts.
@@ -51,6 +51,7 @@ def group_no_single_break_found_ht(
     """
     # Aggregating values into a struct here to force the positions and observed, expected missense values to stay sorted
     # `hl.agg.collect` does not guarantee order: https://hail.is/docs/0.2/aggregators.html#hail.expr.aggregators.collect
+    ht = hl.read_table(ht_path)
     group_ht = ht.group_by(group_str).aggregate(
         values=hl.sorted(
             hl.agg.collect(
@@ -75,7 +76,7 @@ def group_no_single_break_found_ht(
 
 
 def split_sections_by_len(
-    ht: hl.Table,
+    ht_path: str,
     group_str: str,
     search_num: int,
     missense_len_threshold: int,
@@ -88,13 +89,14 @@ def split_sections_by_len(
     This is necessary because transcripts/transcript sections with more possible missense sites
     take longer to run through `hl.experimental.loop`.
 
-    :param ht: Input Table (Table written using `group_no_single_break_found_ht`).
+    :param ht: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param group_str: Field used to group observed and expected values.
     :param missense_len_threshold: Cutoff based on possible number of missense sites in section.
     :param ttn_id: TTN transcript ID. TTN is large and needs to be processed separately.
     :param overwrite: Whether to overwrite existing SetExpressions.
     :return: None; writes SetExpressions to resource paths (`simul_break_under_threshold_path`, `simul_break_over_threshold_path`).
     """
+    ht = hl.read_table(ht_path)
     logger.info("Annotating HT with length of cumulative observed list annotation...")
     # This length is the number of positions with possible missense sites that need to be searched
     # Not using transcript/transcript section size here because transcript/transcript section size

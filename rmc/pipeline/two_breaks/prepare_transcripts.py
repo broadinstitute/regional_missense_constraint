@@ -15,6 +15,10 @@ import hail as hl
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.rmc import (
+    grouped_no_single_break_ht_path,
+    single_search_ht_path,
+)
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import (
     group_no_single_break_found_ht,
@@ -43,8 +47,13 @@ def main(args):
                 "Creating grouped HT with lists of cumulative observed and expected missense values..."
             )
             group_no_single_break_found_ht(
-                ht=no_single_break_found_path(args.search_num),
-                out_ht_path=no_single_break_found_path(args.search_num, grouped=True),
+                ht_path=single_search_ht_path(
+                    search_num=args.search_num,
+                    is_break_found=False,
+                    is_breakpoint_only=False,
+                    is_rescue=args.is_rescue,
+                ),
+                out_ht_path=grouped_no_single_break_ht_path(args.search_num, args.is_rescue),
                 group_str="section" if args.search_num > 1 else "transcript",
             )
 
@@ -54,7 +63,7 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_DEL,
             )
             split_sections_by_len(
-                ht=no_single_break_found_path(args.search_num, grouped=True),
+                ht_path=grouped_no_single_break_ht_path(args.search_num, args.is_rescue),
                 group_str="section" if args.search_num > 1 else "transcript",
                 search_num=args.search_num,
                 missense_len_threshold=args.missense_len_threshold,
@@ -83,6 +92,14 @@ if __name__ == "__main__":
         "--search-num",
         help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
         type=int,
+    )
+    parser.add_argument(
+        "--is-rescue",
+        help="""
+        Whether search is part of the 'rescue' pathway (pathway
+        with lower chi square significance cutoff).
+        """,
+        action="store_true",
     )
 
     # Create subparsers for each step

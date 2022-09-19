@@ -13,6 +13,7 @@ from rmc.resources.basics import (
     MODEL_PREFIX,
     MPC_PREFIX,
     RESOURCE_PREFIX,
+    SIMUL_BREAK_TEMP_PATH,
     SINGLE_BREAK_TEMP_PATH,
 )
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
@@ -87,7 +88,8 @@ def single_search_ht_path(
     is_rescue: bool,
 ) -> str:
     """
-    Return path to Table associated for specified round of search.
+    Return path to a Table associated with results from a specified round of single
+    break search.
 
     Function returns path to HT based on search number, break status,
     breakpoint status, and whether HT is associated with "rescue" pathway
@@ -114,6 +116,28 @@ def single_search_ht_path(
     return f"{SINGLE_BREAK_TEMP_PATH}/{rescue}round{search_num}_single_{break_status}{breakpoint_status}.ht"
 
 
+def grouped_no_single_break_ht_path(
+    search_num: int,
+    is_rescue: bool,
+) -> str:
+    """
+    Return path to Table with results from single break search where no break was
+    found, grouped by transcript/transcript section. This Table is used in
+    preparation for simultaneous break search.
+
+    Function returns path to HT based on search number, break status,
+    breakpoint status, and whether HT is associated with "rescue" pathway
+    (pathway with lowered chi square significance cutoff).
+
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :param is_rescue: Whether to return path to HT created in rescue pathway.
+    :return: Path to specified single break found or no single break found HT.
+    """
+    rescue = "rescue_" if is_rescue else ""
+    return f"{SIMUL_BREAK_TEMP_PATH}/{rescue}round{search_num}_grouped_single_no_break_found.ht"
+    
+    
 def merged_search_ht_path(
     search_num: int,
     is_break_found: bool,
