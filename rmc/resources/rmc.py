@@ -89,8 +89,7 @@ def single_search_ht_path(
     is_rescue: bool,
 ) -> str:
     """
-    Return path to a Table associated with results from a specified round of single
-    break search.
+    Return path to a Table with results from a specified round of single break search.
 
     Function returns path to HT based on search number, break status,
     breakpoint status, and whether HT is associated with "rescue" pathway
@@ -122,8 +121,9 @@ def grouped_no_single_break_ht_path(
     is_rescue: bool,
 ) -> str:
     """
-    Return path to Table with results from single break search where no break was
-    found, grouped by transcript/transcript section. This Table is used in
+    Return path to Table with results from single break search where no break was found.
+
+    Table is grouped by transcript/transcript section and is used in
     preparation for simultaneous break search.
 
     Function returns path to HT based on search number, break status,
@@ -137,8 +137,8 @@ def grouped_no_single_break_ht_path(
     """
     rescue = "rescue_" if is_rescue else ""
     return f"{SIMUL_BREAK_TEMP_PATH}/{rescue}round{search_num}_grouped_single_no_break_found.ht"
-    
-    
+
+
 def merged_search_ht_path(
     search_num: int,
     is_break_found: bool,
@@ -163,9 +163,7 @@ def merged_search_ht_path(
     """
     rescue = "rescue_" if is_rescue else ""
     break_status = "break_found" if is_break_found else "no_break_found"
-    return (
-        f"{TEMP_PATH}/{rescue}round{search_num}_merged_{break_status}.ht"
-    )
+    return f"{TEMP_PATH}/{rescue}round{search_num}_merged_{break_status}.ht"
 
 
 one_break = VersionedTableResource(
