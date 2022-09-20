@@ -37,6 +37,11 @@ logger.setLevel(logging.INFO)
 def main(args):
     """Prepare input Table for two simultaneous breaks search."""
     try:
+        grouped_ht_path = grouped_no_single_break_ht_path(
+            args.search_num,
+            args.is_rescue
+        )
+
         if args.command == "create-grouped-ht":
             hl.init(
                 log=f"/round{args.search_num}_search_for_two_breaks_create_grouped_ht.log",
@@ -53,7 +58,7 @@ def main(args):
                     is_breakpoint_only=False,
                     is_rescue=args.is_rescue,
                 ),
-                out_ht_path=grouped_no_single_break_ht_path(args.search_num, args.is_rescue),
+                out_ht_path=grouped_ht_path,
                 group_str="section" if args.search_num > 1 else "transcript",
             )
 
@@ -63,7 +68,7 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_DEL,
             )
             split_sections_by_len(
-                ht_path=grouped_no_single_break_ht_path(args.search_num, args.is_rescue),
+                ht_path=grouped_ht_path,
                 group_str="section" if args.search_num > 1 else "transcript",
                 search_num=args.search_num,
                 missense_len_threshold=args.missense_len_threshold,
