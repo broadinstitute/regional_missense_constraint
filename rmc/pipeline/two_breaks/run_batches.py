@@ -22,7 +22,7 @@ import logging
 from tqdm import tqdm
 
 from collections.abc import Callable
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 import hail as hl
 import hailtop.batch as hb
@@ -32,9 +32,9 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
-    not_one_break_grouped,
     sections_to_simul_by_threshold_path,
     simul_search_round_bucket_path,
+    single_search_round_ht_path,
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import check_for_successful_transcripts
@@ -593,7 +593,12 @@ def main(args):
             j.storage(args.batch_storage)
             j.call(
                 process_section_group,
-                not_one_break_grouped.path,
+                ht_path=single_search_round_ht_path(
+                    is_rescue=args.is_rescue,
+                    search_num=args.search_num,
+                    is_break_found=False,
+                    is_breakpoint_only=False,
+                ),
                 section_group=group,
                 is_rescue=args.is_rescue,
                 search_num=args.search_num,
@@ -620,7 +625,12 @@ def main(args):
                 j.storage(args.batch_storage)
             j.call(
                 process_section_group,
-                not_one_break_grouped.path,
+                ht_path=single_search_round_ht_path(
+                    is_rescue=args.is_rescue,
+                    search_num=args.search_num,
+                    is_break_found=False,
+                    is_breakpoint_only=False,
+                ),
                 section_group=group,
                 is_rescue=args.is_rescue,
                 search_num=args.search_num,
