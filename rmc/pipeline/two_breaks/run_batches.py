@@ -30,10 +30,11 @@ import hailtop.batch as hb
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
     not_one_break_grouped,
     sections_to_simul_by_threshold_path,
+    simul_search_round_bucket_path,
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import check_for_successful_transcripts
@@ -357,10 +358,10 @@ def search_for_two_breaks(
 def process_section_group(
     ht_path: str,
     section_group: List[str],
+    is_rescue: bool,
+    search_num: int,
     over_threshold: bool,
     output_ht_path: str,
-    output_tsv_path: str,
-    temp_ht_path: Optional[str] = None,
     chisq_threshold: float = 9.2,
     min_num_exp_mis: float = 10,
     split_list_len: int = 500,
@@ -373,11 +374,12 @@ def process_section_group(
 
     :param str ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param List[str] section_group: List of transcripts or transcript sections to process.
+    :param is_rescue: Whether to return path to HT created in rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
     :param bool over_threshold: Whether input transcript/sections have more
         possible missense sites than threshold specified in `run_simultaneous_breaks`.
     :param str output_ht_path: Path to output results Table.
-    :param str output_tsv_path: Path to success TSV bucket.
-    :param Optional[str] temp_ht_path: Path to temporary Table. Required only if over_threshold is True.
     :param float chisq_threshold: Chi-square significance threshold. Default is 9.2.
         This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
@@ -448,8 +450,13 @@ def process_section_group(
         # keep the desired number of partitions
         # (would sometimes repartition to a lower number of partitions)
         ht = ht.repartition(n_rows)
+        prep_path = simul_search_round_bucket_path(
+            is_rescue=is_rescue,
+            search_num=search_num,
+            bucket_type="prep",
+        )
         ht = ht.checkpoint(
-            f"{temp_ht_path}/{section_group[0]}_prep.ht",
+            f"{prep_path}/{section_group[0]}.ht",
             overwrite=not read_if_exists,
             _read_if_exists=read_if_exists,
         )
@@ -468,7 +475,12 @@ def process_section_group(
 
     # If over threshold, checkpoint HT and check if there were any breaks
     if over_threshold:
-        ht = ht.checkpoint(f"{temp_ht_path}/{section_group[0]}_res.ht", overwrite=True)
+        raw_path = simul_search_round_bucket_path(
+            is_rescue=is_rescue,
+            search_num=search_num,
+            bucket_type="raw_results",
+        )
+        ht = ht.checkpoint(f"{raw_path}/{section_group[0]}.ht", overwrite=True)
         # If any rows had a significant breakpoint,
         # find the one "best" breakpoint (breakpoint with largest chi square value)
         if ht.count() > 0:
@@ -479,13 +491,19 @@ def process_section_group(
             ht = ht.filter(ht.max_chisq == ht.section_max_chisq)
 
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
+    # TODO: Restructure ht to match locus-level formats from single breaks
     ht.write(output_ht_path, overwrite=True)
     # TODO: Consider whether we want to write out temp information on chisq values for each potential break combination
     #   like in single breaks
 
+    success_tsvs_path = simul_search_round_bucket_path(
+        is_rescue=is_rescue,
+        search_num=search_num,
+        bucket_type="success_files",
+    )
     for section in section_group:
-        success_tsv_path = f"{output_tsv_path}/{section}.tsv"
-        with hl.hadoop_open(success_tsv_path, "w") as o:
+        tsv_path = f"{success_tsvs_path}/{section}.tsv"
+        with hl.hadoop_open(tsv_path, "w") as o:
             o.write(f"{section}\n")
 
 
@@ -531,6 +549,12 @@ def main(args):
     )
     logger.info("Found %i transcripts to search...", len(transcripts_to_run))
 
+    raw_path = simul_search_round_bucket_path(
+        is_rescue=args.is_rescue,
+        search_num=args.search_num,
+        bucket_type="raw_results",
+    )
+
     if not args.docker_image:
         logger.info("Picking default docker image...")
         # Use a docker image that specifies spark memory allocation if --use-custom-machine was specified
@@ -570,13 +594,13 @@ def main(args):
             j.call(
                 process_section_group,
                 not_one_break_grouped.path,
-                group,
-                args.over_threshold,
-                f"{SIMUL_BREAK_TEMP_PATH}/hts/round{args.search_num}/simul_break_{job_name}.ht",
-                f"{SIMUL_BREAK_TEMP_PATH}/success_files",
-                None,
-                args.chisq_threshold,
-                split_window_size,
+                section_group=group,
+                is_rescue=args.is_rescue,
+                search_num=args.search_num,
+                over_threshold=False,
+                output_ht_path=f"{raw_path}/simul_break_{job_name}.ht",
+                chisq_threshold=args.chisq_threshold,
+                split_list_len=args.group_size,
             )
             count += 1
 
@@ -597,15 +621,14 @@ def main(args):
             j.call(
                 process_section_group,
                 not_one_break_grouped.path,
-                group,
-                args.over_threshold,
-                f"{SIMUL_BREAK_TEMP_PATH}/hts/round{args.search_num}/simul_break_{group[0]}.ht",
-                f"{SIMUL_BREAK_TEMP_PATH}/success_files",
-                f"{SIMUL_BREAK_TEMP_PATH}",
-                args.chisq_threshold,
-                args.group_size,
+                section_group=group,
+                is_rescue=args.is_rescue,
+                search_num=args.search_num,
+                over_threshold=True,
+                output_ht_path=f"{raw_path}/simul_break_{group[0]}.ht",
+                chisq_threshold=args.chisq_threshold,
+                split_list_len=args.group_size,
             )
-
     b.run(wait=False)
 
 
