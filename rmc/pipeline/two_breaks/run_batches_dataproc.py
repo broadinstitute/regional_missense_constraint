@@ -75,7 +75,6 @@ def main(args):
                 search_num=args.search_num,
                 over_threshold=True,
                 output_ht_path=output_ht_path,
-                temp_ht_path=raw_path,
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.split_list_len,
                 read_if_exists=args.read_if_exists,
