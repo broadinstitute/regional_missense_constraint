@@ -7,7 +7,6 @@ import hail as hl
 
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
 
-from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH
 from rmc.resources.rmc import sections_to_simul_by_threshold_path, simul_search_round_bucket_path
 from rmc.utils.constraint import get_dpois_expr, get_obs_exp_expr
 
