@@ -8,10 +8,7 @@ import hail as hl
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
 
 from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH
-from rmc.resources.rmc import (
-    simul_break_over_threshold_path,
-    simul_break_under_threshold_path,
-)
+from rmc.resources.rmc import sections_to_simul_by_threshold_path, simul_search_round_bucket_path
 from rmc.utils.constraint import get_dpois_expr, get_obs_exp_expr
 
 
@@ -79,6 +76,7 @@ def split_sections_by_len(
     ht_path: str,
     group_str: str,
     search_num: int,
+    is_rescue: bool,
     missense_len_threshold: int,
     ttn_id: str,
     overwrite: bool,
@@ -91,10 +89,13 @@ def split_sections_by_len(
 
     :param ht: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param group_str: Field used to group observed and expected values.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :param is_rescue: Whether current search is in rescue pathway.
     :param missense_len_threshold: Cutoff based on possible number of missense sites in section.
     :param ttn_id: TTN transcript ID. TTN is large and needs to be processed separately.
     :param overwrite: Whether to overwrite existing SetExpressions.
-    :return: None; writes SetExpressions to resource paths (`simul_break_under_threshold_path`, `simul_break_over_threshold_path`).
+    :return: None; writes SetExpressions to resource paths.
     """
     ht = hl.read_table(ht_path)
     logger.info("Annotating HT with length of cumulative observed list annotation...")
@@ -129,15 +130,30 @@ def split_sections_by_len(
         over_threshold.remove(ttn_id)
         over_threshold = set(over_threshold)
     hl.experimental.write_expression(
-        under_threshold, simul_break_under_threshold_path(search_num), overwrite
+        under_threshold,
+        sections_to_simul_by_threshold_path(
+            search_num=search_num,
+            is_rescue=is_rescue,
+            is_over_threshold=False,
+        ),
+        overwrite
     )
     hl.experimental.write_expression(
-        over_threshold, simul_break_over_threshold_path(search_num), overwrite
+        over_threshold,
+        sections_to_simul_by_threshold_path(
+            search_num=search_num,
+            is_rescue=is_rescue,
+            is_over_threshold=True,
+        ),
+        overwrite
     )
 
 
 def check_for_successful_transcripts(
-    transcripts: List[str], in_parallel: bool = True
+    transcripts: List[str],
+    search_num: int,
+    is_rescue: bool,
+    in_parallel: bool = True,
 ) -> List[str]:
     """
     Check if any transcripts have been previously searched by searching for success TSV existence.
@@ -146,12 +162,19 @@ def check_for_successful_transcripts(
         This step needs to be run locally due to permissions involved with `parallel_file_exists`.
 
     :param List[str] transcripts: List of transcripts to check.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :param is_rescue: Whether search is in rescue pathway.
     :param bool in_parallel: Whether to check if successful file exist in parallel.
         If True, must be run locally and not in Dataproc. Default is True.
     :return: List of transcripts didn't have success TSVs and therefore still need to be processed.
     """
     logger.info("Checking if any transcripts have already been searched...")
-    success_file_path = f"{SIMUL_BREAK_TEMP_PATH}/success_files"
+    success_file_path = simul_search_round_bucket_path(
+        search_num=search_num,
+        is_rescue=is_rescue,
+        bucket_type="success_files",
+    )
     transcript_success_map = {}
     transcripts_to_run = []
     for transcript in transcripts:
@@ -433,7 +456,7 @@ def process_section_group(
     section_group: List[str],
     over_threshold: bool,
     output_ht_path: str,
-    output_tsv_path: str,
+    success_tsvs_path: str,
     temp_ht_path: Optional[str] = None,
     chisq_threshold: float = 9.2,
     min_num_exp_mis: float = 10,
@@ -450,7 +473,7 @@ def process_section_group(
     :param bool over_threshold: Whether input transcript/sections have more
         possible missense sites than threshold specified in `run_simultaneous_breaks`.
     :param str output_ht_path: Path to output results Table.
-    :param str output_tsv_path: Path to success TSV bucket.
+    :param str success_tsvs_path: Path to success TSV bucket.
     :param Optional[str] temp_ht_path: Path to temporary Table. Required only if over_threshold is True.
     :param float chisq_threshold: Chi-square significance threshold. Default is 9.2.
         This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
@@ -559,6 +582,6 @@ def process_section_group(
     #   like in single breaks
 
     for section in section_group:
-        success_tsv_path = f"{output_tsv_path}/{section}.tsv"
-        with hl.hadoop_open(success_tsv_path, "w") as o:
+        success_tsvs_path = f"{success_tsvs_path}/{section}.tsv"
+        with hl.hadoop_open(success_tsvs_path, "w") as o:
             o.write(f"{section}\n")

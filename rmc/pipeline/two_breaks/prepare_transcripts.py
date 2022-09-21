@@ -16,8 +16,8 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
-    grouped_no_single_break_ht_path,
-    single_search_ht_path,
+    simul_search_round_bucket_path,
+    single_search_round_ht_path,
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import (
@@ -37,10 +37,12 @@ logger.setLevel(logging.INFO)
 def main(args):
     """Prepare input Table for two simultaneous breaks search."""
     try:
-        grouped_ht_path = grouped_no_single_break_ht_path(
-            args.search_num,
-            args.is_rescue
+        prep_path = simul_search_round_bucket_path(
+            search_num=args.search_num,
+            is_rescue=args.is_rescue,
+            bucket_type="prep",
         )
+        grouped_ht_path = f"{prep_path}/grouped_single_no_break_found.ht"
 
         if args.command == "create-grouped-ht":
             hl.init(
@@ -52,7 +54,7 @@ def main(args):
                 "Creating grouped HT with lists of cumulative observed and expected missense values..."
             )
             group_no_single_break_found_ht(
-                ht_path=single_search_ht_path(
+                ht_path=single_search_round_ht_path(
                     search_num=args.search_num,
                     is_break_found=False,
                     is_breakpoint_only=False,
@@ -71,6 +73,7 @@ def main(args):
                 ht_path=grouped_ht_path,
                 group_str="section" if args.search_num > 1 else "transcript",
                 search_num=args.search_num,
+                is_rescue=args.is_rescue,
                 missense_len_threshold=args.missense_len_threshold,
                 ttn_id=args.ttn,
                 overwrite=args.overwrite,

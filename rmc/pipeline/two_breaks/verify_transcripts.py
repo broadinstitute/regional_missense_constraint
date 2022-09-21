@@ -12,10 +12,7 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import TEMP_PATH_WITH_DEL
-from rmc.resources.rmc import (
-    simul_break_over_threshold_path,
-    simul_break_under_threshold_path,
-)
+from rmc.resources.rmc import sections_to_simul_by_threshold_path
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import check_for_successful_transcripts
 
@@ -37,21 +34,41 @@ def main(args):
     logger.info("Verifying that all transcripts were processed...")
     transcripts = list(
         hl.eval(
-            hl.experimental.read_expression(simul_break_under_threshold_path).union(
-                hl.experimental.read_expression(simul_break_over_threshold_path)
+            hl.experimental.read_expression(
+                sections_to_simul_by_threshold_path(
+                    search_num=args.search_num,
+                    is_rescue=args.is_rescue,
+                    is_over_threshold=False,
+                )
+            ).union(
+                hl.experimental.read_expression(
+                    sections_to_simul_by_threshold_path(
+                        search_num=args.search_num,
+                        is_rescue=args.is_rescue,
+                        is_over_threshold=True,
+                    )
+                )
             )
         )
     )
-    missing_transcripts = check_for_successful_transcripts(transcripts)
+    missing_transcripts = check_for_successful_transcripts(
+        transcripts=transcripts,
+        search_num=args.search_num,
+        is_rescue=args.is_rescue,
+    )
     if len(missing_transcripts) > 0:
         logger.error(missing_transcripts)
         raise DataException(f"{len(missing_transcripts)} are missing! Please rerun.")
 
     # Check if TTN was run and print a warning if it wasn't
-    # TTN ID isn't included in `simul_break_under_threshold_path` or `simul_break_over_threshold_path`
+    # TTN ID isn't included in `sections_to_simul_by_threshold_path`
     # It needs to be run separately due to its size
     logger.info("Checking if TTN was processed...")
-    ttn_missing = check_for_successful_transcripts(transcripts=[args.ttn])
+    ttn_missing = check_for_successful_transcripts(
+        transcripts=[args.ttn],
+        search_num=args.search_num,
+        is_rescue=args.is_rescue,
+    )
     if len(ttn_missing) > 0:
         logger.warning(
             "TTN wasn't processed successfully. Double check whether this is expected!"
@@ -74,7 +91,17 @@ if __name__ == "__main__":
         default=9.2,
     )
     parser.add_argument(
-        "--overwrite", help="Overwrite existing data.", action="store_true"
+        "--search-num",
+        help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
+        type=int,
+    )
+    parser.add_argument(
+        "--is-rescue",
+        help="""
+        Whether search is part of the 'rescue' pathway (pathway
+        with lower chi square significance cutoff).
+        """,
+        action="store_true",
     )
     parser.add_argument(
         "--slack-channel",

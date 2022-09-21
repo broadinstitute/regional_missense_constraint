@@ -16,6 +16,8 @@ from rmc.resources.basics import LOGGING_PATH, SIMUL_BREAK_TEMP_PATH, TEMP_PATH_
 from rmc.resources.rmc import (
     no_breaks,
     not_one_break,
+    simul_search_round_bucket_path,
+    simul_search_round_path,
 )
 from rmc.slack_creds import slack_token
 
@@ -48,10 +50,18 @@ def main(args):
         )
 
         logger.info("Collecting all HT paths...")
+        round_path = simul_search_round_path(
+            search_num=args.search_num,
+            is_rescue=args.is_rescue,
+        )
+        raw_hts_path = simul_search_round_bucket_path(
+            search_num=args.search_num,
+            is_rescue=args.is_rescue,
+            bucket_type="raw_results",
+        )
         intermediate_hts = []
-        ht_bucket = f"{SIMUL_BREAK_TEMP_PATH}/hts/round{args.search_num}/"
         temp_ht_paths = (
-            subprocess.check_output(["gsutil", "ls", ht_bucket])
+            subprocess.check_output(["gsutil", "ls", f"{raw_hts_path}/"])
             .decode("utf8")
             .strip()
             .split("\n")
@@ -88,7 +98,7 @@ def main(args):
             )
         ht = intermediate_hts[0].union(*intermediate_hts[1:])
         ht = ht.checkpoint(
-            f"{SIMUL_BREAK_TEMP_PATH}/hts/round{args.search_num}/merged.ht",
+            f"{round_path}/merged.ht",
             overwrite=args.overwrite,
         )
         logger.info("Wrote temp simultaneous breaks HT with %i lines", ht.count())
@@ -101,9 +111,19 @@ def main(args):
             len(simul_break_transcripts),
         )
         simul_break_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
+        results_path = simul_search_round_bucket_path(
+            search_num=args.search_num,
+            is_rescue=args.is_rescue,
+            bucket_type="final_results",
+        )
         hl.experimental.write_expression(
             simul_break_sections,
-            f"{SIMUL_BREAK_TEMP_PATH}/hts/round{args.search_num}_sections.he",
+            f"{SIMUL_BREAK_TEMP_PATH}/round{args.search_num}_sections.he",
+            overwrite=args.overwrite,
+        )
+        hl.experimental.write_expression(
+            simul_break_sections,
+            f"{results_path}/,
             overwrite=args.overwrite,
         )
         logger.info(
@@ -143,6 +163,14 @@ if __name__ == "__main__":
         "--search-num",
         help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
         type=int,
+    )
+    parser.add_argument(
+        "--is-rescue",
+        help="""
+        Whether search is part of the 'rescue' pathway (pathway
+        with lower chi square significance cutoff).
+        """,
+        action="store_true",
     )
     parser.add_argument(
         "--create-no-breaks-ht",

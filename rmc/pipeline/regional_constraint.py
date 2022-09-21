@@ -25,7 +25,7 @@ from rmc.resources.rmc import (
     merged_search_ht_path,
     multiple_breaks,
     simul_break,
-    single_search_ht_path,
+    single_search_round_ht_path,
 )
 from rmc.resources.resource_utils import MISSENSE
 from rmc.slack_creds import slack_token
@@ -299,7 +299,7 @@ def main(args):
             )
             breakpoint_ht = breakpoint_ht.key_by("section")
             breakpoint_ht = breakpoint_ht.checkpoint(
-                single_search_ht_path(
+                single_search_round_ht_path(
                     search_num=args.search_num,
                     is_break_found=True,
                     is_breakpoint_only=True,
@@ -340,7 +340,7 @@ def main(args):
             ).drop("section_1")
             logger.info("Writing out sections with single significant break...")
             break_found_ht.write(
-                single_search_ht_path(
+                single_search_round_ht_path(
                     search_num=args.search_num,
                     is_break_found=True,
                     is_breakpoint_only=False,
@@ -355,7 +355,7 @@ def main(args):
             no_break_found_ht = ht.filter(hl.is_missing(ht.breakpoint))
             no_break_found_ht = no_break_found_ht.drop("breakpoint")
             no_break_found_ht.write(
-                single_search_ht_path(
+                single_search_round_ht_path(
                     search_num=args.search_num,
                     is_break_found=False,
                     is_breakpoint_only=False,
@@ -374,7 +374,7 @@ def main(args):
                 f"{SIMUL_BREAK_TEMP_PATH}/hts/round{args.search_num}_sections.he"
             )
             simul_ht = hl.read_table(
-                single_search_ht_path(
+                single_search_round_ht_path(
                     search_num=args.search_num,
                     is_break_found=False,
                     is_breakpoint_only=False,

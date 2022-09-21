@@ -6,7 +6,11 @@ MPC: Missense badness, Polyphen-2, and Constraint score
 """
 import hail as hl
 
-from gnomad.resources.resource_utils import TableResource, VersionedTableResource
+from gnomad.resources.resource_utils import (
+    DataException,
+    TableResource,
+    VersionedTableResource,
+)
 
 from rmc.resources.basics import (
     CONSTRAINT_PREFIX,
@@ -82,7 +86,7 @@ HT is annotated with observed and expected variant counts per base.
 """
 
 
-def single_search_ht_path(
+def single_search_round_ht_path(
     search_num: int,
     is_break_found: bool,
     is_breakpoint_only: bool,
@@ -108,35 +112,59 @@ def single_search_ht_path(
     :param is_breakpoint_only: Whether to return path to HT with breakpoint positions
         only.
     :param is_rescue: Whether to return path to HT created in rescue pathway.
-    :return: Path to specified single break found or no single break found HT.
+    :return: Path to specified HT resulting from single break search.
     """
-    rescue = "rescue_" if is_rescue else ""
+    rescue = "rescue_" if is_rescue else "initial"
     break_status = "break_found" if is_break_found else "no_break_found"
     breakpoint_status = "_breakpoint_only" if is_breakpoint_only else ""
-    return f"{SINGLE_BREAK_TEMP_PATH}/{rescue}round{search_num}_single_{break_status}{breakpoint_status}.ht"
+    return f"{SINGLE_BREAK_TEMP_PATH}/{rescue}/round{search_num}/{break_status}{breakpoint_status}.ht"
 
 
-def grouped_no_single_break_ht_path(
+def simul_search_round_path(
     search_num: int,
     is_rescue: bool,
 ) -> str:
     """
-    Return path to Table with results from single break search where no break was found.
+    Return path to bucket associated with a specific round of simultaneous break search.
 
-    Table is grouped by transcript/transcript section and is used in
-    preparation for simultaneous break search.
-
-    Function returns path to HT based on search number, break status,
-    breakpoint status, and whether HT is associated with "rescue" pathway
-    (pathway with lowered chi square significance cutoff).
+    Function returns path to bucket based on search number, and whether search is
+    in "rescue" pathway (pathway with lowered chi square significance cutoff).
 
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
-    :param is_rescue: Whether to return path to HT created in rescue pathway.
-    :return: Path to specified single break found or no single break found HT.
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :return: Path to simultaneous break search round bucket.
     """
-    rescue = "rescue_" if is_rescue else ""
-    return f"{SIMUL_BREAK_TEMP_PATH}/{rescue}round{search_num}_grouped_single_no_break_found.ht"
+    rescue = "rescue_" if is_rescue else "initial"
+    return f"{SIMUL_BREAK_TEMP_PATH}/{rescue}/round{search_num}"
+
+
+def simul_search_round_bucket_path(
+    search_num: int,
+    is_rescue: bool,
+    bucket_type: str,
+) -> str:
+    """
+    Return path to bucket with  Tables resulting from a specific round of simultaneous break search.
+
+    Function returns path to bucket based on search number, whether search is in
+    "rescue" pathway (pathway with lowered chi square significance cutoff), and
+    bucket type.
+
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :param bucket_type: Bucket type.
+        Must be one of "prep", "raw_results", "final_results", or "success_files".
+    :return: Path to a bucket in the simultaneous break search round bucket.
+    """
+    if bucket_type not in ["prep","raw_results","final_results","success_files"]:
+        raise DataException(
+            "Bucket type must be one of 'prep', 'raw_results', 'final_results', or 'success_files'."
+        )
+    else:
+        round_path = simul_search_round_path(search_num, is_rescue)
+        return f"{round_path}/{bucket_type}"
 
 
 def merged_search_ht_path(
@@ -224,15 +252,36 @@ multiple_breaks = VersionedTableResource(
 Table containing transcripts with multiple breaks.
 """
 
-simul_break_under_threshold_path = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/transcripts_under_threshold.he"
-"""
-SetExpression containing transcripts with fewer possible missense positions than cutoff specified in `run_simultaneous_breaks.py`.
-"""
+def sections_to_simul_by_threshold_path(
+    search_num: int,
+    is_rescue: bool,
+    is_over_threshold: bool,
+) -> str:
+    """
+    Return path to transcripts/transcript sections entering a specific round of simultaneous break search by number of possible missense positions.
 
-simul_break_over_threshold_path = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/transcripts_over_threshold.he"
-"""
-SetExpression containing transcripts with greater than or equal to the cutoff for possible missense positions.
-"""
+    Function returns path to SetExpression based on search number, whether search is
+    in "rescue" pathway (pathway with lowered chi square significance cutoff), and
+    whether the transcripts/transcript sections have greater than or equal to the
+    cutoff for possible missense positions.
+
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :param is_over_threshold: Whether to return path for transcripts/transcript 
+        sections with more than the cutoff for possible missense positions specified
+        in `prepare_transcripts.py`. If True, those with greater than or equal to
+        this cutoff will be returned. If False, those with fewer than this cutoff
+        will be returned.
+    :return: Path to SetExpression containing transcripts/transcript sections.
+    """
+    bucket_path = simul_search_round_bucket_path(
+        search_num=search_num,
+        is_rescue=is_rescue,
+        bucket_type="prep",
+    )
+    threshold_relation = "over" if is_over_threshold else "under"
+    return f"{bucket_path}/sections_to_simul_{threshold_relation}_threshold.he"
 
 simul_break = VersionedTableResource(
     default_version=CURRENT_FREEZE,

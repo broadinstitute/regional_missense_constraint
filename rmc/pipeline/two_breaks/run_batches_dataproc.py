@@ -17,8 +17,8 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
-from rmc.resources.rmc import not_one_break_grouped
+from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.rmc import not_one_break_grouped, simul_search_round_bucket_path
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import process_section_group
 
@@ -52,26 +52,35 @@ def main(args):
                 logger.info("Running transcripts one at a time...")
                 transcript_groups = [[transcript] for transcript in transcripts_to_run]
 
+        raw_hts_path = simul_search_round_bucket_path(
+            search_num=args.search_num,
+            is_rescue=args.is_rescue,
+            bucket_type="raw_results",
+        )
         for counter, group in enumerate(transcript_groups):
-            output_ht = (
-                f"{SIMUL_BREAK_TEMP_PATH}/hts/round{args.search_num}/simul_break_dataproc_ttn.ht"
+            output_ht_path = (
+                f"{raw_hts_path}/simul_break_dataproc_ttn.ht"
                 if args.run_ttn
-                else f"{SIMUL_BREAK_TEMP_PATH}/hts/round{args.search_num}/simul_break_dataproc_{counter}.ht"
+                else f"{raw_hts_path}/simul_break_dataproc_{counter}.ht"
             )
-            if file_exists(output_ht):
+            if file_exists(output_ht_path):
                 raise DataException(
-                    f"Output already exists at {output_ht}! Double check before running script again."
+                    f"Output already exists at {output_ht_path}! Double check before running script again."
                 )
 
             process_section_group(
                 ht_path=not_one_break_grouped.path,
                 section_group=group,
                 over_threshold=True,
-                output_ht_path=output_ht,
-                output_tsv_path=f"{SIMUL_BREAK_TEMP_PATH}/success_files",
-                temp_ht_path=f"{SIMUL_BREAK_TEMP_PATH}",
+                output_ht_path=output_ht_path,
+                success_tsvs_path=simul_search_round_bucket_path(
+                    search_num=args.search_num,
+                    is_rescue=args.is_rescue,
+                    bucket_type="success_files",
+                ),
+                temp_ht_path=raw_hts_path,
                 chisq_threshold=args.chisq_threshold,
-                split_list_len=args.window_size,
+                split_list_len=args.split_list_len,
                 read_if_exists=args.read_if_exists,
             )
 
@@ -103,6 +112,14 @@ if __name__ == "__main__":
         "--search-num",
         help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
         type=int,
+    )
+    parser.add_argument(
+        "--is-rescue",
+        help="""
+        Whether search is part of the 'rescue' pathway (pathway
+        with lower chi square significance cutoff).
+        """,
+        action="store_true",
     )
     parser.add_argument(
         "--group-size",

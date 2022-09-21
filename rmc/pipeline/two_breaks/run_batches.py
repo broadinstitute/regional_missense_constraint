@@ -33,8 +33,7 @@ from gnomad.utils.slack import slack_notifications
 from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
     not_one_break_grouped,
-    simul_break_over_threshold_path,
-    simul_break_under_threshold_path,
+    sections_to_simul_by_threshold_path,
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import check_for_successful_transcripts
@@ -505,13 +504,25 @@ def main(args):
         transcripts=(
             list(
                 hl.eval(
-                    hl.experimental.read_expression(simul_break_under_threshold_path)
+                    hl.experimental.read_expression(
+                        sections_to_simul_by_threshold_path(
+                            search_num=args.search_num,
+                            is_rescue=args.is_rescue,
+                            is_over_threshold=False,
+                        )
+                    )
                 )
             )
             if args.under_threshold
             else list(
                 hl.eval(
-                    hl.experimental.read_expression(simul_break_over_threshold_path)
+                    hl.experimental.read_expression(
+                        sections_to_simul_by_threshold_path(
+                            search_num=args.search_num,
+                            is_rescue=args.is_rescue,
+                            is_over_threshold=True,
+                        )
+                    )
                 )
             )
         ),
@@ -618,6 +629,14 @@ if __name__ == "__main__":
         "--search-num",
         help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
         type=int,
+    )
+    parser.add_argument(
+        "--is-rescue",
+        help="""
+        Whether search is part of the 'rescue' pathway (pathway
+        with lower chi square significance cutoff).
+        """,
+        action="store_true",
     )
 
     transcript_size = parser.add_mutually_exclusive_group(required=True)
