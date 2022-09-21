@@ -112,7 +112,7 @@ def single_search_round_ht_path(
     :param is_rescue: Whether to return path to HT created in rescue pathway.
     :return: Path to specified HT resulting from single break search.
     """
-    rescue = "rescue_" if is_rescue else "initial"
+    rescue = "rescue" if is_rescue else "initial"
     break_status = "break_found" if is_break_found else "no_break_found"
     breakpoint_status = "_breakpoint_only" if is_breakpoint_only else ""
     return f"{SINGLE_BREAK_TEMP_PATH}/{rescue}/round{search_num}/{break_status}{breakpoint_status}.ht"
@@ -150,7 +150,7 @@ def simul_search_bucket_path(
         (e.g., second round of searching for single break would be 2).
     :return: Path to simultaneous break search round bucket.
     """
-    rescue = "rescue_" if is_rescue else "initial"
+    rescue = "rescue" if is_rescue else "initial"
     return (
         f"{SIMUL_BREAK_TEMP_PATH}/{rescue}/round{search_num}"
         if search_num
