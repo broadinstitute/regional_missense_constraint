@@ -50,18 +50,14 @@ def main(args):
         )
 
         logger.info("Collecting all HT paths...")
-        round_path = simul_search_bucket_path(
-            is_rescue=args.is_rescue,
-            search_num=args.search_num,
-        )
-        raw_hts_path = simul_search_round_bucket_path(
+        raw_path = simul_search_round_bucket_path(
             is_rescue=args.is_rescue,
             search_num=args.search_num,
             bucket_type="raw_results",
         )
         intermediate_hts = []
         temp_ht_paths = (
-            subprocess.check_output(["gsutil", "ls", f"{raw_hts_path}/"])
+            subprocess.check_output(["gsutil", "ls", f"{raw_path}/"])
             .decode("utf8")
             .strip()
             .split("\n")
@@ -97,8 +93,13 @@ def main(args):
                 "All temp tables had 0 rows. Please double check the temp tables!"
             )
         ht = intermediate_hts[0].union(*intermediate_hts[1:])
+        results_path = simul_search_round_bucket_path(
+            is_rescue=args.is_rescue,
+            search_num=args.search_num,
+            bucket_type="final_results",
+        )
         ht = ht.checkpoint(
-            f"{round_path}/merged.ht",
+            f"{results_path}/merged.ht",
             overwrite=args.overwrite,
         )
         logger.info("Wrote temp simultaneous breaks HT with %i lines", ht.count())
@@ -111,19 +112,9 @@ def main(args):
             len(simul_break_transcripts),
         )
         simul_break_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
-        results_path = simul_search_round_bucket_path(
-            is_rescue=args.is_rescue,
-            search_num=args.search_num,
-            bucket_type="final_results",
-        )
         hl.experimental.write_expression(
             simul_break_sections,
-            f"{SIMUL_BREAK_TEMP_PATH}/round{args.search_num}_sections.he",
-            overwrite=args.overwrite,
-        )
-        hl.experimental.write_expression(
-            simul_break_sections,
-            f"{results_path}/",
+            f"{results_path}/sections.he",
             overwrite=args.overwrite,
         )
         logger.info(

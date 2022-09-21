@@ -52,16 +52,16 @@ def main(args):
                 logger.info("Running transcripts one at a time...")
                 transcript_groups = [[transcript] for transcript in transcripts_to_run]
 
-        raw_hts_path = simul_search_round_bucket_path(
+        raw_path = simul_search_round_bucket_path(
             is_rescue=args.is_rescue,
             search_num=args.search_num,
             bucket_type="raw_results",
         )
         for counter, group in enumerate(transcript_groups):
             output_ht_path = (
-                f"{raw_hts_path}/simul_break_dataproc_ttn.ht"
+                f"{raw_path}/simul_break_dataproc_ttn.ht"
                 if args.run_ttn
-                else f"{raw_hts_path}/simul_break_dataproc_{counter}.ht"
+                else f"{raw_path}/simul_break_dataproc_{counter}.ht"
             )
             if file_exists(output_ht_path):
                 raise DataException(
@@ -78,7 +78,7 @@ def main(args):
                     search_num=args.search_num,
                     bucket_type="success_files",
                 ),
-                temp_ht_path=raw_hts_path,
+                temp_ht_path=raw_path,
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.split_list_len,
                 read_if_exists=args.read_if_exists,
