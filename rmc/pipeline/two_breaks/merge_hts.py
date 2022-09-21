@@ -51,8 +51,8 @@ def main(args):
 
         logger.info("Collecting all HT paths...")
         round_path = simul_search_bucket_path(
-            search_num=args.search_num,
             is_rescue=args.is_rescue,
+            search_num=args.search_num,
         )
         raw_hts_path = simul_search_round_bucket_path(
             search_num=args.search_num,
