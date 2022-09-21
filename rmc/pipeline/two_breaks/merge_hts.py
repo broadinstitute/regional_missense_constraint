@@ -17,7 +17,7 @@ from rmc.resources.rmc import (
     no_breaks,
     not_one_break,
     simul_search_round_bucket_path,
-    simul_search_round_path,
+    simul_search_bucket_path,
 )
 from rmc.slack_creds import slack_token
 
@@ -50,7 +50,7 @@ def main(args):
         )
 
         logger.info("Collecting all HT paths...")
-        round_path = simul_search_round_path(
+        round_path = simul_search_bucket_path(
             search_num=args.search_num,
             is_rescue=args.is_rescue,
         )
@@ -123,7 +123,7 @@ def main(args):
         )
         hl.experimental.write_expression(
             simul_break_sections,
-            f"{results_path}/,
+            f"{results_path}/",
             overwrite=args.overwrite,
         )
         logger.info(
