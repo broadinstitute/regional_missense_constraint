@@ -36,15 +36,15 @@ def main(args):
         hl.eval(
             hl.experimental.read_expression(
                 sections_to_simul_by_threshold_path(
-                    search_num=args.search_num,
                     is_rescue=args.is_rescue,
+                    search_num=args.search_num,
                     is_over_threshold=False,
                 )
             ).union(
                 hl.experimental.read_expression(
                     sections_to_simul_by_threshold_path(
-                        search_num=args.search_num,
                         is_rescue=args.is_rescue,
+                        search_num=args.search_num,
                         is_over_threshold=True,
                     )
                 )
@@ -53,8 +53,8 @@ def main(args):
     )
     missing_transcripts = check_for_successful_transcripts(
         transcripts=transcripts,
-        search_num=args.search_num,
         is_rescue=args.is_rescue,
+        search_num=args.search_num,
     )
     if len(missing_transcripts) > 0:
         logger.error(missing_transcripts)
@@ -66,8 +66,8 @@ def main(args):
     logger.info("Checking if TTN was processed...")
     ttn_missing = check_for_successful_transcripts(
         transcripts=[args.ttn],
-        search_num=args.search_num,
         is_rescue=args.is_rescue,
+        search_num=args.search_num,
     )
     if len(ttn_missing) > 0:
         logger.warning(

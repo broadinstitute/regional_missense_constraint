@@ -55,10 +55,10 @@ def main(args):
             )
             group_no_single_break_found_ht(
                 ht_path=single_search_round_ht_path(
+                    is_rescue=args.is_rescue,
                     search_num=args.search_num,
                     is_break_found=False,
                     is_breakpoint_only=False,
-                    is_rescue=args.is_rescue,
                 ),
                 out_ht_path=grouped_ht_path,
                 group_str="section" if args.search_num > 1 else "transcript",
@@ -72,8 +72,8 @@ def main(args):
             split_sections_by_len(
                 ht_path=grouped_ht_path,
                 group_str="section" if args.search_num > 1 else "transcript",
-                search_num=args.search_num,
                 is_rescue=args.is_rescue,
+                search_num=args.search_num,
                 missense_len_threshold=args.missense_len_threshold,
                 ttn_id=args.ttn,
                 overwrite=args.overwrite,

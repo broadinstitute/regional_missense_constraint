@@ -506,8 +506,8 @@ def main(args):
                 hl.eval(
                     hl.experimental.read_expression(
                         sections_to_simul_by_threshold_path(
-                            search_num=args.search_num,
                             is_rescue=args.is_rescue,
+                            search_num=args.search_num,
                             is_over_threshold=False,
                         )
                     )
@@ -518,14 +518,16 @@ def main(args):
                 hl.eval(
                     hl.experimental.read_expression(
                         sections_to_simul_by_threshold_path(
-                            search_num=args.search_num,
                             is_rescue=args.is_rescue,
+                            search_num=args.search_num,
                             is_over_threshold=True,
                         )
                     )
                 )
             )
         ),
+        is_rescue=args.is_rescue,
+        search_num=args.search_num,
     )
     logger.info("Found %i transcripts to search...", len(transcripts_to_run))
 

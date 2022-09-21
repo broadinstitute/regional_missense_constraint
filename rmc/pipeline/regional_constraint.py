@@ -253,9 +253,9 @@ def main(args):
                 if is_rescue:
                     ht = hl.read_table(
                         merged_search_ht_path(
+                            is_rescue=not is_rescue,
                             search_num=args.search_num,
                             is_break_found=False,
-                            is_rescue=not is_rescue,
                         )
                     )
                 else:
@@ -275,9 +275,9 @@ def main(args):
                 # Read in merged single and simultaneous breaks results HT
                 ht = hl.read_table(
                     merged_search_ht_path(
+                        is_rescue=is_rescue,
                         search_num=args.search_num - 1,
                         is_break_found=True,
-                        is_rescue=is_rescue,
                     ),
                 )
 
@@ -300,10 +300,10 @@ def main(args):
             breakpoint_ht = breakpoint_ht.key_by("section")
             breakpoint_ht = breakpoint_ht.checkpoint(
                 single_search_round_ht_path(
+                    is_rescue=is_rescue,
                     search_num=args.search_num,
                     is_break_found=True,
                     is_breakpoint_only=True,
-                    is_rescue=is_rescue,
                 ),
                 overwrite=args.overwrite,
             )
@@ -341,10 +341,10 @@ def main(args):
             logger.info("Writing out sections with single significant break...")
             break_found_ht.write(
                 single_search_round_ht_path(
+                    is_rescue=is_rescue,
                     search_num=args.search_num,
                     is_break_found=True,
                     is_breakpoint_only=False,
-                    is_rescue=is_rescue,
                 ),
                 overwrite=args.overwrite,
             )
@@ -356,10 +356,10 @@ def main(args):
             no_break_found_ht = no_break_found_ht.drop("breakpoint")
             no_break_found_ht.write(
                 single_search_round_ht_path(
+                    is_rescue=is_rescue,
                     search_num=args.search_num,
                     is_break_found=False,
                     is_breakpoint_only=False,
-                    is_rescue=is_rescue,
                 ),
                 overwrite=args.overwrite,
             )
@@ -375,10 +375,10 @@ def main(args):
             )
             simul_ht = hl.read_table(
                 single_search_round_ht_path(
+                    is_rescue=args.is_rescue,
                     search_num=args.search_num,
                     is_break_found=False,
                     is_breakpoint_only=False,
-                    is_rescue=args.is_rescue,
                 ),
             )
             simul_ht = simul_ht.filter(simul_sections.contains(simul_ht.section))

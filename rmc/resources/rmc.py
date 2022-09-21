@@ -85,10 +85,10 @@ HT is annotated with observed and expected variant counts per base.
 
 
 def single_search_round_ht_path(
+    is_rescue: bool,
     search_num: int,
     is_break_found: bool,
     is_breakpoint_only: bool,
-    is_rescue: bool,
 ) -> str:
     """
     Return path to a Table with results from a specified round of single break search.
@@ -103,13 +103,13 @@ def single_search_round_ht_path(
     Breakpoint status refers to whether HT contains breakpoint positions only
     or all positions in transcripts/sections.
 
+    :param is_rescue: Whether to return path to HT created in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param is_break_found: Whether to return path to HT with transcript/sections
         that have significant single break results.
     :param is_breakpoint_only: Whether to return path to HT with breakpoint positions
         only.
-    :param is_rescue: Whether to return path to HT created in rescue pathway.
     :return: Path to specified HT resulting from single break search.
     """
     rescue = "rescue" if is_rescue else "initial"
@@ -185,9 +185,9 @@ def simul_search_round_bucket_path(
 
 
 def merged_search_ht_path(
+    is_rescue: bool,
     search_num: int,
     is_break_found: bool,
-    is_rescue: bool,
 ) -> str:
     """
     Return path to Table with merged single and simultaneous breaks search results.
@@ -199,11 +199,11 @@ def merged_search_ht_path(
     Break status refers to whether transcripts/sections in HT have at least one
     single significant breakpoint.
 
+    :param is_rescue: Whether to return path to HT created in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param is_break_found: Whether to return path to HT with transcript/sections
         that have significant single break results.
-    :param is_rescue: Whether to return path to HT created in rescue pathway.
     :return: Path to merged break found HT or no break found HT.
     """
     rescue = "rescue_" if is_rescue else ""
@@ -271,8 +271,8 @@ Table containing transcripts with multiple breaks.
 
 
 def sections_to_simul_by_threshold_path(
-    search_num: int,
     is_rescue: bool,
+    search_num: int,
     is_over_threshold: bool,
 ) -> str:
     """
@@ -283,9 +283,9 @@ def sections_to_simul_by_threshold_path(
     whether the transcripts/transcript sections have greater than or equal to the
     cutoff for possible missense positions.
 
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
-    :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param is_over_threshold: Whether to return path for transcripts/transcript
         sections with more than the cutoff for possible missense positions specified
         in `prepare_transcripts.py`. If True, those with greater than or equal to

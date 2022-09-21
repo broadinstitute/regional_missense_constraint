@@ -74,8 +74,8 @@ def group_no_single_break_found_ht(
 def split_sections_by_len(
     ht_path: str,
     group_str: str,
-    search_num: int,
     is_rescue: bool,
+    search_num: int,
     missense_len_threshold: int,
     ttn_id: str,
     overwrite: bool,
@@ -131,8 +131,8 @@ def split_sections_by_len(
     hl.experimental.write_expression(
         under_threshold,
         sections_to_simul_by_threshold_path(
-            search_num=search_num,
             is_rescue=is_rescue,
+            search_num=search_num,
             is_over_threshold=False,
         ),
         overwrite
@@ -140,8 +140,8 @@ def split_sections_by_len(
     hl.experimental.write_expression(
         over_threshold,
         sections_to_simul_by_threshold_path(
-            search_num=search_num,
             is_rescue=is_rescue,
+            search_num=search_num,
             is_over_threshold=True,
         ),
         overwrite
@@ -150,8 +150,8 @@ def split_sections_by_len(
 
 def check_for_successful_transcripts(
     transcripts: List[str],
-    search_num: int,
     is_rescue: bool,
+    search_num: int,
     in_parallel: bool = True,
 ) -> List[str]:
     """
