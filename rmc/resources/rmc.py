@@ -4,13 +4,11 @@ Script containing RMC and MPC related resources.
 RMC: Regional missense constraint
 MPC: Missense badness, Polyphen-2, and Constraint score
 """
+from typing import List
+
 import hail as hl
 
-from gnomad.resources.resource_utils import (
-    DataException,
-    TableResource,
-    VersionedTableResource,
-)
+from gnomad.resources.resource_utils import TableResource, VersionedTableResource
 
 from rmc.resources.basics import (
     CONSTRAINT_PREFIX,
@@ -120,6 +118,22 @@ def single_search_round_ht_path(
     return f"{SINGLE_BREAK_TEMP_PATH}/{rescue}/round{search_num}/{break_status}{breakpoint_status}.ht"
 
 
+SIMUL_SEARCH_BUCKET_NAMES = ["prep", "raw_results", "final_results", "success_files"]
+"""
+Names of buckets nested within round bucket of `SIMUL_BREAK_TEMP_PATH`.
+
+Bucket structure:
+    `SIMUL_BREAK_TEMP_PATH`
+        initial/ or rescue/
+            round/
+            (anything not specific to round number at this level)
+                prep/
+                raw_results/
+                final_results/
+                success_files/
+"""
+
+
 def simul_search_bucket_path(
     is_rescue: bool,
     search_num: int,
@@ -130,16 +144,6 @@ def simul_search_bucket_path(
     Function returns path to top level initial or "rescue"
     (search with lowered chi square significance cutoff) bucket,
     or bucket based on search number in either initial or rescue bucket.
-
-    Bucket structure:
-    SIMUL_BREAK_TEMP_PATH
-        initial/ or rescue/
-            round/
-            (anything not specific to round number at this level)
-                prep/
-                raw_results/
-                final_results/
-                success_files/
 
     :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
@@ -158,6 +162,7 @@ def simul_search_round_bucket_path(
     search_num: int,
     is_rescue: bool,
     bucket_type: str,
+    bucket_names: List[str] = SIMUL_SEARCH_BUCKET_NAMES,
 ) -> str:
     """
     Return path to bucket with  Tables resulting from a specific round of simultaneous break search.
@@ -170,16 +175,13 @@ def simul_search_round_bucket_path(
         (e.g., second round of searching for single break would be 2).
     :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param bucket_type: Bucket type.
-        Must be one of "prep", "raw_results", "final_results", or "success_files".
+        Must be in `bucket_names`.
+    :param bucket_names: Possible bucket names for simultaneous search bucket type.
+        Default is `SIMUL_SEARCH_BUCKET_NAMES`.
     :return: Path to a bucket in the simultaneous break search round bucket.
     """
-    if bucket_type not in ["prep", "raw_results", "final_results", "success_files"]:
-        raise DataException(
-            "Bucket type must be one of 'prep', 'raw_results', 'final_results', or 'success_files'."
-        )
-    else:
-        round_path = simul_search_bucket_path(is_rescue, search_num)
-        return f"{round_path}/{bucket_type}"
+    assert bucket_type in bucket_names, f"Bucket type must be one of {bucket_names}!"
+    return f"{simul_search_bucket_path(is_rescue, search_num)}/{bucket_type}"
 
 
 def merged_search_ht_path(
