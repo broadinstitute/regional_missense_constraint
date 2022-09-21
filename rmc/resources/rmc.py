@@ -120,23 +120,38 @@ def single_search_round_ht_path(
     return f"{SINGLE_BREAK_TEMP_PATH}/{rescue}/round{search_num}/{break_status}{breakpoint_status}.ht"
 
 
-def simul_search_round_path(
-    search_num: int,
+def simul_search_bucket_path(
     is_rescue: bool,
+    search_num: int,
 ) -> str:
     """
-    Return path to bucket associated with a specific round of simultaneous break search.
+    Return path to bucket associated with simultaneous break search inputs and results.
 
-    Function returns path to bucket based on search number, and whether search is
-    in "rescue" pathway (pathway with lowered chi square significance cutoff).
+    Function returns path to top level initial or "rescue"
+    (search with lowered chi square significance cutoff) bucket,
+    or bucket based on search number in either initial or rescue bucket.
 
+    Bucket structure:
+    SIMUL_BREAK_TEMP_PATH
+        initial/ or rescue/
+            round/
+            (anything not specific to round number at this level)
+                prep/
+                raw_results/
+                final_results/
+                success_files/
+
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
-    :param is_rescue: Whether to return path corresponding to rescue pathway.
     :return: Path to simultaneous break search round bucket.
     """
     rescue = "rescue_" if is_rescue else "initial"
-    return f"{SIMUL_BREAK_TEMP_PATH}/{rescue}/round{search_num}"
+    return (
+        f"{SIMUL_BREAK_TEMP_PATH}/{rescue}/round{search_num}"
+        if search_num
+        else f"{SIMUL_BREAK_TEMP_PATH}/{rescue}"
+    )
 
 
 def simul_search_round_bucket_path(
@@ -158,12 +173,12 @@ def simul_search_round_bucket_path(
         Must be one of "prep", "raw_results", "final_results", or "success_files".
     :return: Path to a bucket in the simultaneous break search round bucket.
     """
-    if bucket_type not in ["prep","raw_results","final_results","success_files"]:
+    if bucket_type not in ["prep", "raw_results", "final_results", "success_files"]:
         raise DataException(
             "Bucket type must be one of 'prep', 'raw_results', 'final_results', or 'success_files'."
         )
     else:
-        round_path = simul_search_round_path(search_num, is_rescue)
+        round_path = simul_search_bucket_path(is_rescue, search_num)
         return f"{round_path}/{bucket_type}"
 
 
@@ -252,6 +267,7 @@ multiple_breaks = VersionedTableResource(
 Table containing transcripts with multiple breaks.
 """
 
+
 def sections_to_simul_by_threshold_path(
     search_num: int,
     is_rescue: bool,
@@ -268,7 +284,7 @@ def sections_to_simul_by_threshold_path(
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param is_rescue: Whether to return path corresponding to rescue pathway.
-    :param is_over_threshold: Whether to return path for transcripts/transcript 
+    :param is_over_threshold: Whether to return path for transcripts/transcript
         sections with more than the cutoff for possible missense positions specified
         in `prepare_transcripts.py`. If True, those with greater than or equal to
         this cutoff will be returned. If False, those with fewer than this cutoff
@@ -282,6 +298,7 @@ def sections_to_simul_by_threshold_path(
     )
     threshold_relation = "over" if is_over_threshold else "under"
     return f"{bucket_path}/sections_to_simul_{threshold_relation}_threshold.he"
+
 
 simul_break = VersionedTableResource(
     default_version=CURRENT_FREEZE,
