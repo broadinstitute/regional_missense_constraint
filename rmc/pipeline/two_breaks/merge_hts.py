@@ -12,12 +12,11 @@ import hail as hl
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
     no_breaks,
     not_one_break,
     simul_search_round_bucket_path,
-    simul_search_bucket_path,
 )
 from rmc.slack_creds import slack_token
 
