@@ -581,6 +581,6 @@ def process_section_group(
     #   like in single breaks
 
     for section in section_group:
-        success_tsvs_path = f"{success_tsvs_path}/{section}.tsv"
-        with hl.hadoop_open(success_tsvs_path, "w") as o:
+        tsv_path = f"{success_tsvs_path}/{section}.tsv"
+        with hl.hadoop_open(tsv_path, "w") as o:
             o.write(f"{section}\n")
