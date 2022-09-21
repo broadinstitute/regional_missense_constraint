@@ -53,8 +53,8 @@ def main(args):
                 transcript_groups = [[transcript] for transcript in transcripts_to_run]
 
         raw_hts_path = simul_search_round_bucket_path(
-            search_num=args.search_num,
             is_rescue=args.is_rescue,
+            search_num=args.search_num,
             bucket_type="raw_results",
         )
         for counter, group in enumerate(transcript_groups):
@@ -74,8 +74,8 @@ def main(args):
                 over_threshold=True,
                 output_ht_path=output_ht_path,
                 success_tsvs_path=simul_search_round_bucket_path(
-                    search_num=args.search_num,
                     is_rescue=args.is_rescue,
+                    search_num=args.search_num,
                     bucket_type="success_files",
                 ),
                 temp_ht_path=raw_hts_path,

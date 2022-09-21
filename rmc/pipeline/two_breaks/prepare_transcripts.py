@@ -38,8 +38,8 @@ def main(args):
     """Prepare input Table for two simultaneous breaks search."""
     try:
         prep_path = simul_search_round_bucket_path(
-            search_num=args.search_num,
             is_rescue=args.is_rescue,
+            search_num=args.search_num,
             bucket_type="prep",
         )
         grouped_ht_path = f"{prep_path}/grouped_single_no_break_found.ht"

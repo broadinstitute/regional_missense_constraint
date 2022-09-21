@@ -171,8 +171,8 @@ def check_for_successful_transcripts(
     """
     logger.info("Checking if any transcripts have already been searched...")
     success_file_path = simul_search_round_bucket_path(
-        search_num=search_num,
         is_rescue=is_rescue,
+        search_num=search_num,
         bucket_type="success_files",
     )
     transcript_success_map = {}

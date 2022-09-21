@@ -55,8 +55,8 @@ def main(args):
             search_num=args.search_num,
         )
         raw_hts_path = simul_search_round_bucket_path(
-            search_num=args.search_num,
             is_rescue=args.is_rescue,
+            search_num=args.search_num,
             bucket_type="raw_results",
         )
         intermediate_hts = []
@@ -112,8 +112,8 @@ def main(args):
         )
         simul_break_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
         results_path = simul_search_round_bucket_path(
-            search_num=args.search_num,
             is_rescue=args.is_rescue,
+            search_num=args.search_num,
             bucket_type="final_results",
         )
         hl.experimental.write_expression(

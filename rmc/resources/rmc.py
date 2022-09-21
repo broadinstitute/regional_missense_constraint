@@ -159,8 +159,8 @@ def simul_search_bucket_path(
 
 
 def simul_search_round_bucket_path(
-    search_num: int,
     is_rescue: bool,
+    search_num: int,
     bucket_type: str,
     bucket_names: Set[str] = SIMUL_SEARCH_BUCKET_NAMES,
 ) -> str:
@@ -171,9 +171,9 @@ def simul_search_round_bucket_path(
     "rescue" pathway (pathway with lowered chi square significance cutoff), and
     bucket type.
 
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
-    :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param bucket_type: Bucket type.
         Must be in `bucket_names`.
     :param bucket_names: Possible bucket names for simultaneous search bucket type.
@@ -294,8 +294,8 @@ def sections_to_simul_by_threshold_path(
     :return: Path to SetExpression containing transcripts/transcript sections.
     """
     bucket_path = simul_search_round_bucket_path(
-        search_num=search_num,
         is_rescue=is_rescue,
+        search_num=search_num,
         bucket_type="prep",
     )
     threshold_relation = "over" if is_over_threshold else "under"
