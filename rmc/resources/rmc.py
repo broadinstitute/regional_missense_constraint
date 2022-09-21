@@ -4,7 +4,7 @@ Script containing RMC and MPC related resources.
 RMC: Regional missense constraint
 MPC: Missense badness, Polyphen-2, and Constraint score
 """
-from typing import List
+from typing import Set
 
 import hail as hl
 
@@ -118,7 +118,7 @@ def single_search_round_ht_path(
     return f"{SINGLE_BREAK_TEMP_PATH}/{rescue}/round{search_num}/{break_status}{breakpoint_status}.ht"
 
 
-SIMUL_SEARCH_BUCKET_NAMES = ["prep", "raw_results", "final_results", "success_files"]
+SIMUL_SEARCH_BUCKET_NAMES = {"prep", "raw_results", "final_results", "success_files"}
 """
 Names of buckets nested within round bucket of `SIMUL_BREAK_TEMP_PATH`.
 
@@ -162,7 +162,7 @@ def simul_search_round_bucket_path(
     search_num: int,
     is_rescue: bool,
     bucket_type: str,
-    bucket_names: List[str] = SIMUL_SEARCH_BUCKET_NAMES,
+    bucket_names: Set[str] = SIMUL_SEARCH_BUCKET_NAMES,
 ) -> str:
     """
     Return path to bucket with  Tables resulting from a specific round of simultaneous break search.
