@@ -453,10 +453,10 @@ def search_for_two_breaks(
 def process_section_group(
     ht_path: str,
     section_group: List[str],
+    is_rescue: bool,
+    search_num: int,
     over_threshold: bool,
     output_ht_path: str,
-    success_tsvs_path: str,
-    temp_ht_path: Optional[str] = None,
     chisq_threshold: float = 9.2,
     min_num_exp_mis: float = 10,
     split_list_len: int = 500,
@@ -469,11 +469,12 @@ def process_section_group(
 
     :param str ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param List[str] section_group: List of transcripts or transcript sections to process.
+    :param is_rescue: Whether to return path to HT created in rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
     :param bool over_threshold: Whether input transcript/sections have more
         possible missense sites than threshold specified in `run_simultaneous_breaks`.
     :param str output_ht_path: Path to output results Table.
-    :param str success_tsvs_path: Path to success TSV bucket.
-    :param Optional[str] temp_ht_path: Path to temporary Table. Required only if over_threshold is True.
     :param float chisq_threshold: Chi-square significance threshold. Default is 9.2.
         This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
@@ -544,8 +545,13 @@ def process_section_group(
         # keep the desired number of partitions
         # (would sometimes repartition to a lower number of partitions)
         ht = ht.repartition(n_rows)
+        prep_path = simul_search_round_bucket_path(
+            is_rescue=is_rescue,
+            search_num=search_num,
+            bucket_type="prep",
+        )
         ht = ht.checkpoint(
-            f"{temp_ht_path}/{section_group[0]}_prep.ht",
+            f"{prep_path}/{section_group[0]}.ht",
             overwrite=not read_if_exists,
             _read_if_exists=read_if_exists,
         )
@@ -564,7 +570,12 @@ def process_section_group(
 
     # If over threshold, checkpoint HT and check if there were any breaks
     if over_threshold:
-        ht = ht.checkpoint(f"{temp_ht_path}/{section_group[0]}_res.ht", overwrite=True)
+        raw_path = simul_search_round_bucket_path(
+            is_rescue=is_rescue,
+            search_num=search_num,
+            bucket_type="raw_results",
+        )
+        ht = ht.checkpoint(f"{raw_path}/{section_group[0]}.ht", overwrite=True)
         # If any rows had a significant breakpoint,
         # find the one "best" breakpoint (breakpoint with largest chi square value)
         if ht.count() > 0:
@@ -580,6 +591,11 @@ def process_section_group(
     # TODO: Consider whether we want to write out temp information on chisq values for each potential break combination
     #   like in single breaks
 
+    success_tsvs_path = simul_search_round_bucket_path(
+        is_rescue=is_rescue,
+        search_num=search_num,
+        bucket_type="success_files",
+    )
     for section in section_group:
         tsv_path = f"{success_tsvs_path}/{section}.tsv"
         with hl.hadoop_open(tsv_path, "w") as o:

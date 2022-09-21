@@ -71,13 +71,10 @@ def main(args):
             process_section_group(
                 ht_path=not_one_break_grouped.path,
                 section_group=group,
+                is_rescue=args.is_rescue,
+                search_num=args.search_num,
                 over_threshold=True,
                 output_ht_path=output_ht_path,
-                success_tsvs_path=simul_search_round_bucket_path(
-                    is_rescue=args.is_rescue,
-                    search_num=args.search_num,
-                    bucket_type="success_files",
-                ),
                 temp_ht_path=raw_path,
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.split_list_len,
