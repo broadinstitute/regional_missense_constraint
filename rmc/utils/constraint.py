@@ -9,7 +9,7 @@ from gnomad.utils.file_utils import file_exists
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
-from rmc.resources.basics import TEMP_PATH
+from rmc.resources.basics import TEMP_PATH, TEMP_PATH_WITH_DEL
 from rmc.resources.gnomad import filtered_exomes
 from rmc.resources.reference_data import clinvar_path_mis, de_novo, gene_model
 from rmc.utils.generic import (
@@ -628,7 +628,7 @@ def search_for_break(
     )
     # hl.agg.max ignores NaNs
     group_ht = ht.group_by(group_str).aggregate(max_chisq=hl.agg.max(ht.chisq))
-    group_ht = group_ht.checkpoint(f"{TEMP_PATH}/max_chisq.ht", overwrite=True)
+    group_ht = group_ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/max_chisq.ht", overwrite=True)
     ht = ht.annotate(max_chisq=group_ht[ht[group_str]].max_chisq)
     return ht.annotate(
         is_break=((ht.chisq == ht.max_chisq) & (ht.chisq >= chisq_threshold))
