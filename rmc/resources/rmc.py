@@ -270,13 +270,13 @@ Table containing transcripts with multiple breaks.
 """
 
 
-def sections_to_simul_by_threshold_path(
+def simul_sections_split_by_len_path(
     is_rescue: bool,
     search_num: int,
     is_over_threshold: bool,
 ) -> str:
     """
-    Return path to transcripts/transcript sections entering a specific round of simultaneous break search by number of possible missense positions.
+    Return path to transcripts/transcript sections entering a specific round of simultaneous break search.
 
     Function returns path to SetExpression based on search number, whether search is
     in "rescue" pathway (pathway with lowered chi square significance cutoff), and

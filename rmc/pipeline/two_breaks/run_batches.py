@@ -32,7 +32,7 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
-    sections_to_simul_by_threshold_path,
+    simul_sections_split_by_len_path,
     simul_search_round_bucket_path,
     single_search_round_ht_path,
 )
@@ -523,7 +523,7 @@ def main(args):
             list(
                 hl.eval(
                     hl.experimental.read_expression(
-                        sections_to_simul_by_threshold_path(
+                        simul_sections_split_by_len_path(
                             is_rescue=args.is_rescue,
                             search_num=args.search_num,
                             is_over_threshold=False,
@@ -535,7 +535,7 @@ def main(args):
             else list(
                 hl.eval(
                     hl.experimental.read_expression(
-                        sections_to_simul_by_threshold_path(
+                        simul_sections_split_by_len_path(
                             is_rescue=args.is_rescue,
                             search_num=args.search_num,
                             is_over_threshold=True,
