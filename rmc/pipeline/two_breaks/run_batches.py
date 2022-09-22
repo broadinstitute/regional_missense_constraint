@@ -37,7 +37,7 @@ from rmc.resources.rmc import (
     single_search_round_ht_path,
 )
 from rmc.slack_creds import slack_token
-from rmc.utils.simultaneous_breaks import check_for_successful_transcripts
+from rmc.utils.simultaneous_breaks import check_for_successful_sections
 
 
 logging.basicConfig(
@@ -514,12 +514,12 @@ def main(args):
     # Make sure custom machine wasn't specified with under threshold
     if args.under_threshold and args.use_custom_machine:
         raise DataException(
-            "Do not specify --use-custom-machine when transcripts are --under-threshold size!"
+            "Do not specify --use-custom-machine when transcripts/sections are --under-threshold size!"
         )
 
-    logger.info("Importing SetExpression with transcripts...")
-    transcripts_to_run = check_for_successful_transcripts(
-        transcripts=(
+    logger.info("Importing SetExpression with transcripts or transcript sections...")
+    sections_to_run = check_for_successful_sections(
+        sections=(
             list(
                 hl.eval(
                     hl.experimental.read_expression(
@@ -547,7 +547,7 @@ def main(args):
         is_rescue=args.is_rescue,
         search_num=args.search_num,
     )
-    logger.info("Found %i transcripts to search...", len(transcripts_to_run))
+    logger.info("Found %i transcripts or sections to search...", len(sections_to_run))
 
     raw_path = simul_search_round_bucket_path(
         is_rescue=args.is_rescue,
@@ -577,13 +577,12 @@ def main(args):
     )
 
     if args.under_threshold:
-        transcript_groups = [
-            transcripts_to_run[x : x + args.group_size]
-            for x in range(0, len(transcripts_to_run), args.group_size)
+        section_groups = [
+            sections_to_run[x : x + args.group_size]
+            for x in range(0, len(sections_to_run), args.group_size)
         ]
-        split_window_size = None
         count = 1
-        for group in tqdm(transcript_groups, unit="transcript group"):
+        for group in tqdm(section_groups, unit="transcript group"):
             logger.info("Working on group number %s...", count)
             logger.info(group)
             job_name = f'group{count}{"over" if args.over_threshold else "under"}'
@@ -610,8 +609,8 @@ def main(args):
             count += 1
 
     else:
-        transcript_groups = [[transcript] for transcript in transcripts_to_run]
-        for group in transcript_groups:
+        section_groups = [[section] for section in sections_to_run]
+        for group in section_groups:
             if args.use_custom_machine:
                 # NOTE: you do not specify memory and cpu when specifying a custom machine
                 j = b.new_python_job(name=job_name)
