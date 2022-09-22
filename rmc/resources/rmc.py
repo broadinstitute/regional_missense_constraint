@@ -184,6 +184,38 @@ def simul_search_round_bucket_path(
     return f"{simul_search_bucket_path(is_rescue, search_num)}/{bucket_type}"
 
 
+def simul_sections_split_by_len_path(
+    is_rescue: bool,
+    search_num: int,
+    is_over_threshold: bool,
+) -> str:
+    """
+    Return path to transcripts/transcript sections entering a specific round of simultaneous break search.
+
+    Function returns path to SetExpression based on search number, whether search is
+    in "rescue" pathway (pathway with lowered chi square significance cutoff), and
+    whether the transcripts/transcript sections have greater than or equal to the
+    cutoff for possible missense positions.
+
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :param is_over_threshold: Whether to return path for transcripts/transcript
+        sections with more than the cutoff for possible missense positions specified
+        in `prepare_transcripts.py`. If True, those with greater than or equal to
+        this cutoff will be returned. If False, those with fewer than this cutoff
+        will be returned.
+    :return: Path to SetExpression containing transcripts/transcript sections.
+    """
+    bucket_path = simul_search_round_bucket_path(
+        is_rescue=is_rescue,
+        search_num=search_num,
+        bucket_type="prep",
+    )
+    threshold_relation = "over" if is_over_threshold else "under"
+    return f"{bucket_path}/sections_to_simul_{threshold_relation}_threshold.he"
+
+
 def merged_search_ht_path(
     is_rescue: bool,
     search_num: int,
@@ -268,38 +300,6 @@ multiple_breaks = VersionedTableResource(
 """
 Table containing transcripts with multiple breaks.
 """
-
-
-def simul_sections_split_by_len_path(
-    is_rescue: bool,
-    search_num: int,
-    is_over_threshold: bool,
-) -> str:
-    """
-    Return path to transcripts/transcript sections entering a specific round of simultaneous break search.
-
-    Function returns path to SetExpression based on search number, whether search is
-    in "rescue" pathway (pathway with lowered chi square significance cutoff), and
-    whether the transcripts/transcript sections have greater than or equal to the
-    cutoff for possible missense positions.
-
-    :param is_rescue: Whether to return path corresponding to rescue pathway.
-    :param search_num: Search iteration number
-        (e.g., second round of searching for single break would be 2).
-    :param is_over_threshold: Whether to return path for transcripts/transcript
-        sections with more than the cutoff for possible missense positions specified
-        in `prepare_transcripts.py`. If True, those with greater than or equal to
-        this cutoff will be returned. If False, those with fewer than this cutoff
-        will be returned.
-    :return: Path to SetExpression containing transcripts/transcript sections.
-    """
-    bucket_path = simul_search_round_bucket_path(
-        is_rescue=is_rescue,
-        search_num=search_num,
-        bucket_type="prep",
-    )
-    threshold_relation = "over" if is_over_threshold else "under"
-    return f"{bucket_path}/sections_to_simul_{threshold_relation}_threshold.he"
 
 
 simul_break = VersionedTableResource(
