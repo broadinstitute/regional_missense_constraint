@@ -32,6 +32,7 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
+    grouped_single_no_break_ht_path,
     simul_sections_split_by_len_path,
     simul_search_round_bucket_path,
     single_search_round_ht_path,
@@ -594,11 +595,9 @@ def main(args):
             j.storage(args.batch_storage)
             j.call(
                 process_section_group,
-                ht_path=single_search_round_ht_path(
-                    is_rescue=args.is_rescue,
-                    search_num=args.search_num,
-                    is_break_found=False,
-                    is_breakpoint_only=False,
+                ht_path=grouped_single_no_break_ht_path(
+                    args.is_rescue,
+                    args.search_num
                 ),
                 section_group=group,
                 is_rescue=args.is_rescue,
@@ -626,11 +625,9 @@ def main(args):
                 j.storage(args.batch_storage)
             j.call(
                 process_section_group,
-                ht_path=single_search_round_ht_path(
-                    is_rescue=args.is_rescue,
-                    search_num=args.search_num,
-                    is_break_found=False,
-                    is_breakpoint_only=False,
+                ht_path=grouped_single_no_break_ht_path(
+                    args.is_rescue,
+                    args.search_num
                 ),
                 section_group=group,
                 is_rescue=args.is_rescue,

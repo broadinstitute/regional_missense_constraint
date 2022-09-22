@@ -19,8 +19,8 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
+    grouped_single_no_break_ht_path,
     simul_search_round_bucket_path,
-    single_search_round_ht_path,
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import process_section_group
@@ -75,11 +75,9 @@ def main(args):
                 )
 
             process_section_group(
-                ht_path=single_search_round_ht_path(
-                    is_rescue=args.is_rescue,
-                    search_num=args.search_num,
-                    is_break_found=False,
-                    is_breakpoint_only=False,
+                ht_path=grouped_single_no_break_ht_path(
+                    args.is_rescue,
+                    args.search_num
                 ),
                 section_group=group,
                 is_rescue=args.is_rescue,

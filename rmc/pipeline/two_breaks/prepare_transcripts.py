@@ -16,7 +16,7 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
-    simul_search_round_bucket_path,
+    grouped_single_no_break_ht_path,
     single_search_round_ht_path,
 )
 from rmc.slack_creds import slack_token
@@ -37,12 +37,10 @@ logger.setLevel(logging.INFO)
 def main(args):
     """Prepare input Table for two simultaneous breaks search."""
     try:
-        prep_path = simul_search_round_bucket_path(
-            is_rescue=args.is_rescue,
-            search_num=args.search_num,
-            bucket_type="prep",
+        grouped_ht_path = grouped_single_no_break_ht_path(
+            args.is_rescue,
+            args.search_num,
         )
-        grouped_ht_path = f"{prep_path}/grouped_single_no_break_found.ht"
 
         if args.command == "create-grouped-ht":
             hl.init(

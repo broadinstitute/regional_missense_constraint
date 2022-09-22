@@ -184,6 +184,29 @@ def simul_search_round_bucket_path(
     return f"{simul_search_bucket_path(is_rescue, search_num)}/{bucket_type}"
 
 
+def grouped_single_no_break_ht_path(
+    is_rescue: bool,
+    search_num: int,
+) -> str:
+    """
+    Return path to Table of transcripts/transcript sections without a significant break in a single break search round, grouped by transcript/transcript section.
+
+    Function returns path to Table based on search number and whether search is
+    in "rescue" pathway (pathway with lowered chi square significance cutoff).
+
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :return: Path to grouped Table.
+    """
+    bucket_path = simul_search_round_bucket_path(
+        is_rescue=is_rescue,
+        search_num=search_num,
+        bucket_type="prep",
+    )
+    return f"{bucket_path}/grouped_single_no_break_found.ht"
+    
+
 def simul_sections_split_by_len_path(
     is_rescue: bool,
     search_num: int,
