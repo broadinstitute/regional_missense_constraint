@@ -323,13 +323,13 @@ def main(args):
                     break_found_ht.locus.position > break_found_ht.breakpoint,
                     hl.format(
                         "%s_%s_%s",
-                        break_found_ht.transcript,
+                        break_found_ht.section.split("_")[0],
                         break_found_ht.breakpoint + 1,
                         break_found_ht.section.split("_")[2],
                     ),
                     hl.format(
                         "%s_%s_%s",
-                        break_found_ht.transcript,
+                        break_found_ht.section.split("_")[0],
                         break_found_ht.section.split("_")[1],
                         break_found_ht.breakpoint,
                     ),
