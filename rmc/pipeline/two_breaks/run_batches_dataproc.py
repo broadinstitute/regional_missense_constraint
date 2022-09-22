@@ -42,25 +42,28 @@ def main(args):
             tmp_dir=TEMP_PATH_WITH_DEL,
         )
         if args.run_ttn:
-            transcript_groups = [[args.ttn_id]]
+            section_groups = [[args.ttn_id]]
         else:
-            transcripts_to_run = args.transcripts_to_run.split(",")
+            sections_to_run = args.sections_to_run.split(",")
             if args.group_size:
-                logger.info("Splitting transcripts into groups of %i", args.group_size)
-                transcript_groups = [
-                    transcripts_to_run[x : x + args.group_size]
-                    for x in range(0, len(transcripts_to_run), args.group_size)
+                logger.info(
+                    "Splitting transcripts/transcript sections into groups of %i",
+                    args.group_size,
+                )
+                section_groups = [
+                    sections_to_run[x : x + args.group_size]
+                    for x in range(0, len(sections_to_run), args.group_size)
                 ]
             else:
-                logger.info("Running transcripts one at a time...")
-                transcript_groups = [[transcript] for transcript in transcripts_to_run]
+                logger.info("Running transcripts/transcript sections one at a time...")
+                section_groups = [[section] for section in sections_to_run]
 
         raw_path = simul_search_round_bucket_path(
             is_rescue=args.is_rescue,
             search_num=args.search_num,
             bucket_type="raw_results",
         )
-        for counter, group in enumerate(transcript_groups):
+        for counter, group in enumerate(section_groups):
             output_ht_path = (
                 f"{raw_path}/simul_break_dataproc_ttn.ht"
                 if args.run_ttn
@@ -128,7 +131,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--group-size",
         help="""
-        Number of transcripts to include in each group of transcripts to be run.
+        Number of transcripts/transcript sections to include in each group to be run.
         """,
         type=int,
     )
@@ -138,11 +141,12 @@ if __name__ == "__main__":
         type=int,
         default=500,
     )
-    transcript_ids = parser.add_mutually_exclusive_group()
-    transcript_ids.add_argument(
-        "--transcripts-to-run", help="Comma separated list of transcript IDs to run."
+    section_ids = parser.add_mutually_exclusive_group()
+    section_ids.add_argument(
+        "--sections-to-run",
+        help="Comma separated list of transcripts/transcript sections to run.",
     )
-    transcript_ids.add_argument(
+    section_ids.add_argument(
         "--run-ttn",
         help="Run TTN. TTN is so large that it needs to be treated separately.",
         action="store_true",
