@@ -14,7 +14,7 @@ from gnomad.utils.slack import slack_notifications
 from rmc.resources.basics import TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import simul_sections_split_by_len_path
 from rmc.slack_creds import slack_token
-from rmc.utils.simultaneous_breaks import check_for_successful_transcripts
+from rmc.utils.simultaneous_breaks import check_for_successful_sections
 
 
 logging.basicConfig(
@@ -51,7 +51,7 @@ def main(args):
             )
         )
     )
-    missing_transcripts = check_for_successful_transcripts(
+    missing_transcripts = check_for_successful_sections(
         transcripts=transcripts,
         is_rescue=args.is_rescue,
         search_num=args.search_num,
@@ -64,7 +64,7 @@ def main(args):
     # TTN ID isn't included in `simul_sections_split_by_len_path`
     # It needs to be run separately due to its size
     logger.info("Checking if TTN was processed...")
-    ttn_missing = check_for_successful_transcripts(
+    ttn_missing = check_for_successful_sections(
         transcripts=[args.ttn],
         is_rescue=args.is_rescue,
         search_num=args.search_num,
