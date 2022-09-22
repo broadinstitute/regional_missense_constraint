@@ -1,13 +1,16 @@
 """This script contains functions used to search for two simultaneous breaks."""
 from collections.abc import Callable
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import hail as hl
 
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
 
-from rmc.resources.rmc import sections_to_simul_by_threshold_path, simul_search_round_bucket_path
+from rmc.resources.rmc import (
+    sections_to_simul_by_threshold_path,
+    simul_search_round_bucket_path,
+)
 from rmc.utils.constraint import get_dpois_expr, get_obs_exp_expr
 
 
@@ -135,7 +138,7 @@ def split_sections_by_len(
             search_num=search_num,
             is_over_threshold=False,
         ),
-        overwrite
+        overwrite,
     )
     hl.experimental.write_expression(
         over_threshold,
@@ -144,29 +147,29 @@ def split_sections_by_len(
             search_num=search_num,
             is_over_threshold=True,
         ),
-        overwrite
+        overwrite,
     )
 
 
-def check_for_successful_transcripts(
-    transcripts: List[str],
+def check_for_successful_sections(
+    sections: List[str],
     is_rescue: bool,
     search_num: int,
     in_parallel: bool = True,
 ) -> List[str]:
     """
-    Check if any transcripts have been previously searched by searching for success TSV existence.
+    Check if any transcripts/sections have been previously searched by searching for success TSV existence.
 
     .. note::
         This step needs to be run locally due to permissions involved with `parallel_file_exists`.
 
-    :param List[str] transcripts: List of transcripts to check.
+    :param List[str] sections: List of transcripts/transcript sections to check.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param is_rescue: Whether search is in rescue pathway.
     :param bool in_parallel: Whether to check if successful file exist in parallel.
         If True, must be run locally and not in Dataproc. Default is True.
-    :return: List of transcripts didn't have success TSVs and therefore still need to be processed.
+    :return: List of transcripts/sections that didn't have success TSVs and therefore still need to be processed.
     """
     logger.info("Checking if any transcripts have already been searched...")
     success_file_path = simul_search_round_bucket_path(
@@ -174,24 +177,24 @@ def check_for_successful_transcripts(
         search_num=search_num,
         bucket_type="success_files",
     )
-    transcript_success_map = {}
-    transcripts_to_run = []
-    for transcript in transcripts:
-        transcript_success_map[transcript] = f"{success_file_path}/{transcript}.tsv"
+    section_success_map = {}
+    sections_to_run = []
+    for section in sections:
+        section_success_map[section] = f"{success_file_path}/{section}.tsv"
 
     if in_parallel:
         # Use parallel_file_exists if in_parallel is set to True
-        success_tsvs_exist = parallel_file_exists(list(transcript_success_map.values()))
-        for transcript in transcripts:
-            if not success_tsvs_exist[transcript_success_map[transcript]]:
-                transcripts_to_run.append(transcript)
+        success_tsvs_exist = parallel_file_exists(list(section_success_map.values()))
+        for section in sections:
+            if not success_tsvs_exist[section_success_map[section]]:
+                sections_to_run.append(section)
     else:
-        # Otherwise, use file_exists
-        for transcript in transcripts:
-            if not file_exists(transcript_success_map[transcript]):
-                transcripts_to_run.append(transcript)
+        # Otherwise, use `file_exists``
+        for section in sections:
+            if not file_exists(section_success_map[section]):
+                sections_to_run.append(section)
 
-    return transcripts_to_run
+    return sections_to_run
 
 
 def calculate_window_chisq(
