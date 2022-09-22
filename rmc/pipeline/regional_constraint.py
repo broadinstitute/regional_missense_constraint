@@ -271,6 +271,7 @@ def main(args):
                 ht = ht.annotate(
                     section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop)
                 ).drop("start", "stop")
+                ht = ht.key_by("locus", "section").drop("transcript")
             else:
                 # Read in merged single and simultaneous breaks results HT
                 ht = hl.read_table(
@@ -336,7 +337,7 @@ def main(args):
             )
             # Rekey by new section annotation
             break_found_ht = break_found_ht.key_by(
-                section=break_found_ht.section_1
+                "locus", section=break_found_ht.section_1
             ).drop("section_1")
             logger.info("Writing out sections with single significant break...")
             break_found_ht.write(
