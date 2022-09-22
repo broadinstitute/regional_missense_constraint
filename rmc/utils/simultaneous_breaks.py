@@ -8,7 +8,7 @@ import hail as hl
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
 
 from rmc.resources.rmc import (
-    sections_to_simul_by_threshold_path,
+    simul_sections_split_by_len_path,
     simul_search_round_bucket_path,
 )
 from rmc.utils.constraint import get_dpois_expr, get_obs_exp_expr
@@ -133,7 +133,7 @@ def split_sections_by_len(
         over_threshold = set(over_threshold)
     hl.experimental.write_expression(
         under_threshold,
-        sections_to_simul_by_threshold_path(
+        simul_sections_split_by_len_path(
             is_rescue=is_rescue,
             search_num=search_num,
             is_over_threshold=False,
@@ -142,7 +142,7 @@ def split_sections_by_len(
     )
     hl.experimental.write_expression(
         over_threshold,
-        sections_to_simul_by_threshold_path(
+        simul_sections_split_by_len_path(
             is_rescue=is_rescue,
             search_num=search_num,
             is_over_threshold=True,
