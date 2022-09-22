@@ -547,7 +547,9 @@ def main(args):
         is_rescue=args.is_rescue,
         search_num=args.search_num,
     )
-    logger.info("Found %i transcripts or sections to search...", len(sections_to_run))
+    logger.info(
+        "Found %i transcripts or transcript sections to search...", len(sections_to_run)
+    )
 
     raw_path = simul_search_round_bucket_path(
         is_rescue=args.is_rescue,
@@ -582,7 +584,7 @@ def main(args):
             for x in range(0, len(sections_to_run), args.group_size)
         ]
         count = 1
-        for group in tqdm(section_groups, unit="transcript group"):
+        for group in tqdm(section_groups, unit="section group"):
             logger.info("Working on group number %s...", count)
             logger.info(group)
             job_name = f'group{count}{"over" if args.over_threshold else "under"}'
@@ -644,7 +646,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="""
-        This regional missense constraint script searches for two simultaneous breaks in transcripts without evidence
+        This regional missense constraint script searches for two simultaneous breaks in transcripts/transcript sections without evidence
         of a single significant break.
         """,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -673,22 +675,22 @@ if __name__ == "__main__":
         action="store_true",
     )
 
-    transcript_size = parser.add_mutually_exclusive_group(required=True)
-    transcript_size.add_argument(
+    section_size = parser.add_mutually_exclusive_group(required=True)
+    section_size.add_argument(
         "--under-threshold",
-        help="Transcripts in batch should have less than --transcript-len-threshold possible missense positions.",
+        help="Transcripts in batch should have less than --section-len-threshold possible missense positions.",
         action="store_true",
     )
-    transcript_size.add_argument(
+    section_size.add_argument(
         "--over-threshold",
-        help="Transcripts in batch should greater than or equal to --transcript-len-threshold possible missense positions.",
+        help="Transcripts in batch should greater than or equal to --section-len-threshold possible missense positions.",
         action="store_true",
     )
     parser.add_argument(
         "--group-size",
         help="""
-        Number of transcripts to include in each group of transcripts to be submitted to Hail Batch if --under-threshold.
-        Size of windows to split transcripts if --over-threshold.
+        Number of transcripts/transcript sections to include in each group to be submitted to Hail Batch if --under-threshold.
+        Size of windows to split transcripts/sections if --over-threshold.
         Default is 100.
         """,
         type=int,
