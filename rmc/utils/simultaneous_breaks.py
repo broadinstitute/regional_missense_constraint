@@ -1,7 +1,6 @@
 """This script contains functions used to search for two simultaneous breaks."""
-from collections.abc import Callable
 import logging
-from typing import List, Tuple
+from typing import List
 
 import hail as hl
 
