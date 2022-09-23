@@ -69,7 +69,7 @@ def main(args):
             )
             split_sections_by_len(
                 ht_path=grouped_ht_path,
-                group_str="section" if args.search_num > 1 else "transcript",
+                group_str="section",
                 is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 missense_len_threshold=args.missense_len_threshold,
