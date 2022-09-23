@@ -400,6 +400,7 @@ def process_section_group(
     min_num_exp_mis: float = 10,
     split_list_len: int = 500,
     read_if_exists: bool = False,
+    save_chisq_ht: bool = False,
 ) -> None:
     """
     Run two simultaneous breaks search on a group of transcripts or transcript sections.
@@ -427,6 +428,10 @@ def process_section_group(
     :param bool read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
         Only applies to Table that is input to `search_for_two_breaks`
         (`f"{temp_ht_path}/{transcript_group[0]}_prep.ht"`).
+        Default is False.
+    :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
+        (as long as chi square value is >= min_chisq_threshold).
+        This saves a lot of extra data and should only occur during the initial search round.
         Default is False.
     :return: None; processes Table and writes to path. Also writes success TSV to path.
     """
@@ -505,7 +510,12 @@ def process_section_group(
         )
 
     # Search for two simultaneous breaks
-    ht = search_for_two_breaks(ht, chisq_threshold, min_num_exp_mis)
+    ht = search_for_two_breaks(
+        group_ht=ht,
+        chisq_threshold=chisq_threshold,
+        min_num_exp_mis=min_num_exp_mis,
+        save_chisq_ht=save_chisq_ht,
+    )
 
     # If over threshold, checkpoint HT and check if there were any breaks
     if over_threshold:
