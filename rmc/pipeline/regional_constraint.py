@@ -262,6 +262,14 @@ def main(args):
                 else:
                     # Read constraint_prep resource HT if this is the first search
                     ht = constraint_prep.ht()
+
+                    # TEMP CODE FIX FOR FREEZE 2 ROUND 1 ONlY
+                    ht = ht.annotate(
+                        section_mu=ht.total_mu,
+                        section_exp=ht.total_exp,
+                        section_obs=ht.total_obs,
+                        section_oe=hl.min(ht.total_obs / ht.total_exp, 1),
+                    )
                     save_full_chisq_ht = True
 
                 logger.info(

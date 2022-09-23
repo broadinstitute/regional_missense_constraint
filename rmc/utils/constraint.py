@@ -730,17 +730,26 @@ def process_sections(
     # `get_fwd_exprs` don't run again for first break search only
     # Also rename total to section for this run
     # TODO: update code to stop continually finding first break (we still need a break_list annotation or something similar)
-    ht = get_subsection_exprs(ht)
+    # ht = get_subsection_exprs(ht)
 
     logger.info("Annotating cumulative observed and expected counts...")
-    ht = get_fwd_exprs(
-        ht=ht,
-        group_str=group_str,
-        obs_str="observed",
-        mu_str="mu_snp",
-        total_mu_str="section_mu",
-        total_exp_str="section_exp",
+    # ht = get_fwd_exprs(
+    #    ht=ht,
+    #    group_str=group_str,
+    #    obs_str="observed",
+    #    mu_str="mu_snp",
+    #    total_mu_str="section_mu",
+    #    total_exp_str="section_exp",
+    # )
+    ht = ht.annotate(cond_expr=True)
+    ht = ht.annotate(
+        forward_oe=get_obs_exp_expr(
+            ht.cond_expr,
+            ht.cumulative_obs,
+            ht.cumulative_exp,
+        )
     )
+    ht = ht.drop("cond_expr")
 
     logger.info("Annotating reverse observed and expected counts...")
     ht = get_reverse_exprs(
