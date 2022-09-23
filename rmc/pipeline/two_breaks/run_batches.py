@@ -35,7 +35,6 @@ from rmc.resources.rmc import (
     grouped_single_no_break_ht_path,
     simul_sections_split_by_len_path,
     simul_search_round_bucket_path,
-    single_search_round_ht_path,
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import check_for_successful_sections
