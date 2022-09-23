@@ -59,7 +59,7 @@ def main(args):
                     is_breakpoint_only=False,
                 ),
                 out_ht_path=grouped_ht_path,
-                group_str="section" if args.search_num > 1 else "transcript",
+                group_str="section",
             )
 
         if args.command == "split-sections":
