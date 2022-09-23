@@ -41,6 +41,10 @@ def main(args):
             log=f"/round{args.search_num}search_for_two_breaks_run_batches_dataproc.log",
             tmp_dir=TEMP_PATH_WITH_DEL,
         )
+        save_chisq_ht = False
+        if args.search_num == 1 and not args.is_rescue:
+            save_chisq_ht = True
+
         if args.run_ttn:
             section_groups = [[args.ttn_id]]
         else:
@@ -76,8 +80,7 @@ def main(args):
 
             process_section_group(
                 ht_path=grouped_single_no_break_ht_path(
-                    args.is_rescue,
-                    args.search_num
+                    args.is_rescue, args.search_num
                 ),
                 section_group=group,
                 is_rescue=args.is_rescue,
@@ -87,6 +90,7 @@ def main(args):
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.split_list_len,
                 read_if_exists=args.read_if_exists,
+                save_chisq_ht=save_chisq_ht,
             )
 
     finally:

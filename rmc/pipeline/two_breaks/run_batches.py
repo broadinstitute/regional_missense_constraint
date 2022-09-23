@@ -21,8 +21,7 @@ import argparse
 import logging
 from tqdm import tqdm
 
-from collections.abc import Callable
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Union
 
 import hail as hl
 import hailtop.batch as hb
@@ -30,12 +29,11 @@ import hailtop.batch as hb
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import TEMP_PATH_WITH_DEL
+from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
     grouped_single_no_break_ht_path,
     simul_sections_split_by_len_path,
     simul_search_round_bucket_path,
-    single_search_round_ht_path,
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import check_for_successful_sections
@@ -210,147 +208,82 @@ def search_for_two_breaks(
     group_ht: hl.Table,
     chisq_threshold: float = 9.2,
     min_num_exp_mis: float = 10,
+    min_chisq_threshold: float = 7.4,
+    save_chisq_ht: bool = False,
 ) -> hl.Table:
     """
     Search for transcripts/transcript sections with simultaneous breaks.
 
     This function searches for breaks for all possible window sizes that exceed a minimum threshold of expected missense variants.
 
-    :param hl.Table group_ht: Input Table aggregated by transcript/transcript section with lists of cumulative observed
+    :param group_ht: Input Table aggregated by transcript/transcript section with lists of cumulative observed
         and expected missense values. HT is filtered to contain only transcript/sections without
         a single significant breakpoint.
-    :param float chisq_threshold:  Chi-square significance threshold. Default is 9.2.
+    :param chisq_threshold:  Chi-square significance threshold. Default is 9.2.
         This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
-    :param float min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
+    :param min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
+    :param min_chisq_threshold: Minimum chi square value to emit from search.
+        Default is 7.4, which corresponds to a p-value of 0.025 with 2 degrees of freedom.
+    :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
+        (as long as chi square value is >= min_chisq_threshold).
+        This saves a lot of extra data and should only occur during the initial search round.
+        Default is False.
     :return: Table filtered to transcript/sections with significant simultaneous breakpoints
         and annotated with breakpoint information.
-    :rtype: hl.Table
     """
-
-    def _simul_break_loop(
-        loop_continue: Callable,
-        i: int,
-        j: int,
-        start_idx_j: int,
-        max_idx_i: int,
-        max_idx_j: int,
-        cur_max_chisq: float,
-        cur_best_i: int,
-        cur_best_j: int,
-    ) -> Tuple[float, int, int]:
-        """
-        Iterate over each possible pair of indices in a transcript's cumulative value lists to find the optimum two break window.
-
-        :param Callable[float, int, int] loop_continue: Function to restart hail loop.
-            First argument to `hl.experimental.loop` must be a function (`_simul_break_loop` in this case),
-            and the first argument to that function must be another function.
-            Calling `loop_continue` tells hail to go back to the top of the loop with loop variables updated.
-        :param int i: Smaller list index value. This index defines the current position of the first break.
-            It's the `i` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
-        :param int j: Larger list index value. This index defines the current position of the second break.
-            It's the `j` in 3 windows defined by intervals: [start, i), [i, j], (j, end].
-        :param int start_idx_j: Smallest list index for larger list index value `j`.
-        :param int max_idx_i: Largest list index for smaller list index value.
-        :param int max_idx_j: Largest list index for larger list index value.
-        :param float cur_max_chisq: Current maximum chi square value.
-        :param int cur_best_i: Current best index i.
-        :param int cur_best_j: Current best index j.
-        :return: Maximum chi square significance value and optimum index pair i, j.
-        """
-        # Calculate chi squared value associated with transcript subsections created using this index pair i, j
-        chisq = calculate_window_chisq(
-            group_ht.max_idx,
-            i,
-            j,
-            group_ht.cum_obs,
-            group_ht.cum_exp,
-            group_ht.total_oe,
-            min_num_exp_mis,
-        )
-
-        # Make sure chi square isn't NaN
-        chisq = hl.nanmax(chisq, -1)
-
-        # Update current best indices and chi square if new chi square (calculated above)
-        # is better than the current stored value (`cur_max_chisq`)
-        cur_best_i = hl.if_else(chisq > cur_max_chisq, i, cur_best_i)
-        cur_best_j = hl.if_else(chisq > cur_max_chisq, j, cur_best_j)
-        cur_max_chisq = hl.max(chisq, cur_max_chisq)
-
-        return hl.if_else(
-            # Return the best indices at the end of the iteration through the position list
-            # Note that max_idx_i has been adjusted to be ht.max_idx - 1 (or i + window_size - 1):
-            # see note in `process_section_group`
-            # Also note that j needs to be checked here to ensure that j is also at the end of its loop
-            # (This check is necessary when transcripts have been split into multiple i, j windows
-            # across multiple rows)
-            (i == max_idx_i) & (j == max_idx_j),
-            (cur_max_chisq, cur_best_i, cur_best_j),
-            # If we haven't reached the end of the position list with index i,
-            # continue with the loop
-            hl.if_else(
-                j == max_idx_j,
-                # At end of j iteration, continue to next i index
-                # Set i to i + 1
-                # and set j to the larger value between i + 2 and start index value for j
-                # This is to avoid redundant work in larger transcripts; e.g.:
-                # start_idx_i = 0, start_idx_j = 50 ->
-                # using `hl.max()` here means that j will be reset to 50 rather than 2 on the second
-                # iteration of the loop will restart at 50
-                # Note that the j index should always be larger than the i index
-                loop_continue(
-                    i + 1,
-                    hl.min(hl.max(i + 2, start_idx_j), max_idx_j),
-                    start_idx_j,
-                    max_idx_i,
-                    max_idx_j,
-                    cur_max_chisq,
-                    cur_best_i,
-                    cur_best_j,
+    # Create ArrayExpression of StructExpressions that stores each
+    # pair of positions (window breakpoints) and their corresponding chi square value
+    break_values_expr = hl.range(
+        group_ht.start_idx.i_start, group_ht.i_max_idx
+    ).flatmap(
+        lambda i: hl.range(group_ht.start_idx.j_start, group_ht.j_max_idx).map(
+            lambda j: hl.struct(
+                i=i,
+                j=j,
+                chisq=hl.nanmax(
+                    calculate_window_chisq(
+                        group_ht.max_idx,
+                        i,
+                        j,
+                        group_ht.cum_obs,
+                        group_ht.cum_exp,
+                        group_ht.total_oe,
+                        min_num_exp_mis,
+                    ),
+                    -1,
                 ),
-                # Otherwise, if j hasn't gotten to the maximum index,
-                # continue to the next j value for current i
-                loop_continue(
-                    i,
-                    j + 1,
-                    start_idx_j,
-                    max_idx_i,
-                    max_idx_j,
-                    cur_max_chisq,
-                    cur_best_i,
-                    cur_best_j,
-                ),
-            ),
+            )
         )
-
+    )
+    # Filter ArrayExpression to only keep chi square values that are at least
+    # some minimum value (to shorten this array and save on storage)
+    break_values_expr = break_values_expr.filter(lambda x: x.chisq >= min_chisq_threshold)
+    group_ht = group_ht.annotate(break_values=break_values_expr)
+    # Extract the positions with the maximum chi square value (the "best" break)
     group_ht = group_ht.annotate(
-        max_break=hl.experimental.loop(
-            _simul_break_loop,
-            hl.ttuple(hl.tfloat, hl.tint, hl.tint),
-            group_ht.start_idx.i_start,
-            group_ht.start_idx.j_start,
-            group_ht.start_idx.j_start,
-            group_ht.i_max_idx,
-            group_ht.j_max_idx,
-            0.0,
-            0,
-            0,
+        best_break=group_ht.break_values.fold(
+            lambda x, y: hl.if_else(x.chisq >= y.chisq, x, y),
+            hl.struct(i=-1, j=-1, chisq=-99),
         )
     )
     group_ht = group_ht.transmute(
-        max_chisq=group_ht.max_break[0],
+        max_chisq=group_ht.best_break.chisq,
         # Adjust breakpoint inclusive/exclusiveness to be consistent with single break breakpoints, i.e.
         # so that the breakpoint site itself is the last site in the left subsection. Thus, the resulting
         # subsections will be divided as follows:
         # [section_start, first_break_pos] (first_break_pos, second_break_pos] (second_break_pos, section_end]
         breakpoints=(
-            group_ht.positions[group_ht.max_break[1]] - 1,
-            group_ht.positions[group_ht.max_break[2]],
+            group_ht.positions[group_ht.best_break.i] - 1,
+            group_ht.positions[group_ht.best_break.j],
         ),
     )
+    if save_chisq_ht:
+        group_ht = group_ht.checkpoint(
+            f"{SIMUL_BREAK_TEMP_PATH}/temp_chisq_over_threshold.ht", overwrite=True
+        )
     # Remove rows with maximum chi square values below the threshold
     group_ht = group_ht.filter(group_ht.max_chisq >= chisq_threshold)
     return group_ht
@@ -367,6 +300,7 @@ def process_section_group(
     min_num_exp_mis: float = 10,
     split_list_len: int = 500,
     read_if_exists: bool = False,
+    save_chisq_ht: bool = False,
 ) -> None:
     """
     Run two simultaneous breaks search on a group of transcripts or transcript sections.
@@ -394,6 +328,10 @@ def process_section_group(
     :param bool read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
         Only applies to Table that is input to `search_for_two_breaks`
         (`f"{temp_ht_path}/{transcript_group[0]}_prep.ht"`).
+        Default is False.
+    :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
+        (as long as chi square value is >= min_chisq_threshold).
+        This saves a lot of extra data and should only occur during the initial search round.
         Default is False.
     :return: None; processes Table and writes to path. Also writes success TSV to path.
     """
@@ -472,7 +410,12 @@ def process_section_group(
         )
 
     # Search for two simultaneous breaks
-    ht = search_for_two_breaks(ht, chisq_threshold, min_num_exp_mis)
+    ht = search_for_two_breaks(
+        group_ht=ht,
+        chisq_threshold=chisq_threshold,
+        min_num_exp_mis=min_num_exp_mis,
+        save_chisq_ht=save_chisq_ht,
+    )
 
     # If over threshold, checkpoint HT and check if there were any breaks
     if over_threshold:
@@ -517,6 +460,10 @@ def main(args):
         raise DataException(
             "Do not specify --use-custom-machine when transcripts/sections are --under-threshold size!"
         )
+
+    save_chisq_ht = False
+    if args.search_num == 1 and not args.is_rescue:
+        save_chisq_ht = True
 
     logger.info("Importing SetExpression with transcripts or transcript sections...")
     sections_to_run = check_for_successful_sections(
@@ -596,8 +543,7 @@ def main(args):
             j.call(
                 process_section_group,
                 ht_path=grouped_single_no_break_ht_path(
-                    args.is_rescue,
-                    args.search_num
+                    args.is_rescue, args.search_num
                 ),
                 section_group=group,
                 is_rescue=args.is_rescue,
@@ -606,6 +552,7 @@ def main(args):
                 output_ht_path=f"{raw_path}/simul_break_{job_name}.ht",
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.group_size,
+                save_chisq_ht=save_chisq_ht,
             )
             count += 1
 
@@ -626,8 +573,7 @@ def main(args):
             j.call(
                 process_section_group,
                 ht_path=grouped_single_no_break_ht_path(
-                    args.is_rescue,
-                    args.search_num
+                    args.is_rescue, args.search_num
                 ),
                 section_group=group,
                 is_rescue=args.is_rescue,
@@ -636,6 +582,7 @@ def main(args):
                 output_ht_path=f"{raw_path}/simul_break_{group[0]}.ht",
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.group_size,
+                save_chisq_ht=save_chisq_ht,
             )
     b.run(wait=False)
 

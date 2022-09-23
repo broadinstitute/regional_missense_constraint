@@ -69,7 +69,7 @@ for each canonical transcript in Gencode v19.
 ## RMC-related resources
 ####################################################################################
 constraint_prep = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
+    default_version=1,
     versions={
         freeze: TableResource(
             path=f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/context_obs_exp_annot.ht"
@@ -205,7 +205,7 @@ def grouped_single_no_break_ht_path(
         bucket_type="prep",
     )
     return f"{bucket_path}/grouped_single_no_break_found.ht"
-    
+
 
 def simul_sections_split_by_len_path(
     is_rescue: bool,

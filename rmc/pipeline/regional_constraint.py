@@ -574,6 +574,14 @@ if __name__ == "__main__":
         type=int,
     )
     parser.add_argument(
+        "--merge-single-simul",
+        help="""
+        Merge transcripts/transcript sections with significant breakpoints from
+        single and simultaneous breaks searches into a single Table.
+        """,
+        action="store_true",
+    )
+    parser.add_argument(
         "--finalize",
         help="Combine and reformat (finalize) RMC output.",
         action="store_true",
