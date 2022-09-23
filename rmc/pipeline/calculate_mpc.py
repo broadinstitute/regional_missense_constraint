@@ -11,7 +11,7 @@ import hail as hl
 
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX
+from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX, TEMP_PATH_WITH_DEL
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 from rmc.slack_creds import slack_token
 from rmc.utils.mpc import (
@@ -32,13 +32,14 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Calculate MPC (Missense badness, Polyphen-2, and Constraint) score."""
+    temp_dir = f"{TEMP_PATH_WITH_DEL}/mpc/"
     try:
         if args.command == "prepare-ht":
-            hl.init(log="/write_pop_path_ht.log")
+            hl.init(log="/write_pop_path_ht.log", tmp_dir=temp_dir)
             prepare_pop_path_ht()
 
         if args.command == "run-glm":
-            hl.init(log="/run_regressions_using_glm.log")
+            hl.init(log="/run_regressions_using_glm.log", tmp_dir=temp_dir)
             run_regressions(
                 variables=args.variables.split(","),
                 additional_variables=args.extra_variables.split(","),
@@ -46,13 +47,13 @@ def main(args):
             )
 
         if args.command == "calculate-mpc":
-            hl.init(log="/calculate_mpc_release.log")
+            hl.init(log="/calculate_mpc_release.log", tmp_dir=temp_dir)
             create_mpc_release_ht(
                 overwrite=args.overwrite,
             )
 
         if args.command == "annotate-hts":
-            hl.init(log="/annotate_hts.log")
+            hl.init(log="/annotate_hts.log", tmp_dir=temp_dir)
             if args.clinvar:
                 from rmc.resources.reference_data import clinvar_path_mis
 

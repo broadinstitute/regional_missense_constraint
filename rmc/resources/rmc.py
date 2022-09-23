@@ -4,6 +4,8 @@ Script containing RMC and MPC related resources.
 RMC: Regional missense constraint
 MPC: Missense badness, Polyphen-2, and Constraint score
 """
+from typing import Set
+
 import hail as hl
 
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
@@ -13,6 +15,9 @@ from rmc.resources.basics import (
     MODEL_PREFIX,
     MPC_PREFIX,
     RESOURCE_PREFIX,
+    SIMUL_BREAK_TEMP_PATH,
+    SINGLE_BREAK_TEMP_PATH,
+    TEMP_PATH,
 )
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
@@ -56,7 +61,8 @@ divergence_scores = TableResource(
     },
 )
 """
-Table with divergence score between humans and macaques for each canonical transcript in Gencode v19.
+Table with divergence score between humans and macaques
+for each canonical transcript in Gencode v19.
 """
 
 ####################################################################################
@@ -76,6 +82,189 @@ Context Table ready for RMC calculations.
 
 HT is annotated with observed and expected variant counts per base.
 """
+
+
+def single_search_round_ht_path(
+    is_rescue: bool,
+    search_num: int,
+    is_break_found: bool,
+    is_breakpoint_only: bool,
+) -> str:
+    """
+    Return path to a Table with results from a specified round of single break search.
+
+    Function returns path to HT based on search number, break status,
+    breakpoint status, and whether HT is associated with "rescue" pathway
+    (pathway with lowered chi square significance cutoff).
+
+    Break status refers to whether transcripts/sections in HT have at least one
+    single significant breakpoint.
+
+    Breakpoint status refers to whether HT contains breakpoint positions only
+    or all positions in transcripts/sections.
+
+    :param is_rescue: Whether to return path to HT created in rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :param is_break_found: Whether to return path to HT with transcript/sections
+        that have significant single break results.
+    :param is_breakpoint_only: Whether to return path to HT with breakpoint positions
+        only.
+    :return: Path to specified HT resulting from single break search.
+    """
+    rescue = "rescue" if is_rescue else "initial"
+    break_status = "break_found" if is_break_found else "no_break_found"
+    breakpoint_status = "_breakpoint_only" if is_breakpoint_only else ""
+    return f"{SINGLE_BREAK_TEMP_PATH}/{rescue}/round{search_num}/{break_status}{breakpoint_status}.ht"
+
+
+SIMUL_SEARCH_BUCKET_NAMES = {"prep", "raw_results", "final_results", "success_files"}
+"""
+Names of buckets nested within round bucket of `SIMUL_BREAK_TEMP_PATH`.
+
+Bucket structure:
+    `SIMUL_BREAK_TEMP_PATH`
+        initial/ or rescue/
+            round/
+            (anything not specific to round number at this level)
+                prep/
+                raw_results/
+                final_results/
+                success_files/
+"""
+
+
+def simul_search_bucket_path(
+    is_rescue: bool,
+    search_num: int,
+) -> str:
+    """
+    Return path to bucket associated with simultaneous break search inputs and results.
+
+    Function returns path to top level initial or "rescue"
+    (search with lowered chi square significance cutoff) bucket,
+    or bucket based on search number in either initial or rescue bucket.
+
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :return: Path to simultaneous break search round bucket.
+    """
+    rescue = "rescue" if is_rescue else "initial"
+    return (
+        f"{SIMUL_BREAK_TEMP_PATH}/{rescue}/round{search_num}"
+        if search_num
+        else f"{SIMUL_BREAK_TEMP_PATH}/{rescue}"
+    )
+
+
+def simul_search_round_bucket_path(
+    is_rescue: bool,
+    search_num: int,
+    bucket_type: str,
+    bucket_names: Set[str] = SIMUL_SEARCH_BUCKET_NAMES,
+) -> str:
+    """
+    Return path to bucket with  Tables resulting from a specific round of simultaneous break search.
+
+    Function returns path to bucket based on search number, whether search is in
+    "rescue" pathway (pathway with lowered chi square significance cutoff), and
+    bucket type.
+
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :param bucket_type: Bucket type.
+        Must be in `bucket_names`.
+    :param bucket_names: Possible bucket names for simultaneous search bucket type.
+        Default is `SIMUL_SEARCH_BUCKET_NAMES`.
+    :return: Path to a bucket in the simultaneous break search round bucket.
+    """
+    assert bucket_type in bucket_names, f"Bucket type must be one of {bucket_names}!"
+    return f"{simul_search_bucket_path(is_rescue, search_num)}/{bucket_type}"
+
+
+def grouped_single_no_break_ht_path(
+    is_rescue: bool,
+    search_num: int,
+) -> str:
+    """
+    Return path to Table of transcripts/transcript sections without a significant break in a single break search round, grouped by transcript/transcript section.
+
+    Function returns path to Table based on search number and whether search is
+    in "rescue" pathway (pathway with lowered chi square significance cutoff).
+
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :return: Path to grouped Table.
+    """
+    bucket_path = simul_search_round_bucket_path(
+        is_rescue=is_rescue,
+        search_num=search_num,
+        bucket_type="prep",
+    )
+    return f"{bucket_path}/grouped_single_no_break_found.ht"
+    
+
+def simul_sections_split_by_len_path(
+    is_rescue: bool,
+    search_num: int,
+    is_over_threshold: bool,
+) -> str:
+    """
+    Return path to transcripts/transcript sections entering a specific round of simultaneous break search.
+
+    Function returns path to SetExpression based on search number, whether search is
+    in "rescue" pathway (pathway with lowered chi square significance cutoff), and
+    whether the transcripts/transcript sections have greater than or equal to the
+    cutoff for possible missense positions.
+
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :param is_over_threshold: Whether to return path for transcripts/transcript
+        sections with more than the cutoff for possible missense positions specified
+        in `prepare_transcripts.py`. If True, those with greater than or equal to
+        this cutoff will be returned. If False, those with fewer than this cutoff
+        will be returned.
+    :return: Path to SetExpression containing transcripts/transcript sections.
+    """
+    bucket_path = simul_search_round_bucket_path(
+        is_rescue=is_rescue,
+        search_num=search_num,
+        bucket_type="prep",
+    )
+    threshold_relation = "over" if is_over_threshold else "under"
+    return f"{bucket_path}/sections_to_simul_{threshold_relation}_threshold.he"
+
+
+def merged_search_ht_path(
+    is_rescue: bool,
+    search_num: int,
+    is_break_found: bool,
+) -> str:
+    """
+    Return path to Table with merged single and simultaneous breaks search results.
+
+    Function returns path to HT based on search number, break status,
+    and whether HT is associated with "rescue" pathway
+    (pathway with lowered chi square significance cutoff).
+
+    Break status refers to whether transcripts/sections in HT have at least one
+    single significant breakpoint.
+
+    :param is_rescue: Whether to return path to HT created in rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :param is_break_found: Whether to return path to HT with transcript/sections
+        that have significant single break results.
+    :return: Path to merged break found HT or no break found HT.
+    """
+    rescue = "rescue_" if is_rescue else ""
+    break_status = "break_found" if is_break_found else "no_break_found"
+    return f"{TEMP_PATH}/{rescue}round{search_num}_merged_{break_status}.ht"
+
 
 one_break = VersionedTableResource(
     default_version=CURRENT_FREEZE,
@@ -135,15 +324,6 @@ multiple_breaks = VersionedTableResource(
 Table containing transcripts with multiple breaks.
 """
 
-simul_break_under_threshold_path = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/transcripts_under_threshold.he"
-"""
-SetExpression containing transcripts with fewer possible missense positions than cutoff specified in `run_simultaneous_breaks.py`.
-"""
-
-simul_break_over_threshold_path = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/transcripts_over_threshold.he"
-"""
-SetExpression containing transcripts with greater than or equal to the cutoff for possible missense positions.
-"""
 
 simul_break = VersionedTableResource(
     default_version=CURRENT_FREEZE,

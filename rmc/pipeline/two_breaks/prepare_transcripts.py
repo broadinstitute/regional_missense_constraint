@@ -2,8 +2,8 @@
 This script prepares the inputs to the two simultaneous breaks search.
 
 This script has two possible steps:
-- Create grouped version of not one break Table
-- Split transcripts to search by number of possible missense variants per transcript.
+- Group not one single break found Table by transcript/transcript section.
+- Split transcripts/transcript sections in this Table based on number of possible missense variants.
 
 Both steps should be run in Dataproc.
 """
@@ -12,17 +12,17 @@ import logging
 
 import hail as hl
 
-from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH
-from rmc.resources.reference_data import gene_model
-from rmc.resources.rmc import not_one_break, not_one_break_grouped
+from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.rmc import (
+    grouped_single_no_break_ht_path,
+    single_search_round_ht_path,
+)
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import (
-    group_not_one_break_ht,
-    split_transcripts_by_len,
+    group_no_single_break_found_ht,
+    split_sections_by_len,
 )
 
 
@@ -35,35 +35,44 @@ logger.setLevel(logging.INFO)
 
 
 def main(args):
-    """Prepare input Table and transcripts for two simultaneous breaks search."""
+    """Prepare input Table for two simultaneous breaks search."""
     try:
+        grouped_ht_path = grouped_single_no_break_ht_path(
+            args.is_rescue,
+            args.search_num,
+        )
+
         if args.command == "create-grouped-ht":
-            hl.init(log="/search_for_two_breaks_create_grouped_ht.log")
+            hl.init(
+                log=f"/round{args.search_num}_search_for_two_breaks_create_grouped_ht.log",
+                tmp_dir=TEMP_PATH_WITH_DEL,
+            )
 
-            if not file_exists(not_one_break_grouped.path) or args.create_grouped_ht:
-                if args.min_num_obs == 0:
-                    # Make sure user didn't specify a min obs of 0
-                    raise DataException(
-                        "Minimum number of observed variants must be greater than zero!"
-                    )
+            logger.info(
+                "Creating grouped HT with lists of cumulative observed and expected missense values..."
+            )
+            group_no_single_break_found_ht(
+                ht_path=single_search_round_ht_path(
+                    is_rescue=args.is_rescue,
+                    search_num=args.search_num,
+                    is_break_found=False,
+                    is_breakpoint_only=False,
+                ),
+                out_ht_path=grouped_ht_path,
+                group_str="section" if args.search_num > 1 else "transcript",
+            )
 
-                logger.info(
-                    "Creating grouped HT with lists of cumulative observed and expected missense values..."
-                )
-                group_not_one_break_ht(
-                    ht=not_one_break.ht(),
-                    transcript_ht=gene_model.ht(),
-                    get_min_window_size=args.get_min_window_size,
-                    min_window_size=args.min_window_size,
-                    min_num_obs=args.min_num_obs,
-                )
-
-        if args.command == "split-transcripts":
-            logger.warning("This step should be run in Dataproc!")
-            hl.init(log="/search_for_two_breaks_split_transcripts.log")
-            split_transcripts_by_len(
-                ht=not_one_break_grouped.ht(),
-                transcript_len_threshold=args.transcript_len_threshold,
+        if args.command == "split-sections":
+            hl.init(
+                log=f"/round{args.search_num}_search_for_two_breaks_split_sections.log",
+                tmp_dir=TEMP_PATH_WITH_DEL,
+            )
+            split_sections_by_len(
+                ht_path=grouped_ht_path,
+                group_str="section" if args.search_num > 1 else "transcript",
+                is_rescue=args.is_rescue,
+                search_num=args.search_num,
+                missense_len_threshold=args.missense_len_threshold,
                 ttn_id=args.ttn,
                 overwrite=args.overwrite,
             )
@@ -75,7 +84,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="This regional missense constraint script prepares the input Table and transcripts for the two simultaneous breaks search.",
+        description="This regional missense constraint script prepares the input Table for the two simultaneous breaks search.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -84,7 +93,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
-        default="@kc (she/her)",
+    )
+    parser.add_argument(
+        "--search-num",
+        help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
+        type=int,
+    )
+    parser.add_argument(
+        "--is-rescue",
+        help="""
+        Whether search is part of the 'rescue' pathway (pathway
+        with lower chi square significance cutoff).
+        """,
+        action="store_true",
     )
 
     # Create subparsers for each step
@@ -95,43 +116,27 @@ if __name__ == "__main__":
     create_grouped_ht = subparsers.add_parser(
         "create-grouped-ht",
         help="""
-        Create hail Table grouped by transcript with cumulative observed and expected missense values collected into lists.
+        Create hail Table grouped by transcript/transcript section with cumulative observed and expected missense values collected into lists.
         This step should be run in Dataproc.
         """,
-    )
-    min_window_group = create_grouped_ht.add_mutually_exclusive_group()
-    min_window_group.add_argument(
-        "--min-window-size",
-        help="Smallest possible window size for simultaneous breaks. Determined by running --get-min-window-size.",
-        type=int,
-    )
-    min_window_group.add_argument(
-        "--get-min-window-size",
-        help="Determine smallest possible window size for simultaneous breaks.",
-        action="store_true",
-    )
-    create_grouped_ht.add_argument(
-        "--min-num-obs",
-        help="Number of observed variants. Used when determining the smallest possible window size for simultaneous breaks.",
-        type=int,
-        default=10,
     )
 
-    split_transcripts = subparsers.add_parser(
-        "split-transcripts",
+    # TODO: Switch from using "missense variants" to "missense sites" where applicable
+    split_sections = subparsers.add_parser(
+        "split-sections",
         help="""
-        Split transcripts based on number of possible missense positions.
-        This is used to create batches of transcripts to run through search for two breaks code.
+        Split transcripts/transcript sections based on number of possible missense sites.
+        This is used to create batches to run through search for two breaks code.
         This step should be run in Dataproc.
         """,
     )
-    split_transcripts.add_argument(
-        "--transcript-len-threshold",
-        help="Cutoff for number of possible missense positions in transcript. Used to create batches of transcripts.",
+    split_sections.add_argument(
+        "--missense-len-threshold",
+        help="Cutoff for number of possible missense sites in transcript/transcript section. Used to create batches.",
         type=int,
         default=5000,
     )
-    split_transcripts.add_argument(
+    split_sections.add_argument(
         "--ttn",
         help="TTN transcript ID. TTN is so large that it needs to be treated separately.",
         default="ENST00000589042",

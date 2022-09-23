@@ -17,10 +17,13 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, SIMUL_BREAK_TEMP_PATH
-from rmc.resources.rmc import not_one_break_grouped
+from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.rmc import (
+    grouped_single_no_break_ht_path,
+    simul_search_round_bucket_path,
+)
 from rmc.slack_creds import slack_token
-from rmc.utils.simultaneous_breaks import process_transcript_group
+from rmc.utils.simultaneous_breaks import process_section_group
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -34,41 +37,55 @@ def main(args):
     """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
     try:
         logger.warning("This step should be run on an autoscaling cluster!")
-        hl.init(log="/search_for_two_breaks_run_batches_dataproc.log")
+        hl.init(
+            log=f"/round{args.search_num}search_for_two_breaks_run_batches_dataproc.log",
+            tmp_dir=TEMP_PATH_WITH_DEL,
+        )
         if args.run_ttn:
-            transcript_groups = [[args.ttn_id]]
+            section_groups = [[args.ttn_id]]
         else:
-            transcripts_to_run = args.transcripts_to_run.split(",")
+            sections_to_run = args.sections_to_run.split(",")
             if args.group_size:
-                logger.info("Splitting transcripts into groups of %i", args.group_size)
-                transcript_groups = [
-                    transcripts_to_run[x : x + args.group_size]
-                    for x in range(0, len(transcripts_to_run), args.group_size)
+                logger.info(
+                    "Splitting transcripts/transcript sections into groups of %i",
+                    args.group_size,
+                )
+                section_groups = [
+                    sections_to_run[x : x + args.group_size]
+                    for x in range(0, len(sections_to_run), args.group_size)
                 ]
             else:
-                logger.info("Running transcripts one at a time...")
-                transcript_groups = [[transcript] for transcript in transcripts_to_run]
+                logger.info("Running transcripts/transcript sections one at a time...")
+                section_groups = [[section] for section in sections_to_run]
 
-        for counter, group in enumerate(transcript_groups):
-            output_ht = (
-                f"{SIMUL_BREAK_TEMP_PATH}/hts/simul_break_dataproc_ttn.ht"
+        raw_path = simul_search_round_bucket_path(
+            is_rescue=args.is_rescue,
+            search_num=args.search_num,
+            bucket_type="raw_results",
+        )
+        for counter, group in enumerate(section_groups):
+            output_ht_path = (
+                f"{raw_path}/simul_break_dataproc_ttn.ht"
                 if args.run_ttn
-                else f"{SIMUL_BREAK_TEMP_PATH}/hts/simul_break_dataproc_{counter}.ht"
+                else f"{raw_path}/simul_break_dataproc_{counter}.ht"
             )
-            if file_exists(output_ht):
+            if file_exists(output_ht_path):
                 raise DataException(
-                    f"Output already exists at {output_ht}! Double check before running script again."
+                    f"Output already exists at {output_ht_path}! Double check before running script again."
                 )
 
-            process_transcript_group(
-                ht_path=not_one_break_grouped.path,
-                transcript_group=group,
+            process_section_group(
+                ht_path=grouped_single_no_break_ht_path(
+                    args.is_rescue,
+                    args.search_num
+                ),
+                section_group=group,
+                is_rescue=args.is_rescue,
+                search_num=args.search_num,
                 over_threshold=True,
-                output_ht_path=output_ht,
-                output_tsv_path=f"{SIMUL_BREAK_TEMP_PATH}/success_files",
-                temp_ht_path=f"{SIMUL_BREAK_TEMP_PATH}",
+                output_ht_path=output_ht_path,
                 chisq_threshold=args.chisq_threshold,
-                split_window_size=args.window_size,
+                split_list_len=args.split_list_len,
                 read_if_exists=args.read_if_exists,
             )
 
@@ -93,32 +110,41 @@ if __name__ == "__main__":
         default=9.2,
     )
     parser.add_argument(
-        "--overwrite", help="Overwrite existing data.", action="store_true"
-    )
-    parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
-        default="@kc (she/her)",
     )
-
+    parser.add_argument(
+        "--search-num",
+        help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
+        type=int,
+    )
+    parser.add_argument(
+        "--is-rescue",
+        help="""
+        Whether search is part of the 'rescue' pathway (pathway
+        with lower chi square significance cutoff).
+        """,
+        action="store_true",
+    )
     parser.add_argument(
         "--group-size",
         help="""
-        Number of transcripts to include in each group of transcripts to be run.
+        Number of transcripts/transcript sections to include in each group to be run.
         """,
         type=int,
     )
     parser.add_argument(
-        "--window-size",
-        help="Size of windows to split transcripts. Default is 500.",
+        "--split-list-len",
+        help="Max length to divide transcript/sections observed or expected missense and position lists into.",
         type=int,
         default=500,
     )
-    transcript_ids = parser.add_mutually_exclusive_group()
-    transcript_ids.add_argument(
-        "--transcripts-to-run", help="Comma separated list of transcript IDs to run."
+    section_ids = parser.add_mutually_exclusive_group()
+    section_ids.add_argument(
+        "--sections-to-run",
+        help="Comma separated list of transcripts/transcript sections to run.",
     )
-    transcript_ids.add_argument(
+    section_ids.add_argument(
         "--run-ttn",
         help="Run TTN. TTN is so large that it needs to be treated separately.",
         action="store_true",
