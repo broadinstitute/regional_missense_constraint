@@ -21,8 +21,7 @@ import argparse
 import logging
 from tqdm import tqdm
 
-from collections.abc import Callable
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Union
 
 import hail as hl
 import hailtop.batch as hb
