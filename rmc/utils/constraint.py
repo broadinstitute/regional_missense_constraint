@@ -9,7 +9,7 @@ from gnomad.utils.file_utils import file_exists
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
-from rmc.resources.basics import TEMP_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import SINGLE_BREAK_TEMP_PATH, TEMP_PATH, TEMP_PATH_WITH_DEL
 from rmc.resources.gnomad import filtered_exomes
 from rmc.resources.reference_data import clinvar_path_mis, de_novo, gene_model
 from rmc.utils.generic import (
@@ -531,6 +531,7 @@ def search_for_break(
     chisq_threshold: float = 6.6,
     group_str: str = "section",
     min_num_exp_mis: float = 10.0,
+    save_full_chisq_ht: bool = False,
 ) -> hl.Table:
     """
     Search for breakpoints in a transcript or within a transcript subsection.
@@ -563,6 +564,9 @@ def search_for_break(
         Sections that have fewer than this number of expected missense variants will not
         be computed (chi square will be annotated as a missing value).
         Default is 10.
+    :param save_full_chisq_ht: Whether to save HT with chi square values annotated for every locus.
+        This saves a lot of extra data and should only occur during the initial search round.
+        Default is False.
     :return: Table annotated with whether position is a breakpoint (`is_break`).
     """
     logger.info(
@@ -626,6 +630,11 @@ def search_for_break(
             2 * (ht.total_alt - ht.total_null),
         )
     )
+    if save_full_chisq_ht:
+        ht = ht.checkpoint(
+            f"{SINGLE_BREAK_TEMP_PATH}/all_loci_chisq.ht", overwrite=True
+        )
+
     # hl.agg.max ignores NaNs
     group_ht = ht.group_by(group_str).aggregate(max_chisq=hl.agg.max(ht.chisq))
     group_ht = group_ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/max_chisq.ht", overwrite=True)
@@ -688,7 +697,12 @@ def get_subsection_exprs(
     )
 
 
-def process_sections(ht: hl.Table, chisq_threshold: float, group_str: str = "section"):
+def process_sections(
+    ht: hl.Table,
+    chisq_threshold: float,
+    group_str: str = "section",
+    save_full_chisq_ht: bool = False,
+):
     """
     Search for breaks within given sections of a transcript.
 
@@ -707,6 +721,9 @@ def process_sections(ht: hl.Table, chisq_threshold: float, group_str: str = "sec
     :param chisq_threshold: Chi-square significance threshold.
         Value should be 6.6 (single break) or 9.2 (two breaks) (p = 0.01).
     :param group_str: Field used to group observed and expected values. Default is 'section'.
+    :param save_full_chisq_ht: Whether to save HT with chi square values annotated for every locus.
+        This saves a lot of extra data and should only occur during the initial search round.
+        Default is False.
     :return: Table annotated with whether position is a breakpoint.
     """
     # TODO: When re-running, make sure `get_subsection_exprs`,
@@ -738,6 +755,7 @@ def process_sections(ht: hl.Table, chisq_threshold: float, group_str: str = "sec
     ht = search_for_break(
         ht,
         chisq_threshold=chisq_threshold,
+        save_full_chisq_ht=save_full_chisq_ht,
     )
     return ht
 
