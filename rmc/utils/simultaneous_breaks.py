@@ -426,7 +426,7 @@ def search_for_two_breaks(
     group_ht = group_ht.annotate(
         max_break=hl.experimental.loop(
             _simul_break_loop,
-            hl.ttuple(hl.tfloat, hl.tint, hl.tint),
+            hl.tarray(hl.tdict(hl.ttuple(hl.tint, hl.tint), hl.tfloat)),
             group_ht.start_idx.i_start,
             group_ht.start_idx.j_start,
             group_ht.start_idx.j_start,
