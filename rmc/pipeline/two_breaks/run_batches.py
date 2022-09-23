@@ -260,7 +260,7 @@ def search_for_two_breaks(
     )
     # Filter ArrayExpression to only keep chi square values that are at least
     # some minimum value (to shorten this array and save on storage)
-    break_values_expr.filter(lambda x: x.chisq >= min_chisq_threshold)
+    break_values_expr = break_values_expr.filter(lambda x: x.chisq >= min_chisq_threshold)
     group_ht = group_ht.annotate(break_values=break_values_expr)
     # Extract the positions with the maximum chi square value (the "best" break)
     group_ht = group_ht.annotate(
