@@ -252,7 +252,7 @@ def main(args):
             save_full_chisq_ht = False
             if args.search_num == 1:
                 if is_rescue:
-                    single_no_break_ht = hl.read_table(
+                    ht = hl.read_table(
                         merged_search_ht_path(
                             is_rescue=not is_rescue,
                             search_num=args.search_num,
@@ -261,7 +261,7 @@ def main(args):
                     )
                 else:
                     # Read constraint_prep resource HT if this is the first search
-                    single_no_break_ht = constraint_prep.ht()
+                    ht = constraint_prep.ht()
                     save_full_chisq_ht = True
 
                 logger.info(
@@ -269,14 +269,14 @@ def main(args):
                 )
                 # Add transcript start and stop positions from browser HT
                 transcript_ht = gene_model.ht().select("start", "stop")
-                single_no_break_ht = single_no_break_ht.annotate(**transcript_ht[single_no_break_ht.transcript])
-                single_no_break_ht = single_no_break_ht.annotate(
-                    section=hl.format("%s_%s_%s", single_no_break_ht.transcript, single_no_break_ht.start, single_no_break_ht.stop)
+                ht = ht.annotate(**transcript_ht[ht.transcript])
+                ht = ht.annotate(
+                    section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop)
                 ).drop("start", "stop")
-                single_no_break_ht = single_no_break_ht.key_by("locus", "section").drop("transcript")
+                ht = ht.key_by("locus", "section").drop("transcript")
             else:
                 # Read in merged single and simultaneous breaks results HT
-                single_no_break_ht = hl.read_table(
+                ht = hl.read_table(
                     merged_search_ht_path(
                         is_rescue=is_rescue,
                         search_num=args.search_num - 1,
@@ -287,12 +287,12 @@ def main(args):
             logger.info(
                 "Calculating nulls, alts, and chi square values and checkpointing..."
             )
-            single_no_break_ht = process_sections(
-                ht=single_no_break_ht,
+            ht = process_sections(
+                ht=ht,
                 chisq_threshold=args.chisq_threshold,
                 save_full_chisq_ht=save_full_chisq_ht,
             )
-            single_no_break_ht = single_no_break_ht.checkpoint(
+            ht = ht.checkpoint(
                 f"{TEMP_PATH_WITH_DEL}/round{args.search_num}_temp.ht", overwrite=True
             )
 
@@ -300,7 +300,7 @@ def main(args):
                 "Extracting breakpoints found in round %i...",
                 args.search_num,
             )
-            breakpoint_ht = single_no_break_ht.filter(single_no_break_ht.is_break)
+            breakpoint_ht = ht.filter(ht.is_break)
             breakpoint_ht = breakpoint_ht.annotate_globals(
                 chisq_threshold=args.chisq_threshold
             )
@@ -318,14 +318,14 @@ def main(args):
             logger.info(
                 "Filtering to transcripts or transcript subsections with breaks and checkpointing..."
             )
-            single_no_break_ht = single_no_break_ht.annotate(breakpoint=breakpoint_ht[single_no_break_ht.section].locus.position)
+            ht = ht.annotate(breakpoint=breakpoint_ht[ht.section].locus.position)
             # Possible checkpoint here if necessary
             logger.info(
                 "Splitting at breakpoints and re-annotating section starts, stops, and names..."
             )
-            single_break_ht = single_no_break_ht.filter(hl.is_defined(single_no_break_ht.breakpoint))
+            break_found_ht = ht.filter(hl.is_defined(ht.breakpoint))
             logger.info("Writing out sections with single significant break...")
-            single_break_ht.write(
+            break_found_ht.write(
                 single_search_round_ht_path(
                     is_rescue=is_rescue,
                     search_num=args.search_num,
@@ -338,7 +338,7 @@ def main(args):
             logger.info(
                 "Filtering HT to sections without a significant break and writing..."
             )
-            no_break_found_ht = single_no_break_ht.filter(hl.is_missing(single_no_break_ht.breakpoint))
+            no_break_found_ht = ht.filter(hl.is_missing(ht.breakpoint))
             no_break_found_ht = no_break_found_ht.drop("breakpoint")
             no_break_found_ht.write(
                 single_search_round_ht_path(
