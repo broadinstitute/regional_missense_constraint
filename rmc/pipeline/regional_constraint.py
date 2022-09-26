@@ -9,7 +9,6 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
     LOGGING_PATH,
-    SIMUL_BREAK_TEMP_PATH,
     TEMP_PATH,
     TEMP_PATH_WITH_DEL,
 )
