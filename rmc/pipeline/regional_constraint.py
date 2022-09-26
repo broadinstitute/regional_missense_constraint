@@ -436,6 +436,7 @@ def main(args):
             logger.info("Merging break results from single and simultaneous search and writing...")
             merged_break_ht = single_break_ht.union(simul_break_ht)
             merged_break_ht.write(
+                # TODO: Change break results bucket structure to have round first, then simul vs. single split
                 merged_search_ht_path(
                     is_rescue=not is_rescue,
                     search_num=args.search_num,
@@ -459,7 +460,7 @@ def main(args):
 
             # DONE: 1. Annotate this newly found simul_ht with same annotations as on break_found_ht
             # DONE: 2. Merge simul_ht with break_found_ht and write
-            # 3. Add validity checks that we haven't dropped any transcripts/sections - e.g. using sections with breaks expression
+            # TODO: 3. Add validity checks that we haven't dropped any transcripts/sections - e.g. using sections with breaks expression
             # DONE: 4. Create and write final no break found ht for this round number
 
         if args.finalize:
@@ -509,10 +510,10 @@ def main(args):
             ].sort()
             rmc_transcripts = []
             for break_num in n_breaks:
-                single_no_break_ht = hl.read_table(f"{TEMP_PATH}/break_{break_num}.ht")
-                single_no_break_ht = single_no_break_ht.filter(single_no_break_ht.is_break)
+                ht = hl.read_table(f"{TEMP_PATH}/break_{break_num}.ht")
+                ht = ht.filter(ht.is_break)
                 rmc_transcripts.append(
-                    single_no_break_ht.aggregate(hl.agg.collect_as_set(single_no_break_ht.transcript), _localize=False)
+                    ht.aggregate(hl.agg.collect_as_set(ht.transcript), _localize=False)
                 )
 
             logger.info("Removing overlapping transcript information...")
