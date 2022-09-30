@@ -9,7 +9,6 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
     LOGGING_PATH,
-    SIMUL_BREAK_TEMP_PATH,
     TEMP_PATH,
     TEMP_PATH_WITH_DEL,
 )
@@ -25,6 +24,7 @@ from rmc.resources.rmc import (
     merged_search_ht_path,
     multiple_breaks,
     simul_break,
+    simul_search_round_bucket_path,
     single_search_round_ht_path,
 )
 from rmc.resources.resource_utils import MISSENSE
@@ -324,27 +324,6 @@ def main(args):
                 "Splitting at breakpoints and re-annotating section starts, stops, and names..."
             )
             break_found_ht = ht.filter(hl.is_defined(ht.breakpoint))
-            break_found_ht = break_found_ht.annotate(
-                section_1=hl.if_else(
-                    break_found_ht.locus.position > break_found_ht.breakpoint,
-                    hl.format(
-                        "%s_%s_%s",
-                        break_found_ht.section.split("_")[0],
-                        break_found_ht.breakpoint + 1,
-                        break_found_ht.section.split("_")[2],
-                    ),
-                    hl.format(
-                        "%s_%s_%s",
-                        break_found_ht.section.split("_")[0],
-                        break_found_ht.section.split("_")[1],
-                        break_found_ht.breakpoint,
-                    ),
-                )
-            )
-            # Rekey by new section annotation
-            break_found_ht = break_found_ht.key_by(
-                "locus", section=break_found_ht.section_1
-            ).drop("section_1")
             logger.info("Writing out sections with single significant break...")
             break_found_ht.write(
                 single_search_round_ht_path(
@@ -372,28 +351,117 @@ def main(args):
             )
 
         if args.merge_single_simul:
-            # Convert simul break breakpoint info to locus-level table with new section annotations
-            # Merge single breaks with simultaneous breaks
-            logger.info("Creating simultaneous breaks HT to prepare for merge...")
-            # Read in sections with breaks
-            # TODO: think about whether section annotation will always be consistent
-            simul_sections = hl.experimental.read_expression(
-                f"{SIMUL_BREAK_TEMP_PATH}/hts/round{args.search_num}_sections.he"
-            )
-            simul_ht = hl.read_table(
+            logger.info("Converting merged simultaneous breaks HT from section-level to locus-level...")
+            simul_results_path = simul_search_round_bucket_path(
+                is_rescue=args.is_rescue,
+                search_num=args.search_num,
+                bucket_type="final_results",
+            )            
+            simul_by_section_ht = hl.read_table(f"{simul_results_path}/merged.ht")
+            # Use no_break_found HT from single breaks results to get locus input to simultaneous break search
+            single_no_break_ht = hl.read_table(
                 single_search_round_ht_path(
                     is_rescue=args.is_rescue,
                     search_num=args.search_num,
                     is_break_found=False,
                     is_breakpoint_only=False,
-                ),
+                )
             )
-            simul_ht = simul_ht.filter(simul_sections.contains(simul_ht.section))
-            # NOTE: ran out of time, broad next steps:
-            # 1. Annotate this newly found simul_ht with same annotations as on break_found_ht
-            # 2. Merge simul_ht with break_found_ht and write
-            # 3. Add validity checks that we haven't dropped any transcripts/sections
-            # 4. Create and write final no break found ht for this round number
+            # Filter to sections with simultaneous breaks
+            single_no_break_ht = single_no_break_ht.annotate(
+                breakpoints=simul_by_section_ht[single_no_break_ht.section].breakpoints
+            )
+            simul_break_ht = single_no_break_ht.filter(hl.is_defined(single_no_break_ht.breakpoints))
+
+            logger.info("Annotating new sections and re-keying for next search...")
+            single_break_ht = hl.read_table(
+                single_search_round_ht_path(
+                    is_rescue=args.is_rescue,
+                    search_num=args.search_num,
+                    is_break_found=True,
+                    is_breakpoint_only=False,
+                )
+            )
+            single_break_ht = single_break_ht.annotate(
+                section_1=hl.if_else(
+                    single_break_ht.locus.position > single_break_ht.breakpoint,
+                    hl.format(
+                        "%s_%s_%s",
+                        single_break_ht.section.split("_")[0],
+                        single_break_ht.breakpoint + 1,
+                        single_break_ht.section.split("_")[2],
+                    ),
+                    hl.format(
+                        "%s_%s_%s",
+                        single_break_ht.section.split("_")[0],
+                        single_break_ht.section.split("_")[1],
+                        single_break_ht.breakpoint,
+                    ),
+                )
+            )
+            single_break_ht = single_break_ht.key_by(
+                "locus", section=single_break_ht.section_1
+            ).drop("section_1", "breakpoint")
+
+            simul_break_ht = simul_break_ht.annotate(
+                section_1=hl.if_else(
+                    simul_break_ht.locus.position > simul_break_ht.breakpoints[1],
+                    hl.format(
+                        "%s_%s_%s",
+                        simul_break_ht.section.split("_")[0],
+                        simul_break_ht.breakpoints[1] + 1,
+                        simul_break_ht.section.split("_")[2],
+                    ),
+                    hl.if_else(
+                        simul_break_ht.locus.position > simul_break_ht.breakpoints[0],
+                        hl.format(
+                            "%s_%s_%s",
+                            simul_break_ht.section.split("_")[0],
+                            simul_break_ht.breakpoints[0] + 1,
+                            simul_break_ht.breakpoints[1],
+                        ), 
+                          hl.format(
+                            "%s_%s_%s",
+                            simul_break_ht.section.split("_")[0],
+                            simul_break_ht.section.split("_")[1],
+                            simul_break_ht.breakpoints[0],
+                        ), 
+                    )
+                )
+            )
+            simul_break_ht = simul_break_ht.key_by(
+                "locus", section=simul_break_ht.section_1
+            ).drop("section_1", "breakpoints")
+
+            logger.info("Merging break results from single and simultaneous search and writing...")
+            merged_break_ht = single_break_ht.union(simul_break_ht)
+            merged_break_ht.write(
+                # TODO: Change break results bucket structure to have round first, then simul vs. single split
+                merged_search_ht_path(
+                    is_rescue=not is_rescue,
+                    search_num=args.search_num,
+                    is_break_found=True,
+                ),
+                overwrite=args.overwrite,
+            )
+
+            logger.info("Merging no-break results from single and simultaneous search and writing...")
+            merged_no_break_ht = single_no_break_ht.filter(
+                hl.is_missing(single_no_break_ht.breakpoints)
+            ).drop("breakpoints")
+            merged_no_break_ht.write(
+                merged_search_ht_path(
+                    is_rescue=not is_rescue,
+                    search_num=args.search_num,
+                    is_break_found=False,
+                ),
+                overwrite=args.overwrite,
+            )
+
+            # DONE: 1. Annotate this newly found simul_ht with same annotations as on break_found_ht
+            # DONE: 2. Merge simul_ht with break_found_ht and write
+            # TODO: 3. Add validity checks that we haven't dropped any transcripts/sections - e.g. using sections with breaks expression
+            # DONE: 4. Create and write final no break found ht for this round number
 
         if args.finalize:
             hl.init(log="/RMC_finalize.log", tmp_dir=TEMP_PATH_WITH_DEL)
@@ -576,8 +644,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--merge-single-simul",
         help="""
-        Merge transcripts/transcript sections with significant breakpoints from
-        single and simultaneous breaks searches into a single Table.
+        Merge those transcripts/transcript sections with significant breakpoints from
+        single and simultaneous breaks searches into a single Table, and those without
+        significant breakpoints into another Table.
         """,
         action="store_true",
     )
