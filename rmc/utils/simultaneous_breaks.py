@@ -5,7 +5,7 @@ from typing import List
 import hail as hl
 
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
-from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
 
 from rmc.resources.rmc import (
     simul_sections_split_by_len_path,
@@ -319,6 +319,7 @@ def search_for_two_breaks(
     :param group_ht: Input Table aggregated by transcript/transcript section with lists of cumulative observed
         and expected missense values. HT is filtered to contain only transcript/sections without
         a single significant breakpoint.
+    :param section_group: List of transcripts or transcript sections to process.
     :param chisq_threshold:  Chi-square significance threshold. Default is 9.2.
         This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
