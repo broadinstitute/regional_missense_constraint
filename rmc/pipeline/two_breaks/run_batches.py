@@ -260,7 +260,9 @@ def search_for_two_breaks(
     )
     # Filter ArrayExpression to only keep chi square values that are at least
     # some minimum value (to shorten this array and save on storage)
-    break_values_expr = break_values_expr.filter(lambda x: x.chisq >= min_chisq_threshold)
+    break_values_expr = break_values_expr.filter(
+        lambda x: x.chisq >= min_chisq_threshold
+    )
     group_ht = group_ht.annotate(break_values=break_values_expr)
     # Extract the positions with the maximum chi square value (the "best" break)
     group_ht = group_ht.annotate(
@@ -509,10 +511,10 @@ def main(args):
         logger.info("Picking default docker image...")
         # Use a docker image that specifies spark memory allocation if --use-custom-machine was specified
         if args.use_custom_machine:
-            args.docker_image = "gcr.io/broad-mpg-gnomad/rmc:20220304"
+            args.docker_image = "gcr.io/broad-mpg-gnomad/rmc:20220930"
         # Otherwise, use the default docker image
         else:
-            args.docker_image = "gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220302"
+            args.docker_image = "gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220930"
 
     logger.info("Setting up Batch parameters...")
     backend = hb.ServiceBackend(
@@ -684,12 +686,12 @@ if __name__ == "__main__":
         "--docker-image",
         help="""
         Docker image to provide to hail Batch. Must have dill, hail, and python installed.
-        Suggested image: gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220302.
+        Suggested image: gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220930.
 
         If running with --use-custom-machine, Docker image must also contain this line:
         `ENV PYSPARK_SUBMIT_ARGS="--driver-memory 8g --executor-memory 8g pyspark-shell"`
         to make sure the job allocates memory correctly.
-        Suggested image: gcr.io/broad-mpg-gnomad/rmc:20220304.
+        Suggested image: gcr.io/broad-mpg-gnomad/rmc:20220930.
 
         Default is None -- script will select default image if not specified on the command line.
         """,
