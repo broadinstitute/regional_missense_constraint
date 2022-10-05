@@ -64,6 +64,12 @@ def main(args):
         ht_count = 0
         for ht_path in temp_ht_paths:
             ht_path = ht_path.strip("/")
+            # Skip temp HTs checkpointed to raw_results bucket
+            # i.e., HTs written with this line:
+            # `ht = ht.checkpoint(f"{raw_path}/{section_group[0]}.ht", overwrite=True)`
+            # in `process_section_group`
+            if "under" not in ht_path or "dataproc" not in ht_path:
+                continue
             if ht_path.endswith("ht"):
                 ht_count += 1
                 logger.info("Working on %s", ht_path)
