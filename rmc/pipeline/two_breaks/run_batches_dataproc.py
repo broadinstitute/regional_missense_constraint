@@ -55,7 +55,7 @@ def main(args):
                         simul_sections_split_by_len_path(
                             is_rescue=args.is_rescue,
                             search_num=args.search_num,
-                            is_over_threshold=False,
+                            is_over_threshold=True,
                         )
                     )
                 )
