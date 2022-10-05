@@ -437,7 +437,8 @@ def process_section_group(
             "spark.hadoop.fs.gs.requester.pays.mode": "CUSTOM",
             "spark.hadoop.fs.gs.requester.pays.buckets": f"{requester_pays_bucket.lstrip('gs://')}",
             "spark.hadoop.fs.gs.requester.pays.project.id": f"{google_project}",
-        }
+        },
+        tmp_dir=TEMP_PATH_WITH_DEL,
     )
     ht = hl.read_table(ht_path)
     ht = ht.filter(hl.literal(section_group).contains(ht.section))
