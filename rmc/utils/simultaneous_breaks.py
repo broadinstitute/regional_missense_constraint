@@ -383,6 +383,7 @@ def search_for_two_breaks(
             group_ht.positions[group_ht.best_break.j],
         ),
     )
+    # TODO: remove over_threshold
     if save_chisq_ht:
         section_name = "_".join(section_group)
         group_ht = group_ht.checkpoint(
