@@ -383,9 +383,6 @@ def search_for_two_breaks(
             group_ht.positions[group_ht.best_break.j],
         ),
     )
-    # NOTE: freeze 2 round 1 path was:
-    # section_name = "_".join(section_group)
-    # f"{SIMUL_BREAK_TEMP_PATH}/temp_chisq_over_threshold_{section_name}.ht",
     if save_chisq_ht:
         group_ht = group_ht.checkpoint(
             f"{SIMUL_BREAK_TEMP_PATH}/dataproc_temp_chisq_group{count}.ht",
