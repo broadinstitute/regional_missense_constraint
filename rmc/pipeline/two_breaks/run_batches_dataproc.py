@@ -85,9 +85,20 @@ def main(args):
                 else f"{raw_path}/simul_break_dataproc_{counter}.ht"
             )
             if file_exists(output_ht_path):
-                raise DataException(
-                    f"Output already exists at {output_ht_path}! Double check before running script again."
+                # raise DataException(
+                #    f"Output already exists at {output_ht_path}! Double check before running script again."
+                # )
+                tmp_ht = hl.read_table(
+                    f"gs://regional_missense_constraint/temp/simul_breaks/dataproc_temp_chisq_group{counter}.ht"
                 )
+                prev_sections = tmp_ht.aggregate(hl.agg.collect_as_set(tmp_ht.section))
+                if len(set(group).difference(prev_sections)) != 0:
+                    print(
+                        f"{output_ht_path} exists but sections are different! Will overwrite"
+                    )
+                else:
+                    print(f"{output_ht_path} exists, continuing")
+                    continue
 
             process_section_group(
                 ht_path=grouped_single_no_break_ht_path(
