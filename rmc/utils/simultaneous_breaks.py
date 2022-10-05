@@ -5,7 +5,7 @@ from typing import List
 import hail as hl
 
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
-from rmc.resources.basics import TEMP_PATH_WITH_DEL
+from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH
 
 from rmc.resources.rmc import (
     simul_sections_split_by_len_path,
@@ -308,6 +308,7 @@ def search_for_two_breaks(
     chisq_threshold: float = 9.2,
     min_num_exp_mis: float = 10,
     min_chisq_threshold: float = 7.4,
+    save_chisq_ht: bool = False,
 ) -> hl.Table:
     """
     Search for transcripts/transcript sections with simultaneous breaks.
@@ -325,6 +326,10 @@ def search_for_two_breaks(
         simultaneous breaks.
     :param min_chisq_threshold: Minimum chi square value to emit from search.
         Default is 7.4, which corresponds to a p-value of 0.025 with 2 degrees of freedom.
+    :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
+        (as long as chi square value is >= min_chisq_threshold).
+        This saves a lot of extra data and should only occur during the initial search round.
+        Default is False.
     :return: Table filtered to transcript/sections with significant simultaneous breakpoints
         and annotated with breakpoint information.
     """
@@ -376,9 +381,10 @@ def search_for_two_breaks(
             group_ht.positions[group_ht.best_break.j],
         ),
     )
-    group_ht = group_ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/temp_chisq_over_threshold.ht", overwrite=True
-    )
+    if save_chisq_ht:
+        group_ht = group_ht.checkpoint(
+            f"{SIMUL_BREAK_TEMP_PATH}/temp_chisq_over_threshold.ht", overwrite=True
+        )
     # Remove rows with maximum chi square values below the threshold
     group_ht = group_ht.filter(group_ht.max_chisq >= chisq_threshold)
     return group_ht
