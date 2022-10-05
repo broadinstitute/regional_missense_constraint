@@ -301,6 +301,7 @@ def search_for_two_breaks(
     :param group_ht: Input Table aggregated by transcript/transcript section with lists of cumulative observed
         and expected missense values. HT is filtered to contain only transcript/sections without
         a single significant breakpoint.
+    :param count: Which transcript group is being run (based on counter generated in `main`).
     :param section_group: List of transcripts or transcript sections to process.
     :param chisq_threshold:  Chi-square significance threshold. Default is 9.2.
         This value corresponds to a p-value of 0.01 with 2 degrees of freedom.

@@ -94,6 +94,7 @@ def main(args):
                     args.is_rescue, args.search_num
                 ),
                 section_group=group,
+                count=counter,
                 is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 over_threshold=True,
