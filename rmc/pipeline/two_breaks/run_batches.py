@@ -21,7 +21,7 @@ import argparse
 import logging
 from tqdm import tqdm
 
-from typing import Dict, List, Union
+from typing import Dict, List, Set, Union
 
 import hail as hl
 import hailtop.batch as hb
@@ -29,11 +29,10 @@ import hailtop.batch as hb
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
     grouped_single_no_break_ht_path,
     simul_sections_split_by_len_path,
-    simul_search_round_bucket_path,
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import check_for_successful_sections
@@ -45,6 +44,72 @@ logging.basicConfig(
 )
 logger = logging.getLogger("run_batches")
 logger.setLevel(logging.INFO)
+
+
+SIMUL_BREAK_TEMP_PATH = "gs://regional_missense_constraint/temp/simul_breaks"
+"""
+Path to bucket to store temporary results for simultaneous searches.
+
+Adding this constant here to avoid ModuleNotFound errors in the
+PythonJobs. See `rmc.resources.basics` for full docstring.
+"""
+
+
+SIMUL_SEARCH_BUCKET_NAMES = {"prep", "raw_results", "final_results", "success_files"}
+"""
+Names of buckets nested within round bucket of `SIMUL_BREAK_TEMP_PATH`.
+
+Adding this constant here to avoid ModuleNotFound errors in the
+PythonJobs. See `rmc.resources.rmc` for full docstring.
+"""
+
+
+def simul_search_bucket_path(
+    is_rescue: bool,
+    search_num: int,
+) -> str:
+    """
+    Return path to bucket associated with simultaneous break search inputs and results.
+
+    Adding this constant here to avoid ModuleNotFound errors in the
+    PythonJobs. See `rmc.resources.rmc` for full docstring.
+
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :return: Path to simultaneous break search round bucket.
+    """
+    rescue = "rescue" if is_rescue else "initial"
+    return (
+        f"{SIMUL_BREAK_TEMP_PATH}/{rescue}/round{search_num}"
+        if search_num
+        else f"{SIMUL_BREAK_TEMP_PATH}/{rescue}"
+    )
+
+
+def simul_search_round_bucket_path(
+    is_rescue: bool,
+    search_num: int,
+    bucket_type: str,
+    bucket_names: Set[str] = SIMUL_SEARCH_BUCKET_NAMES,
+) -> str:
+    """
+    Return path to bucket with  Tables resulting from a specific round of simultaneous break search.
+
+    Adding this constant here to avoid ModuleNotFound errors in the
+    PythonJobs. See `rmc.resources.rmc` for full docstring.
+
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :param bucket_type: Bucket type.
+        Must be in `bucket_names`.
+    :param bucket_names: Possible bucket names for simultaneous search bucket type.
+        Default is `SIMUL_SEARCH_BUCKET_NAMES`.
+    :return: Path to a bucket in the simultaneous break search round bucket.
+    """
+    assert bucket_type in bucket_names, f"Bucket type must be one of {bucket_names}!"
+    return f"{simul_search_bucket_path(is_rescue, search_num)}/{bucket_type}"
 
 
 def get_obs_exp_expr(
