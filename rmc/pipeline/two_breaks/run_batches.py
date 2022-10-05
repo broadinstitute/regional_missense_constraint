@@ -287,7 +287,7 @@ def calculate_window_chisq(
 
 def search_for_two_breaks(
     group_ht: hl.Table,
-    section_group: List[str],
+    count: int,
     chisq_threshold: float = 9.2,
     min_num_exp_mis: float = 10,
     min_chisq_threshold: float = 7.4,
@@ -365,15 +365,14 @@ def search_for_two_breaks(
             group_ht.positions[group_ht.best_break.j],
         ),
     )
-    section_name = "_".join(section_group[0])
     if save_chisq_ht:
         group_ht = group_ht.checkpoint(
-            f"{SIMUL_BREAK_TEMP_PATH}/batch_temp_chisq{section_name}.ht",
+            f"{SIMUL_BREAK_TEMP_PATH}/batch_temp_chisq_group{count}.ht",
             overwrite=True,
         )
     else:
         group_ht = group_ht.checkpoint(
-            f"{TEMP_PATH_WITH_DEL}/batch_temp_chisq{section_name}.ht",
+            f"{TEMP_PATH_WITH_DEL}/batch_temp_chisq_group{count}.ht",
             overwrite=True,
         )
     # Remove rows with maximum chi square values below the threshold
@@ -384,6 +383,7 @@ def search_for_two_breaks(
 def process_section_group(
     ht_path: str,
     section_group: List[str],
+    count: int,
     is_rescue: bool,
     search_num: int,
     over_threshold: bool,
@@ -403,6 +403,7 @@ def process_section_group(
 
     :param str ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param List[str] section_group: List of transcripts or transcript sections to process.
+    :param count: Which transcript group is being run (based on counter generated in `main`).
     :param is_rescue: Whether to return path to HT created in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
@@ -515,7 +516,7 @@ def process_section_group(
     # Search for two simultaneous breaks
     ht = search_for_two_breaks(
         group_ht=ht,
-        section_group=section_group,
+        count=count,
         chisq_threshold=chisq_threshold,
         min_num_exp_mis=min_num_exp_mis,
         save_chisq_ht=save_chisq_ht,
@@ -651,6 +652,7 @@ def main(args):
                     args.is_rescue, args.search_num
                 ),
                 section_group=group,
+                count=count,
                 is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 over_threshold=False,
@@ -682,6 +684,7 @@ def main(args):
                     args.is_rescue, args.search_num
                 ),
                 section_group=group,
+                count=count,
                 is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 over_threshold=True,
