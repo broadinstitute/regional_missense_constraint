@@ -417,8 +417,8 @@ def process_section_group(
     hl.init(
         spark_conf={
             "spark.hadoop.fs.gs.requester.pays.mode": "CUSTOM",
-            "spark.hadoop.fs.gs.requester.pays.buckets": f"{requester_pays_bucket}",
-            "spark.hadoop.fs.gs.requester.pays.project.id": f"{google_project}",
+            "spark.hadoop.fs.gs.requester.pays.buckets": "gs://regional_missense_constraint",
+            "spark.hadoop.fs.gs.requester.pays.project.id": "broad-mpg-gnomad",
         }
     )
     ht = hl.read_table(ht_path)
