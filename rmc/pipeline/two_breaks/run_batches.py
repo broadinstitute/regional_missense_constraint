@@ -46,7 +46,15 @@ logger = logging.getLogger("run_batches")
 logger.setLevel(logging.INFO)
 
 
-SIMUL_BREAK_TEMP_PATH = "gs://regional_missense_constraint/temp/simul_breaks"
+RMC_PREFIX = "gs://regional_missense_constraint"
+"""
+Path to bucket attached to regional missense constraint (RMC) project.
+
+Adding this constant here to avoid ModuleNotFound errors in the
+PythonJobs. See `rmc.resources.basics` for full docstring.
+"""
+
+SIMUL_BREAK_TEMP_PATH = f"{RMC_PREFIX}/temp/simul_breaks"
 """
 Path to bucket to store temporary results for simultaneous searches.
 
@@ -368,6 +376,8 @@ def process_section_group(
     split_list_len: int = 500,
     read_if_exists: bool = False,
     save_chisq_ht: bool = False,
+    requester_pays_bucket: str = RMC_PREFIX,
+    google_project: str = "broad-mpg-gnomad",
 ) -> None:
     """
     Run two simultaneous breaks search on a group of transcripts or transcript sections.
@@ -400,8 +410,17 @@ def process_section_group(
         (as long as chi square value is >= min_chisq_threshold).
         This saves a lot of extra data and should only occur during the initial search round.
         Default is False.
+    :param google_project: Google project used to read and write data to requester-pays bucket.
     :return: None; processes Table and writes to path. Also writes success TSV to path.
     """
+    # Initialize hail to read from requester-pays correctly
+    hl.init(
+        spark_conf={
+            "spark.hadoop.fs.gs.requester.pays.mode": "CUSTOM",
+            "spark.hadoop.fs.gs.requester.pays.buckets": f"{requester_pays_bucket}",
+            "spark.hadoop.fs.gs.requester.pays.project.id": f"{google_project}",
+        }
+    )
     ht = hl.read_table(ht_path)
     ht = ht.filter(hl.literal(section_group).contains(ht.section))
 
@@ -621,6 +640,7 @@ def main(args):
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.group_size,
                 save_chisq_ht=save_chisq_ht,
+                google_project=args.google_project,
             )
             count += 1
 
@@ -651,6 +671,7 @@ def main(args):
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.group_size,
                 save_chisq_ht=save_chisq_ht,
+                google_project=args.google_project,
             )
     b.run(wait=False)
 
