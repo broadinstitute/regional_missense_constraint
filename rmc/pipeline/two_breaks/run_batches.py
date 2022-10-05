@@ -591,6 +591,7 @@ def main(args):
         name="simul_breaks",
         backend=backend,
         default_python_image=args.docker_image,
+        requester_pays_project=args.google_project,
     )
 
     if args.under_threshold:
@@ -719,7 +720,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--google-project",
-        help="Google cloud project provided to hail batch for storage objects access.",
+        help="""
+            Google cloud project provided to hail batch for storage objects access.
+            Also used to read and write to requester-pays buckets.
+            """,
         default="broad-mpg-gnomad",
     )
     parser.add_argument(
