@@ -88,7 +88,7 @@ def main(args):
                     # This `key_by` should not shuffle because `section` is already the first key for both Tables
                     temp = temp.key_by("section")
                     row_fields = set(temp.row)
-                    if len(ANNOTATIONS.intersection(row_fields)) < 3:
+                    if len(ANNOTATIONS.intersection(row_fields)) < len(ANNOTATIONS):
                         raise DataException(
                             f"The following fields are missing from the temp table: {ANNOTATIONS.difference(row_fields)}!"
                         )
