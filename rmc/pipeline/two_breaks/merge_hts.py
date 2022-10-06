@@ -56,7 +56,9 @@ def main(args):
         )
         intermediate_hts = []
         temp_ht_paths = (
-            subprocess.check_output(["gsutil", "ls", f"{raw_path}/"])
+            subprocess.check_output(
+                ["gsutil", "-u", f"{args.google_project}", "ls", f"{raw_path}/"]
+            )
             .decode("utf8")
             .strip()
             .split("\n")
@@ -167,6 +169,13 @@ if __name__ == "__main__":
         with lower chi square significance cutoff).
         """,
         action="store_true",
+    )
+    parser.add_argument(
+        "--google-project",
+        help="""
+            Google cloud project used to read from requester-pays buckets.
+            """,
+        default="broad-mpg-gnomad",
     )
     parser.add_argument(
         "--create-no-breaks-ht",
