@@ -29,14 +29,16 @@ logger = logging.getLogger("merge_hts")
 logger.setLevel(logging.INFO)
 
 
-ANNOTATIONS = {"max_chisq", "section", "breakpoints"}
+ANNOTATIONS = {"max_chisq", "breakpoints"}
 """
 Set of annotations to keep from two simultaneous breaks search.
 
 `max_chisq`: Chi square value associated with two breaks.
+`breakpoints`: Tuple of breakpoints with adjusted inclusiveness/exclusiveness.
+
+Note that this field will also be kept (`section` is a key field):
 `section`: Transcript section that was searched.
     Format: <transcript>_<start position>_<end position>.
-`breakpoints`: Tuple of breakpoints with adjusted inclusiveness/exclusiveness.
 """
 
 
