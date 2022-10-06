@@ -56,6 +56,7 @@ def main(args):
         )
         intermediate_hts = []
         temp_ht_paths = (
+            # Add project because bucket is requester-pays
             subprocess.check_output(
                 ["gsutil", "-u", f"{args.google_project}", "ls", f"{raw_path}/"]
             )
