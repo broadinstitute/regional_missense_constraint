@@ -1,4 +1,3 @@
-# TODO: sync code with changes in rmc.utils.simultaneous_breaks (once those changes are finalized)
 """
 This script searches for two simultaneous breaks in groups of transcripts using Hail Batch.
 
@@ -541,10 +540,7 @@ def process_section_group(
             ht = ht.filter(ht.max_chisq == ht.section_max_chisq)
 
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
-    # TODO: Restructure ht to match locus-level formats from single breaks
     ht.write(output_ht_path, overwrite=True)
-    # TODO: Consider whether we want to write out temp information on chisq values for each potential break combination
-    #   like in single breaks
 
     success_tsvs_path = simul_search_round_bucket_path(
         is_rescue=is_rescue,
