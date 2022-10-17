@@ -390,7 +390,7 @@ def search_for_two_breaks(
         )
     else:
         group_ht = group_ht.checkpoint(
-            f"{TEMP_PATH_WITH_DEL}/dataproc_temp_chisq.ht", overwrite=True
+            f"{TEMP_PATH_WITH_DEL}/dataproc_temp_chisq_group{count}.ht", overwrite=True
         )
     # Remove rows with maximum chi square values below the threshold
     group_ht = group_ht.filter(group_ht.max_chisq >= chisq_threshold)
