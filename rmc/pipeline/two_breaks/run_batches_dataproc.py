@@ -48,7 +48,8 @@ def main(args):
 
         if args.run_ttn:
             section_groups = [[args.ttn_id]]
-        else:
+
+        if args.run_sections_over_threshold:
             sections_to_run = list(
                 hl.eval(
                     hl.experimental.read_expression(
