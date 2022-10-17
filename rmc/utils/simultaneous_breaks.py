@@ -418,7 +418,7 @@ def process_section_group(
 
     :param str ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param List[str] section_group: List of transcripts or transcript sections to process.
-    :param count: Which transcript group is being run (based on counter generated in `main`).
+    :param count: Which transcript or transcript section group is being run (based on counter generated in `main`).
     :param is_rescue: Whether to return path to HT created in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
