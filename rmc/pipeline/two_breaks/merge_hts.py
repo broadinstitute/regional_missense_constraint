@@ -29,14 +29,16 @@ logger = logging.getLogger("merge_hts")
 logger.setLevel(logging.INFO)
 
 
-ANNOTATIONS = {"max_chisq", "section", "breakpoints"}
+ANNOTATIONS = {"max_chisq", "breakpoints"}
 """
 Set of annotations to keep from two simultaneous breaks search.
 
 `max_chisq`: Chi square value associated with two breaks.
+`breakpoints`: Tuple of breakpoints with adjusted inclusiveness/exclusiveness.
+
+Note that this field will also be kept (`section` is a key field):
 `section`: Transcript section that was searched.
     Format: <transcript>_<start position>_<end position>.
-`breakpoints`: Tuple of breakpoints with adjusted inclusiveness/exclusiveness.
 """
 
 
@@ -56,7 +58,10 @@ def main(args):
         )
         intermediate_hts = []
         temp_ht_paths = (
-            subprocess.check_output(["gsutil", "ls", f"{raw_path}/"])
+            # Add project because bucket is requester-pays
+            subprocess.check_output(
+                ["gsutil", "-u", f"{args.google_project}", "ls", f"{raw_path}/"]
+            )
             .decode("utf8")
             .strip()
             .split("\n")
@@ -64,6 +69,12 @@ def main(args):
         ht_count = 0
         for ht_path in temp_ht_paths:
             ht_path = ht_path.strip("/")
+            # Skip temp HTs checkpointed to raw_results bucket
+            # i.e., HTs written with this line:
+            # `ht = ht.checkpoint(f"{raw_path}/{section_group[0]}.ht", overwrite=True)`
+            # in `process_section_group`
+            if "under" not in ht_path and "dataproc" not in ht_path:
+                continue
             if ht_path.endswith("ht"):
                 ht_count += 1
                 logger.info("Working on %s", ht_path)
@@ -77,7 +88,7 @@ def main(args):
                     # This `key_by` should not shuffle because `section` is already the first key for both Tables
                     temp = temp.key_by("section")
                     row_fields = set(temp.row)
-                    if len(ANNOTATIONS.intersection(row_fields)) < 3:
+                    if len(ANNOTATIONS.intersection(row_fields)) < len(ANNOTATIONS):
                         raise DataException(
                             f"The following fields are missing from the temp table: {ANNOTATIONS.difference(row_fields)}!"
                         )
@@ -161,6 +172,13 @@ if __name__ == "__main__":
         with lower chi square significance cutoff).
         """,
         action="store_true",
+    )
+    parser.add_argument(
+        "--google-project",
+        help="""
+            Google cloud project used to read from requester-pays buckets.
+            """,
+        default="broad-mpg-gnomad",
     )
     parser.add_argument(
         "--create-no-breaks-ht",

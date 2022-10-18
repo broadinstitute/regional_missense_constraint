@@ -21,6 +21,7 @@ from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
     grouped_single_no_break_ht_path,
     simul_search_round_bucket_path,
+    simul_sections_split_by_len_path,
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import process_section_group
@@ -47,8 +48,19 @@ def main(args):
 
         if args.run_ttn:
             section_groups = [[args.ttn_id]]
-        else:
-            sections_to_run = args.sections_to_run.split(",")
+
+        if args.run_sections_over_threshold:
+            sections_to_run = list(
+                hl.eval(
+                    hl.experimental.read_expression(
+                        simul_sections_split_by_len_path(
+                            is_rescue=args.is_rescue,
+                            search_num=args.search_num,
+                            is_over_threshold=True,
+                        )
+                    )
+                )
+            )
             if args.group_size:
                 logger.info(
                     "Splitting transcripts/transcript sections into groups of %i",
@@ -68,6 +80,10 @@ def main(args):
             bucket_type="raw_results",
         )
         for counter, group in enumerate(section_groups):
+            # Double check TTN has been removed
+            if args.ttn_id in group:
+                group.remove(args.ttn_id)
+
             output_ht_path = (
                 f"{raw_path}/simul_break_dataproc_ttn.ht"
                 if args.run_ttn
@@ -83,6 +99,7 @@ def main(args):
                     args.is_rescue, args.search_num
                 ),
                 section_group=group,
+                count=counter,
                 is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 over_threshold=True,
@@ -145,8 +162,9 @@ if __name__ == "__main__":
     )
     section_ids = parser.add_mutually_exclusive_group()
     section_ids.add_argument(
-        "--sections-to-run",
-        help="Comma separated list of transcripts/transcript sections to run.",
+        "--run-sections-over-threshold",
+        help="Search for simultaneous breaks in sections that are over length cutoff.",
+        action="store_true",
     )
     section_ids.add_argument(
         "--run-ttn",

@@ -1,4 +1,3 @@
-# TODO: sync code with changes in rmc.utils.simultaneous_breaks (once those changes are finalized)
 """
 This script searches for two simultaneous breaks in groups of transcripts using Hail Batch.
 
@@ -21,7 +20,7 @@ import argparse
 import logging
 from tqdm import tqdm
 
-from typing import Dict, List, Union
+from typing import Dict, List, Set, Union
 
 import hail as hl
 import hailtop.batch as hb
@@ -29,11 +28,10 @@ import hailtop.batch as hb
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
     grouped_single_no_break_ht_path,
     simul_sections_split_by_len_path,
-    simul_search_round_bucket_path,
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import check_for_successful_sections
@@ -45,6 +43,88 @@ logging.basicConfig(
 )
 logger = logging.getLogger("run_batches")
 logger.setLevel(logging.INFO)
+
+
+RMC_PREFIX = "gs://regional_missense_constraint"
+"""
+Path to bucket attached to regional missense constraint (RMC) project.
+
+Adding this constant here to avoid ModuleNotFound errors in the
+PythonJobs. See `rmc.resources.basics` for full docstring.
+"""
+
+TEMP_PATH_WITH_DEL = "gs://gnomad-tmp-4day/rmc/"
+"""
+Path to bucket for temporary files.
+
+Adding this constant here to avoid ModuleNotFound errors in the
+PythonJobs. See `rmc.resources.basics` for full docstring.
+"""
+
+SIMUL_BREAK_TEMP_PATH = f"{RMC_PREFIX}/temp/simul_breaks"
+"""
+Path to bucket to store temporary results for simultaneous searches.
+
+Adding this constant here to avoid ModuleNotFound errors in the
+PythonJobs. See `rmc.resources.basics` for full docstring.
+"""
+
+
+SIMUL_SEARCH_BUCKET_NAMES = {"prep", "raw_results", "final_results", "success_files"}
+"""
+Names of buckets nested within round bucket of `SIMUL_BREAK_TEMP_PATH`.
+
+Adding this constant here to avoid ModuleNotFound errors in the
+PythonJobs. See `rmc.resources.rmc` for full docstring.
+"""
+
+
+def simul_search_bucket_path(
+    is_rescue: bool,
+    search_num: int,
+) -> str:
+    """
+    Return path to bucket associated with simultaneous break search inputs and results.
+
+    Adding this constant here to avoid ModuleNotFound errors in the
+    PythonJobs. See `rmc.resources.rmc` for full docstring.
+
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :return: Path to simultaneous break search round bucket.
+    """
+    rescue = "rescue" if is_rescue else "initial"
+    return (
+        f"{SIMUL_BREAK_TEMP_PATH}/{rescue}/round{search_num}"
+        if search_num
+        else f"{SIMUL_BREAK_TEMP_PATH}/{rescue}"
+    )
+
+
+def simul_search_round_bucket_path(
+    is_rescue: bool,
+    search_num: int,
+    bucket_type: str,
+    bucket_names: Set[str] = SIMUL_SEARCH_BUCKET_NAMES,
+) -> str:
+    """
+    Return path to bucket with  Tables resulting from a specific round of simultaneous break search.
+
+    Adding this constant here to avoid ModuleNotFound errors in the
+    PythonJobs. See `rmc.resources.rmc` for full docstring.
+
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :param bucket_type: Bucket type.
+        Must be in `bucket_names`.
+    :param bucket_names: Possible bucket names for simultaneous search bucket type.
+        Default is `SIMUL_SEARCH_BUCKET_NAMES`.
+    :return: Path to a bucket in the simultaneous break search round bucket.
+    """
+    assert bucket_type in bucket_names, f"Bucket type must be one of {bucket_names}!"
+    return f"{simul_search_bucket_path(is_rescue, search_num)}/{bucket_type}"
 
 
 def get_obs_exp_expr(
@@ -206,6 +286,7 @@ def calculate_window_chisq(
 
 def search_for_two_breaks(
     group_ht: hl.Table,
+    count: int,
     chisq_threshold: float = 9.2,
     min_num_exp_mis: float = 10,
     min_chisq_threshold: float = 7.4,
@@ -219,6 +300,7 @@ def search_for_two_breaks(
     :param group_ht: Input Table aggregated by transcript/transcript section with lists of cumulative observed
         and expected missense values. HT is filtered to contain only transcript/sections without
         a single significant breakpoint.
+    :param count: Which transcript group is being run (based on counter generated in `main`).
     :param chisq_threshold:  Chi-square significance threshold. Default is 9.2.
         This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
@@ -284,7 +366,13 @@ def search_for_two_breaks(
     )
     if save_chisq_ht:
         group_ht = group_ht.checkpoint(
-            f"{SIMUL_BREAK_TEMP_PATH}/temp_chisq_over_threshold.ht", overwrite=True
+            f"{SIMUL_BREAK_TEMP_PATH}/batch_temp_chisq_group{count}.ht",
+            overwrite=True,
+        )
+    else:
+        group_ht = group_ht.checkpoint(
+            f"{TEMP_PATH_WITH_DEL}/batch_temp_chisq_group{count}.ht",
+            overwrite=True,
         )
     # Remove rows with maximum chi square values below the threshold
     group_ht = group_ht.filter(group_ht.max_chisq >= chisq_threshold)
@@ -294,6 +382,7 @@ def search_for_two_breaks(
 def process_section_group(
     ht_path: str,
     section_group: List[str],
+    count: int,
     is_rescue: bool,
     search_num: int,
     over_threshold: bool,
@@ -303,6 +392,8 @@ def process_section_group(
     split_list_len: int = 500,
     read_if_exists: bool = False,
     save_chisq_ht: bool = False,
+    requester_pays_bucket: str = RMC_PREFIX,
+    google_project: str = "broad-mpg-gnomad",
 ) -> None:
     """
     Run two simultaneous breaks search on a group of transcripts or transcript sections.
@@ -311,6 +402,7 @@ def process_section_group(
 
     :param str ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param List[str] section_group: List of transcripts or transcript sections to process.
+    :param count: Which transcript group is being run (based on counter generated in `main`).
     :param is_rescue: Whether to return path to HT created in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
@@ -335,8 +427,18 @@ def process_section_group(
         (as long as chi square value is >= min_chisq_threshold).
         This saves a lot of extra data and should only occur during the initial search round.
         Default is False.
+    :param google_project: Google project used to read and write data to requester-pays bucket.
     :return: None; processes Table and writes to path. Also writes success TSV to path.
     """
+    # Initialize hail to read from requester-pays correctly
+    hl.init(
+        spark_conf={
+            "spark.hadoop.fs.gs.requester.pays.mode": "CUSTOM",
+            "spark.hadoop.fs.gs.requester.pays.buckets": f"{requester_pays_bucket.lstrip('gs://')}",
+            "spark.hadoop.fs.gs.requester.pays.project.id": f"{google_project}",
+        },
+        tmp_dir=TEMP_PATH_WITH_DEL,
+    )
     ht = hl.read_table(ht_path)
     ht = ht.filter(hl.literal(section_group).contains(ht.section))
 
@@ -414,6 +516,7 @@ def process_section_group(
     # Search for two simultaneous breaks
     ht = search_for_two_breaks(
         group_ht=ht,
+        count=count,
         chisq_threshold=chisq_threshold,
         min_num_exp_mis=min_num_exp_mis,
         save_chisq_ht=save_chisq_ht,
@@ -437,10 +540,7 @@ def process_section_group(
             ht = ht.filter(ht.max_chisq == ht.section_max_chisq)
 
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
-    # TODO: Restructure ht to match locus-level formats from single breaks
     ht.write(output_ht_path, overwrite=True)
-    # TODO: Consider whether we want to write out temp information on chisq values for each potential break combination
-    #   like in single breaks
 
     success_tsvs_path = simul_search_round_bucket_path(
         is_rescue=is_rescue,
@@ -526,6 +626,7 @@ def main(args):
         name="simul_breaks",
         backend=backend,
         default_python_image=args.docker_image,
+        requester_pays_project=args.google_project,
     )
 
     if args.under_threshold:
@@ -548,6 +649,7 @@ def main(args):
                     args.is_rescue, args.search_num
                 ),
                 section_group=group,
+                count=count,
                 is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 over_threshold=False,
@@ -555,6 +657,7 @@ def main(args):
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.group_size,
                 save_chisq_ht=save_chisq_ht,
+                google_project=args.google_project,
             )
             count += 1
 
@@ -578,6 +681,7 @@ def main(args):
                     args.is_rescue, args.search_num
                 ),
                 section_group=group,
+                count=count,
                 is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 over_threshold=True,
@@ -585,6 +689,7 @@ def main(args):
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.group_size,
                 save_chisq_ht=save_chisq_ht,
+                google_project=args.google_project,
             )
     b.run(wait=False)
 
@@ -654,7 +759,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--google-project",
-        help="Google cloud project provided to hail batch for storage objects access.",
+        help="""
+            Google cloud project provided to hail batch for storage objects access.
+            Also used to read and write to requester-pays buckets.
+            """,
         default="broad-mpg-gnomad",
     )
     parser.add_argument(

@@ -5,7 +5,7 @@ from typing import List
 import hail as hl
 
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
-from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH
+from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
 
 from rmc.resources.rmc import (
     simul_sections_split_by_len_path,
@@ -305,6 +305,7 @@ def calculate_window_chisq(
 
 def search_for_two_breaks(
     group_ht: hl.Table,
+    count: int,
     chisq_threshold: float = 9.2,
     min_num_exp_mis: float = 10,
     min_chisq_threshold: float = 7.4,
@@ -318,6 +319,7 @@ def search_for_two_breaks(
     :param group_ht: Input Table aggregated by transcript/transcript section with lists of cumulative observed
         and expected missense values. HT is filtered to contain only transcript/sections without
         a single significant breakpoint.
+    :param count: Which transcript or transcript section group is being run (based on counter generated in `main`).
     :param chisq_threshold:  Chi-square significance threshold. Default is 9.2.
         This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
@@ -383,7 +385,12 @@ def search_for_two_breaks(
     )
     if save_chisq_ht:
         group_ht = group_ht.checkpoint(
-            f"{SIMUL_BREAK_TEMP_PATH}/temp_chisq_over_threshold.ht", overwrite=True
+            f"{SIMUL_BREAK_TEMP_PATH}/dataproc_temp_chisq_group{count}.ht",
+            overwrite=True,
+        )
+    else:
+        group_ht = group_ht.checkpoint(
+            f"{TEMP_PATH_WITH_DEL}/dataproc_temp_chisq_group{count}.ht", overwrite=True
         )
     # Remove rows with maximum chi square values below the threshold
     group_ht = group_ht.filter(group_ht.max_chisq >= chisq_threshold)
@@ -393,6 +400,7 @@ def search_for_two_breaks(
 def process_section_group(
     ht_path: str,
     section_group: List[str],
+    count: int,
     is_rescue: bool,
     search_num: int,
     over_threshold: bool,
@@ -410,6 +418,7 @@ def process_section_group(
 
     :param str ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param List[str] section_group: List of transcripts or transcript sections to process.
+    :param count: Which transcript or transcript section group is being run (based on counter generated in `main`).
     :param is_rescue: Whether to return path to HT created in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
@@ -513,6 +522,7 @@ def process_section_group(
     # Search for two simultaneous breaks
     ht = search_for_two_breaks(
         group_ht=ht,
+        count=count,
         chisq_threshold=chisq_threshold,
         min_num_exp_mis=min_num_exp_mis,
         save_chisq_ht=save_chisq_ht,
