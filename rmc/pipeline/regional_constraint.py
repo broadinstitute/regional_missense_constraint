@@ -444,7 +444,7 @@ def main(args):
             merged_break_ht.write(
                 # TODO: Change break results bucket structure to have round first, then simul vs. single split
                 merged_search_ht_path(
-                    is_rescue=not args.is_rescue,
+                    is_rescue=args.is_rescue,
                     search_num=args.search_num,
                     is_break_found=True,
                 ),
@@ -459,7 +459,7 @@ def main(args):
             ).drop("breakpoints")
             merged_no_break_ht.write(
                 merged_search_ht_path(
-                    is_rescue=not args.is_rescue,
+                    is_rescue=args.is_rescue,
                     search_num=args.search_num,
                     is_break_found=False,
                 ),
