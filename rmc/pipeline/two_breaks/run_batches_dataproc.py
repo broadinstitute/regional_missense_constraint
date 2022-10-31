@@ -79,27 +79,16 @@ def main(args):
             search_num=args.search_num,
             bucket_type="raw_results",
         )
-        section_groups = [
-            list(
-                hl.eval(
-                    hl.experimental.read_expression(
-                        "gs://regional_missense_constraint/temp/simul_breaks/initial/round2/prep/sections_to_simul_under_threshold_missing.he"
-                    )
-                )
-            )
-        ]
-        print(section_groups)
         for counter, group in enumerate(section_groups):
             # Double check TTN has been removed
             if args.ttn_id in group:
                 group.remove(args.ttn_id)
 
-            # output_ht_path = (
-            #    f"{raw_path}/simul_break_dataproc_ttn.ht"
-            #    if args.run_ttn
-            #    else f"{raw_path}/simul_break_dataproc_{counter}.ht"
-            # )
-            output_ht_path = "gs://regional_missense_constraint/temp/simul_breaks/initial/round2/raw_results/simul_break_group86under.ht"
+            output_ht_path = (
+                f"{raw_path}/simul_break_dataproc_ttn.ht"
+                if args.run_ttn
+                else f"{raw_path}/simul_break_dataproc_{counter}.ht"
+            )
             if file_exists(output_ht_path):
                 raise DataException(
                     f"Output already exists at {output_ht_path}! Double check before running script again."
@@ -110,8 +99,7 @@ def main(args):
                     args.is_rescue, args.search_num
                 ),
                 section_group=group,
-                # count=counter,
-                count=86,
+                count=counter,
                 is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 over_threshold=True,
