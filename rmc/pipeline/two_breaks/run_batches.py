@@ -628,6 +628,10 @@ def main(args):
         default_python_image=args.docker_image,
         requester_pays_project=args.google_project,
     )
+    # Check if user specified list of numbers for batches
+    # These numbers are used to write output files for batch jobs
+    if args.counter:
+        count_list = args.counter.split(",")
 
     if args.under_threshold:
         section_groups = [
@@ -635,10 +639,16 @@ def main(args):
             for x in range(0, len(sections_to_run), args.group_size)
         ]
         count = 1
+
         for group in tqdm(section_groups, unit="section group"):
-            logger.info("Working on group number %s...", count)
+            if count_list:
+                group_num = count_list[count - 1]
+            else:
+                group_num = count
+
+            logger.info("Working on group number %s...", group_num)
             logger.info(group)
-            job_name = f'group{count}{"over" if args.over_threshold else "under"}'
+            job_name = f'group{group_num}{"over" if args.over_threshold else "under"}'
             j = b.new_python_job(name=job_name)
             j.memory(args.batch_memory)
             j.cpu(args.batch_cpu)
@@ -649,7 +659,7 @@ def main(args):
                     args.is_rescue, args.search_num
                 ),
                 section_group=group,
-                count=count,
+                count=group_num,
                 is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 over_threshold=False,
@@ -664,6 +674,10 @@ def main(args):
     else:
         section_groups = [[section] for section in sections_to_run]
         for group in section_groups:
+            if count_list:
+                group_num = count_list[count - 1]
+            else:
+                group_num = count
             if args.use_custom_machine:
                 # NOTE: you do not specify memory and cpu when specifying a custom machine
                 j = b.new_python_job(name=job_name)
@@ -681,7 +695,7 @@ def main(args):
                     args.is_rescue, args.search_num
                 ),
                 section_group=group,
-                count=count,
+                count=group_num,
                 is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 over_threshold=True,
@@ -691,6 +705,7 @@ def main(args):
                 save_chisq_ht=save_chisq_ht,
                 google_project=args.google_project,
             )
+            count += 1
     b.run(wait=False)
 
 
@@ -722,6 +737,14 @@ if __name__ == "__main__":
         help="""
         Whether search is part of the 'rescue' pathway (pathway
         with lower chi square significance cutoff).
+        """,
+        action="store_true",
+    )
+    parser.add_argument(
+        "--counter",
+        help="""
+        Comma separated string of counter numbers, e.g. '31,32,40'.
+        Should only be specified any batches that failed the first submission.
         """,
         action="store_true",
     )
