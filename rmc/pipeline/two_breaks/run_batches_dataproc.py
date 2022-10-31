@@ -79,13 +79,16 @@ def main(args):
             search_num=args.search_num,
             bucket_type="raw_results",
         )
-        section_groups = list(
-            hl.eval(
-                hl.experimental.read_expression(
-                    "gs://regional_missense_constraint/temp/simul_breaks/initial/round2/prep/sections_to_simul_under_threshold_missing.he"
+        section_groups = [
+            list(
+                hl.eval(
+                    hl.experimental.read_expression(
+                        "gs://regional_missense_constraint/temp/simul_breaks/initial/round2/prep/sections_to_simul_under_threshold_missing.he"
+                    )
                 )
             )
-        )
+        ]
+        print(section_groups)
         for counter, group in enumerate(section_groups):
             # Double check TTN has been removed
             if args.ttn_id in group:
