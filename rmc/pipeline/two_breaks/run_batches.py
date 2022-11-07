@@ -631,7 +631,7 @@ def main(args):
     # Check if user specified list of numbers for batches
     # These numbers are used to write output files for batch jobs
     if args.counter:
-        count_list = args.counter.split(",")
+        count_list = list(map(int, args.counter.split(",")))
 
     if args.under_threshold:
         section_groups = [
@@ -643,12 +643,15 @@ def main(args):
         for group in tqdm(section_groups, unit="section group"):
             if count_list:
                 group_num = count_list[count - 1]
+                assert len(count_list) == len(
+                    section_groups
+                ), "Number of section groups doesn't match specified number of batches!"
             else:
                 group_num = count
 
             logger.info("Working on group number %s...", group_num)
             logger.info(group)
-            job_name = f'group{group_num}{"over" if args.over_threshold else "under"}'
+            job_name = f"group{group_num}under"
             j = b.new_python_job(name=job_name)
             j.memory(args.batch_memory)
             j.cpu(args.batch_cpu)
@@ -744,7 +747,8 @@ if __name__ == "__main__":
         "--counter",
         help="""
         Comma separated string of counter numbers, e.g. '31,32,40'.
-        Should only be specified any batches that failed the first submission.
+        These numbers correspond to batch numbers and should only be
+        specified for any batches that failed the first submission.
         """,
         action="store_true",
     )
@@ -752,12 +756,12 @@ if __name__ == "__main__":
     section_size = parser.add_mutually_exclusive_group(required=True)
     section_size.add_argument(
         "--under-threshold",
-        help="Transcripts in batch should have less than --section-len-threshold possible missense positions.",
+        help="Transcripts/sections in batch should have less than --section-len-threshold possible missense positions.",
         action="store_true",
     )
     section_size.add_argument(
         "--over-threshold",
-        help="Transcripts in batch should greater than or equal to --section-len-threshold possible missense positions.",
+        help="Transcripts/sections in batch should have greater than or equal to --section-len-threshold possible missense positions.",
         action="store_true",
     )
     parser.add_argument(
