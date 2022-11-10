@@ -34,6 +34,7 @@ from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
     get_rescue_1break_transcripts,
+    get_rescue_2breaks_transcripts,
     GROUPINGS,
     process_sections,
 )
@@ -252,13 +253,11 @@ def main(args):
             )
             save_full_chisq_ht = False
             if args.search_num == 1:
-                if is_rescue:
-                    get_rescue_1break_transcripts(overwrite=args.overwrite)
-                    return
-                else:
-                    # Read constraint_prep resource HT if this is the first search
-                    ht = constraint_prep.ht()
-                    save_full_chisq_ht = True
+                assert not is_rescue, "No code to support rescue search round 1!"
+
+                # Read constraint_prep resource HT if this is the first search
+                ht = constraint_prep.ht()
+                save_full_chisq_ht = True
 
                 logger.info(
                     "Adding section annotation before searching for first break..."
@@ -347,6 +346,10 @@ def main(args):
             )
 
         if args.merge_single_simul:
+            if args.is_rescue and args.search_num == 1:
+                get_rescue_1break_transcripts(overwrite=args.overwrite)
+                get_rescue_2breaks_transcripts(overwrite=args.overwrite)
+
             logger.info(
                 "Converting merged simultaneous breaks HT from section-level to locus-level..."
             )
