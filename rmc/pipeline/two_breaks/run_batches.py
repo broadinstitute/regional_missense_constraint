@@ -34,7 +34,7 @@ from rmc.resources.rmc import (
     simul_sections_split_by_len_path,
 )
 from rmc.slack_creds import slack_token
-from rmc.utils.simultaneous_breaks import check_for_successful_sections
+from rmc.utils.simultaneous_breaks import get_sections_to_run
 
 
 logging.basicConfig(
@@ -568,7 +568,7 @@ def main(args):
         save_chisq_ht = True
 
     logger.info("Importing SetExpression with transcripts or transcript sections...")
-    sections_to_run = check_for_successful_sections(
+    sections_to_run = get_sections_to_run(
         sections=(
             list(
                 hl.eval(
