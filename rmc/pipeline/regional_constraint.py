@@ -33,6 +33,7 @@ from rmc.utils.constraint import (
     add_obs_annotation,
     calculate_exp_per_transcript,
     calculate_observed,
+    get_rescue_1break_transcripts,
     GROUPINGS,
     process_sections,
 )
@@ -252,13 +253,8 @@ def main(args):
             save_full_chisq_ht = False
             if args.search_num == 1:
                 if is_rescue:
-                    ht = hl.read_table(
-                        merged_search_ht_path(
-                            is_rescue=not is_rescue,
-                            search_num=args.search_num,
-                            is_break_found=False,
-                        )
-                    )
+                    get_rescue_1break_transcripts(overwrite=args.overwrite)
+                    return
                 else:
                     # Read constraint_prep resource HT if this is the first search
                     ht = constraint_prep.ht()
