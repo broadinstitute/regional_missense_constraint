@@ -205,6 +205,7 @@ def merge_simul_break_temp_hts(
     batch_phrase: str,
     query_phrase: str,
     output_ht_path: str,
+    overwrite: bool,
     google_project: str = "broad-mpg-gnomad",
 ) -> None:
     """
@@ -220,6 +221,7 @@ def merge_simul_break_temp_hts(
     :param query_phrase: String indicating name associated with HTs created
         using Hail Query jobs via Dataproc, e.g. "dataproc", or "dataproc_temp_chisq".
     :param output_ht_path: Desired path for output HT.
+    :param overwrite: Whether to overwrite output HT if it exists.
     :param google_project: Google project to use to read data from requester-pays buckets.
         Default is 'broad-mpg-gnomad'.
     :return: None; function writes HT to specified path.
