@@ -679,6 +679,9 @@ def main(args):
         for group in section_groups:
             if count_list:
                 group_num = count_list[count - 1]
+                assert len(count_list) == len(
+                    section_groups
+                ), "Number of section groups doesn't match specified number of batches!"
             else:
                 group_num = count
             if args.use_custom_machine:
