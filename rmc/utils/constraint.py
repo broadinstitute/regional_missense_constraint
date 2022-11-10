@@ -25,6 +25,7 @@ from rmc.resources.rmc import (
     rmc_browser,
     rmc_results,
     simul_search_round_bucket_path,
+    single_search_round_ht_path,
 )
 
 
@@ -821,7 +822,7 @@ def get_rescue_1break_transcripts(
     )
     breakpoint_ht = breakpoint_ht.filter(breakpoint_ht.is_break)
     breakpoint_ht = breakpoint_ht.annotate_globals(chisq_threshold=rescue_threshold)
-    breakpoint_ht = chibreakpoint_htsq_ht.key_by("section")
+    breakpoint_ht = breakpoint_ht.key_by("section")
     breakpoint_ht = breakpoint_ht.checkpoint(
         single_search_round_ht_path(
             is_rescue=True,
