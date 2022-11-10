@@ -133,6 +133,20 @@ Bucket structure:
                 success_files/
 """
 
+SIMUL_SEARCH_ANNOTATIONS = {"max_chisq", "breakpoints"}
+"""
+Set of annotations to keep from two simultaneous breaks search.
+
+Used when merging sections found in over and under length threshold search.
+
+`max_chisq`: Chi square value associated with two breaks.
+`breakpoints`: Tuple of breakpoints with adjusted inclusiveness/exclusiveness.
+
+Note that this field will also be kept (`section` is a key field):
+`section`: Transcript section that was searched.
+    Format: <transcript>_<start position>_<end position>.
+"""
+
 
 def simul_search_bucket_path(
     is_rescue: bool,

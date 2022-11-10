@@ -16,6 +16,7 @@ from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
     no_breaks,
     not_one_break,
+    SIMUL_SEARCH_ANNOTATIONS,
     simul_search_round_bucket_path,
 )
 from rmc.slack_creds import slack_token
@@ -27,19 +28,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("merge_hts")
 logger.setLevel(logging.INFO)
-
-
-ANNOTATIONS = {"max_chisq", "breakpoints"}
-"""
-Set of annotations to keep from two simultaneous breaks search.
-
-`max_chisq`: Chi square value associated with two breaks.
-`breakpoints`: Tuple of breakpoints with adjusted inclusiveness/exclusiveness.
-
-Note that this field will also be kept (`section` is a key field):
-`section`: Transcript section that was searched.
-    Format: <transcript>_<start position>_<end position>.
-"""
 
 
 def main(args):
@@ -88,11 +76,13 @@ def main(args):
                     # This `key_by` should not shuffle because `section` is already the first key for both Tables
                     temp = temp.key_by("section")
                     row_fields = set(temp.row)
-                    if len(ANNOTATIONS.intersection(row_fields)) < len(ANNOTATIONS):
+                    if len(SIMUL_SEARCH_ANNOTATIONS.intersection(row_fields)) < len(
+                        SIMUL_SEARCH_ANNOTATIONS
+                    ):
                         raise DataException(
-                            f"The following fields are missing from the temp table: {ANNOTATIONS.difference(row_fields)}!"
+                            f"The following fields are missing from the temp table: {SIMUL_SEARCH_ANNOTATIONS.difference(row_fields)}!"
                         )
-                    temp = temp.select(*ANNOTATIONS)
+                    temp = temp.select(*SIMUL_SEARCH_ANNOTATIONS)
                     intermediate_hts.append(temp)
                 else:
                     logger.warning("%s had 0 rows", ht_path)
