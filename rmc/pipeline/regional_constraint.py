@@ -351,6 +351,10 @@ def main(args):
             )
 
         if args.merge_single_simul:
+            hl.init(
+                log=f"/round{args.search_num}_merge_single_simul.log",
+                tmp_dir=TEMP_PATH_WITH_DEL,
+            )
             logger.info(
                 "Converting merged simultaneous breaks HT from section-level to locus-level..."
             )
