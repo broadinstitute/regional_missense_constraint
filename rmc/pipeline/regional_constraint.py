@@ -347,8 +347,8 @@ def main(args):
 
         if args.merge_single_simul:
             if args.is_rescue and args.search_num == 1:
-                get_rescue_1break_transcripts(overwrite=args.overwrite)
-                get_rescue_2breaks_transcripts(overwrite=args.overwrite)
+                get_rescue_transcripts_and_create_no_breaks_ht(overwrite)
+                return
 
             logger.info(
                 "Converting merged simultaneous breaks HT from section-level to locus-level..."

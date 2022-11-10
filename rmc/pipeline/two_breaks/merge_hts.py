@@ -77,17 +77,6 @@ def main(args):
             len(simul_break_sections),
         )
 
-        if args.create_no_breaks_ht:
-            # TODO: Update this section
-            logger.info(
-                "Getting transcripts with no evidence of regional missense constraint..."
-            )
-            context_ht = not_one_break.ht()
-            context_ht = context_ht.filter(
-                ~simul_break_transcripts.contains(context_ht.transcript)
-            )
-            context_ht.write(no_breaks.path, overwrite=args.overwrite)
-
     finally:
         logger.info("Copying hail log to logging bucket...")
         hl.copy_log(LOGGING_PATH)
@@ -124,15 +113,6 @@ if __name__ == "__main__":
             Google cloud project used to read from requester-pays buckets.
             """,
         default="broad-mpg-gnomad",
-    )
-    parser.add_argument(
-        "--create-no-breaks-ht",
-        help="""
-        Create Table containing transcripts that have no evidence of RMC.
-        This step should only be run after the final round of searching for breaks
-        (final round of searching with p = 0.025 significance threshold).
-        """,
-        action="store_true",
     )
 
     args = parser.parse_args()

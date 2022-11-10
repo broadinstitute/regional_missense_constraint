@@ -26,6 +26,7 @@ from rmc.utils.generic import (
 )
 from rmc.resources.rmc import (
     multiple_breaks,
+    no_breaks,
     oe_bin_counts_tsv,
     rmc_browser,
     rmc_results,
@@ -770,7 +771,7 @@ def process_sections(
 
 def get_rescue_1break_transcripts(
     overwrite: bool, initial_threshold: float = 6.6, rescue_threshold: float = 5.0
-) -> None:
+) -> Tuple[hl.expr.SetExpression]:
     """
     Get transcripts that have a single breakpoint above the 'rescue' threshold.
 
@@ -852,7 +853,7 @@ def get_rescue_1break_transcripts(
     # Write break found HT for rescue search
     ht = ht.annotate(breakpoint=breakpoint_ht[ht.section].locus.position)
     ht = ht.filter(hl.is_defined(ht.breakpoint))
-    ht.write(
+    ht = ht.checkpoint(
         single_search_round_ht_path(
             is_rescue=True,
             search_num=1,
@@ -861,11 +862,14 @@ def get_rescue_1break_transcripts(
         ),
         overwrite=overwrite,
     )
+    ht = ht.annotate(transcript=ht.section.split("_")[0])
+    rescue_single_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
+    return simul_transcripts, rescue_single_transcripts
 
 
 def get_rescue_2breaks_transcripts(
     overwrite: bool, initial_threshold: float = 6.6, rescue_threshold: float = 5.0
-) -> None:
+) -> hl.expr.SetExpression:
     """
     Get transcripts that have two simultaneous breakpoints above the 'rescue' threshold.
 
@@ -919,7 +923,44 @@ def get_rescue_2breaks_transcripts(
         search_num=1,
         bucket_type="final_results",
     )
-    ht.write(f"{results_path}/merged.ht")
+    ht = ht.checkpoint(f"{results_path}/merged.ht", overwrite=overwrite)
+    ht = ht.annotate(transcript=ht.section.split("_")[0])
+    return ht.aggregate(hl.agg.collect_as_set(ht.transcript))
+
+
+def get_rescue_transcripts_and_create_no_breaks_ht(overwrite: bool) -> None:
+    """
+    Get transcripts found in rescue pipeline and write final no breaks HT.
+
+    Function gets transcripts found in rescue single and simultaneous breaks searches
+    and creates final HT with all transcripts that do not have evidence of RMC.
+
+    :param overwrite: Whether to overwrite output data if it exists.
+    :return: None; function writes HT to resource path.
+    """
+    # Get the transcripts found in initial simultaneous breaks search,
+    # rescue single break search, and rescue simultaneous breaks search
+    init_simul_transcripts, rescue_single_transcripts = get_rescue_1break_transcripts(
+        overwrite=overwrite
+    )
+    rescue_simul_transcripts = get_rescue_2breaks_transcripts(overwrite=overwrite)
+    transcripts_with_breaks = init_simul_transcripts.union(
+        rescue_simul_transcripts
+    ).union(rescue_single_transcripts)
+
+    # Read in the no break found HT from initial search round 1
+    ht = hl.read_table(
+        single_search_round_ht_path(
+            is_rescue=False,
+            search_num=1,
+            is_break_found=False,
+            is_breakpoint_only=False,
+        )
+    )
+    ht = ht.annotate(transcript=ht.section.split("_")[0])
+    ht = ht.filter(~hl.literal(transcripts_with_breaks).contains(ht.transcript))
+    ht = ht.drop("transcript")
+    ht.write(no_breaks.path, overwrite=overwrite)
 
 
 def calculate_section_chisq(
