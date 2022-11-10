@@ -218,7 +218,7 @@ def merge_simul_break_temp_hts(
     :param batch_phrase: String indicating name associated with HTs created
         using Hail Batch jobs, e.g. "under", or "batch_temp_chisq".
     :param query_phrase: String indicating name associated with HTs created
-        using Hail Query jobs via Dataproc, e.g. "over", or "dataproc_temp_chisq".
+        using Hail Query jobs via Dataproc, e.g. "dataproc", or "dataproc_temp_chisq".
     :param output_ht_path: Desired path for output HT.
     :param google_project: Google project to use to read data from requester-pays buckets.
         Default is 'broad-mpg-gnomad'.
