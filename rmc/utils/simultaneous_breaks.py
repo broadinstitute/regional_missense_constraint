@@ -192,7 +192,7 @@ def check_for_successful_sections(
             if not success_tsvs_exist[section_success_map[section]]:
                 sections_to_run.append(section)
     else:
-        # Otherwise, use `file_exists``
+        # Otherwise, use `file_exists`
         for section in sections:
             if not file_exists(section_success_map[section]):
                 sections_to_run.append(section)
