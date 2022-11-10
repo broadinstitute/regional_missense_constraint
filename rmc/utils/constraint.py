@@ -9,7 +9,12 @@ from gnomad.utils.file_utils import file_exists
 
 from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
-from rmc.resources.basics import SINGLE_BREAK_TEMP_PATH, TEMP_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import (
+    SIMUL_BREAK_TEMP_PATH,
+    SINGLE_BREAK_TEMP_PATH,
+    TEMP_PATH,
+    TEMP_PATH_WITH_DEL,
+)
 from rmc.resources.gnomad import filtered_exomes
 from rmc.resources.reference_data import clinvar_path_mis, de_novo, gene_model
 from rmc.utils.generic import (
@@ -27,6 +32,7 @@ from rmc.resources.rmc import (
     simul_search_round_bucket_path,
     single_search_round_ht_path,
 )
+from rmc.utils.simultaneous_breaks import merge_simul_break_temp_hts
 
 
 logging.basicConfig(
@@ -764,12 +770,12 @@ def process_sections(
 
 def get_rescue_1break_transcripts(
     overwrite: bool, initial_threshold: float = 6.6, rescue_threshold: float = 5.0
-):
+) -> None:
     """
-    Get transcripts that have significant breakpoint(s) above the 'rescue' threshold.
+    Get transcripts that have a single breakpoint above the 'rescue' threshold.
 
     These transcripts did not have a breakpoint that was over the initial search threshold
-    but have breakpoints that are above the lower 'rescue' search threshold.
+    but have a breakpoint that is above the lower 'rescue' search threshold.
 
     .. note::
         This function assumes that `process_sections` was run with `save_full_chisq_ht`
@@ -780,6 +786,7 @@ def get_rescue_1break_transcripts(
         the initial search pathway.
     :param rescue_threshold: Lower chi square significance threshold associated with
         the 'rescue' search pathway.
+    :return: None; function writes HT to resource path.
     """
     # Read in the simultaneous breaks results from initial search round 1
     simul_results_path = simul_search_round_bucket_path(
@@ -854,6 +861,65 @@ def get_rescue_1break_transcripts(
         ),
         overwrite=overwrite,
     )
+
+
+def get_rescue_2breaks_transcripts(
+    overwrite: bool, initial_threshold: float = 6.6, rescue_threshold: float = 5.0
+) -> None:
+    """
+    Get transcripts that have two simultaneous breakpoints above the 'rescue' threshold.
+
+    These transcripts did not have a single break/simultaneous breaks over the initial search threshold
+    but have simultaneous breakpoints that are above the lower 'rescue' search threshold.
+
+    .. note::
+        This function assumes that `process_sections` was run with `save_full_chisq_ht`
+        set to True during the initial single break search (round 1).
+
+    :param overwrite: Whether to overwrite output data if it exists.
+    :param initial_threshold: Chi square significance threshold associated with
+        the initial search pathway.
+    :param rescue_threshold: Lower chi square significance threshold associated with
+        the 'rescue' search pathway.
+    :return: None; function writes HT to resource path.
+    """
+    # Read in the transcripts found in the single break rescue search
+    single_ht = hl.read_table(
+        single_search_round_ht_path(
+            is_rescue=True,
+            search_num=1,
+            is_break_found=True,
+            is_breakpoint_only=True,
+        )
+    )
+    single_ht = single_ht.annotate(transcript=single_ht.section.split("_")[0])
+    single_transcripts = single_ht.aggregate(
+        hl.agg.collect_as_set(single_ht.transcript)
+    )
+
+    # Merge all of the temporary chi square HTs saved in round 1 of
+    # initial simul breaks search
+    merge_simul_break_temp_hts(
+        input_hts_path=SIMUL_BREAK_TEMP_PATH,
+        batch_phrase="batch_temp_chisq",
+        query_phrase="dataproc_temp_chisq",
+        output_ht_path=f"{TEMP_PATH_WITH_DEL}/rescue_simul_chisq.ht",
+        overwrite=overwrite,
+    )
+    ht = hl.read_table(f"{TEMP_PATH_WITH_DEL}/rescue_simul_chisq.ht")
+    ht = ht.annotate(transcript=ht.section.split("_")[0])
+    ht = ht.filter(
+        (ht.max_chisq < initial_threshold)
+        & (ht.max_chisq >= rescue_threshold)
+        & ~hl.literal(single_transcripts).contains(ht.transcript)
+    )
+    ht = ht.drop("transcript")
+    results_path = simul_search_round_bucket_path(
+        is_rescue=True,
+        search_num=1,
+        bucket_type="final_results",
+    )
+    ht.write(f"{results_path}/merged.ht")
 
 
 def calculate_section_chisq(
