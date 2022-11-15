@@ -945,7 +945,7 @@ def get_rescue_transcripts_and_create_no_breaks_ht(overwrite: bool) -> None:
     )
     rescue_simul_transcripts = get_rescue_2breaks_transcripts(overwrite=overwrite)
     transcripts_with_breaks = init_simul_transcripts.union(
-        rescue_simul_transcripts
+        rescue_simul_transcriptsget_
     ).union(rescue_single_transcripts)
 
     # Read in the no break found HT from initial search round 1
