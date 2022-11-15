@@ -26,6 +26,7 @@ def group_no_single_break_found_ht(
     ht_path: str,
     out_ht_path: str,
     group_str: str,
+    overwrite: bool,
 ) -> None:
     """
     Group HT containing transcripts/transcript sections that don't have a single significant break and collect annotations into lists.
@@ -45,6 +46,7 @@ def group_no_single_break_found_ht(
     :param out_ht_path: Path to output Table grouped by transcripts/transcript sections with lists
         of cumulative observed, expected missense counts.
     :param group_str: Field used to group observed and expected values.
+    :param overwrite: Whether to overwrite existing grouped Table.
     :return: None; writes Table grouped by transcript/transcript section with cumulative observed, expected missense counts
         and all positions collected into lists to resource path.
     """
@@ -71,7 +73,7 @@ def group_no_single_break_found_ht(
         cum_exp=group_ht.values.cum_exp,
         positions=group_ht.values.positions,
     )
-    group_ht.write(out_ht_path, overwrite=True)
+    group_ht.write(out_ht_path, overwrite=overwrite)
 
 
 def split_sections_by_len(
