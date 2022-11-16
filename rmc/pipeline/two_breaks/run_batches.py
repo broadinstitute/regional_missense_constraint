@@ -572,7 +572,7 @@ def main(args):
         save_chisq_ht = True
 
     logger.info("Importing SetExpression with transcripts or transcript sections...")
-    """sections_to_run = get_sections_to_run(
+    sections_to_run = get_sections_to_run(
         sections=(
             list(
                 hl.eval(
@@ -600,18 +600,8 @@ def main(args):
         ),
         is_rescue=args.is_rescue,
         search_num=args.search_num,
-    )"""
-    sections_to_run = list(
-        hl.eval(
-            hl.experimental.read_expression(
-                simul_sections_split_by_len_path(
-                    is_rescue=args.is_rescue,
-                    search_num=args.search_num,
-                    is_over_threshold=False,
-                )
-            )
-        )
     )
+
     logger.info(
         "Found %i transcripts or transcript sections to search...", len(sections_to_run)
     )
