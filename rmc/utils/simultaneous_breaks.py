@@ -151,6 +151,11 @@ def split_sections_by_len(
         ),
         overwrite,
     )
+    logger.info(
+        "Found %i sections under threshold and %i sections over threshold",
+        len(under_threshold),
+        len(over_threshold),
+    )
 
 
 def get_sections_to_run(
