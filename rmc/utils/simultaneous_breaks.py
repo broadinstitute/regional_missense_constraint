@@ -125,6 +125,11 @@ def split_sections_by_len(
             hl.agg.collect_as_set(ht[group_str]),
         )
     )
+    logger.info(
+        "Found %i sections under threshold and %i sections over threshold",
+        len(under_threshold),
+        len(over_threshold),
+    )
     # TODO: Re-evaluate if this check is necessary for v4
     if ttn_id in list(over_threshold):
         logger.warning(
@@ -133,29 +138,27 @@ def split_sections_by_len(
         over_threshold = list(over_threshold)
         over_threshold.remove(ttn_id)
         over_threshold = set(over_threshold)
-    hl.experimental.write_expression(
-        under_threshold,
-        simul_sections_split_by_len_path(
-            is_rescue=is_rescue,
-            search_num=search_num,
-            is_over_threshold=False,
-        ),
-        overwrite,
-    )
-    hl.experimental.write_expression(
-        over_threshold,
-        simul_sections_split_by_len_path(
-            is_rescue=is_rescue,
-            search_num=search_num,
-            is_over_threshold=True,
-        ),
-        overwrite,
-    )
-    logger.info(
-        "Found %i sections under threshold and %i sections over threshold",
-        len(under_threshold),
-        len(over_threshold),
-    )
+
+    if len(under_threshold) > 0:
+        hl.experimental.write_expression(
+            under_threshold,
+            simul_sections_split_by_len_path(
+                is_rescue=is_rescue,
+                search_num=search_num,
+                is_over_threshold=False,
+            ),
+            overwrite,
+        )
+    if len(over_threshold) > 0:
+        hl.experimental.write_expression(
+            over_threshold,
+            simul_sections_split_by_len_path(
+                is_rescue=is_rescue,
+                search_num=search_num,
+                is_over_threshold=True,
+            ),
+            overwrite,
+        )
 
 
 def get_sections_to_run(
