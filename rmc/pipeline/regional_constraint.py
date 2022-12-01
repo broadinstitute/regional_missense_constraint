@@ -251,13 +251,11 @@ def main(args):
             logger.info(
                 "Searching for transcripts or transcript subsections with a single significant break..."
             )
-            save_full_chisq_ht = False
             if args.search_num == 1:
                 assert not is_rescue, "No code to support rescue search round 1!"
 
                 # Read constraint_prep resource HT if this is the first search
                 ht = constraint_prep.ht()
-                save_full_chisq_ht = True
 
                 logger.info(
                     "Adding section annotation before searching for first break..."
@@ -285,7 +283,6 @@ def main(args):
             ht = process_sections(
                 ht=ht,
                 chisq_threshold=args.chisq_threshold,
-                save_full_chisq_ht=save_full_chisq_ht,
             )
             ht = ht.checkpoint(
                 f"{TEMP_PATH_WITH_DEL}/round{args.search_num}_temp.ht", overwrite=True
