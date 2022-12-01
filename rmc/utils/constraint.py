@@ -903,7 +903,7 @@ def get_rescue_2breaks_transcripts(
         )
     )
     single_ht = single_ht.annotate(transcript=single_ht.section.split("_")[0])
-    single_transcripts = single_ht.aggregate(
+    single_break_rescue_transcripts = single_ht.aggregate(
         hl.agg.collect_as_set(single_ht.transcript)
     )
 
@@ -921,7 +921,7 @@ def get_rescue_2breaks_transcripts(
     ht = ht.filter(
         (ht.max_chisq < initial_threshold)
         & (ht.max_chisq >= rescue_threshold)
-        & ~hl.literal(single_transcripts).contains(ht.transcript)
+        & ~hl.literal(single_break_rescue_transcripts).contains(ht.transcript)
     )
     ht = ht.drop("transcript")
     results_path = simul_search_round_bucket_path(
