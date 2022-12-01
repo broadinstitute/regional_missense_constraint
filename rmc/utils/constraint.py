@@ -778,6 +778,10 @@ def get_rescue_1break_transcripts(
     These transcripts did not have a breakpoint that was over the initial search threshold
     but have a breakpoint that is above the lower 'rescue' search threshold.
 
+    Function reads in the results HT from the first round of simultaneous breaks search,
+    the temporary table with chi square values found in the first round of the single
+    break search, and removes transcripts with two simultaneous breaks or one single break.
+
     .. note::
         This function assumes that `process_sections` was run with `save_full_chisq_ht`
         set to True during the initial single break search (round 1).
