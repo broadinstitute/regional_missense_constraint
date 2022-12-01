@@ -780,7 +780,7 @@ def get_rescue_1break_transcripts(
     """
     # Read in the simultaneous breaks results from initial search round 1
     simul_results_path = simul_search_round_bucket_path(
-        is_rescue=True,
+        is_rescue=False,
         search_num=1,
         bucket_type="final_results",
     )

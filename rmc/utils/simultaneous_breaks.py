@@ -270,7 +270,7 @@ def merge_simul_break_temp_hts(
             "All temp tables had 0 rows. Please double check the temp tables!"
         )
     ht = intermediate_hts[0].union(*intermediate_hts[1:])
-    ht.write(f"{output_ht_path}")
+    ht.write(output_ht_path, overwrite=overwrite)
 
 
 def calculate_window_chisq(
