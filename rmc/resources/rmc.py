@@ -352,17 +352,9 @@ simul_break = VersionedTableResource(
 Table containing transcripts with two simultaneous breaks.
 """
 
-no_breaks = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/no_breaks.ht"
-        )
-        for freeze in FREEZES
-    },
-)
+no_breaks = f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/no_breaks.he"
 """
-Table containing transcripts with no significant breaks.
+SetExpression containing transcripts with no significant breaks.
 """
 
 rmc_results = VersionedTableResource(

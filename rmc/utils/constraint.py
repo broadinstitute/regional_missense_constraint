@@ -965,8 +965,10 @@ def get_rescue_transcripts_and_create_no_breaks_ht(overwrite: bool) -> None:
     )
     ht = ht.annotate(transcript=ht.section.split("_")[0])
     ht = ht.filter(~hl.literal(transcripts_with_breaks).contains(ht.transcript))
-    ht = ht.drop("transcript")
-    ht.write(no_breaks.path, overwrite=overwrite)
+    no_break_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
+    hl.experimental.write_expression(
+        no_break_transcripts, no_breaks, overwrite=overwrite
+    )
 
 
 def calculate_section_chisq(
