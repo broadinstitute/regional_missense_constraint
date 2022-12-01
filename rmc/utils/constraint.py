@@ -886,7 +886,8 @@ def get_rescue_2breaks_transcripts(
         the initial search pathway.
     :param rescue_threshold: Lower chi square significance threshold associated with
         the 'rescue' search pathway.
-    :return: None; function writes HT to resource path.
+    :return: SetExpression of transcripts with two simultaneous breaks above 'rescue'
+        threshold.
     """
     # Read in the transcripts found in the single break rescue search
     single_ht = hl.read_table(
