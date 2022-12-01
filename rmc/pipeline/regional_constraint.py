@@ -347,7 +347,7 @@ def main(args):
 
         if args.merge_single_simul:
             if args.is_rescue and args.search_num == 1:
-                get_rescue_transcripts_and_create_no_breaks_ht(overwrite)
+                get_rescue_transcripts_and_create_no_breaks_ht(args.overwrite)
                 return
 
             logger.info(
