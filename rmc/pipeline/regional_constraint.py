@@ -33,8 +33,7 @@ from rmc.utils.constraint import (
     add_obs_annotation,
     calculate_exp_per_transcript,
     calculate_observed,
-    get_rescue_1break_transcripts,
-    get_rescue_2breaks_transcripts,
+    get_rescue_transcripts_and_create_no_breaks_ht,
     GROUPINGS,
     process_sections,
 )
