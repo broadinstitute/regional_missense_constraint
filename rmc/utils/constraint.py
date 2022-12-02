@@ -770,14 +770,17 @@ def get_rescue_1break_transcripts(
     overwrite: bool, initial_threshold: float = 6.6, rescue_threshold: float = 5.0
 ) -> Tuple[hl.expr.SetExpression]:
     """
-    Get transcripts that have a single breakpoint above the 'rescue' threshold.
+    Get transcripts that have a single breakpoint in the first round of the 'rescue' search.
 
-    This function starts the 'rescue' search by identifying the transcripts
-    that would have been found in the first single breakpoint search with the
-    lower chi square significance threshold.
+    These transcripts did not have a single or simultaneous breakpoint that was over 
+    the initial search threshold but do have a single breakpoint that is above
+    the lower 'rescue' search threshold.
 
-    These transcripts did not have a breakpoint that was over the initial search threshold
-    but have a breakpoint that is above the lower 'rescue' search threshold.
+    This function performs the single break search for the first 'rescue' round
+    using the statistics already computed during the single break search for the 
+    first 'initial' round and writes out the resulting tables:
+    a section (transcript)-level breakpoint table and a locus-level table
+    for transcripts where a 'rescue' breakpoint was found.
 
     Function reads in the results HT from the first round of simultaneous breaks search,
     the HT with transcripts without significant single breaks from the first round of the single
