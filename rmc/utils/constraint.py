@@ -772,6 +772,10 @@ def get_rescue_1break_transcripts(
     """
     Get transcripts that have a single breakpoint above the 'rescue' threshold.
 
+    This function starts the 'rescue' search by identifying the transcripts
+    that would have been found in the first single breakpoint search with the
+    lower chi square significance threshold.
+
     These transcripts did not have a breakpoint that was over the initial search threshold
     but have a breakpoint that is above the lower 'rescue' search threshold.
 
