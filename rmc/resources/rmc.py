@@ -352,7 +352,9 @@ simul_break = VersionedTableResource(
 Table containing transcripts with two simultaneous breaks.
 """
 
-no_breaks = f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/no_breaks.he"
+no_breaks = (
+    f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/no_breaks.he"
+)
 """
 SetExpression containing transcripts with no significant breaks.
 """
