@@ -566,7 +566,7 @@ def search_for_break(
 
     :param ht: Input Table.
     :param search_num: Search iteration number
-        (e.g., second round of searching for single break would be 2).-
+        (e.g., second round of searching for single break would be 2).
     :param chisq_threshold: Chi-square significance threshold.
         Default is 6.6 (single break; p = 0.01).
     :param group_str: Field used to group Table observed and expected values. Default is 'section'.
