@@ -1,15 +1,18 @@
 """This script contains functions used to search for two simultaneous breaks."""
 import logging
+import subprocess
 from typing import List
 
 import hail as hl
 
+from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
-from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
 
+from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
 from rmc.resources.rmc import (
-    simul_sections_split_by_len_path,
+    SIMUL_SEARCH_ANNOTATIONS,
     simul_search_round_bucket_path,
+    simul_sections_split_by_len_path,
 )
 from rmc.utils.constraint import get_dpois_expr, get_obs_exp_expr
 
@@ -189,12 +192,85 @@ def get_sections_to_run(
             if not success_tsvs_exist[section_success_map[section]]:
                 sections_to_run.append(section)
     else:
-        # Otherwise, use `file_exists``
+        # Otherwise, use `file_exists`
         for section in sections:
             if not file_exists(section_success_map[section]):
                 sections_to_run.append(section)
 
     return sections_to_run
+
+
+def merge_simul_break_temp_hts(
+    input_hts_path: str,
+    batch_phrase: str,
+    query_phrase: str,
+    output_ht_path: str,
+    overwrite: bool,
+    google_project: str = "broad-mpg-gnomad",
+) -> None:
+    """
+    Read in simultaneous breaks temporary HTs at specified path and merge.
+
+    .. note::
+        - Assumes temp HTs are keyed by "section" or ("section", "i", "j")
+        - Assumes temp HTs contain all annotations in SIMUL_BREAK_ANNOTATIONS
+
+    :param input_hts_path: Path to bucket containing input temporary HTs.
+    :param batch_phrase: String indicating name associated with HTs created
+        using Hail Batch jobs, e.g. "under", or "batch_temp_chisq".
+    :param query_phrase: String indicating name associated with HTs created
+        using Hail Query jobs via Dataproc, e.g. "dataproc", or "dataproc_temp_chisq".
+    :param output_ht_path: Desired path for output HT.
+    :param overwrite: Whether to overwrite output HT if it exists.
+    :param google_project: Google project to use to read data from requester-pays buckets.
+        Default is 'broad-mpg-gnomad'.
+    :return: None; function writes HT to specified path.
+    """
+    logger.info("Collecting all HT paths...")
+    temp_ht_paths = (
+        subprocess.check_output(
+            ["gsutil", "-u", f"{google_project}", "ls", f"{input_hts_path}"]
+        )
+        .decode("utf8")
+        .strip()
+        .split("\n")
+    )
+
+    intermediate_hts = []
+    ht_count = 0
+    for ht_path in temp_ht_paths:
+        ht_path = ht_path.strip("/")
+        if (batch_phrase in ht_path or query_phrase in ht_path) and ht_path.endswith(
+            "ht"
+        ):
+            ht_count += 1
+            logger.info("Working on %s", ht_path)
+            temp = hl.read_table(ht_path)
+            if temp.count() > 0:
+                # Tables containing transcripts/transcript sections that are over the transcript/section length threshold
+                # are keyed by section, i, j
+                # Tables containing transcripts/transcript sections that are under the length threshold are keyed
+                # only by section
+                # Rekey all tables here and select only the required fields to ensure the union on line 83 is able to work
+                # This `key_by` should not shuffle because `section` is already the first key for both Tables
+                temp = temp.key_by("section")
+                row_fields = set(temp.row)
+                if len(SIMUL_SEARCH_ANNOTATIONS.intersection(row_fields)) < len(
+                    SIMUL_SEARCH_ANNOTATIONS
+                ):
+                    raise DataException(
+                        f"The following fields are missing from the temp table: {SIMUL_SEARCH_ANNOTATIONS.difference(row_fields)}!"
+                    )
+                temp = temp.select(*SIMUL_SEARCH_ANNOTATIONS)
+                intermediate_hts.append(temp)
+
+    logger.info("Found %i HTs and appended %i", ht_count, len(intermediate_hts))
+    if len(intermediate_hts) == 0:
+        raise DataException(
+            "All temp tables had 0 rows. Please double check the temp tables!"
+        )
+    ht = intermediate_hts[0].union(*intermediate_hts[1:])
+    ht.write(output_ht_path, overwrite=overwrite)
 
 
 def calculate_window_chisq(

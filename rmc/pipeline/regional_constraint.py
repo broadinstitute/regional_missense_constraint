@@ -33,6 +33,7 @@ from rmc.utils.constraint import (
     add_obs_annotation,
     calculate_exp_per_transcript,
     calculate_observed,
+    get_rescue_transcripts_and_create_no_breaks_ht,
     GROUPINGS,
     process_sections,
 )
@@ -249,20 +250,11 @@ def main(args):
             logger.info(
                 "Searching for transcripts or transcript subsections with a single significant break..."
             )
-            save_full_chisq_ht = False
             if args.search_num == 1:
-                if is_rescue:
-                    ht = hl.read_table(
-                        merged_search_ht_path(
-                            is_rescue=not is_rescue,
-                            search_num=args.search_num,
-                            is_break_found=False,
-                        )
-                    )
-                else:
-                    # Read constraint_prep resource HT if this is the first search
-                    ht = constraint_prep.ht()
-                    save_full_chisq_ht = True
+                assert not is_rescue, "No code to support rescue search round 1!"
+
+                # Read constraint_prep resource HT if this is the first search
+                ht = constraint_prep.ht()
 
                 logger.info(
                     "Adding section annotation before searching for first break..."
@@ -289,8 +281,8 @@ def main(args):
             )
             ht = process_sections(
                 ht=ht,
+                search_num=args.search_num,
                 chisq_threshold=args.chisq_threshold,
-                save_full_chisq_ht=save_full_chisq_ht,
             )
             ht = ht.checkpoint(
                 f"{TEMP_PATH_WITH_DEL}/round{args.search_num}_temp.ht", overwrite=True
@@ -351,10 +343,15 @@ def main(args):
             )
 
         if args.merge_single_simul:
+            if args.is_rescue and args.search_num == 1:
+                get_rescue_transcripts_and_create_no_breaks_ht(args.overwrite)
+                return
+
             hl.init(
                 log=f"/round{args.search_num}_merge_single_simul.log",
                 tmp_dir=TEMP_PATH_WITH_DEL,
             )
+            
             logger.info(
                 "Converting merged simultaneous breaks HT from section-level to locus-level..."
             )

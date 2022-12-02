@@ -5,11 +5,9 @@ This step should be run in Dataproc.
 """
 import argparse
 import logging
-import subprocess
 
 import hail as hl
 
-from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
@@ -19,6 +17,7 @@ from rmc.resources.rmc import (
     simul_search_round_bucket_path,
 )
 from rmc.slack_creds import slack_token
+from rmc.utils.simultaneous_breaks import merge_simul_break_temp_hts
 
 
 logging.basicConfig(
@@ -29,19 +28,6 @@ logger = logging.getLogger("merge_hts")
 logger.setLevel(logging.INFO)
 
 
-ANNOTATIONS = {"max_chisq", "breakpoints"}
-"""
-Set of annotations to keep from two simultaneous breaks search.
-
-`max_chisq`: Chi square value associated with two breaks.
-`breakpoints`: Tuple of breakpoints with adjusted inclusiveness/exclusiveness.
-
-Note that this field will also be kept (`section` is a key field):
-`section`: Transcript section that was searched.
-    Format: <transcript>_<start position>_<end position>.
-"""
-
-
 def main(args):
     """Merge all simultaneous breaks intermediate results into single Table."""
     try:
@@ -50,68 +36,27 @@ def main(args):
             tmp_dir=TEMP_PATH_WITH_DEL,
         )
 
-        logger.info("Collecting all HT paths...")
+        logger.info("Merging all temp HTs...")
         raw_path = simul_search_round_bucket_path(
             is_rescue=args.is_rescue,
             search_num=args.search_num,
             bucket_type="raw_results",
         )
-        intermediate_hts = []
-        temp_ht_paths = (
-            # Add project because bucket is requester-pays
-            subprocess.check_output(
-                ["gsutil", "-u", f"{args.google_project}", "ls", f"{raw_path}/"]
-            )
-            .decode("utf8")
-            .strip()
-            .split("\n")
-        )
-        ht_count = 0
-        for ht_path in temp_ht_paths:
-            ht_path = ht_path.strip("/")
-            # Skip temp HTs checkpointed to raw_results bucket
-            # i.e., HTs written with this line:
-            # `ht = ht.checkpoint(f"{raw_path}/{section_group[0]}.ht", overwrite=True)`
-            # in `process_section_group`
-            if "under" not in ht_path and "dataproc" not in ht_path:
-                continue
-            if ht_path.endswith("ht"):
-                ht_count += 1
-                logger.info("Working on %s", ht_path)
-                temp = hl.read_table(ht_path)
-                if temp.count() > 0:
-                    # Tables containing transcripts/transcript sections that are over the transcript/section length threshold
-                    # are keyed by section, i, j
-                    # Tables containing transcripts/transcript sections that are under the length threshold are keyed
-                    # only by section
-                    # Rekey all tables here and select only the required fields to ensure the union on line 83 is able to work
-                    # This `key_by` should not shuffle because `section` is already the first key for both Tables
-                    temp = temp.key_by("section")
-                    row_fields = set(temp.row)
-                    if len(ANNOTATIONS.intersection(row_fields)) < len(ANNOTATIONS):
-                        raise DataException(
-                            f"The following fields are missing from the temp table: {ANNOTATIONS.difference(row_fields)}!"
-                        )
-                    temp = temp.select(*ANNOTATIONS)
-                    intermediate_hts.append(temp)
-                else:
-                    logger.warning("%s had 0 rows", ht_path)
-        logger.info("Found %i HTs and appended %i", ht_count, len(intermediate_hts))
-
-        if len(intermediate_hts) == 0:
-            raise DataException(
-                "All temp tables had 0 rows. Please double check the temp tables!"
-            )
-        ht = intermediate_hts[0].union(*intermediate_hts[1:])
         results_path = simul_search_round_bucket_path(
             is_rescue=args.is_rescue,
             search_num=args.search_num,
             bucket_type="final_results",
         )
-        ht = ht.checkpoint(
-            f"{results_path}/merged.ht",
+        merge_simul_break_temp_hts(
+            input_hts_path=raw_path,
+            batch_phrase="under",
+            query_phrase="dataproc",
+            output_ht_path=f"{results_path}/merged.ht",
             overwrite=args.overwrite,
+            google_project=args.google_project,
         )
+
+        ht = hl.read_table(f"{results_path}/merged.ht")
         logger.info("Wrote temp simultaneous breaks HT with %i lines", ht.count())
 
         # Collect all transcripts and sections with two simultaneous breaks
@@ -131,17 +76,6 @@ def main(args):
             "%i transcript sections had two simultaneous breaks in this round",
             len(simul_break_sections),
         )
-
-        if args.create_no_breaks_ht:
-            # TODO: Update this section
-            logger.info(
-                "Getting transcripts with no evidence of regional missense constraint..."
-            )
-            context_ht = not_one_break.ht()
-            context_ht = context_ht.filter(
-                ~simul_break_transcripts.contains(context_ht.transcript)
-            )
-            context_ht.write(no_breaks.path, overwrite=args.overwrite)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -179,15 +113,6 @@ if __name__ == "__main__":
             Google cloud project used to read from requester-pays buckets.
             """,
         default="broad-mpg-gnomad",
-    )
-    parser.add_argument(
-        "--create-no-breaks-ht",
-        help="""
-        Create Table containing transcripts that have no evidence of RMC.
-        This step should only be run after the final round of searching for breaks
-        (final round of searching with p = 0.025 significance threshold).
-        """,
-        action="store_true",
     )
 
     args = parser.parse_args()

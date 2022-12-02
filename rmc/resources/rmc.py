@@ -133,6 +133,20 @@ Bucket structure:
                 success_files/
 """
 
+SIMUL_SEARCH_ANNOTATIONS = {"max_chisq", "breakpoints"}
+"""
+Set of annotations to keep from two simultaneous breaks search.
+
+Used when merging sections found in over and under length threshold search.
+
+`max_chisq`: Chi square value associated with two breaks.
+`breakpoints`: Tuple of breakpoints with adjusted inclusiveness/exclusiveness.
+
+Note that this field will also be kept (`section` is a key field):
+`section`: Transcript section that was searched.
+    Format: <transcript>_<start position>_<end position>.
+"""
+
 
 def simul_search_bucket_path(
     is_rescue: bool,
@@ -338,17 +352,9 @@ simul_break = VersionedTableResource(
 Table containing transcripts with two simultaneous breaks.
 """
 
-no_breaks = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/no_breaks.ht"
-        )
-        for freeze in FREEZES
-    },
-)
+no_breaks = f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/no_breaks.he"
 """
-Table containing transcripts with no significant breaks.
+SetExpression containing transcripts with no significant breaks.
 """
 
 rmc_results = VersionedTableResource(
