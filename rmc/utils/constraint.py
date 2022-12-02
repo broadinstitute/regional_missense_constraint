@@ -784,8 +784,8 @@ def get_rescue_1break_transcripts(
         the initial search pathway.
     :param rescue_threshold: Lower chi square significance threshold associated with
         the 'rescue' search pathway.
-    :return: Tuple set of sections (transcript_start_stop) with two simultaneous breaks and
-        set of sections with single breakpoint above 'rescue' threshold.
+    :return: Tuple set of sections (transcript_start_stop) with two simultaneous breaks in
+        the initial search and set of sections with single breakpoint above 'rescue' threshold.
     """
     # Read in the simultaneous breaks results from initial search round 1
     simul_results_path = simul_search_round_bucket_path(
