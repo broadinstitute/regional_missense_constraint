@@ -931,9 +931,9 @@ def get_rescue_transcripts_and_create_no_breaks_ht(overwrite: bool) -> None:
         overwrite=overwrite
     )
     rescue_simul_sections = get_rescue_2breaks_transcripts(overwrite=overwrite)
-    transcripts_with_breaks = init_simul_transcripts.union(
-        rescue_simul_transcripts
-    ).union(rescue_single_transcripts)
+    sections_with_breaks = init_simul_sections.union(rescue_simul_sections).union(
+        rescue_single_sections
+    )
 
     # Read in the no break found HT from initial search round 1
     ht = hl.read_table(
@@ -944,7 +944,7 @@ def get_rescue_transcripts_and_create_no_breaks_ht(overwrite: bool) -> None:
             is_breakpoint_only=False,
         )
     )
-    ht = ht.filter(~hl.literal(transcripts_with_breaks).contains(ht.section))
+    ht = ht.filter(~hl.literal(sections_with_breaks).contains(ht.section))
     no_break_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
     no_break_transcripts = hl.map(lambda x: x.split("_")[0], no_break_sections)
     hl.experimental.write_expression(
