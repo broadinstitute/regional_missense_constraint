@@ -818,6 +818,7 @@ def get_rescue_1break_transcripts(
     # in initial search
     ht = ht.filter(
         (ht.max_chisq < initial_threshold)
+        & (ht.max_chisq >= rescue_threshold)
         & ~hl.literal(simul_sections).contains(ht.section)
     )
     ht = ht.checkpoint(
@@ -825,9 +826,7 @@ def get_rescue_1break_transcripts(
     )
 
     # Annotate breakpoints of transcripts found with rescue threshold and checkpoint
-    breakpoint_ht = ht.annotate(
-        is_break=((ht.max_chisq >= rescue_threshold) & (ht.chisq == ht.max_chisq))
-    )
+    breakpoint_ht = ht.annotate(is_break=(ht.chisq == ht.max_chisq))
     breakpoint_ht = breakpoint_ht.filter(breakpoint_ht.is_break)
     breakpoint_ht = breakpoint_ht.annotate_globals(chisq_threshold=rescue_threshold)
     breakpoint_ht = breakpoint_ht.key_by("section")
