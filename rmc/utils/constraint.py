@@ -797,7 +797,7 @@ def get_rescue_1break_transcripts(
         f"{simul_results_path}/merged.ht",
     )
     simul_ht = simul_ht.annotate(transcript=simul_ht.section.split("_")[0])
-    simul_sections = simul_ht.aggregate(hl.agg.collect_as_set(simul_ht.sectopm))
+    simul_sections = simul_ht.aggregate(hl.agg.collect_as_set(simul_ht.section))
 
     # Read in the no break found HT from single search round 1
     # (of initial search)
