@@ -154,7 +154,7 @@ def split_sections_by_len(
     )
 
 
-def check_for_successful_sections(
+def get_sections_to_run(
     sections: List[str],
     is_rescue: bool,
     search_num: int,
