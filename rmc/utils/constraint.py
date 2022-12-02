@@ -536,6 +536,7 @@ def get_dpois_expr(
 
 def search_for_break(
     ht: hl.Table,
+    search_num: int,
     chisq_threshold: float = 6.6,
     group_str: str = "section",
     min_num_exp_mis: float = 10.0,
@@ -564,6 +565,8 @@ def search_for_break(
         - Multiallelic variants in input HT have been split.
 
     :param ht: Input Table.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).-
     :param chisq_threshold: Chi-square significance threshold.
         Default is 6.6 (single break; p = 0.01).
     :param group_str: Field used to group Table observed and expected values. Default is 'section'.
@@ -635,7 +638,9 @@ def search_for_break(
         )
     )
 
-    ht = ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/all_loci_chisq.ht", overwrite=True)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_DEL}/round{search_num}_all_loci_chisq.ht", overwrite=True
+    )
 
     # hl.agg.max ignores NaNs
     group_ht = ht.group_by(group_str).aggregate(max_chisq=hl.agg.max(ht.chisq))
@@ -701,6 +706,7 @@ def get_subsection_exprs(
 
 def process_sections(
     ht: hl.Table,
+    search_num: int,
     chisq_threshold: float,
     group_str: str = "section",
 ):
@@ -719,6 +725,8 @@ def process_sections(
         - section
 
     :param ht: Input Table.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
     :param chisq_threshold: Chi-square significance threshold.
         Value should be 6.6 (single break) or 9.2 (two breaks) (p = 0.01).
     :param group_str: Field used to group observed and expected values. Default is 'section'.
@@ -752,6 +760,7 @@ def process_sections(
     logger.info("Searching for a break in each section and returning...")
     ht = search_for_break(
         ht,
+        search_num,
         chisq_threshold=chisq_threshold,
     )
     return ht

@@ -281,6 +281,7 @@ def main(args):
             )
             ht = process_sections(
                 ht=ht,
+                search_num=args.search_num,
                 chisq_threshold=args.chisq_threshold,
             )
             ht = ht.checkpoint(
