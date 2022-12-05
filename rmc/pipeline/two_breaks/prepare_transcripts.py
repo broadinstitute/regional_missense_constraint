@@ -60,6 +60,7 @@ def main(args):
                 ),
                 out_ht_path=grouped_ht_path,
                 group_str="section",
+                overwrite=args.overwrite,
             )
 
         if args.command == "split-sections":

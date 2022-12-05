@@ -8,7 +8,7 @@ Note that a couple functions have been copied into this script from `constraint.
 Note also that a few functions have been copied into this script from `simultaneous_breaks.py`:
 - `calculate_window_chisq`
 - `search_for_two_breaks`
-- `process_transcript_group`
+- `process_section_group`
 
 This is because python imports do not work in Hail Batch PythonJobs unless
 the python scripts are included within the provided Dockerfile, and the scripts within the RMC repo are
@@ -387,6 +387,7 @@ def process_section_group(
     search_num: int,
     over_threshold: bool,
     output_ht_path: str,
+    output_n_partitions: int = 10,
     chisq_threshold: float = 9.2,
     min_num_exp_mis: float = 10,
     split_list_len: int = 500,
@@ -409,6 +410,8 @@ def process_section_group(
     :param bool over_threshold: Whether input transcript/sections have more
         possible missense sites than threshold specified in `run_simultaneous_breaks`.
     :param str output_ht_path: Path to output results Table.
+    :param output_n_partitions: Desired number of partitions for output Table.
+        Default is 10.
     :param float chisq_threshold: Chi-square significance threshold. Default is 9.2.
         This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
@@ -540,6 +543,7 @@ def process_section_group(
             ht = ht.filter(ht.max_chisq == ht.section_max_chisq)
 
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
+    ht = ht.naive_coalesce(output_n_partitions)
     ht.write(output_ht_path, overwrite=True)
 
     success_tsvs_path = simul_search_round_bucket_path(
@@ -597,6 +601,7 @@ def main(args):
         is_rescue=args.is_rescue,
         search_num=args.search_num,
     )
+
     logger.info(
         "Found %i transcripts or transcript sections to search...", len(sections_to_run)
     )
@@ -630,6 +635,7 @@ def main(args):
     )
     # Check if user specified list of numbers for batches
     # These numbers are used to write output files for batch jobs
+    count_list = None
     if args.counter:
         count_list = list(map(int, args.counter.split(",")))
 
@@ -667,6 +673,7 @@ def main(args):
                 search_num=args.search_num,
                 over_threshold=False,
                 output_ht_path=f"{raw_path}/simul_break_{job_name}.ht",
+                output_n_partitions=args.output_n_partitions,
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.group_size,
                 save_chisq_ht=save_chisq_ht,
@@ -706,6 +713,7 @@ def main(args):
                 search_num=args.search_num,
                 over_threshold=True,
                 output_ht_path=f"{raw_path}/simul_break_{group[0]}.ht",
+                output_n_partitions=args.output_n_partitions,
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.group_size,
                 save_chisq_ht=save_chisq_ht,
@@ -728,6 +736,12 @@ if __name__ == "__main__":
         help="Chi-square significance threshold. Value should be 9.2 (value adjusted from ExAC code due to discussion with Mark).",
         type=float,
         default=9.2,
+    )
+    parser.add_argument(
+        "--output-n-partitions",
+        help="Number of desired partitions for output Tables. Default is 10.",
+        type=int,
+        default=10,
     )
     parser.add_argument(
         "--slack-channel",
