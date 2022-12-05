@@ -348,12 +348,30 @@ def main(args):
                     log=f"/rescue_round{args.search_num}_merge_single_simul.log",
                     tmp_dir=TEMP_PATH_WITH_DEL,
                 )
-                get_rescue_transcripts_and_create_no_breaks_ht(args.overwrite)
+                # get_rescue_transcripts_and_create_no_breaks_ht(args.overwrite)
+                # Use no_break_found HT from single breaks results to get locus input to simultaneous break search
+                single_no_break_ht = hl.read_table(
+                    single_search_round_ht_path(
+                        is_rescue=not args.is_rescue,
+                        search_num=args.search_num,
+                        is_break_found=False,
+                        is_breakpoint_only=False,
+                    )
+                )
 
             else:
                 hl.init(
                     log=f"/round{args.search_num}_merge_single_simul.log",
                     tmp_dir=TEMP_PATH_WITH_DEL,
+                )
+                # Use no_break_found HT from single breaks results to get locus input to simultaneous break search
+                single_no_break_ht = hl.read_table(
+                    single_search_round_ht_path(
+                        is_rescue=args.is_rescue,
+                        search_num=args.search_num,
+                        is_break_found=False,
+                        is_breakpoint_only=False,
+                    )
                 )
 
             logger.info(
@@ -365,15 +383,7 @@ def main(args):
                 bucket_type="final_results",
             )
             simul_by_section_ht = hl.read_table(f"{simul_results_path}/merged.ht")
-            # Use no_break_found HT from single breaks results to get locus input to simultaneous break search
-            single_no_break_ht = hl.read_table(
-                single_search_round_ht_path(
-                    is_rescue=args.is_rescue,
-                    search_num=args.search_num,
-                    is_break_found=False,
-                    is_breakpoint_only=False,
-                )
-            )
+
             # Filter to sections with simultaneous breaks
             single_no_break_ht = single_no_break_ht.annotate(
                 breakpoints=simul_by_section_ht[single_no_break_ht.section].breakpoints
