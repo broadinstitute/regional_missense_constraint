@@ -871,7 +871,7 @@ def get_rescue_1break_transcripts(
 
 
 def get_rescue_2breaks_transcripts(
-    overwrite: bool, initial_threshold: float = 6.6, rescue_threshold: float = 5.0
+    overwrite: bool, initial_threshold: float = 9.2, rescue_threshold: float = 7.4
 ) -> hl.expr.SetExpression:
     """
     Get transcripts that have two simultaneous breakpoints above the 'rescue' threshold.
@@ -906,13 +906,13 @@ def get_rescue_2breaks_transcripts(
 
     # Merge all of the temporary chi square HTs saved in round 1 of
     # initial simul breaks search
-    """merge_simul_break_temp_hts(
+    merge_simul_break_temp_hts(
         input_hts_path=SIMUL_BREAK_TEMP_PATH,
         batch_phrase="batch_temp_chisq",
         query_phrase="dataproc_temp_chisq",
         output_ht_path=f"{TEMP_PATH_WITH_DEL}/rescue_simul_chisq.ht",
         overwrite=overwrite,
-    )"""
+    )
     ht = hl.read_table(f"{TEMP_PATH_WITH_DEL}/rescue_simul_chisq.ht")
     ht = ht.filter(
         (ht.max_chisq < initial_threshold)
