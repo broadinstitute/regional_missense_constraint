@@ -17,7 +17,7 @@ from rmc.resources.rmc import (
     simul_search_round_bucket_path,
 )
 from rmc.slack_creds import slack_token
-from rmc.utils.simultaneous_breaks import merge_simul_break_temp_hts
+from rmc.utils.constraint import merge_simul_break_temp_hts
 
 
 logging.basicConfig(
