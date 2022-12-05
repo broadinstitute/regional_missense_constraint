@@ -11,11 +11,7 @@ import hail as hl
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
-from rmc.resources.rmc import (
-    no_breaks,
-    not_one_break,
-    simul_search_round_bucket_path,
-)
+from rmc.resources.rmc import simul_search_round_bucket_path
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import merge_simul_break_temp_hts
 
