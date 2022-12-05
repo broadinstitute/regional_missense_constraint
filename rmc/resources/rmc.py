@@ -256,7 +256,7 @@ def simul_sections_split_by_len_path(
 def merged_search_path(
     is_rescue: bool,
     search_num: int,
-    is_break_found: bool,
+    is_break_found: bool = True,
 ) -> str:
     """
     Return path to Table with merged single and simultaneous breaks search results.
@@ -265,8 +265,9 @@ def merged_search_path(
     and whether HT is associated with "rescue" pathway
     (pathway with lowered chi square significance cutoff).
 
-    For no break found sections, function returns path to HailExpression path containing
-    set of sections without breakpoints.
+    Function also has ability to return path to HailExpression path containing
+    set of sections without breakpoints, though this functionality isn't
+    currently being used.
 
     Break status refers to whether transcripts/sections in HT have at least one
     single significant breakpoint.
@@ -276,7 +277,8 @@ def merged_search_path(
         (e.g., second round of searching for single break would be 2).
     :param is_break_found: Whether to return path to HT with transcript/sections
         that have significant single break results.
-    :return: Path to merged break found HT or no break found HT.
+        Default is True.
+    :return: Path to merged break found HT or no break found HailExpression.
     """
     rescue = "rescue_" if is_rescue else ""
     if is_break_found:

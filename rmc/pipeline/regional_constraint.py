@@ -272,7 +272,6 @@ def main(args):
                     merged_search_path(
                         is_rescue=is_rescue,
                         search_num=args.search_num - 1,
-                        is_break_found=True,
                     ),
                 )
 
@@ -461,30 +460,9 @@ def main(args):
                 merged_search_path(
                     is_rescue=args.is_rescue,
                     search_num=args.search_num,
-                    is_break_found=True,
                 ),
                 overwrite=args.overwrite,
             )
-
-            if not (args.is_rescue and args.search_num == 1):
-                logger.info(
-                    "Merging no-break results from single and simultaneous search and writing..."
-                )
-                merged_no_break_ht = single_no_break_ht.filter(
-                    hl.is_missing(single_no_break_ht.breakpoints)
-                ).drop("breakpoints")
-                merged_no_break_sections = merged_no_break_ht.aggregate(
-                    hl.agg.collect_as_set(merged_no_break_ht.section)
-                )
-                hl.experimental.write_expression(
-                    merged_no_break_sections,
-                    merged_search_path(
-                        is_rescue=args.is_rescue,
-                        search_num=args.search_num,
-                        is_break_found=False,
-                    ),
-                    overwrite=args.overwrite,
-                )
 
             # DONE: 1. Annotate this newly found simul_ht with same annotations as on break_found_ht
             # DONE: 2. Merge simul_ht with break_found_ht and write
