@@ -630,6 +630,7 @@ def main(args):
     )
     # Check if user specified list of numbers for batches
     # These numbers are used to write output files for batch jobs
+    count_list = None
     if args.counter:
         count_list = list(map(int, args.counter.split(",")))
 
