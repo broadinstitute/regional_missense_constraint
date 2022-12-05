@@ -950,6 +950,7 @@ def get_rescue_transcripts_and_create_no_breaks_ht(overwrite: bool) -> None:
     )
     ht = ht.filter(~hl.literal(sections_with_breaks).contains(ht.section))
     no_break_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
+    logger.info("%i sections did not have any evidence of RMC", len(no_break_sections))
     no_break_transcripts = hl.map(lambda x: x.split("_")[0], no_break_sections)
     hl.experimental.write_expression(
         no_break_transcripts, no_breaks, overwrite=overwrite
