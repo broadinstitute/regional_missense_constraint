@@ -892,7 +892,7 @@ def get_rescue_2breaks_transcripts(
         above 'rescue' threshold.
     """
     # Read in the transcripts found in the single break rescue search
-    """single_ht = hl.read_table(
+    single_ht = hl.read_table(
         single_search_round_ht_path(
             is_rescue=True,
             search_num=1,
@@ -906,7 +906,7 @@ def get_rescue_2breaks_transcripts(
 
     # Merge all of the temporary chi square HTs saved in round 1 of
     # initial simul breaks search
-    merge_simul_break_temp_hts(
+    """merge_simul_break_temp_hts(
         input_hts_path=SIMUL_BREAK_TEMP_PATH,
         batch_phrase="batch_temp_chisq",
         query_phrase="dataproc_temp_chisq",
