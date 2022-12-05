@@ -21,7 +21,7 @@ from rmc.resources.gnomad import (
 from rmc.resources.reference_data import filtered_context, gene_model
 from rmc.resources.rmc import (
     constraint_prep,
-    merged_search_ht_path,
+    merged_search_path,
     multiple_breaks,
     simul_break,
     simul_search_round_bucket_path,
@@ -269,7 +269,7 @@ def main(args):
             else:
                 # Read in merged single and simultaneous breaks results HT
                 ht = hl.read_table(
-                    merged_search_ht_path(
+                    merged_search_path(
                         is_rescue=is_rescue,
                         search_num=args.search_num - 1,
                         is_break_found=True,
@@ -458,7 +458,7 @@ def main(args):
             merged_break_ht = single_break_ht.union(simul_break_ht)
             merged_break_ht.write(
                 # TODO: Change break results bucket structure to have round first, then simul vs. single split
-                merged_search_ht_path(
+                merged_search_path(
                     is_rescue=args.is_rescue,
                     search_num=args.search_num,
                     is_break_found=True,
@@ -466,15 +466,19 @@ def main(args):
                 overwrite=args.overwrite,
             )
 
-            if not args.rescue:
+            if not (args.rescue and args.search_num == 1):
                 logger.info(
                     "Merging no-break results from single and simultaneous search and writing..."
                 )
                 merged_no_break_ht = single_no_break_ht.filter(
                     hl.is_missing(single_no_break_ht.breakpoints)
                 ).drop("breakpoints")
-                merged_no_break_ht.write(
-                    merged_search_ht_path(
+                merged_no_break_sections = merged_no_break_ht.aggregate(
+                    hl.agg.collect_as_set(merged_no_break_ht.section)
+                )
+                hl.experimental.write_expression(
+                    merged_no_break_sections,
+                    merged_search_path(
                         is_rescue=args.is_rescue,
                         search_num=args.search_num,
                         is_break_found=False,

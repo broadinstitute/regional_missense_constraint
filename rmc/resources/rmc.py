@@ -253,7 +253,7 @@ def simul_sections_split_by_len_path(
     return f"{bucket_path}/sections_to_simul_{threshold_relation}_threshold.he"
 
 
-def merged_search_ht_path(
+def merged_search_path(
     is_rescue: bool,
     search_num: int,
     is_break_found: bool,
@@ -261,9 +261,12 @@ def merged_search_ht_path(
     """
     Return path to Table with merged single and simultaneous breaks search results.
 
-    Function returns path to HT based on search number, break status,
+    Function returns path to HT for break found sections based on search number and
     and whether HT is associated with "rescue" pathway
     (pathway with lowered chi square significance cutoff).
+
+    For no break found sections, function returns path to HailExpression path containing
+    set of sections without breakpoints.
 
     Break status refers to whether transcripts/sections in HT have at least one
     single significant breakpoint.
@@ -276,8 +279,9 @@ def merged_search_ht_path(
     :return: Path to merged break found HT or no break found HT.
     """
     rescue = "rescue_" if is_rescue else ""
-    break_status = "break_found" if is_break_found else "no_break_found"
-    return f"{TEMP_PATH}/{rescue}round{search_num}_merged_{break_status}.ht"
+    if is_break_found:
+        return f"{TEMP_PATH}/{rescue}round{search_num}_merged_break_found.ht"
+    return f"{TEMP_PATH}/{rescue}round{search_num}_no_break_found.he"
 
 
 one_break = VersionedTableResource(
