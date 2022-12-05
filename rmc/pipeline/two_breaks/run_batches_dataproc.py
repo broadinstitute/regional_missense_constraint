@@ -138,7 +138,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output-n-partitions",
         help="Number of desired partitions for output Tables. Default is 10.",
-        type=float,
+        type=int,
         default=10,
     )
     parser.add_argument(
