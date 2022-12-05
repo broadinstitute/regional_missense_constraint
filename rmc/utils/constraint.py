@@ -809,7 +809,7 @@ def get_rescue_1break_transcripts(
 
     # Read in the no break found HT from single search round 1
     # (of initial search)
-    ht = hl.read_table(
+    """ht = hl.read_table(
         single_search_round_ht_path(
             is_rescue=False,
             search_num=1,
@@ -828,6 +828,7 @@ def get_rescue_1break_transcripts(
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_DEL}/tmp_single_rescue_transcripts.ht", overwrite=True
     )
+    ht = hl.read_table(f"{TEMP_PATH_WITH_DEL}/tmp_single_rescue_transcripts.ht")
 
     # Annotate breakpoints of transcripts found with rescue threshold and checkpoint
     breakpoint_ht = ht.annotate(is_break=(ht.chisq == ht.max_chisq))
@@ -855,7 +856,16 @@ def get_rescue_1break_transcripts(
             is_breakpoint_only=False,
         ),
         overwrite=overwrite,
+    )"""
+    ht = hl.read_table(
+        single_search_round_ht_path(
+            is_rescue=True,
+            search_num=1,
+            is_break_found=True,
+            is_breakpoint_only=False,
+        )
     )
+
     rescue_single_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
     return simul_sections, rescue_single_sections
 
@@ -882,7 +892,7 @@ def get_rescue_2breaks_transcripts(
         above 'rescue' threshold.
     """
     # Read in the transcripts found in the single break rescue search
-    single_ht = hl.read_table(
+    """single_ht = hl.read_table(
         single_search_round_ht_path(
             is_rescue=True,
             search_num=1,
@@ -913,8 +923,9 @@ def get_rescue_2breaks_transcripts(
         is_rescue=True,
         search_num=1,
         bucket_type="final_results",
-    )
-    ht = ht.checkpoint(f"{results_path}/merged.ht", overwrite=overwrite)
+    )"""
+    # ht = ht.checkpoint(f"{results_path}/merged.ht", overwrite=overwrite)
+    ht = hl.read_table(f"{results_path}/merged.ht")
     return ht.aggregate(hl.agg.collect_as_set(ht.section))
 
 
