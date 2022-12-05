@@ -8,7 +8,7 @@ Note that a couple functions have been copied into this script from `constraint.
 Note also that a few functions have been copied into this script from `simultaneous_breaks.py`:
 - `calculate_window_chisq`
 - `search_for_two_breaks`
-- `process_transcript_group`
+- `process_section_group`
 
 This is because python imports do not work in Hail Batch PythonJobs unless
 the python scripts are included within the provided Dockerfile, and the scripts within the RMC repo are
