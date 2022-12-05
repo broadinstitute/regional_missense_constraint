@@ -909,7 +909,6 @@ def get_rescue_2breaks_transcripts(
         & (ht.max_chisq >= rescue_threshold)
         & ~hl.literal(single_break_rescue_sections).contains(ht.section)
     )
-    ht = ht.drop("transcript")
     results_path = simul_search_round_bucket_path(
         is_rescue=True,
         search_num=1,
