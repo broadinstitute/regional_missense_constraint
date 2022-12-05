@@ -912,13 +912,13 @@ def get_rescue_2breaks_transcripts(
         query_phrase="dataproc_temp_chisq",
         output_ht_path=f"{TEMP_PATH_WITH_DEL}/rescue_simul_chisq.ht",
         overwrite=overwrite,
-    )
+    )"""
     ht = hl.read_table(f"{TEMP_PATH_WITH_DEL}/rescue_simul_chisq.ht")
     ht = ht.filter(
         (ht.max_chisq < initial_threshold)
         & (ht.max_chisq >= rescue_threshold)
         & ~hl.literal(single_break_rescue_sections).contains(ht.section)
-    )"""
+    )
     results_path = simul_search_round_bucket_path(
         is_rescue=True,
         search_num=1,
