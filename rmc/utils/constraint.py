@@ -918,12 +918,12 @@ def get_rescue_2breaks_transcripts(
         (ht.max_chisq < initial_threshold)
         & (ht.max_chisq >= rescue_threshold)
         & ~hl.literal(single_break_rescue_sections).contains(ht.section)
-    )
+    )"""
     results_path = simul_search_round_bucket_path(
         is_rescue=True,
         search_num=1,
         bucket_type="final_results",
-    )"""
+    )
     # ht = ht.checkpoint(f"{results_path}/merged.ht", overwrite=overwrite)
     ht = hl.read_table(f"{results_path}/merged.ht")
     return ht.aggregate(hl.agg.collect_as_set(ht.section))
