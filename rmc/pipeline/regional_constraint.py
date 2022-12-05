@@ -349,12 +349,12 @@ def main(args):
                     tmp_dir=TEMP_PATH_WITH_DEL,
                 )
                 get_rescue_transcripts_and_create_no_breaks_ht(args.overwrite)
-                return
 
-            hl.init(
-                log=f"/round{args.search_num}_merge_single_simul.log",
-                tmp_dir=TEMP_PATH_WITH_DEL,
-            )
+            else:
+                hl.init(
+                    log=f"/round{args.search_num}_merge_single_simul.log",
+                    tmp_dir=TEMP_PATH_WITH_DEL,
+                )
 
             logger.info(
                 "Converting merged simultaneous breaks HT from section-level to locus-level..."
@@ -456,20 +456,21 @@ def main(args):
                 overwrite=args.overwrite,
             )
 
-            logger.info(
-                "Merging no-break results from single and simultaneous search and writing..."
-            )
-            merged_no_break_ht = single_no_break_ht.filter(
-                hl.is_missing(single_no_break_ht.breakpoints)
-            ).drop("breakpoints")
-            merged_no_break_ht.write(
-                merged_search_ht_path(
-                    is_rescue=args.is_rescue,
-                    search_num=args.search_num,
-                    is_break_found=False,
-                ),
-                overwrite=args.overwrite,
-            )
+            if not args.rescue:
+                logger.info(
+                    "Merging no-break results from single and simultaneous search and writing..."
+                )
+                merged_no_break_ht = single_no_break_ht.filter(
+                    hl.is_missing(single_no_break_ht.breakpoints)
+                ).drop("breakpoints")
+                merged_no_break_ht.write(
+                    merged_search_ht_path(
+                        is_rescue=args.is_rescue,
+                        search_num=args.search_num,
+                        is_break_found=False,
+                    ),
+                    overwrite=args.overwrite,
+                )
 
             # DONE: 1. Annotate this newly found simul_ht with same annotations as on break_found_ht
             # DONE: 2. Merge simul_ht with break_found_ht and write
