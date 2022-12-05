@@ -81,7 +81,7 @@ def main(args):
         )
         for counter, group in enumerate(section_groups):
             # Double check TTN has been removed
-            for section in group:
+            for section in group and not args.run_ttn:
                 if args.ttn_id in section:
                     group.remove(section)
 
