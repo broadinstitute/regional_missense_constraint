@@ -924,8 +924,7 @@ def get_rescue_2breaks_transcripts(
         search_num=1,
         bucket_type="final_results",
     )
-    # ht = ht.checkpoint(f"{results_path}/merged.ht", overwrite=overwrite)
-    ht = hl.read_table(f"{results_path}/merged.ht")
+    ht = ht.checkpoint(f"{results_path}/merged.ht", overwrite=overwrite)
     return ht.aggregate(hl.agg.collect_as_set(ht.section))
 
 
