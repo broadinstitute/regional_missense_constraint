@@ -81,9 +81,10 @@ def main(args):
         )
         for counter, group in enumerate(section_groups):
             # Double check TTN has been removed
-            for section in group and not args.run_ttn:
-                if args.ttn_id in section:
-                    group.remove(section)
+            if not args.run_ttn:
+                for section in group:
+                    if args.ttn_id in section:
+                        group.remove(section)
 
             output_ht_path = (
                 f"{raw_path}/simul_break_dataproc_ttn.ht"
