@@ -466,7 +466,7 @@ def main(args):
                 overwrite=args.overwrite,
             )
 
-            if not (args.rescue and args.search_num == 1):
+            if not (args.is_rescue and args.search_num == 1):
                 logger.info(
                     "Merging no-break results from single and simultaneous search and writing..."
                 )
