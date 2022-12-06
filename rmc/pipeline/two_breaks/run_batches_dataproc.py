@@ -46,9 +46,6 @@ def main(args):
         if args.search_num == 1 and not args.is_rescue:
             save_chisq_ht = True
 
-        if args.run_ttn:
-            section_groups = args.ttn_id.split(",")
-
         if args.run_sections_over_threshold:
             sections_to_run = list(
                 hl.eval(
@@ -80,17 +77,8 @@ def main(args):
             bucket_type="raw_results",
         )
         for counter, group in enumerate(section_groups):
-            # Double check TTN has been removed
-            if not args.run_ttn:
-                for section in group:
-                    if args.ttn_id in section:
-                        group.remove(section)
 
-            output_ht_path = (
-                f"{raw_path}/simul_break_dataproc_ttn_round{args.search_num}_{counter}.ht"
-                if args.run_ttn
-                else f"{raw_path}/simul_break_dataproc_{counter}.ht"
-            )
+            output_ht_path = f"{raw_path}/simul_break_dataproc_{counter}.ht"
             if file_exists(output_ht_path):
                 raise DataException(
                     f"Output already exists at {output_ht_path}! Double check before running script again."
@@ -169,19 +157,9 @@ if __name__ == "__main__":
         action="store_true",
     )
     section_ids.add_argument(
-        "--run-ttn",
-        help="Run TTN. TTN is so large that it needs to be treated separately.",
+        "--run-sections-under-threshold",
+        help="Search for simultaneous breaks in sections that are under length cutoff.",
         action="store_true",
-    )
-    parser.add_argument(
-        "--ttn-id",
-        help="""
-        TTN section ID(s).
-        TTN is so large that it needs to be treated separately.
-        If more than one section, needs to be comma-separated,
-        e.g. 'ENST00000589042_179440991_179695529,ENST00000589042_179393148_179440821'.
-        """,
-        default="ENST00000589042",
     )
     parser.add_argument(
         "--read-if-exists",
