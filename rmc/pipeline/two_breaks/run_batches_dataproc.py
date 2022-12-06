@@ -47,7 +47,7 @@ def main(args):
             save_chisq_ht = True
 
         if args.run_ttn:
-            section_groups = [[args.ttn_id]]
+            section_groups = [args.ttn_id.split(",")]
 
         if args.run_sections_over_threshold:
             sections_to_run = list(
@@ -175,7 +175,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--ttn-id",
-        help="TTN transcript ID. TTN is so large that it needs to be treated separately.",
+        help="TTN section ID(s). TTN is so large that it needs to be treated separately. If more than one section, needs to be comma-separated",
         default="ENST00000589042",
     )
     parser.add_argument(
