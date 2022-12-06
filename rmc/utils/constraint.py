@@ -929,13 +929,13 @@ def get_rescue_2breaks_transcripts(
 
     # Merge all of the temporary chi square HTs saved in round 1 of
     # initial simul breaks search
-    merge_simul_break_temp_hts(
+    """merge_simul_break_temp_hts(
         input_hts_path=SIMUL_BREAK_TEMP_PATH,
         batch_phrase="batch_temp_chisq",
         query_phrase="dataproc_temp_chisq",
         output_ht_path=f"{TEMP_PATH_WITH_DEL}/rescue_simul_chisq.ht",
         overwrite=overwrite,
-    )
+    )"""
 
     ht = hl.read_table(f"{TEMP_PATH_WITH_DEL}/rescue_simul_chisq.ht")
     ht = get_max_chisq_per_group(ht, "section", "max_chisq", True)
