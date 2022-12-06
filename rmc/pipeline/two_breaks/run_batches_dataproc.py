@@ -175,7 +175,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--ttn-id",
-        help="TTN section ID(s). TTN is so large that it needs to be treated separately. If more than one section, needs to be comma-separated",
+        help="""
+        TTN section ID(s).
+        TTN is so large that it needs to be treated separately.
+        If more than one section, needs to be comma-separated,
+        e.g. 'ENST00000589042_179440991_179695529,ENST00000589042_179393148_179440821'.
+        """,
         default="ENST00000589042",
     )
     parser.add_argument(
