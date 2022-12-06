@@ -347,7 +347,8 @@ def main(args):
                     log=f"/rescue_round{args.search_num}_merge_single_simul.log",
                     tmp_dir=TEMP_PATH_WITH_DEL,
                 )
-                # get_rescue_transcripts_and_create_no_breaks_ht(args.overwrite)
+                get_rescue_transcripts_and_create_no_breaks_ht(args.overwrite)
+
                 # Use no_break_found HT from single breaks results to get locus input to simultaneous break search
                 single_no_break_ht = hl.read_table(
                     single_search_round_ht_path(
