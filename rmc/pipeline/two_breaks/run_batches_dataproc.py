@@ -87,7 +87,7 @@ def main(args):
                         group.remove(section)
 
             output_ht_path = (
-                f"{raw_path}/simul_break_dataproc_ttn.ht"
+                f"{raw_path}/simul_break_dataproc_ttn_round{args.search_num}.ht"
                 if args.run_ttn
                 else f"{raw_path}/simul_break_dataproc_{counter}.ht"
             )
