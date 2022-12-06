@@ -11,7 +11,11 @@ from rmc.resources.rmc import (
     simul_search_round_bucket_path,
     simul_sections_split_by_len_path,
 )
-from rmc.utils.constraint import get_dpois_expr, get_obs_exp_expr
+from rmc.utils.constraint import (
+    get_dpois_expr,
+    get_obs_exp_expr,
+    get_max_chisq_per_group,
+)
 
 
 logging.basicConfig(
@@ -539,10 +543,7 @@ def process_section_group(
         # If any rows had a significant breakpoint,
         # find the one "best" breakpoint (breakpoint with largest chi square value)
         if ht.count() > 0:
-            group_ht = ht.group_by("section").aggregate(
-                section_max_chisq=hl.agg.max(ht.max_chisq)
-            )
-            ht = ht.annotate(section_max_chisq=group_ht[ht.section].section_max_chisq)
+            ht = get_max_chisq_per_group(ht, "section", "max_chisq")
             ht = ht.filter(ht.max_chisq == ht.section_max_chisq)
 
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
