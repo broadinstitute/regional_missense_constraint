@@ -47,7 +47,7 @@ def main(args):
             save_chisq_ht = True
 
         if args.run_ttn:
-            section_groups = [args.ttn_id.split(",")]
+            section_groups = args.ttn_id.split(",")
 
         if args.run_sections_over_threshold:
             sections_to_run = list(
@@ -87,7 +87,7 @@ def main(args):
                         group.remove(section)
 
             output_ht_path = (
-                f"{raw_path}/simul_break_dataproc_ttn_round{args.search_num}.ht"
+                f"{raw_path}/simul_break_dataproc_ttn_round{args.search_num}_{counter}.ht"
                 if args.run_ttn
                 else f"{raw_path}/simul_break_dataproc_{counter}.ht"
             )
