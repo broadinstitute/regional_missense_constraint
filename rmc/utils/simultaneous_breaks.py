@@ -127,6 +127,11 @@ def split_sections_by_len(
             hl.agg.collect_as_set(ht[group_str]),
         )
     )
+    logger.info(
+        "Found %i sections under threshold and %i sections over threshold",
+        len(under_threshold),
+        len(over_threshold),
+    )
     # TODO: Re-evaluate if this check is necessary for v4
     if ttn_id in list(over_threshold):
         logger.warning(
