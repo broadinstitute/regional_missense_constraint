@@ -132,14 +132,6 @@ def split_sections_by_len(
         len(under_threshold),
         len(over_threshold),
     )
-    # TODO: Re-evaluate if this check is necessary for v4
-    if ttn_id in list(over_threshold):
-        logger.warning(
-            "TTN is present in input transcripts! It will need to be run separately."
-        )
-        over_threshold = list(over_threshold)
-        over_threshold.remove(ttn_id)
-        over_threshold = set(over_threshold)
     hl.experimental.write_expression(
         under_threshold,
         simul_sections_split_by_len_path(
