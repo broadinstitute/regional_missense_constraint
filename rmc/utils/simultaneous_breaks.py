@@ -130,24 +130,26 @@ def split_sections_by_len(
         len(under_threshold),
         len(over_threshold),
     )
-    hl.experimental.write_expression(
-        under_threshold,
-        simul_sections_split_by_len_path(
-            is_rescue=is_rescue,
-            search_num=search_num,
-            is_over_threshold=False,
-        ),
-        overwrite,
-    )
-    hl.experimental.write_expression(
-        over_threshold,
-        simul_sections_split_by_len_path(
-            is_rescue=is_rescue,
-            search_num=search_num,
-            is_over_threshold=True,
-        ),
-        overwrite,
-    )
+    if len(under_threshold) > 0:
+        hl.experimental.write_expression(
+            under_threshold,
+            simul_sections_split_by_len_path(
+                is_rescue=is_rescue,
+                search_num=search_num,
+                is_over_threshold=False,
+            ),
+            overwrite,
+        )
+    if len(over_threshold) > 0:
+        hl.experimental.write_expression(
+            over_threshold,
+            simul_sections_split_by_len_path(
+                is_rescue=is_rescue,
+                search_num=search_num,
+                is_over_threshold=True,
+            ),
+            overwrite,
+        )
 
 
 def get_sections_to_run(
