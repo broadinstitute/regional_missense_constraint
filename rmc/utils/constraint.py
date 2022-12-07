@@ -536,7 +536,9 @@ def get_dpois_expr(
 
 
 def get_max_chisq_per_group(
-    ht: hl.Table, group_str: str, chisq_str: str, is_rescue: bool = False
+    ht: hl.Table,
+    group_str: str,
+    chisq_str: str,
 ) -> hl.Table:
     """
     Group input Table by given field and return maximum chi square value per group.
@@ -547,16 +549,14 @@ def get_max_chisq_per_group(
     :param group_str: String of field containing transcript or transcript subsection information.
         Used to group observed and expected values.
     :param chisq_str: String of field containing chi square values to be checked.
-    :param is_rescue: Whether this search is associated with the rescue search. Default is False.
     :return: Table annotated with maximum chi square value per group
     """
     group_ht = ht.group_by(group_str).aggregate(
         # hl.agg.max ignores NaNs
         section_max_chisq=hl.agg.max(ht[chisq_str])
     )
-    rescue_status = "rescue" if is_rescue else "initial"
     group_ht = group_ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/group_{rescue_status}_max_chisq.ht", overwrite=True
+        f"{TEMP_PATH_WITH_DEL}/group_max_chisq.ht", overwrite=True
     )
     ht = ht.annotate(section_max_chisq=group_ht[ht.section].section_max_chisq)
     return ht
@@ -938,7 +938,7 @@ def get_rescue_2breaks_transcripts(
     )
 
     ht = hl.read_table(f"{TEMP_PATH_WITH_DEL}/rescue_simul_chisq.ht")
-    ht = get_max_chisq_per_group(ht, "section", "max_chisq", True)
+    ht = get_max_chisq_per_group(ht, "section", "max_chisq")
     ht = ht.filter(ht.max_chisq == ht.section_max_chisq)
     ht = ht.filter(
         (ht.section_max_chisq < initial_threshold)
