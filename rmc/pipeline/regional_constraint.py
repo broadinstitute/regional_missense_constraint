@@ -390,96 +390,141 @@ def main(args):
                     )
                 )
 
-            logger.info(
-                "Converting merged simultaneous breaks HT from section-level to locus-level..."
-            )
+            logger.info("Checking if simul breaks merged HT exists...")
             simul_results_path = simul_search_round_bucket_path(
                 is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 bucket_type="final_results",
             )
-            simul_by_section_ht = hl.read_table(f"{simul_results_path}/merged.ht")
+            if file_exists(f"{simul_results_path}/merged.ht"):
+                simul_exists = True
+                logger.info(
+                    "Converting merged simultaneous breaks HT from section-level to locus-level..."
+                )
+                simul_by_section_ht = hl.read_table(f"{simul_results_path}/merged.ht")
 
-            # Filter to sections with simultaneous breaks
-            single_no_break_ht = single_no_break_ht.annotate(
-                breakpoints=simul_by_section_ht[single_no_break_ht.section].breakpoints
-            )
-            simul_break_ht = single_no_break_ht.filter(
-                hl.is_defined(single_no_break_ht.breakpoints)
-            )
+                # Filter to sections with simultaneous breaks
+                single_no_break_ht = single_no_break_ht.annotate(
+                    breakpoints=simul_by_section_ht[
+                        single_no_break_ht.section
+                    ].breakpoints
+                )
+                simul_break_ht = single_no_break_ht.filter(
+                    hl.is_defined(single_no_break_ht.breakpoints)
+                )
+                simul_break_ht = simul_break_ht.annotate(
+                    section_1=hl.if_else(
+                        simul_break_ht.locus.position > simul_break_ht.breakpoints[1],
+                        hl.format(
+                            "%s_%s_%s",
+                            simul_break_ht.section.split("_")[0],
+                            simul_break_ht.breakpoints[1] + 1,
+                            simul_break_ht.section.split("_")[2],
+                        ),
+                        hl.if_else(
+                            simul_break_ht.locus.position
+                            > simul_break_ht.breakpoints[0],
+                            hl.format(
+                                "%s_%s_%s",
+                                simul_break_ht.section.split("_")[0],
+                                simul_break_ht.breakpoints[0] + 1,
+                                simul_break_ht.breakpoints[1],
+                            ),
+                            hl.format(
+                                "%s_%s_%s",
+                                simul_break_ht.section.split("_")[0],
+                                simul_break_ht.section.split("_")[1],
+                                simul_break_ht.breakpoints[0],
+                            ),
+                        ),
+                    )
+                )
+                simul_break_ht = simul_break_ht.key_by(
+                    "locus", section=simul_break_ht.section_1
+                ).drop("section_1", "breakpoints")
+            else:
+                simul_exists = False
+                logger.info(
+                    "No sections in round %i had breakpoints in simultaneous breaks search.",
+                    args.search_num,
+                )
 
-            logger.info("Annotating new sections and re-keying for next search...")
-            single_break_ht = hl.read_table(
+            if file_exists(
                 single_search_round_ht_path(
                     is_rescue=args.is_rescue,
                     search_num=args.search_num,
                     is_break_found=True,
                     is_breakpoint_only=False,
                 )
-            )
-            single_break_ht = single_break_ht.annotate(
-                section_1=hl.if_else(
-                    single_break_ht.locus.position > single_break_ht.breakpoint,
-                    hl.format(
-                        "%s_%s_%s",
-                        single_break_ht.section.split("_")[0],
-                        single_break_ht.breakpoint + 1,
-                        single_break_ht.section.split("_")[2],
-                    ),
-                    hl.format(
-                        "%s_%s_%s",
-                        single_break_ht.section.split("_")[0],
-                        single_break_ht.section.split("_")[1],
-                        single_break_ht.breakpoint,
-                    ),
+            ):
+                single_exists = True
+                logger.info(
+                    "Annotating single breaks with new sections and re-keying for next search..."
                 )
-            )
-            single_break_ht = single_break_ht.key_by(
-                "locus", section=single_break_ht.section_1
-            ).drop("section_1", "breakpoint")
-
-            simul_break_ht = simul_break_ht.annotate(
-                section_1=hl.if_else(
-                    simul_break_ht.locus.position > simul_break_ht.breakpoints[1],
-                    hl.format(
-                        "%s_%s_%s",
-                        simul_break_ht.section.split("_")[0],
-                        simul_break_ht.breakpoints[1] + 1,
-                        simul_break_ht.section.split("_")[2],
-                    ),
-                    hl.if_else(
-                        simul_break_ht.locus.position > simul_break_ht.breakpoints[0],
+                single_break_ht = hl.read_table(
+                    single_search_round_ht_path(
+                        is_rescue=args.is_rescue,
+                        search_num=args.search_num,
+                        is_break_found=True,
+                        is_breakpoint_only=False,
+                    )
+                )
+                single_break_ht = single_break_ht.annotate(
+                    section_1=hl.if_else(
+                        single_break_ht.locus.position > single_break_ht.breakpoint,
                         hl.format(
                             "%s_%s_%s",
-                            simul_break_ht.section.split("_")[0],
-                            simul_break_ht.breakpoints[0] + 1,
-                            simul_break_ht.breakpoints[1],
+                            single_break_ht.section.split("_")[0],
+                            single_break_ht.breakpoint + 1,
+                            single_break_ht.section.split("_")[2],
                         ),
                         hl.format(
                             "%s_%s_%s",
-                            simul_break_ht.section.split("_")[0],
-                            simul_break_ht.section.split("_")[1],
-                            simul_break_ht.breakpoints[0],
+                            single_break_ht.section.split("_")[0],
+                            single_break_ht.section.split("_")[1],
+                            single_break_ht.breakpoint,
                         ),
-                    ),
+                    )
                 )
-            )
-            simul_break_ht = simul_break_ht.key_by(
-                "locus", section=simul_break_ht.section_1
-            ).drop("section_1", "breakpoints")
+                single_break_ht = single_break_ht.key_by(
+                    "locus", section=single_break_ht.section_1
+                ).drop("section_1", "breakpoint")
+            else:
+                single_exists = False
+                logger.info(
+                    "No sections in round %i had breakpoints in single search.",
+                    args.search_num,
+                )
 
-            logger.info(
-                "Merging break results from single and simultaneous search and writing..."
-            )
-            merged_break_ht = single_break_ht.union(simul_break_ht)
-            merged_break_ht.write(
-                # TODO: Change break results bucket structure to have round first, then simul vs. single split
-                merged_search_path(
-                    is_rescue=args.is_rescue,
-                    search_num=args.search_num,
-                ),
-                overwrite=args.overwrite,
-            )
+            if single_exists and simul_exists:
+                logger.info(
+                    "Merging break results from single and simultaneous search and writing..."
+                )
+                merged_break_ht = single_break_ht.union(simul_break_ht)
+                merged_break_ht.write(
+                    # TODO: Change break results bucket structure to have round first, then simul vs. single split
+                    merged_search_path(
+                        is_rescue=args.is_rescue,
+                        search_num=args.search_num,
+                    ),
+                    overwrite=args.overwrite,
+                )
+            elif single_exists:
+                single_break_ht.write(
+                    merged_search_path(
+                        is_rescue=args.is_rescue,
+                        search_num=args.search_num,
+                    ),
+                    overwrite=args.overwrite,
+                )
+            else:
+                simul_break_ht.write(
+                    merged_search_path(
+                        is_rescue=args.is_rescue,
+                        search_num=args.search_num,
+                    ),
+                    overwrite=args.overwrite,
+                )
 
             # DONE: 1. Annotate this newly found simul_ht with same annotations as on break_found_ht
             # DONE: 2. Merge simul_ht with break_found_ht and write
