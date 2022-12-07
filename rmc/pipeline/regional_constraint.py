@@ -20,6 +20,7 @@ from rmc.resources.gnomad import (
 )
 from rmc.resources.reference_data import filtered_context, gene_model
 from rmc.resources.rmc import (
+    CHISQ_THRESHOLDS,
     constraint_prep,
     merged_search_path,
     multiple_breaks,
@@ -242,6 +243,14 @@ def main(args):
 
         if args.search_for_single_break:
             is_rescue = args.is_rescue
+            if args.chisq_threshold:
+                chisq_threshold = args.chisq_threshold
+            else:
+                chisq_threshold = (
+                    CHISQ_THRESHOLDS["rescue"]["single"]
+                    if is_rescue
+                    else CHISQ_THRESHOLDS["initial"]["single"]
+                )
             hl.init(
                 log=f"/round{args.search_num}_single_break_search.log",
                 tmp_dir=TEMP_PATH_WITH_DEL,
@@ -281,7 +290,7 @@ def main(args):
             ht = process_sections(
                 ht=ht,
                 search_num=args.search_num,
-                chisq_threshold=args.chisq_threshold,
+                chisq_threshold=chisq_threshold,
             )
             ht = ht.checkpoint(
                 f"{TEMP_PATH_WITH_DEL}/round{args.search_num}_temp.ht", overwrite=True
@@ -293,7 +302,7 @@ def main(args):
             )
             breakpoint_ht = ht.filter(ht.is_break)
             breakpoint_ht = breakpoint_ht.annotate_globals(
-                chisq_threshold=args.chisq_threshold
+                chisq_threshold=chisq_threshold
             )
             breakpoint_ht = breakpoint_ht.key_by("section")
             breakpoint_ht = breakpoint_ht.checkpoint(
@@ -664,9 +673,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--chisq-threshold",
-        help="Chi-square significance threshold. Value should be 6.6 (single break) or 9.2 (two breaks) (p = 0.01).",
+        help="""
+        Chi-square significance threshold.
+        If not specified, script will default to thresholds set
+        in constant `CHISQ_THRESHOLDS`.
+        """,
         type=float,
-        default=6.6,
     )
     parser.add_argument(
         "--overwrite", help="Overwrite existing data.", action="store_true"
