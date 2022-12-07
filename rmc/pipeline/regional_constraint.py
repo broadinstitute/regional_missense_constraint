@@ -359,7 +359,11 @@ def main(args):
                 )
                 if args.chisq_thresholds_dict:
                     chisq_thresholds_dict = json.loads(args.chisq_thresholds_dict)
-                get_rescue_transcripts_and_create_no_breaks_ht(args.overwrite)
+                else:
+                    chisq_thresholds_dict = CHISQ_THRESHOLDS
+                get_rescue_transcripts_and_create_no_breaks_ht(
+                    args.overwrite, chisq_thresholds_dict
+                )
 
                 # Use no_break_found HT from single breaks results to get locus input to simultaneous break search
                 single_no_break_ht = hl.read_table(
