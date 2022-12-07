@@ -73,7 +73,6 @@ def main(args):
                 is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 missense_len_threshold=args.missense_len_threshold,
-                ttn_id=args.ttn,
                 overwrite=args.overwrite,
             )
 
@@ -135,11 +134,6 @@ if __name__ == "__main__":
         help="Cutoff for number of possible missense sites in transcript/transcript section. Used to create batches.",
         type=int,
         default=5000,
-    )
-    split_sections.add_argument(
-        "--ttn",
-        help="TTN transcript ID. TTN is so large that it needs to be treated separately.",
-        default="ENST00000589042",
     )
     args = parser.parse_args()
 

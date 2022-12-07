@@ -84,7 +84,6 @@ def split_sections_by_len(
     is_rescue: bool,
     search_num: int,
     missense_len_threshold: int,
-    ttn_id: str,
     overwrite: bool,
 ) -> None:
     """
@@ -99,7 +98,6 @@ def split_sections_by_len(
         (e.g., second round of searching for single break would be 2).
     :param is_rescue: Whether current search is in rescue pathway.
     :param missense_len_threshold: Cutoff based on possible number of missense sites in section.
-    :param ttn_id: TTN transcript ID. TTN is large and needs to be processed separately.
     :param overwrite: Whether to overwrite existing SetExpressions.
     :return: None; writes SetExpressions to resource paths.
     """
