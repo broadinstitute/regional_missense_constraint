@@ -1,4 +1,5 @@
 import argparse
+import json
 import logging
 
 import hail as hl
@@ -356,6 +357,8 @@ def main(args):
                     log=f"/rescue_round{args.search_num}_merge_single_simul.log",
                     tmp_dir=TEMP_PATH_WITH_DEL,
                 )
+                if args.chisq_thresholds_dict:
+                    chisq_thresholds_dict = json.loads(args.chisq_thresholds_dict)
                 get_rescue_transcripts_and_create_no_breaks_ht(args.overwrite)
 
                 # Use no_break_found HT from single breaks results to get locus input to simultaneous break search
@@ -674,11 +677,30 @@ if __name__ == "__main__":
     parser.add_argument(
         "--chisq-threshold",
         help="""
-        Chi-square significance threshold.
+        Chi-square significance threshold for single break search.
         If not specified, script will default to thresholds set
         in constant `CHISQ_THRESHOLDS`.
         """,
         type=float,
+    )
+    parser.add_argument(
+        "--chisq-thresholds-dict",
+        help="""
+        Dictionary of chi-square significance thresholds
+        per significance threshold and break search type.
+
+        Top level key should be 'initial' or 'rescue', and
+        nested keys should be 'single' or 'simul'.
+
+        Only required when running the first round of rescue
+        search.
+
+        If not specified, script will default to using
+        `CHISQ_THRESHOLDS`.
+
+        Example format (using only 'initial' key):
+        '{"initial": {"single": 6.6, ul": 9.2}}'
+        """,
     )
     parser.add_argument(
         "--overwrite", help="Overwrite existing data.", action="store_true"

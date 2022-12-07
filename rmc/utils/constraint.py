@@ -25,6 +25,7 @@ from rmc.utils.generic import (
     import_de_novo_variants,
 )
 from rmc.resources.rmc import (
+    CHISQ_THRESHOLDS,
     multiple_breaks,
     no_breaks,
     oe_bin_counts_tsv,
@@ -565,7 +566,7 @@ def get_max_chisq_per_group(
 def search_for_break(
     ht: hl.Table,
     search_num: int,
-    chisq_threshold: float = 6.6,
+    chisq_threshold: float,
     group_str: str = "section",
     min_num_exp_mis: float = 10.0,
 ) -> hl.Table:
@@ -596,7 +597,6 @@ def search_for_break(
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param chisq_threshold: Chi-square significance threshold.
-        Default is 6.6 (single break; p = 0.01).
     :param group_str: Field used to group Table observed and expected values. Default is 'section'.
     :param min_num_exp_mis: Minimum number of expected missense per transcript/transcript section.
         Sections that have fewer than this number of expected missense variants will not
@@ -753,7 +753,6 @@ def process_sections(
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param chisq_threshold: Chi-square significance threshold.
-        Value should be 6.6 (single break) or 9.2 (two breaks) (p = 0.01).
     :param group_str: Field used to group observed and expected values. Default is 'section'.
     :return: Table annotated with whether position is a breakpoint.
     """
@@ -792,7 +791,9 @@ def process_sections(
 
 
 def get_rescue_1break_transcripts(
-    overwrite: bool, initial_threshold: float = 6.6, rescue_threshold: float = 5.0
+    overwrite: bool,
+    initial_threshold: float,
+    rescue_threshold: float,
 ) -> Tuple[hl.expr.SetExpression]:
     """
     Get transcripts that have a single breakpoint in the first round of the 'rescue' search.
@@ -894,7 +895,9 @@ def get_rescue_1break_transcripts(
 
 
 def get_rescue_2breaks_transcripts(
-    overwrite: bool, initial_threshold: float = 9.2, rescue_threshold: float = 7.4
+    overwrite: bool,
+    initial_threshold: float,
+    rescue_threshold: float,
 ) -> hl.expr.SetExpression:
     """
     Get transcripts that have two simultaneous breakpoints above the 'rescue' threshold.
@@ -954,22 +957,38 @@ def get_rescue_2breaks_transcripts(
     return ht.aggregate(hl.agg.collect_as_set(ht.section))
 
 
-def get_rescue_transcripts_and_create_no_breaks_ht(overwrite: bool) -> None:
+def get_rescue_transcripts_and_create_no_breaks_ht(
+    overwrite: bool, chisq_thresholds: Dict[str, Dict[str, float]] = CHISQ_THRESHOLDS
+) -> None:
     """
     Get transcripts found in rescue pipeline and write final no breaks HT.
 
     Function gets transcripts found in rescue single and simultaneous breaks searches
     and creates final HT with all transcripts that do not have evidence of RMC.
 
+    .. note::
+        - Assumes top level keys in `chisq_threshold` dictionary are "initial"
+        and "rescue"
+        - Assumes nested keys in `chisq_threshold` dictionary are "single" and
+        "simul"
+
     :param overwrite: Whether to overwrite output data if it exists.
+    :param chisq_thresholds: Dictionary of chi square significance thresholds.
+        Default is CHISQ_THRESHOLDS.
     :return: None; function writes HT to resource path.
     """
     # Get the sections (transcript_start_stop) found in initial simultaneous breaks search,
     # rescue single break search, and rescue simultaneous breaks search
     init_simul_sections, rescue_single_sections = get_rescue_1break_transcripts(
-        overwrite=overwrite
+        overwrite=overwrite,
+        initial_threshold=chisq_thresholds["initial"]["single"],
+        rescue_threshold=chisq_thresholds["rescue"]["single"],
     )
-    rescue_simul_sections = get_rescue_2breaks_transcripts(overwrite=overwrite)
+    rescue_simul_sections = get_rescue_2breaks_transcripts(
+        overwrite=overwrite,
+        initial_threshold=chisq_thresholds["initial"]["simul"],
+        rescue_threshold=chisq_thresholds["rescue"]["simul"],
+    )
     sections_with_breaks = init_simul_sections.union(rescue_simul_sections).union(
         rescue_single_sections
     )
