@@ -32,6 +32,23 @@ CURRENT_FREEZE = 2
 Current RMC/MPC data version.
 """
 
+CHISQ_THRESHOLDS = {
+    "initial": {"single": 6.6, "simul": 9.2},
+    "rescue": {"single": 5.0, "simul": 7.4},
+}
+"""
+Default chi square significance thresholds for each search type.
+
+Thresholds are set for break search type ('single' or 'simul')
+within each search type ('initial', 'rescue'),
+
+Defaults correspond to p = 0.01 (initial search)
+and p = 0.025 (rescue search).
+
+Reference: https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
+"""
+
+
 ####################################################################################
 ## Original regional missense constraint resource files
 ####################################################################################
