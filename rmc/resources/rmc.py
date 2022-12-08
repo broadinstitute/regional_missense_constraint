@@ -174,7 +174,7 @@ Note that this field will also be kept (`section` is a key field):
 
 def simul_search_bucket_path(
     is_rescue: bool,
-    search_num: int,
+    search_num: int = None,
 ) -> str:
     """
     Return path to bucket associated with simultaneous break search inputs and results.
@@ -185,7 +185,7 @@ def simul_search_bucket_path(
 
     :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
-        (e.g., second round of searching for single break would be 2).
+        (e.g., second round of searching for simultaneous break would be 2).
     :return: Path to simultaneous break search round bucket.
     """
     rescue = "rescue" if is_rescue else "initial"
