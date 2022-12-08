@@ -84,6 +84,30 @@ HT is annotated with observed and expected variant counts per base.
 """
 
 
+def single_search_bucket_path(
+    is_rescue: bool,
+    search_num: int = None,
+) -> str:
+    """
+    Return path to bucket associated with single break search inputs and results.
+
+    Function returns path to top level initial or "rescue"
+    (search with lowered chi square significance cutoff) bucket,
+    or bucket based on search number in either initial or rescue bucket.
+
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+    :return: Path to single break search round bucket.
+    """
+    rescue = "rescue" if is_rescue else "initial"
+    return (
+        f"{SINGLE_BREAK_TEMP_PATH}/{rescue}/round{search_num}"
+        if search_num
+        else f"{SINGLE_BREAK_TEMP_PATH}/{rescue}"
+    )
+
+
 def single_search_round_ht_path(
     is_rescue: bool,
     search_num: int,
