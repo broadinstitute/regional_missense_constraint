@@ -1079,7 +1079,7 @@ def calculate_section_chisq(
     return ((obs_expr - exp_expr) ** 2) / exp_expr
 
 
-def merge_round_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
+def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
     """
     Get table of final RMC sections in a given pathway (initial or rescue) after all break searches are complete.
 

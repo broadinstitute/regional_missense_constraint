@@ -31,7 +31,7 @@ from rmc.utils.constraint import (
     check_break_search_round_nums,
     get_rescue_transcripts_and_create_no_breaks_ht,
     GROUPINGS,
-    merge_round_rmc_hts,
+    merge_rmc_hts,
     process_sections,
     rmc_results,
 )
@@ -479,11 +479,11 @@ def main(args):
             rescue_round_nums = check_break_search_round_nums(is_rescue=True)
 
             logger.info("Finalizing section-level RMC table from initial search...")
-            initial_rmc_ht = merge_round_rmc_hts(
+            initial_rmc_ht = merge_rmc_hts(
                 round_nums=initial_round_nums, is_rescue=False
             )
             logger.info("Finalizing section-level RMC table from rescue search...")
-            rescue_rmc_ht = merge_round_rmc_hts(
+            rescue_rmc_ht = merge_rmc_hts(
                 round_nums=rescue_round_nums, is_rescue=True
             )
 
