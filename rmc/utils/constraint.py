@@ -27,7 +27,6 @@ from rmc.utils.generic import (
 from rmc.resources.rmc import (
     no_breaks,
     oe_bin_counts_tsv,
-    rmc_results,
     simul_search_bucket_path,
     simul_search_round_bucket_path,
     single_search_bucket_path,
@@ -1095,16 +1094,16 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
             'section_chisq': float64
             'search_type': str
             'transcript': str
-            'start_pos': int32
-            'end_pos': int32
+            'interval': interval<locus<GRCh37>>
         ----------------------------------------
-        Key: ['transcript', 'start_pos', 'end_pos']
+        Key: ['transcript', 'interval']
         ----------------------------------------
     """
     if len(round_nums) < 2:
         raise DataException(
             "At least two rounds of break search are needed if evidence of RMC is found, please double-check!"
         )
+
     logger.info(
         "Collecting and merging no-break HTs from each search round starting at round 2..."
     )
@@ -1127,14 +1126,27 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
     )
     # Annotate search pathway type (initial or rescue)
     rmc_ht = rmc_ht.annotate(search_type="rescue" if is_rescue else "initial")
-    # Convert section label to transcript and breakpoints
+
+    # Convert section label to transcript and start and end positions
     rmc_ht = rmc_ht.key_by()
     rmc_ht = rmc_ht.transmute(
         transcript=rmc_ht.section.split("_")[0],
         start_pos=hl.int(rmc_ht.section.split("_")[1]),
         end_pos=hl.int(rmc_ht.section.split("_")[2]),
     )
-    rmc_ht = rmc_ht.key_by("transcript", "start_pos", "end_pos")
+    # Convert start and end positions to interval
+    rmc_ht = rmc_ht.annotate(chr=gene_model.ht()[rmc_ht.transcript].chrom)
+    rmc_ht = rmc_ht.transmute(
+        interval=hl.parse_locus_interval(
+            hl.format(
+                "[%s:%s-%s]",
+                rmc_ht.chr,
+                rmc_ht.start_pos,
+                rmc_ht.end_pos,
+            )
+        ),
+    )
+    rmc_ht = rmc_ht.key_by("transcript", "interval")
     return rmc_ht
 
 
@@ -1335,47 +1347,3 @@ def constraint_flag_expr(
         mis_too_many=raw_mis_z_expr < -5,
         lof_too_many=raw_lof_z_expr < -5,
     )
-
-
-def group_rmc_ht_by_section(overwrite: bool = False) -> hl.Table:
-    """
-    Group RMC results Table by transcript subsection and return interval and section missense o/e.
-
-    .. note::
-        - Function reads RMC results Table from resource path.
-        - Assumes RMC HT is annotated with `locus`, `transcript`, `section`, `section_start_pos`,
-        `section_end_pos`, and `section_oe`.
-        - Assumes `transcript` is one of RMC HT's key fields.
-
-    :param overwrite: Whether to overwrite temporary checkpointed Table if it exists.
-        Default is False.
-    :return: RMC results Table keyed by interval and annotated with transcript and section o/e.
-    """
-    rmc_ht = (
-        rmc_results.ht()
-        .select_globals()
-        .select("section", "section_start_pos", "section_end_pos", "section_oe")
-    )
-    rmc_ht = rmc_ht.group_by("section").aggregate(
-        transcript=hl.agg.take(rmc_ht.transcript, 1)[0],
-        start_pos=hl.agg.take(rmc_ht.section_start_pos, 1)[0],
-        end_pos=hl.agg.take(rmc_ht.section_end_pos, 1)[0],
-        contig=hl.agg.take(rmc_ht.locus.contig, 1)[0],
-        section_oe=hl.agg.take(rmc_ht.section_oe, 1)[0],
-    )
-    rmc_ht = rmc_ht.checkpoint(
-        f"{TEMP_PATH}/rmc_group_by_section.ht",
-        _read_if_exists=not overwrite,
-        overwrite=overwrite,
-    )
-    rmc_ht = rmc_ht.transmute(
-        interval=hl.parse_locus_interval(
-            hl.format(
-                "[%s:%s-%s]",
-                rmc_ht.contig,
-                rmc_ht.start_pos,
-                rmc_ht.end_pos,
-            )
-        ),
-    )
-    return rmc_ht.key_by("interval").drop("section")
