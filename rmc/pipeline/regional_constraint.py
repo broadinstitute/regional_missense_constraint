@@ -483,9 +483,7 @@ def main(args):
                 round_nums=initial_round_nums, is_rescue=False
             )
             logger.info("Finalizing section-level RMC table from rescue search...")
-            rescue_rmc_ht = merge_rmc_hts(
-                round_nums=rescue_round_nums, is_rescue=True
-            )
+            rescue_rmc_ht = merge_rmc_hts(round_nums=rescue_round_nums, is_rescue=True)
 
             logger.info(
                 "Merging RMC tables from initial and rescue searches together..."
@@ -497,7 +495,7 @@ def main(args):
             rmc_ht = rmc_ht.filter(~outlier_transcripts.contains(rmc_ht.transcript))
 
             logger.info("Writing out RMC results...")
-            rmc_ht.write(rmc_results.path())
+            rmc_ht.write(rmc_results.path)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
