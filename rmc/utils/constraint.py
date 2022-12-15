@@ -1061,7 +1061,7 @@ def calculate_section_chisq(
 ) -> hl.expr.Float64Expression:
     """
     Check for significane of regional missense constraint within transcript section.
-    
+
     Function calculates chi square expression that assess whether observed and expected
     missense counts in a given transcript session are significantly different than the null
     model (no evidence of regional missense constraint).
@@ -1095,7 +1095,9 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
         Key: ['transcript', 'interval']
         ----------------------------------------
     """
-    logger.warning("This function performs a join followed by a rekey, which will trigger a shuffle!")
+    logger.warning(
+        "This function performs a join followed by a rekey, which will trigger a shuffle!"
+    )
     if len(round_nums) < 2:
         raise DataException(
             "At least two rounds of break search are needed if evidence of RMC is found, please double-check!"
@@ -1118,7 +1120,9 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
         hts.append(ht)
     rmc_ht = hts[0].union(*hts[1:])
     rescue = "rescue" if is_rescue else "initial"
-    rmc_ht = rmc_ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/{rescue}_search_union.ht", overwrite=True)
+    rmc_ht = rmc_ht.checkpoint(
+        f"{TEMP_PATH_WITH_DEL}/{rescue}_search_union.ht", overwrite=True
+    )
     # Calculate chi-square value for each section
     rmc_ht = rmc_ht.annotate(
         section_chisq=calculate_section_chisq(rmc_ht.section_obs, rmc_ht.section_exp)
@@ -1133,9 +1137,12 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
         start_pos=hl.int(rmc_ht.section.split("_")[1]),
         end_pos=hl.int(rmc_ht.section.split("_")[2]),
     )
-    # TODO: Check that transcripts are fully covered 
-    # (Check that all section start and end positions 
+
+    # TODO: Check that transcripts are fully covered
+    # (Check that all section start and end positions
     # line up to cover transcript start/end positions)
+    # TODO: Check that section start/ends reflect breakpoints found in searches
+
     # Convert start and end positions to interval
     rmc_ht = rmc_ht.annotate(chr=gene_model.ht()[rmc_ht.transcript].chrom)
     rmc_ht = rmc_ht.transmute(
