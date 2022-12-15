@@ -1133,6 +1133,9 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
         start_pos=hl.int(rmc_ht.section.split("_")[1]),
         end_pos=hl.int(rmc_ht.section.split("_")[2]),
     )
+    # TODO: Check that transcripts are fully covered 
+    # (Check that all section start and end positions 
+    # line up to cover transcript start/end positions)
     # Convert start and end positions to interval
     rmc_ht = rmc_ht.annotate(chr=gene_model.ht()[rmc_ht.transcript].chrom)
     rmc_ht = rmc_ht.transmute(
