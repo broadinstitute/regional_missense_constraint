@@ -880,14 +880,6 @@ def get_rescue_1break_transcripts(
         ),
         overwrite=overwrite,
     )
-    ht = hl.read_table(
-        single_search_round_ht_path(
-            is_rescue=True,
-            search_num=1,
-            is_break_found=True,
-            is_breakpoint_only=False,
-        )
-    )
 
     rescue_single_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
     return simul_sections, rescue_single_sections
