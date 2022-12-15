@@ -1031,22 +1031,27 @@ def merge_round_no_break_ht(is_rescue: bool, search_num: int) -> hl.Table:
         (e.g., second round of searching for single break would be 2).
     :return: Table of loci in sections where no breaks were found in the break search round.
     """
-    ht = hl.read_table(
-        single_search_round_ht_path(
-            is_rescue=is_rescue,
-            search_num=search_num,
-            is_break_found=False,
-            is_breakpoint_only=False,
-        )
+    single_no_break_path = single_search_round_ht_path(
+        is_rescue=is_rescue,
+        search_num=search_num,
+        is_break_found=False,
+        is_breakpoint_only=False,
     )
+    if file_exists(single_no_break_path):
+        raise DataException(
+            f"No table found at {single_no_break_path}. Please double-check!"
+        )
+    ht = hl.read_table(single_no_break_path)
     simul_results_path = simul_search_round_bucket_path(
         is_rescue=is_rescue,
         search_num=search_num,
         bucket_type="final_results",
     )
-    simul_by_section_ht = hl.read_table(f"{simul_results_path}/merged.ht")
-    ht = ht.annotate(breakpoints=simul_by_section_ht[ht.section].breakpoints)
-    ht = ht.filter(hl.is_missing(ht.breakpoints)).drop("breakpoints")
+    simul_no_break_path = f"{simul_results_path}/merged.ht"
+    if file_exists(simul_no_break_path):
+        simul_by_section_ht = hl.read_table(simul_no_break_path)
+        ht = ht.annotate(breakpoints=simul_by_section_ht[ht.section].breakpoints)
+        ht = ht.filter(hl.is_missing(ht.breakpoints)).drop("breakpoints")
     return ht
 
 
