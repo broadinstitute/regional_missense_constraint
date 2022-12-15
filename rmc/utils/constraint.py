@@ -846,8 +846,7 @@ def get_rescue_1break_transcripts(
     # Filter to transcripts that did not have simultaneous breakpoints
     # in initial search
     ht = ht.filter(
-        (ht.max_chisq < initial_threshold)
-        & (ht.max_chisq >= rescue_threshold)
+        (ht.max_chisq >= rescue_threshold)
         & ~hl.literal(simul_sections).contains(ht.section)
     )
     ht = ht.checkpoint(
