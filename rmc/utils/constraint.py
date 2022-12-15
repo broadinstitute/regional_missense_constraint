@@ -1000,6 +1000,9 @@ def check_break_search_round_nums(is_rescue: bool) -> List[int]:
     Function checks that single and simultaneous search round numbers match, are
     increasing consecutive integers starting at 1, and that at least one search round was run.
 
+    .. note::
+        Assumes there is a folder for each search round run, regardless of whether there were breaks discovered
+
     :param is_rescue: Whether to operate on searches in rescue pathway.
     :return: Sorted list of round numbers.
     """
