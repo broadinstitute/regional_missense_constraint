@@ -491,8 +491,8 @@ def main(args):
             rmc_ht = initial_rmc_ht.union(rescue_rmc_ht)
 
             logger.info("Removing outlier transcripts...")
-            outlier_transcripts = get_constraint_transcripts(outlier=True)
-            rmc_ht = rmc_ht.filter(~outlier_transcripts.contains(rmc_ht.transcript))
+            constraint_transcripts = get_constraint_transcripts(outlier=False)
+            rmc_ht = rmc_ht.filter(constraint_transcripts.contains(rmc_ht.transcript))
 
             logger.info("Writing out RMC results...")
             rmc_ht.write(rmc_results.path)
