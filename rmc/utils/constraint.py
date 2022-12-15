@@ -5,9 +5,8 @@ import hail as hl
 
 from gnomad.resources.grch37.gnomad import coverage, public_release
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.constraint import annotate_mutation_type
 from gnomad.utils.file_utils import file_exists
-
-from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
 from rmc.resources.basics import (
     SIMUL_BREAK_TEMP_PATH,
@@ -308,7 +307,7 @@ def calculate_exp_per_transcript(
     )
 
     logger.info("Adding CpG annotations...")
-    group_ht = annotate_variant_types(group_ht)
+    group_ht = annotate_mutation_type(group_ht)
 
     logger.info("Adjusting aggregated mutation rate with plateau model...")
     if locus_type == "X":
@@ -772,12 +771,12 @@ def get_rescue_1break_transcripts(
     """
     Get transcripts that have a single breakpoint in the first round of the 'rescue' search.
 
-    These transcripts did not have a single or simultaneous breakpoint that was over 
+    These transcripts did not have a single or simultaneous breakpoint that was over
     the initial search threshold but do have a single breakpoint that is above
     the lower 'rescue' search threshold.
 
     This function performs the single break search for the first 'rescue' round
-    using the statistics already computed during the single break search for the 
+    using the statistics already computed during the single break search for the
     first 'initial' round and writes out the resulting tables:
     a section (transcript)-level breakpoint table and a locus-level table
     for transcripts where a 'rescue' breakpoint was found.
