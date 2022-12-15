@@ -957,7 +957,7 @@ def get_rescue_transcripts_and_create_no_breaks_ht(overwrite: bool) -> None:
 
 def get_break_search_round_nums(
     rounds_path: str,
-    round_num_regexpr: str = r"round(\d+)/$",
+    round_num_regex: str = r"round(\d+)/$",
     google_project: str = "broad-mpg-gnomad",
 ) -> List[str]:
     r"""
@@ -968,14 +968,14 @@ def get_break_search_round_nums(
     Regex matches from all capture groups and match instances in a given path are merged.
 
     :param rounds_path: Path to top-level bucket containing break search round buckets.
-    :param round_num_regexpr: Regex pattern to match the round number
+    :param round_num_regex: Regex pattern to match the round number
         in a round bucket path. Default is r'round(\d+)/$'.
     :param google_project: Google project to use to read data from requester-pays buckets.
         Default is 'broad-mpg-gnomad'.
 
     :return: Sorted list of round numbers.
     """
-    r = re.compile(round_num_regexpr)
+    r = re.compile(round_num_regex)
     round_paths = (
         subprocess.check_output(
             ["gsutil", "-u", f"{google_project}", "ls", f"{rounds_path}"]
