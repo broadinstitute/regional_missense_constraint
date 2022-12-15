@@ -13,10 +13,12 @@ from gnomad.utils.constraint import (
 )
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.filtering import filter_to_clinvar_pathogenic
-from gnomad.utils.vep import add_most_severe_csq_to_tc_within_vep_root
+from gnomad.utils.vep import (
+    add_most_severe_csq_to_tc_within_vep_root,
+    filter_vep_to_canonical_transcripts,
+)
 
 from gnomad_constraint.utils.constraint import prepare_ht_for_constraint_calculations
-from gnomad_lof.constraint_utils.generic import fast_filter_vep
 
 from rmc.resources.basics import (
     ACID_NAMES_PATH,
@@ -238,9 +240,7 @@ def get_exome_bases() -> int:
     ht = vep_context.ht()
 
     logger.info("Filtering to canonical transcripts...")
-    ht = fast_filter_vep(
-        ht, vep_root="vep", syn=False, canonical=True, filter_empty=True
-    )
+    ht = filter_vep_to_canonical_transcripts(ht, vep_root="vep", filter_empty_csq=True)
 
     logger.info("Removing outlier transcripts...")
     outlier_transcripts = get_constraint_transcripts(outlier=True)
@@ -337,9 +337,7 @@ def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.T
         ht = ht.filter(hl.is_snp(ht.alleles[0], ht.alleles[1]))
 
     logger.info("Filtering to canonical transcripts...")
-    ht = fast_filter_vep(
-        ht, vep_root="vep", syn=False, canonical=True, filter_empty=True
-    )
+    ht = filter_vep_to_canonical_transcripts(ht, vep_root="vep", filter_empty_csq=True)
 
     logger.info("Annotating HT with most severe consequence...")
     ht = add_most_severe_csq_to_tc_within_vep_root(ht)
