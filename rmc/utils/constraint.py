@@ -966,6 +966,7 @@ def get_break_search_round_nums(
     Function returns all round numbers for a particular type of break search
     by matching the round paths in a top-level bucket to a regex pattern.
     Regex matches from all capture groups and match instances in a given path are merged.
+    Every round number, regardless of whether breaks were discovered, is returned.
 
     :param rounds_path: Path to top-level bucket containing break search round buckets.
     :param round_num_regex: Regex pattern to match the round number
@@ -987,7 +988,6 @@ def get_break_search_round_nums(
     for path in round_paths:
         m = r.findall(path)
         if len(m) > 0:
-            round_nums.append(m)
             # Merge all capture groups and match instances
             round_nums.append(int("".join("".join(t) for t in m)))
     return sorted(round_nums)
