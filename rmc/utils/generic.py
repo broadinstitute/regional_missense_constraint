@@ -9,13 +9,13 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.constraint import (
     annotate_exploded_vep_for_constraint_groupings,
     annotate_with_mu,
+    build_models,
 )
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.filtering import filter_to_clinvar_pathogenic
 from gnomad.utils.vep import add_most_severe_csq_to_tc_within_vep_root
 
 from gnomad_lof.constraint_utils.constraint_basics import (
-    build_models,
     prepare_ht,
 )
 from gnomad_lof.constraint_utils.generic import fast_filter_vep
@@ -406,7 +406,9 @@ def generate_models(
     """
     logger.info("Building autosomes/PAR plateau model and coverage model...")
     coverage_model, plateau_models = build_models(
-        coverage_ht, trimers=trimers, weighted=weighted
+        coverage_ht,
+        weighted=weighted,
+        trimers=trimers,
     )
 
     logger.info("Building plateau models for chrX and chrY...")
