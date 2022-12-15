@@ -71,6 +71,8 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
     .. note::
         - Assumes input Table has `locus` and `trancript` annotations
         - OE values are transcript specific
+        - Assumes merged RMC results HT exists
+        - Assumes merged RMC results HT has per-transcript-section `section_oe` and `interval` (section start to end) annotations
 
     :param hl.Table ht: Input Table.
     :return: Table with `oe` annotation.
