@@ -6,12 +6,12 @@ import hail as hl
 from gnomad.resources.grch37.gnomad import coverage, public_release
 from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.constraint import annotate_exploded_vep_for_constraint_groupings
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.filtering import filter_to_clinvar_pathogenic
 from gnomad.utils.vep import add_most_severe_csq_to_tc_within_vep_root
 
 from gnomad_lof.constraint_utils.constraint_basics import (
-    annotate_constraint_groupings,
     annotate_with_mu,
     build_models,
     prepare_ht,
@@ -151,7 +151,7 @@ def process_context_ht(
         logger.info("Annotating with mutation rate...")
         # Mutation rate HT is keyed by context, ref, alt, methylation level
         mu_ht = mutation_rate.ht().select("mu_snp")
-        ht, grouping = annotate_constraint_groupings(ht)
+        ht, grouping = annotate_exploded_vep_for_constraint_groupings(ht)
         ht = ht.select(
             "context",
             "ref",
