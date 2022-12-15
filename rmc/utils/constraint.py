@@ -1092,7 +1092,7 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
             'transcript': str
             'interval': interval<locus<GRCh37>>
         ----------------------------------------
-        Key: ['transcript', 'interval']
+        Key: ['interval', 'transcript']
         ----------------------------------------
     """
     logger.warning(
@@ -1116,6 +1116,7 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
             section_obs=hl.agg.take(ht.section_obs, 1)[0],
             section_exp=hl.agg.take(ht.section_exp, 1)[0],
             section_oe=hl.agg.take(ht.section_oe, 1)[0],
+            chr=hl.agg.take(ht.locus.contig, 1)[0],
         )
         hts.append(ht)
     rmc_ht = hts[0].union(*hts[1:])
@@ -1144,7 +1145,6 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
     # TODO: Check that section start/ends reflect breakpoints found in searches
 
     # Convert start and end positions to interval
-    rmc_ht = rmc_ht.annotate(chr=gene_model.ht()[rmc_ht.transcript].chrom)
     rmc_ht = rmc_ht.transmute(
         interval=hl.parse_locus_interval(
             hl.format(
@@ -1155,7 +1155,7 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
             )
         ),
     )
-    rmc_ht = rmc_ht.key_by("transcript", "interval")
+    rmc_ht = rmc_ht.key_by("interval", "transcript")
     return rmc_ht
 
 
