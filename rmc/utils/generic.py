@@ -8,9 +8,9 @@ from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.filtering import filter_to_clinvar_pathogenic
+from gnomad.utils.vep import add_most_severe_csq_to_tc_within_vep_root
 
 from gnomad_lof.constraint_utils.constraint_basics import (
-    add_most_severe_csq_to_tc_within_ht,
     annotate_constraint_groupings,
     annotate_with_mu,
     build_models,
@@ -262,8 +262,7 @@ def get_exome_bases() -> int:
     return ht.count()
 
 
-def get_avg_bases_between_mis(
-) -> int:
+def get_avg_bases_between_mis() -> int:
     """
     Return average number of bases between observed missense variation.
 
@@ -276,12 +275,9 @@ def get_avg_bases_between_mis(
     :return: Average number of bases between observed missense variants, rounded to the nearest integer,
     :rtype: int
     """
-
-    logger.info(
-        "Getting total number of bases in the exome from full context HT..."
-    )
+    logger.info("Getting total number of bases in the exome from full context HT...")
     total_bases = get_exome_bases()
-    
+
     ht = filtered_exomes.ht()
     logger.info("Getting total number of missense variants in gnomAD...")
     total_variants = ht.count()
@@ -346,7 +342,7 @@ def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.T
     )
 
     logger.info("Annotating HT with most severe consequence...")
-    ht = add_most_severe_csq_to_tc_within_ht(ht)
+    ht = add_most_severe_csq_to_tc_within_vep_root(ht)
     ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
     ht = ht.explode(ht.transcript_consequences)
 
