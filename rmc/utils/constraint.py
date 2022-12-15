@@ -1060,7 +1060,11 @@ def calculate_section_chisq(
     exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
     """
-    Create expression checking if transcript section is significantly different than the null model (no evidence of regional missense constraint).
+    Check for significane of regional missense constraint within transcript section.
+    
+    Function calculates chi square expression that assess whether observed and expected
+    missense counts in a given transcript session are significantly different than the null
+    model (no evidence of regional missense constraint).
 
     Formula is: (section obs - section exp)^2 / section exp. Taken from ExAC RMC code.
 
@@ -1091,6 +1095,7 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
         Key: ['transcript', 'interval']
         ----------------------------------------
     """
+    logger.warning("This function performs a join followed by a rekey, which will trigger a shuffle!")
     if len(round_nums) < 2:
         raise DataException(
             "At least two rounds of break search are needed if evidence of RMC is found, please double-check!"
@@ -1112,12 +1117,14 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
         )
         hts.append(ht)
     rmc_ht = hts[0].union(*hts[1:])
+    rescue = "rescue" if is_rescue else "initial"
+    rmc_ht = rmc_ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/{rescue}_search_union.ht", overwrite=True)
     # Calculate chi-square value for each section
     rmc_ht = rmc_ht.annotate(
         section_chisq=calculate_section_chisq(rmc_ht.section_obs, rmc_ht.section_exp)
     )
     # Annotate search pathway type (initial or rescue)
-    rmc_ht = rmc_ht.annotate(search_type="rescue" if is_rescue else "initial")
+    rmc_ht = rmc_ht.annotate(search_type=rescue)
 
     # Convert section label to transcript and start and end positions
     rmc_ht = rmc_ht.key_by()
