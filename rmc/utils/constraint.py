@@ -1052,11 +1052,11 @@ def merge_round_no_break_ht(is_rescue: bool, search_num: int) -> hl.Table:
         search_num=search_num,
         bucket_type="final_results",
     )
-    simul_no_break_path = f"{simul_results_path}/merged.ht"
-    if file_exists(simul_no_break_path):
-        simul_by_section_ht = hl.read_table(simul_no_break_path)
-        ht = ht.annotate(breakpoints=simul_by_section_ht[ht.section].breakpoints)
-        ht = ht.filter(hl.is_missing(ht.breakpoints)).drop("breakpoints")
+    simul_break_path = f"{simul_results_path}/merged.ht"
+    if file_exists(simul_break_path):
+        simul_ht = hl.read_table(simul_break_path)
+        simul_sections = simul_ht.aggregate(hl.agg.collect_as_set(simul_ht.section))
+        ht = ht.filter(~hl.literal(simul_sections).contains(ht.section))
     return ht
 
 
