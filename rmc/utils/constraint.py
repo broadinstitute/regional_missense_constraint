@@ -83,17 +83,11 @@ Used to drop unnecessary fields when searching for simultaneous breaks.
 """
 
 FINAL_ANNOTATIONS = [
-    "mu_snp",
-    "observed",
-    "total_exp",
-    "total_mu",
-    "total_obs",
-    "cumulative_obs",
-    "mu_scan",
-    "cumulative_exp",
-    "break_list",
-    "start_pos",
-    "end_pos",
+    "section_obs",
+    "section_exp",
+    "section_oe",
+    "chisq",
+    "max_chisq",
 ]
 """
 List of annotations to keep when finalizing release HT.
@@ -1029,7 +1023,17 @@ def merge_round_no_break_ht(is_rescue: bool, search_num: int) -> hl.Table:
     :param is_rescue: Whether to operate on search in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
-    :return: Table of loci in sections where no breaks were found in the break search round.
+    :return: Table of loci in sections where no breaks were found in the break search round. Schema:
+        ----------------------------------------
+        Row fields:
+            'locus': locus<GRCh37>
+            'section': str
+            'section_obs': int64
+            'section_exp': float64
+            'section_oe': float64
+        ----------------------------------------
+        Key: ['locus', 'section']
+        ----------------------------------------
     """
     single_no_break_path = single_search_round_ht_path(
         is_rescue=is_rescue,
@@ -1042,6 +1046,7 @@ def merge_round_no_break_ht(is_rescue: bool, search_num: int) -> hl.Table:
             f"No table found at {single_no_break_path}. Please double-check!"
         )
     ht = hl.read_table(single_no_break_path)
+    ht = ht.select(*FINAL_ANNOTATIONS)
     simul_results_path = simul_search_round_bucket_path(
         is_rescue=is_rescue,
         search_num=search_num,
