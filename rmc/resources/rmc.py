@@ -98,6 +98,7 @@ def single_search_bucket_path(
     :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
+        Default is None.
     :return: Path to single break search round bucket.
     """
     rescue = "rescue" if is_rescue else "initial"
@@ -186,6 +187,7 @@ def simul_search_bucket_path(
     :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for simultaneous break would be 2).
+        Default is None.
     :return: Path to simultaneous break search round bucket.
     """
     rescue = "rescue" if is_rescue else "initial"

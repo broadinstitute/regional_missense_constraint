@@ -960,7 +960,7 @@ def get_break_search_round_nums(
     round_num_regexpr: str = r"round(\d+)/$",
     google_project: str = "broad-mpg-gnomad",
 ) -> List[str]:
-    """
+    r"""
     Get round numbers for a particular type of break search, e.g. single break in initial search.
 
     Function returns all round numbers for a particular type of break search
@@ -969,7 +969,7 @@ def get_break_search_round_nums(
 
     :param rounds_path: Path to top-level bucket containing break search round buckets.
     :param round_num_regexpr: Regex pattern to match the round number
-        in a round bucket path. Default is r"round(\d+)/$".
+        in a round bucket path. Default is r'round(\d+)/$'.
     :param google_project: Google project to use to read data from requester-pays buckets.
         Default is 'broad-mpg-gnomad'.
 
@@ -1002,7 +1002,6 @@ def check_break_search_round_nums(is_rescue: bool) -> List[int]:
     increasing consecutive integers starting at 1, and that at least one search round was run.
 
     :param is_rescue: Whether to operate on searches in rescue pathway.
-
     :return: Sorted list of round numbers.
     """
     single_search_round_nums = get_break_search_round_nums(
@@ -1040,7 +1039,6 @@ def merge_round_no_break_ht(is_rescue: bool, search_num: int) -> hl.Table:
     :param is_rescue: Whether to operate on search in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
-
     :return: Table of loci in sections where no breaks were found in the break search round.
     """
     ht = hl.read_table(
@@ -1111,7 +1109,7 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
     for search_num in round_nums[1:]:
         # For each search round:
         # Get locus-level merged no-break table (no breaks in both single and simultaneous searches)
-        ht = merge_round_no_break_ht(is_rescue=False, search_num=search_num)
+        ht = merge_round_no_break_ht(is_rescue=is_rescue, search_num=search_num)
         # Group to section-level and retain section obs- and exp-related annotations
         ht = ht.group_by("section").aggregate(
             section_obs=hl.agg.take(ht.section_obs, 1)[0],
