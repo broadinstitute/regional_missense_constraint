@@ -15,9 +15,7 @@ from gnomad.utils.file_utils import file_exists
 from gnomad.utils.filtering import filter_to_clinvar_pathogenic
 from gnomad.utils.vep import add_most_severe_csq_to_tc_within_vep_root
 
-from gnomad_lof.constraint_utils.constraint_basics import (
-    prepare_ht,
-)
+from gnomad_constraint.utils.constraint import prepare_ht_for_constraint_calculations
 from gnomad_lof.constraint_utils.generic import fast_filter_vep
 
 from rmc.resources.basics import (
@@ -147,8 +145,9 @@ def process_context_ht(
         ht = process_vep(ht)
 
     if add_annotations:
-        # `prepare_ht` annotates HT with: ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
-        ht = prepare_ht(ht, trimers)
+        # `prepare_ht_for_constraint_calculations` annotates HT with:
+        # ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
+        ht = prepare_ht_for_constraint_calculations(ht)
 
         logger.info("Annotating with mutation rate...")
         # Mutation rate HT is keyed by context, ref, alt, methylation level
