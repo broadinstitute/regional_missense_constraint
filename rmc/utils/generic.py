@@ -111,7 +111,6 @@ def get_divergence_scores() -> Dict[str, float]:
 
 ## Functions to process reference genome related resources
 def process_context_ht(
-    trimers: bool = True,
     filter_to_missense: bool = True,
     missense_str: str = MISSENSE,
     add_annotations: bool = True,
@@ -407,7 +406,6 @@ def generate_models(
     coverage_model, plateau_models = build_models(
         coverage_ht,
         weighted=weighted,
-        trimers=trimers,
     )
 
     logger.info("Building plateau models for chrX and chrY...")
