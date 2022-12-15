@@ -767,7 +767,7 @@ def process_sections(
 
 
 def get_rescue_1break_transcripts(
-    overwrite: bool, initial_threshold: float = 6.6, rescue_threshold: float = 5.0
+    overwrite: bool, rescue_threshold: float = 5.0
 ) -> Tuple[hl.expr.SetExpression]:
     """
     Get transcripts that have a single breakpoint in the first round of the 'rescue' search.
@@ -782,13 +782,10 @@ def get_rescue_1break_transcripts(
     a section (transcript)-level breakpoint table and a locus-level table
     for transcripts where a 'rescue' breakpoint was found.
 
-    Function reads in the results HT from the first round of simultaneous breaks search,
-    the HT with transcripts without significant single breaks from the first round of the single
-    break search, and removes transcripts with two simultaneous breaks or one single break.
+    Function uses the no-break results from the first round of the single and
+    simultaneous break searches.
 
     :param overwrite: Whether to overwrite output data if it exists.
-    :param initial_threshold: Chi square significance threshold associated with
-        the initial search pathway.
     :param rescue_threshold: Lower chi square significance threshold associated with
         the 'rescue' search pathway.
     :return: Tuple set of sections (transcript_start_stop) with two simultaneous breaks in
@@ -806,27 +803,14 @@ def get_rescue_1break_transcripts(
     simul_ht = simul_ht.annotate(transcript=simul_ht.section.split("_")[0])
     simul_sections = simul_ht.aggregate(hl.agg.collect_as_set(simul_ht.section))
 
-    # Read in the no break found HT from single search round 1
-    # (of initial search)
-    ht = hl.read_table(
-        single_search_round_ht_path(
-            is_rescue=False,
-            search_num=1,
-            is_break_found=False,
-            is_breakpoint_only=False,
-        )
-    ).select_globals()
-
-    # Filter to transcripts that did not have simultaneous breakpoints
-    # in initial search
-    ht = ht.filter(
-        (ht.max_chisq < initial_threshold)
-        & (ht.max_chisq >= rescue_threshold)
-        & ~hl.literal(simul_sections).contains(ht.section)
-    )
+    # Get merged no-break table of round 1 of initial search
+    ht = merge_round_no_break_ht(is_rescue=False, search_num=1)
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_DEL}/tmp_single_rescue_transcripts.ht", overwrite=True
     )
+
+    # Filter to transcripts with candidate breakpoints over the rescue threshold
+    ht = ht.filter(ht.max_chisq >= rescue_threshold)
 
     # Annotate breakpoints of transcripts found with rescue threshold and checkpoint
     breakpoint_ht = ht.annotate(is_break=(ht.chisq == ht.max_chisq))
