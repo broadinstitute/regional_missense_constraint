@@ -972,7 +972,6 @@ def get_break_search_round_nums(
         in a round bucket path. Default is r'round(\d+)/$'.
     :param google_project: Google project to use to read data from requester-pays buckets.
         Default is 'broad-mpg-gnomad'.
-
     :return: Sorted list of round numbers.
     """
     r = re.compile(round_num_regex)
@@ -1082,7 +1081,6 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
 
     :param round_nums: List of round numbers to merge results across.
     :param is_rescue: Whether to operate on search in rescue pathway.
-
     :return: Table of final RMC sections. Schema:
         ----------------------------------------
         Row fields:
