@@ -1017,6 +1017,14 @@ def check_break_search_round_nums(is_rescue: bool) -> List[int]:
         ",".join(map(str, single_search_round_nums)),
         ",".join(map(str, simul_search_round_nums)),
     )
+    if single_search_round_nums != list(range(1, max(single_search_round_nums))):
+        raise DataException(
+            "Single search round numbers are not consecutive and increasing from 1, please double-check!"
+        )
+    if simul_search_round_nums != list(range(1, max(simul_search_round_nums))):
+        raise DataException(
+            "Simultaneous search round numbers are not consecutive and increasing from 1, please double-check!"
+        )
     if single_search_round_nums != simul_search_round_nums:
         raise DataException(
             "Round numbers from single and simultaneous searches do not match, please double-check!"
@@ -1026,10 +1034,6 @@ def check_break_search_round_nums(is_rescue: bool) -> List[int]:
     if len(single_search_round_nums) == 1:
         logger.warning(
             "Only one break search round recorded. Either no breaks were found or break search is not complete, please double-check!"
-        )
-    if single_search_round_nums != list(range(1, max(single_search_round_nums))):
-        raise DataException(
-            "Search round numbers are not consecutive and increasing from 1, please double-check!"
         )
     return single_search_round_nums
 
