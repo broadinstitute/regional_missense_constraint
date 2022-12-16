@@ -488,6 +488,9 @@ def main(args):
             logger.info(
                 "Merging RMC tables from initial and rescue searches together..."
             )
+            logger.warning(
+                "This performs a join followed by a rekey, which will trigger a shuffle!"
+            )
             rmc_ht = initial_rmc_ht.union(rescue_rmc_ht)
 
             logger.info("Removing outlier transcripts...")
