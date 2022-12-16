@@ -83,6 +83,43 @@ Context Table ready for RMC calculations.
 HT is annotated with observed and expected variant counts per base.
 """
 
+CONSTRAINT_ANNOTATIONS = {
+    "mu_snp",
+    "observed",
+    "coverage",
+    "total_exp",
+    "total_mu",
+    "total_obs",
+    "cumulative_obs",
+    "cumulative_exp",
+    "forward_oe",
+    "mu_scan",
+    "section_mu",
+    "section_exp",
+    "section_obs",
+    "section_oe",
+    "reverse",
+    "reverse_obs_exp",
+    "total_null",
+    "total_alt",
+    "chisq",
+    "max_chisq",
+}
+"""
+Set of annotations used to calculate constraint and to hold resulting statistics.
+
+Used to drop unnecessary fields when starting rescue break search.
+"""
+
+FINAL_ANNOTATIONS = {
+    "section_obs",
+    "section_exp",
+    "section_oe",
+}
+"""
+Set of annotations to keep from individual break search round result HTs when finalizing release HT.
+"""
+
 
 def single_search_bucket_path(
     is_rescue: bool,
