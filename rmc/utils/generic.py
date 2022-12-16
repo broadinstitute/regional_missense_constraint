@@ -147,7 +147,7 @@ def process_context_ht(
 
     if add_annotations:
         # `prepare_ht_for_constraint_calculations` annotates HT with:
-        # ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
+        # ref, alt, methylation_level, exome_coverage, cpg, transition, mutation_type
         ht = prepare_ht_for_constraint_calculations(ht)
 
         logger.info("Annotating with mutation rate...")
