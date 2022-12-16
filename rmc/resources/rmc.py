@@ -109,6 +109,8 @@ CONSTRAINT_ANNOTATIONS = {
 Set of annotations used to calculate constraint and to hold resulting statistics.
 
 Used to drop unnecessary fields when starting rescue break search.
+
+TODO: assess which annotations in this list can be removed
 """
 
 FINAL_ANNOTATIONS = {
