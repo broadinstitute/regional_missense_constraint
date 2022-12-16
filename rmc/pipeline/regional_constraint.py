@@ -66,7 +66,7 @@ def main(args):
             logger.warning("Code currently only processes b37 data!")
 
             logger.info("Preprocessing reference fasta (context) HT...")
-            context_ht = process_context_ht(args.trimers)
+            context_ht = process_context_ht()
 
             logger.info(
                 "Filtering context HT to all covered sites not found or rare in gnomAD exomes"
@@ -351,7 +351,7 @@ def main(args):
                 log=f"/round{args.search_num}_merge_single_simul.log",
                 tmp_dir=TEMP_PATH_WITH_DEL,
             )
-            
+
             logger.info(
                 "Converting merged simultaneous breaks HT from section-level to locus-level..."
             )
@@ -606,9 +606,6 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pre-process-data", help="Pre-process data.", action="store_true"
-    )
-    parser.add_argument(
-        "--trimers", help="Use trimers instead of heptamers.", action="store_true"
     )
     parser.add_argument(
         "--n-partitions",

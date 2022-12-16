@@ -6,17 +6,19 @@ import hail as hl
 from gnomad.resources.grch37.gnomad import coverage, public_release
 from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
-from gnomad.utils.filtering import filter_to_clinvar_pathogenic
-
-from gnomad_lof.constraint_utils.constraint_basics import (
-    add_most_severe_csq_to_tc_within_ht,
-    annotate_constraint_groupings,
+from gnomad.utils.constraint import (
+    annotate_exploded_vep_for_constraint_groupings,
     annotate_with_mu,
     build_models,
-    prepare_ht,
 )
-from gnomad_lof.constraint_utils.generic import fast_filter_vep
+from gnomad.utils.file_utils import file_exists
+from gnomad.utils.filtering import filter_to_clinvar_pathogenic
+from gnomad.utils.vep import (
+    add_most_severe_csq_to_tc_within_vep_root,
+    filter_vep_to_canonical_transcripts,
+)
+
+from gnomad_constraint.utils.constraint import prepare_ht_for_constraint_calculations
 
 from rmc.resources.basics import (
     ACID_NAMES_PATH,
@@ -111,7 +113,6 @@ def get_divergence_scores() -> Dict[str, float]:
 
 ## Functions to process reference genome related resources
 def process_context_ht(
-    trimers: bool = True,
     filter_to_missense: bool = True,
     missense_str: str = MISSENSE,
     add_annotations: bool = True,
@@ -128,7 +129,7 @@ def process_context_ht(
     :param bool trimers: Whether to filter to trimers (if set to True) or heptamers. Default is True.
     :param bool filter_to_missense: Whether to filter Table to missense variants only. Default is True.
     :param bool add_annotations: Whether to add ref, alt, methylation_level, exome_coverage, cpg, transition,
-        and variant_type annotations. Default is True.
+        and mutation_type annotations. Default is True.
     :return: Context HT filtered to canonical transcripts and optionally filtered to missense variants with
         mutation rate, CpG status, and methylation level annotations.
     :rtype: hl.Table
@@ -145,13 +146,18 @@ def process_context_ht(
         ht = process_vep(ht)
 
     if add_annotations:
-        # `prepare_ht` annotates HT with: ref, alt, methylation_level, exome_coverage, cpg, transition, variant_type
-        ht = prepare_ht(ht, trimers)
+        # `prepare_ht_for_constraint_calculations` annotates HT with:
+        # ref, alt, methylation_level, exome_coverage, cpg, transition, mutation_type
+        # NOTE: `mutation_type` was initially named `variant_type`, but this
+        # field was renamed because `variant_type` refers to a different piece of
+        # information in the gnomad_methods repo
+        # See docstring for `annotate_mutation_type` for more details
+        ht = prepare_ht_for_constraint_calculations(ht)
 
         logger.info("Annotating with mutation rate...")
         # Mutation rate HT is keyed by context, ref, alt, methylation level
         mu_ht = mutation_rate.ht().select("mu_snp")
-        ht, grouping = annotate_constraint_groupings(ht)
+        ht, grouping = annotate_exploded_vep_for_constraint_groupings(ht)
         ht = ht.select(
             "context",
             "ref",
@@ -160,7 +166,7 @@ def process_context_ht(
             "exome_coverage",
             "cpg",
             "transition",
-            "variant_type",
+            "mutation_type",
             *grouping,
         )
         return annotate_with_mu(ht, mu_ht)
@@ -238,9 +244,7 @@ def get_exome_bases() -> int:
     ht = vep_context.ht()
 
     logger.info("Filtering to canonical transcripts...")
-    ht = fast_filter_vep(
-        ht, vep_root="vep", syn=False, canonical=True, filter_empty=True
-    )
+    ht = filter_vep_to_canonical_transcripts(ht, vep_root="vep", filter_empty_csq=True)
 
     logger.info("Removing outlier transcripts...")
     outlier_transcripts = get_constraint_transcripts(outlier=True)
@@ -262,8 +266,7 @@ def get_exome_bases() -> int:
     return ht.count()
 
 
-def get_avg_bases_between_mis(
-) -> int:
+def get_avg_bases_between_mis() -> int:
     """
     Return average number of bases between observed missense variation.
 
@@ -276,12 +279,9 @@ def get_avg_bases_between_mis(
     :return: Average number of bases between observed missense variants, rounded to the nearest integer,
     :rtype: int
     """
-
-    logger.info(
-        "Getting total number of bases in the exome from full context HT..."
-    )
+    logger.info("Getting total number of bases in the exome from full context HT...")
     total_bases = get_exome_bases()
-    
+
     ht = filtered_exomes.ht()
     logger.info("Getting total number of missense variants in gnomAD...")
     total_variants = ht.count()
@@ -341,12 +341,10 @@ def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.T
         ht = ht.filter(hl.is_snp(ht.alleles[0], ht.alleles[1]))
 
     logger.info("Filtering to canonical transcripts...")
-    ht = fast_filter_vep(
-        ht, vep_root="vep", syn=False, canonical=True, filter_empty=True
-    )
+    ht = filter_vep_to_canonical_transcripts(ht, vep_root="vep", filter_empty_csq=True)
 
     logger.info("Annotating HT with most severe consequence...")
-    ht = add_most_severe_csq_to_tc_within_ht(ht)
+    ht = add_most_severe_csq_to_tc_within_vep_root(ht)
     ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
     ht = ht.explode(ht.transcript_consequences)
 
@@ -408,7 +406,8 @@ def generate_models(
     """
     logger.info("Building autosomes/PAR plateau model and coverage model...")
     coverage_model, plateau_models = build_models(
-        coverage_ht, trimers=trimers, weighted=weighted
+        coverage_ht,
+        weighted=weighted,
     )
 
     logger.info("Building plateau models for chrX and chrY...")
