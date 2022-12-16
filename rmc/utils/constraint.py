@@ -768,7 +768,7 @@ def get_rescue_1break_transcripts(
     # Get merged no-break table of round 1 of initial search
     ht = merge_round_no_break_ht(is_rescue=False, search_num=1)
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/initial_round1_no_breaks.ht", overwrite=overwrite
+        f"{TEMP_PATH_WITH_DEL}/initial_round1_no_breaks.ht", overwrite=overwrite, _read_if_exists=not overwrite,
     )
 
     # Filter to transcripts with candidate breakpoints over the rescue threshold
