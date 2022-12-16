@@ -345,7 +345,9 @@ def merged_search_ht_path(
     return f"{TEMP_PATH}/{rescue}round{search_num}_merged_{break_status}.ht"
 
 
-no_breaks = f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/no_breaks.he"
+no_breaks = (
+    f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/no_breaks.he"
+)
 """
 SetExpression containing transcripts with no significant breaks.
 """
