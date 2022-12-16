@@ -78,7 +78,7 @@ Path to bucket containing resources related to building MPC score.
 ######################################################################
 ## Amino acid resources
 ######################################################################
-AMINO_ACIDS_PREFIX = "{RESOURCE_PREFIX}/amino_acids"
+AMINO_ACIDS_PREFIX = f"{RESOURCE_PREFIX}/amino_acids"
 """
 Path to any amino-acid related resource files used to build MPC.
 """
