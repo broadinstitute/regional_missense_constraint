@@ -489,7 +489,7 @@ def main(args):
             )
             logger.info("Finalizing section-level RMC table from rescue search...")
             rescue_rmc_ht = merge_rmc_hts(round_nums=rescue_round_nums, is_rescue=True)
-            initial_rmc_ht = initial_rmc_ht.checkpoint(
+            rescue_rmc_ht = rescue_rmc_ht.checkpoint(
                 f"{TEMP_PATH_WITH_DEL}/rmc_rescue_search.ht",
                 overwrite=args.overwrite,
                 _read_if_exists=not args.overwrite,
