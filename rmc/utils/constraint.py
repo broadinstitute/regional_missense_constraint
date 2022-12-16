@@ -1065,7 +1065,7 @@ def calculate_section_chisq(
     exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
     """
-    Check for significane of regional missense constraint within transcript section.
+    Check for significance of regional missense constraint within transcript section.
 
     Function calculates chi square expression that assess whether observed and expected
     missense counts in a given transcript session are significantly different than the null
@@ -1121,7 +1121,7 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
             section_obs=hl.agg.take(ht.section_obs, 1)[0],
             section_exp=hl.agg.take(ht.section_exp, 1)[0],
             section_oe=hl.agg.take(ht.section_oe, 1)[0],
-            chr=hl.agg.take(ht.locus.contig, 1)[0],
+            chrom=hl.agg.take(ht.locus.contig, 1)[0],
         )
         hts.append(ht)
     rmc_ht = hts[0].union(*hts[1:])
