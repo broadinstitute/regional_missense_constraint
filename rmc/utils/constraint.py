@@ -763,7 +763,6 @@ def get_rescue_1break_transcripts(
     simul_ht = hl.read_table(
         f"{simul_results_path}/merged.ht",
     )
-    simul_ht = simul_ht.annotate(transcript=simul_ht.section.split("_")[0])
     simul_sections = simul_ht.aggregate(hl.agg.collect_as_set(simul_ht.section))
 
     # Get merged no-break table of round 1 of initial search
