@@ -33,7 +33,6 @@ from rmc.resources.rmc import (
     single_search_bucket_path,
     single_search_round_ht_path,
 )
-from rmc.utils.simultaneous_breaks import merge_simul_break_temp_hts
 
 
 logging.basicConfig(
@@ -767,7 +766,9 @@ def get_rescue_1break_transcripts(
     # Get merged no-break table of round 1 of initial search
     ht = merge_round_no_break_ht(is_rescue=False, search_num=1)
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/initial_round1_no_breaks.ht", overwrite=overwrite, _read_if_exists=not overwrite,
+        f"{TEMP_PATH_WITH_DEL}/initial_round1_no_breaks.ht",
+        overwrite=overwrite,
+        _read_if_exists=not overwrite,
     )
 
     # Filter to transcripts with candidate breakpoints over the rescue threshold
@@ -900,6 +901,79 @@ def get_rescue_transcripts_and_create_no_breaks_ht(overwrite: bool) -> None:
     )
 
 
+def merge_simul_break_temp_hts(
+    input_hts_path: str,
+    batch_phrase: str,
+    query_phrase: str,
+    output_ht_path: str,
+    overwrite: bool,
+    google_project: str = "broad-mpg-gnomad",
+) -> None:
+    """
+    Read in simultaneous breaks temporary HTs at specified path and merge.
+
+    .. note::
+        - Assumes temp HTs are keyed by "section" or ("section", "i", "j")
+        - Assumes temp HTs contain all annotations in SIMUL_BREAK_ANNOTATIONS
+
+    :param input_hts_path: Path to bucket containing input temporary HTs.
+    :param batch_phrase: String indicating name associated with HTs created
+        using Hail Batch jobs, e.g. "under", or "batch_temp_chisq".
+    :param query_phrase: String indicating name associated with HTs created
+        using Hail Query jobs via Dataproc, e.g. "dataproc", or "dataproc_temp_chisq".
+    :param output_ht_path: Desired path for output HT.
+    :param overwrite: Whether to overwrite output HT if it exists.
+    :param google_project: Google project to use to read data from requester-pays buckets.
+        Default is 'broad-mpg-gnomad'.
+    :return: None; function writes HT to specified path.
+    """
+    logger.info("Collecting all HT paths...")
+    temp_ht_paths = (
+        subprocess.check_output(
+            ["gsutil", "-u", f"{google_project}", "ls", f"{input_hts_path}"]
+        )
+        .decode("utf8")
+        .strip()
+        .split("\n")
+    )
+
+    intermediate_hts = []
+    ht_count = 0
+    for ht_path in temp_ht_paths:
+        ht_path = ht_path.strip("/")
+        if (batch_phrase in ht_path or query_phrase in ht_path) and ht_path.endswith(
+            "ht"
+        ):
+            ht_count += 1
+            logger.info("Working on %s", ht_path)
+            temp = hl.read_table(ht_path)
+            if temp.count() > 0:
+                # Tables containing transcripts/transcript sections that are over the transcript/section length threshold
+                # are keyed by section, i, j
+                # Tables containing transcripts/transcript sections that are under the length threshold are keyed
+                # only by section
+                # Rekey all tables here and select only the required fields to ensure the union on line 83 is able to work
+                # This `key_by` should not shuffle because `section` is already the first key for both Tables
+                temp = temp.key_by("section")
+                row_fields = set(temp.row)
+                if len(SIMUL_SEARCH_ANNOTATIONS.intersection(row_fields)) < len(
+                    SIMUL_SEARCH_ANNOTATIONS
+                ):
+                    raise DataException(
+                        f"The following fields are missing from the temp table: {SIMUL_SEARCH_ANNOTATIONS.difference(row_fields)}!"
+                    )
+                temp = temp.select(*SIMUL_SEARCH_ANNOTATIONS)
+                intermediate_hts.append(temp)
+
+    logger.info("Found %i HTs and appended %i", ht_count, len(intermediate_hts))
+    if len(intermediate_hts) == 0:
+        raise DataException(
+            "All temp tables had 0 rows. Please double check the temp tables!"
+        )
+    ht = intermediate_hts[0].union(*intermediate_hts[1:])
+    ht.write(output_ht_path, overwrite=overwrite)
+
+
 def get_break_search_round_nums(
     rounds_path: str,
     round_num_regex: str = r"round(\d+)/$",
@@ -951,7 +1025,6 @@ def check_break_search_round_nums(is_rescue: bool) -> List[int]:
     :param is_rescue: Whether to operate on searches in rescue pathway.
     :return: Sorted list of round numbers.
     """
-
     # Get sorted round numbers
     single_search_round_nums = get_break_search_round_nums(
         single_search_bucket_path(is_rescue=is_rescue)
