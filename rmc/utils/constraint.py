@@ -1118,7 +1118,8 @@ def merge_round_no_break_ht(
         ht = ht.filter(~hl.literal(simul_sections).contains(ht.section))
     else:
         logger.warning(
-            "Simul breaks results HT did not exist. Please double check that this was expected!"
+            "Simul breaks results HT (round %i) did not exist. Please double check that this was expected!",
+            search_num,
         )
     return ht
 
