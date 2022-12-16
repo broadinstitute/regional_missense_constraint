@@ -129,7 +129,7 @@ def process_context_ht(
     :param bool trimers: Whether to filter to trimers (if set to True) or heptamers. Default is True.
     :param bool filter_to_missense: Whether to filter Table to missense variants only. Default is True.
     :param bool add_annotations: Whether to add ref, alt, methylation_level, exome_coverage, cpg, transition,
-        and variant_type annotations. Default is True.
+        and mutation_type annotations. Default is True.
     :return: Context HT filtered to canonical transcripts and optionally filtered to missense variants with
         mutation rate, CpG status, and methylation level annotations.
     :rtype: hl.Table
@@ -162,7 +162,7 @@ def process_context_ht(
             "exome_coverage",
             "cpg",
             "transition",
-            "variant_type",
+            "mutation_type",
             *grouping,
         )
         return annotate_with_mu(ht, mu_ht)
