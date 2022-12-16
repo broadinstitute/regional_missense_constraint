@@ -19,6 +19,7 @@ from rmc.resources.reference_data import filtered_context, gene_model
 from rmc.resources.rmc import (
     constraint_prep,
     merged_search_ht_path,
+    rmc_results,
     simul_search_round_bucket_path,
     single_search_round_ht_path,
 )
@@ -33,7 +34,6 @@ from rmc.utils.constraint import (
     GROUPINGS,
     merge_rmc_hts,
     process_sections,
-    rmc_results,
 )
 from rmc.utils.generic import (
     filter_context_using_gnomad,
