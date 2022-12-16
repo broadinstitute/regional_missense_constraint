@@ -952,6 +952,8 @@ def check_break_search_round_nums(is_rescue: bool) -> List[int]:
     :param is_rescue: Whether to operate on searches in rescue pathway.
     :return: Sorted list of round numbers.
     """
+
+    # Get sorted round numbers
     single_search_round_nums = get_break_search_round_nums(
         single_search_bucket_path(is_rescue=is_rescue)
     )
@@ -963,6 +965,10 @@ def check_break_search_round_nums(is_rescue: bool) -> List[int]:
         ",".join(map(str, single_search_round_nums)),
         ",".join(map(str, simul_search_round_nums)),
     )
+    if len(single_search_round_nums) == 0 or len(simul_search_round_nums) == 0:
+        raise DataException(
+            "No rounds recorded for at least one of single and simultaneous search, please double-check!"
+        )
     if single_search_round_nums != list(range(1, max(single_search_round_nums))):
         raise DataException(
             "Single search round numbers are not consecutive and increasing from 1, please double-check!"
@@ -975,8 +981,6 @@ def check_break_search_round_nums(is_rescue: bool) -> List[int]:
         raise DataException(
             "Round numbers from single and simultaneous searches do not match, please double-check!"
         )
-    if len(single_search_round_nums) == 0:
-        raise DataException("No search rounds recorded, please double-check!")
     if len(single_search_round_nums) == 1:
         logger.warning(
             "Only one break search round recorded. Either no breaks were found or break search is not complete, please double-check!"
@@ -1041,7 +1045,9 @@ def merge_round_no_break_ht(
         simul_sections = simul_ht.aggregate(hl.agg.collect_as_set(simul_ht.section))
         ht = ht.filter(~hl.literal(simul_sections).contains(ht.section))
     else:
-        logger.warning("Simul breaks results HT did not exist. Please double check that this was expected!")
+        logger.warning(
+            "Simul breaks results HT did not exist. Please double check that this was expected!"
+        )
     return ht
 
 
