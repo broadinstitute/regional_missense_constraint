@@ -1041,11 +1041,11 @@ def check_break_search_round_nums(is_rescue: bool) -> List[int]:
         raise DataException(
             "No rounds recorded for at least one of single and simultaneous search, please double-check!"
         )
-    if single_search_round_nums != list(range(1, max(single_search_round_nums))):
+    if single_search_round_nums != list(range(1, max(single_search_round_nums) + 1)):
         raise DataException(
             "Single search round numbers are not consecutive and increasing from 1, please double-check!"
         )
-    if simul_search_round_nums != list(range(1, max(simul_search_round_nums))):
+    if simul_search_round_nums != list(range(1, max(simul_search_round_nums) + 1)):
         raise DataException(
             "Simultaneous search round numbers are not consecutive and increasing from 1, please double-check!"
         )
