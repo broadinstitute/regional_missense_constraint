@@ -7,9 +7,8 @@ import hail as hl
 
 from gnomad.resources.grch37.gnomad import coverage, public_release
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.constraint import annotate_mutation_type
 from gnomad.utils.file_utils import file_exists
-
-from gnomad_lof.constraint_utils.generic import annotate_variant_types
 
 from rmc.resources.basics import (
     SIMUL_BREAK_TEMP_PATH,
@@ -271,7 +270,7 @@ def calculate_exp_per_transcript(
     )
 
     logger.info("Adding CpG annotations...")
-    group_ht = annotate_variant_types(group_ht)
+    group_ht = annotate_mutation_type(group_ht)
 
     logger.info("Adjusting aggregated mutation rate with plateau model...")
     if locus_type == "X":
