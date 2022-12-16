@@ -83,6 +83,70 @@ Context Table ready for RMC calculations.
 HT is annotated with observed and expected variant counts per base.
 """
 
+CONSTRAINT_ANNOTATIONS = {
+    "mu_snp",
+    "observed",
+    "coverage",
+    "total_exp",
+    "total_mu",
+    "total_obs",
+    "cumulative_obs",
+    "cumulative_exp",
+    "forward_oe",
+    "mu_scan",
+    "section_mu",
+    "section_exp",
+    "section_obs",
+    "section_oe",
+    "reverse",
+    "reverse_obs_exp",
+    "total_null",
+    "total_alt",
+    "chisq",
+    "max_chisq",
+}
+"""
+Set of annotations used to calculate constraint and to hold resulting statistics.
+
+Used to drop unnecessary fields when starting rescue break search.
+
+TODO: assess which annotations in this list can be removed
+"""
+
+FINAL_ANNOTATIONS = {
+    "section_obs",
+    "section_exp",
+    "section_oe",
+}
+"""
+Set of annotations to keep from individual break search round result HTs when finalizing release HT.
+"""
+
+
+def single_search_bucket_path(
+    is_rescue: bool,
+    search_num: int = None,
+) -> str:
+    """
+    Return path to bucket associated with single break search inputs and results.
+
+    Function returns path to top level initial or "rescue"
+    (search with lowered chi square significance cutoff) bucket,
+    or bucket based on search number in either initial or rescue bucket.
+
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+        Default is None.
+    :return: Path to single break search round bucket.
+    """
+    rescue = "rescue" if is_rescue else "initial"
+    return (
+        f"{SINGLE_BREAK_TEMP_PATH}/{rescue}/round{search_num}"
+        if search_num
+        else f"{SINGLE_BREAK_TEMP_PATH}/{rescue}"
+    )
+
 
 def single_search_round_ht_path(
     is_rescue: bool,
@@ -150,7 +214,7 @@ Note that this field will also be kept (`section` is a key field):
 
 def simul_search_bucket_path(
     is_rescue: bool,
-    search_num: int,
+    search_num: int = None,
 ) -> str:
     """
     Return path to bucket associated with simultaneous break search inputs and results.
@@ -161,7 +225,8 @@ def simul_search_bucket_path(
 
     :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
-        (e.g., second round of searching for single break would be 2).
+        (e.g., second round of searching for simultaneous break would be 2).
+        Default is None.
     :return: Path to simultaneous break search round bucket.
     """
     rescue = "rescue" if is_rescue else "initial"
@@ -279,78 +344,6 @@ def merged_search_ht_path(
     break_status = "break_found" if is_break_found else "no_break_found"
     return f"{TEMP_PATH}/{rescue}round{search_num}_merged_{break_status}.ht"
 
-
-one_break = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/one_break.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Table containing transcripts with at least one break.
-
-Found when searching constraint_prep HT for transcripts for a single (first) break.
-"""
-
-not_one_break = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/not_one_break.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Table containing transcripts without one significant break.
-
-Transcripts in this table will be processed to check for two simultaneous breaks.
-"""
-
-not_one_break_grouped = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/not_one_break_grouped.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Not one break Table grouped by transcript with observed missense, expected missense, and positions collected into lists.
-
-Input to searching for simultaneous breaks.
-"""
-
-multiple_breaks = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/multiple_breaks.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Table containing transcripts with multiple breaks.
-"""
-
-
-simul_break = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/simul_break.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Table containing transcripts with two simultaneous breaks.
-"""
 
 no_breaks = f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/no_breaks.he"
 """

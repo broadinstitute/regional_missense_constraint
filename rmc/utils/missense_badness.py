@@ -8,8 +8,8 @@ from gnomad.utils.vep import CSQ_NON_CODING
 
 from rmc.resources.basics import TEMP_PATH
 from rmc.resources.gnomad import constraint_ht
-from rmc.resources.rmc import amino_acids_oe, constraint_prep, misbad
-from rmc.utils.constraint import add_obs_annotation, group_rmc_ht_by_section
+from rmc.resources.rmc import amino_acids_oe, constraint_prep, misbad, rmc_results
+from rmc.utils.constraint import add_obs_annotation
 from rmc.utils.generic import (
     filter_context_using_gnomad,
     get_codon_lookup,
@@ -71,6 +71,10 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
     .. note::
         - Assumes input Table has `locus` and `trancript` annotations
         - OE values are transcript specific
+        - Assumes merged RMC results HT exists
+        - Assumes merged RMC results HT is annotated per transcript section with:
+            - `section_oe`: Missense observed/expected ratio
+            - `interval`: Transcript section start position to end position
 
     :param hl.Table ht: Input Table.
     :return: Table with `oe` annotation.
@@ -101,7 +105,9 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
         transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe)
     )
 
-    rmc_ht = group_rmc_ht_by_section()
+    if not file_exists(rmc_results.path):
+        raise DataException("Merged RMC results table does not exist!")
+    rmc_ht = rmc_results.ht().key_by("interval")
     ht = ht.annotate(
         section_oe=rmc_ht.index(ht.locus, all_matches=True)
         .filter(lambda x: x.transcript == ht.transcript)
@@ -137,9 +143,7 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
 
     logger.info("Reading in VEP context HT...")
     # NOTE: Keeping all variant types here because need synonymous and nonsense variants to calculate missense badness
-    context_ht = process_context_ht(
-        filter_to_missense=False, add_annotations=False
-    )
+    context_ht = process_context_ht(filter_to_missense=False, add_annotations=False)
 
     logger.info(
         "Filtering to transcripts to keep and selecting relevant annotations..."

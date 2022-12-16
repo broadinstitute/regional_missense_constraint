@@ -266,34 +266,6 @@ def get_exome_bases() -> int:
     return ht.count()
 
 
-def get_avg_bases_between_mis() -> int:
-    """
-    Return average number of bases between observed missense variation.
-
-    For example, if the total number of bases is 30, and the total number of missense variants is 10,
-    this function will return 3.
-
-    This function is used to determine the minimum size window to check for significant missense depletion
-    when searching for two simultaneous breaks.
-
-    :return: Average number of bases between observed missense variants, rounded to the nearest integer,
-    :rtype: int
-    """
-    logger.info("Getting total number of bases in the exome from full context HT...")
-    total_bases = get_exome_bases()
-
-    ht = filtered_exomes.ht()
-    logger.info("Getting total number of missense variants in gnomAD...")
-    total_variants = ht.count()
-
-    logger.info("Total number of bases in the exome: %i", total_bases)
-    logger.info(
-        "Total number of missense variants in gnomAD exomes: %i", total_variants
-    )
-    logger.info("Getting average bases between missense variants and returning...")
-    return round(total_bases / total_variants)
-
-
 def keep_criteria(
     ac_expr: hl.expr.Int32Expression,
     af_expr: hl.expr.Float64Expression,

@@ -3,13 +3,10 @@ import logging
 
 import hail as hl
 
-from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
     LOGGING_PATH,
-    TEMP_PATH,
     TEMP_PATH_WITH_DEL,
 )
 from rmc.resources.gnomad import (
@@ -22,8 +19,6 @@ from rmc.resources.reference_data import filtered_context, gene_model
 from rmc.resources.rmc import (
     constraint_prep,
     merged_search_ht_path,
-    multiple_breaks,
-    simul_break,
     simul_search_round_bucket_path,
     single_search_round_ht_path,
 )
@@ -33,9 +28,12 @@ from rmc.utils.constraint import (
     add_obs_annotation,
     calculate_exp_per_transcript,
     calculate_observed,
+    check_break_search_round_nums,
     get_rescue_transcripts_and_create_no_breaks_ht,
     GROUPINGS,
+    merge_rmc_hts,
     process_sections,
+    rmc_results,
 )
 from rmc.utils.generic import (
     filter_context_using_gnomad,
@@ -475,125 +473,42 @@ def main(args):
         if args.finalize:
             hl.init(log="/RMC_finalize.log", tmp_dir=TEMP_PATH_WITH_DEL)
 
-            logger.info(
-                "Getting start and end positions and total size for each transcript..."
-            )
-            if not file_exists(f"{TEMP_PATH}/transcript.ht"):
-                raise DataException(
-                    "Transcript HT doesn't exist. Please double check and recreate!"
-                )
+            logger.info("Checking round paths in initial search...")
+            initial_round_nums = check_break_search_round_nums(is_rescue=False)
+            logger.info("Checking round paths in rescue search...")
+            rescue_round_nums = check_break_search_round_nums(is_rescue=True)
 
-            if args.remove_outlier_transcripts:
-                outlier_transcripts = get_constraint_transcripts(outlier=True)
-
-            logger.info("Reading in context HT...")
-            # Drop extra annotations from context HT
-            context_ht = filtered_context.ht().drop(
-                "obs_scan", "mu_scan", "forward_oe", "values"
+            logger.info("Finalizing section-level RMC table from initial search...")
+            initial_rmc_ht = merge_rmc_hts(
+                round_nums=initial_round_nums, is_rescue=False
             )
-            context_ht = context_ht.filter(
-                ~outlier_transcripts.contains(context_ht.transcript)
+            initial_rmc_ht = initial_rmc_ht.checkpoint(
+                f"{TEMP_PATH_WITH_DEL}/rmc_initial_search.ht",
+                overwrite=args.overwrite,
+                _read_if_exists=not args.overwrite,
             )
-
-            logger.info("Reading in results HTs...")
-            multiple_breaks_ht = multiple_breaks.ht()
-            multiple_breaks_ht = multiple_breaks_ht.filter(
-                ~outlier_transcripts.contains(multiple_breaks_ht.transcript)
+            logger.info("Finalizing section-level RMC table from rescue search...")
+            rescue_rmc_ht = merge_rmc_hts(round_nums=rescue_round_nums, is_rescue=True)
+            rescue_rmc_ht = rescue_rmc_ht.checkpoint(
+                f"{TEMP_PATH_WITH_DEL}/rmc_rescue_search.ht",
+                overwrite=args.overwrite,
+                _read_if_exists=not args.overwrite,
             )
-            # TODO: Update simul breaks reformatting
-            simul_breaks_ht = simul_break.ht()
-            simul_breaks_ht = simul_breaks_ht.filter(
-                ~outlier_transcripts.contains(simul_breaks_ht.transcript)
-            )
-
-            logger.info("Getting simultaneous breaks transcripts...")
-            simul_break_transcripts = simul_breaks_ht.aggregate(
-                hl.agg.collect_as_set(simul_breaks_ht.transcript), _localize=False
-            )
-            rmc_transcripts = simul_break_transcripts
-
-            logger.info("Getting transcript information for breaks HT...")
-            global_fields = multiple_breaks_ht.globals
-            n_breaks = [
-                int(x.split("_")[1]) for x in global_fields if "break" in x
-            ].sort()
-            rmc_transcripts = []
-            for break_num in n_breaks:
-                ht = hl.read_table(f"{TEMP_PATH}/break_{break_num}.ht")
-                ht = ht.filter(ht.is_break)
-                rmc_transcripts.append(
-                    ht.aggregate(hl.agg.collect_as_set(ht.transcript), _localize=False)
-                )
-
-            logger.info("Removing overlapping transcript information...")
-            # Extracting the unique set of transcripts for each break number
-            # e.g., keeping only transcripts with a single break
-            # and not transcripts also that had additional breaks in "break_1_transcripts"
-            filtered_transcripts = {}
 
             logger.info(
-                "Cycling through each set of transcripts with break information..."
+                "Merging RMC tables from initial and rescue searches together..."
             )
-            for index, transcripts in enumerate(rmc_transcripts):
-                # Cycle through the sets of transcripts for every number of breaks larger than current number of breaks
-                for t in rmc_transcripts[index + 1 :]:
-                    transcripts = transcripts.difference(t)
-
-                # Separate transcripts with a single break from transcripts with multiple breaks
-                # This is because transcripts with a single break are annotated into a separate struct
-                # in the release HT globals
-                if index == 0:
-                    one_break_transcripts = transcripts
-                else:
-                    filtered_transcripts[f"break_{index + 1}_transcripts"] = transcripts
-
-            # Getting total number of transcripts with evidence of rmc
-            total_rmc_transcripts = simul_break_transcripts
-            for break_num in filtered_transcripts:
-                total_rmc_transcripts = total_rmc_transcripts.union(
-                    filtered_transcripts[break_num]
-                )
-            logger.info(
-                "Number of transcripts with evidence of RMC: %s",
-                hl.eval(hl.len(total_rmc_transcripts)),
+            logger.warning(
+                "This performs a join followed by a rekey, which will trigger a shuffle!"
             )
+            rmc_ht = initial_rmc_ht.union(rescue_rmc_ht)
 
-            logger.info("Creating breaks HT...")
-            breaks_ht = context_ht.filter(
-                total_rmc_transcripts.contains(context_ht.transcript)
-            )
+            logger.info("Removing outlier transcripts...")
+            constraint_transcripts = get_constraint_transcripts(outlier=False)
+            rmc_ht = rmc_ht.filter(constraint_transcripts.contains(rmc_ht.transcript))
 
-            logger.info("Adding simultaneous breaks information to breaks HT...")
-            breaks_ht = breaks_ht.annotate(
-                simul_break_info=hl.struct(
-                    is_break=simul_breaks_ht[breaks_ht.key].is_break,
-                    window_end=simul_breaks_ht[breaks_ht.key].window_end,
-                    post_window_pos=simul_breaks_ht[breaks_ht.key].post_window_pos,
-                )
-            )
-            logger.info("Adding transcript information to breaks HT globals...")
-            breaks_ht = breaks_ht.annotate_globals(
-                single_break=hl.struct(transcripts=one_break_transcripts),
-                multiple_breaks=hl.struct(**filtered_transcripts),
-                simul_breaks=hl.struct(transcripts=simul_break_transcripts),
-            )
-
-            logger.info("Creating no breaks HT...")
-            no_breaks_ht = context_ht.filter(
-                ~total_rmc_transcripts.contains(context_ht.transcript)
-            )
-
-            # TODO: Add section chisq calculation here
-            if (breaks_ht.count() + no_breaks_ht.count()) != context_ht.count():
-                raise DataException(
-                    "Row counts for breaks HT (one break, multiple breaks, simul breaks) and no breaks HT doesn't match context HT row count!"
-                )
-
-            logger.info("Checkpointing HTs...")
-            breaks_ht = breaks_ht.checkpoint(f"{TEMP_PATH}/breaks.ht", overwrite=True)
-            no_breaks_ht = no_breaks_ht.checkpoint(
-                f"{TEMP_PATH}/no_breaks.ht", overwrite=True
-            )
+            logger.info("Writing out RMC results...")
+            rmc_ht.write(rmc_results.path)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
