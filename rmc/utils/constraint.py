@@ -1,7 +1,7 @@
 import logging
 import re
 import subprocess
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Set, Tuple, Union
 
 import hail as hl
 
@@ -25,6 +25,8 @@ from rmc.utils.generic import (
     import_de_novo_variants,
 )
 from rmc.resources.rmc import (
+    CONSTRAINT_ANNOTATIONS,
+    FINAL_ANNOTATIONS,
     no_breaks,
     oe_bin_counts_tsv,
     simul_search_bucket_path,
@@ -58,39 +60,6 @@ GROUPINGS = [
 Core fields to group by when calculating expected variants per variant type.
 
 Fields taken from gnomAD LoF repo.
-"""
-
-CONSTRAINT_ANNOTATIONS = [
-    "mu_snp",
-    "total_exp",
-    "mu_scan",
-    "total_mu",
-    "cumulative_obs",
-    "observed",
-    "cumulative_exp",
-    "total_obs",
-    "reverse",
-    "forward_oe",
-    "section_oe",
-    "start_pos",
-    "end_pos",
-    "transcript_size",
-]
-"""
-List of annotations required to calculate constraint.
-
-Used to drop unnecessary fields when searching for simultaneous breaks.
-"""
-
-FINAL_ANNOTATIONS = [
-    "section_obs",
-    "section_exp",
-    "section_oe",
-    "chisq",
-    "max_chisq",
-]
-"""
-List of annotations to keep when finalizing release HT.
 """
 
 
@@ -794,13 +763,12 @@ def get_rescue_1break_transcripts(
     simul_ht = hl.read_table(
         f"{simul_results_path}/merged.ht",
     )
-    simul_ht = simul_ht.annotate(transcript=simul_ht.section.split("_")[0])
     simul_sections = simul_ht.aggregate(hl.agg.collect_as_set(simul_ht.section))
 
     # Get merged no-break table of round 1 of initial search
     ht = merge_round_no_break_ht(is_rescue=False, search_num=1)
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/tmp_single_rescue_transcripts.ht", overwrite=overwrite
+        f"{TEMP_PATH_WITH_DEL}/initial_round1_no_breaks.ht", overwrite=overwrite
     )
 
     # Filter to transcripts with candidate breakpoints over the rescue threshold
@@ -1016,24 +984,31 @@ def check_break_search_round_nums(is_rescue: bool) -> List[int]:
     return single_search_round_nums
 
 
-def merge_round_no_break_ht(is_rescue: bool, search_num: int) -> hl.Table:
+def merge_round_no_break_ht(
+    is_rescue: bool,
+    search_num: int,
+    keep_annotations: Set[str] = CONSTRAINT_ANNOTATIONS,
+) -> hl.Table:
     """
     Get merged single and simultaneous search no-break table from a given round of break search.
+
+    Function starts with the round-specific single search no-breaks table
+    and removes all sections in the round-specific simultaneous search breaks table.
 
     :param is_rescue: Whether to operate on search in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
+    :param keep_annotations: Fields to keep in the table. Default is `CONSTRAINT_ANNOTATIONS`.
     :return: Table of loci in sections where no breaks were found in the break search round. Schema:
         ----------------------------------------
         Row fields:
             'locus': locus<GRCh37>
             'section': str
-            'section_obs': int64
-            'section_exp': float64
-            'section_oe': float64
+            ...
         ----------------------------------------
         Key: ['locus', 'section']
         ----------------------------------------
+        Note that there may be additional row fields depending on `keep_annotations`.
     """
     single_no_break_path = single_search_round_ht_path(
         is_rescue=is_rescue,
@@ -1046,7 +1021,15 @@ def merge_round_no_break_ht(is_rescue: bool, search_num: int) -> hl.Table:
             f"No table found at {single_no_break_path}. Please double-check!"
         )
     ht = hl.read_table(single_no_break_path)
-    ht = ht.select(*FINAL_ANNOTATIONS)
+
+    # Check that all fields in `keep_annotations` are in the table
+    row_fields = set(ht.row)
+    if len(keep_annotations.intersection(row_fields)) < len(keep_annotations):
+        raise DataException(
+            f"The following fields are missing from the break search result table: {keep_annotations.difference(row_fields)}!"
+        )
+    ht = ht.select(*keep_annotations)
+
     simul_results_path = simul_search_round_bucket_path(
         is_rescue=is_rescue,
         search_num=search_num,
@@ -1057,6 +1040,8 @@ def merge_round_no_break_ht(is_rescue: bool, search_num: int) -> hl.Table:
         simul_ht = hl.read_table(simul_break_path)
         simul_sections = simul_ht.aggregate(hl.agg.collect_as_set(simul_ht.section))
         ht = ht.filter(~hl.literal(simul_sections).contains(ht.section))
+    else:
+        logger.warning("Simul breaks results HT did not exist. Please double check that this was expected!")
     return ht
 
 
@@ -1065,7 +1050,7 @@ def calculate_section_chisq(
     exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
     """
-    Check for significane of regional missense constraint within transcript section.
+    Check for significance of regional missense constraint within transcript section.
 
     Function calculates chi square expression that assess whether observed and expected
     missense counts in a given transcript session are significantly different than the null
@@ -1115,13 +1100,17 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
     for search_num in round_nums[1:]:
         # For each search round:
         # Get locus-level merged no-break table (no breaks in both single and simultaneous searches)
-        ht = merge_round_no_break_ht(is_rescue=is_rescue, search_num=search_num)
+        ht = merge_round_no_break_ht(
+            is_rescue=is_rescue,
+            search_num=search_num,
+            keep_annotations=FINAL_ANNOTATIONS,
+        )
         # Group to section-level and retain section obs- and exp-related annotations
         ht = ht.group_by("section").aggregate(
             section_obs=hl.agg.take(ht.section_obs, 1)[0],
             section_exp=hl.agg.take(ht.section_exp, 1)[0],
             section_oe=hl.agg.take(ht.section_oe, 1)[0],
-            chr=hl.agg.take(ht.locus.contig, 1)[0],
+            chrom=hl.agg.take(ht.locus.contig, 1)[0],
         )
         hts.append(ht)
     rmc_ht = hts[0].union(*hts[1:])
@@ -1154,7 +1143,7 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
         interval=hl.parse_locus_interval(
             hl.format(
                 "[%s:%s-%s]",
-                rmc_ht.chr,
+                rmc_ht.chrom,
                 rmc_ht.start_pos,
                 rmc_ht.end_pos,
             )
