@@ -1040,6 +1040,8 @@ def merge_round_no_break_ht(
         simul_ht = hl.read_table(simul_break_path)
         simul_sections = simul_ht.aggregate(hl.agg.collect_as_set(simul_ht.section))
         ht = ht.filter(~hl.literal(simul_sections).contains(ht.section))
+    else:
+        logger.warning("Simul breaks results HT did not exist. Please double check that this was expected!")
     return ht
 
 
