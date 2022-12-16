@@ -148,6 +148,10 @@ def process_context_ht(
     if add_annotations:
         # `prepare_ht_for_constraint_calculations` annotates HT with:
         # ref, alt, methylation_level, exome_coverage, cpg, transition, mutation_type
+        # NOTE: `mutation_type` was initially named `variant_type`, but this
+        # field was renamed because `variant_type` refers to a different piece of
+        # information in the gnomad_methods repo
+        # See docstring for `annotate_mutation_type` for more details
         ht = prepare_ht_for_constraint_calculations(ht)
 
         logger.info("Annotating with mutation rate...")
