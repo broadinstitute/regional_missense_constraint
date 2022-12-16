@@ -1092,7 +1092,7 @@ def merge_round_no_break_ht(
         is_break_found=False,
         is_breakpoint_only=False,
     )
-    if file_exists(single_no_break_path):
+    if not file_exists(single_no_break_path):
         raise DataException(
             f"No table found at {single_no_break_path}. Please double-check!"
         )
