@@ -1154,7 +1154,7 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
         interval=hl.parse_locus_interval(
             hl.format(
                 "[%s:%s-%s]",
-                rmc_ht.chr,
+                rmc_ht.chrom,
                 rmc_ht.start_pos,
                 rmc_ht.end_pos,
             )
