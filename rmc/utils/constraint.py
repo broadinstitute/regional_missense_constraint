@@ -993,6 +993,9 @@ def merge_round_no_break_ht(
     """
     Get merged single and simultaneous search no-break table from a given round of break search.
 
+    Function starts with the round-specific single search no-breaks table
+    and removes all sections in the round-specific simultaneous search breaks table.
+
     :param is_rescue: Whether to operate on search in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
