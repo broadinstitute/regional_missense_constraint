@@ -273,13 +273,13 @@ def create_context_with_oe(
     ht = ht.collect_by_key()
     ht = ht.annotate(oe=hl.nanmin(ht.values.oe))
     ht = ht.annotate(transcript=ht.values.find(lambda x: x.oe == ht.oe).transcript)
-    ht.write(
-        context_with_oe_dedup.path, _read_if_exists=not overwrite, overwrite=overwrite
-    )
+    ht.write(context_with_oe_dedup.path, overwrite=overwrite)
 
 
 def prepare_pop_path_ht(
-    gnomad_data_type: str = "exomes", af_threshold: float = 0.001
+    gnomad_data_type: str = "exomes",
+    af_threshold: float = 0.001,
+    overwrite: bool = True,
 ) -> None:
     """
     Prepare Table with 'population' (common gnomAD missense) and 'pathogenic' (ClinVar pathogenic/likely pathogenic missense) variants.
@@ -294,6 +294,9 @@ def prepare_pop_path_ht(
     :param float af_threshold: Allele frequency cutoff to filter gnomAD public dataset.
         Variants *above* this threshold will be kept.
         Default is 0.001.
+    :param bool overwrite: Whether to overwrite temporary data if it already exists.
+        If False, will read existing temporary data rather than overwriting.
+        Default is True.
     :return: None; function writes Table to resource path.
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
@@ -305,9 +308,16 @@ def prepare_pop_path_ht(
     gnomad_ht = gnomad_ht.filter(gnomad_ht.freq[0].AF > af_threshold)
     gnomad_ht = gnomad_ht.annotate(pop_v_path=1)
 
-    logger.info("Joining ClinVar and gnomAD HTs...")
+    logger.info("Joining ClinVar and gnomAD HTs and filtering out overlaps...")
     ht = clinvar_ht.select("pop_v_path").union(gnomad_ht.select("pop_v_path"))
-    ht = ht.checkpoint(f"{TEMP_PATH}/joint_clinvar_gnomad.ht", overwrite=True)
+    # Remove variants that are in both the benign and pathogenic set
+    counts = ht.group_by(*ht.key).aggregate(n=hl.agg.count())
+    ht = ht.anti_join(counts.filter(counts.n > 1))
+    ht = ht.checkpoint(
+        f"{TEMP_PATH}/joint_clinvar_gnomad.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
+    )
 
     logger.info("Adding CADD...")
     # TODO: Make sure future CADD HTs have already been split
@@ -322,13 +332,15 @@ def prepare_pop_path_ht(
     # Create VEP context HT filtered to missense variants in canonical transcripts
     # if they don't already exist
     if not file_exists(context_with_oe_dedup.path):
-        create_context_with_oe(overwrite=True)
+        create_context_with_oe(overwrite=overwrite)
 
     # Get transcript annotation from deduplicated context HT resource
     context_ht = context_with_oe_dedup.ht()
     ht = ht.annotate(transcript=context_ht[ht.key].transcript)
     ht = ht.checkpoint(
-        f"{TEMP_PATH}/joint_clinvar_gnomad_transcript.ht", overwrite=True
+        f"{TEMP_PATH}/joint_clinvar_gnomad_transcript.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
     )
 
     logger.info(
@@ -339,7 +351,9 @@ def prepare_pop_path_ht(
     context_ht = context_ht.key_by("locus", "alleles", "transcript")
     ht = ht.annotate(**context_ht[ht.locus, ht.alleles, ht.transcript])
     ht = ht.checkpoint(
-        f"{TEMP_PATH}/joint_clinvar_gnomad_transcript_aa.ht", overwrite=True
+        f"{TEMP_PATH}/joint_clinvar_gnomad_transcript_aa.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
     )
 
     logger.info("Getting missense badness annotation...")
@@ -357,7 +371,11 @@ def prepare_pop_path_ht(
         blosum=blosum_ht[ht.ref, ht.alt].score,
         grantham=grantham_ht[ht.ref, ht.alt].score,
     )
-    ht = ht.checkpoint(f"{TEMP_PATH}/joint_clinvar_gnomad_full.ht", overwrite=True)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH}/joint_clinvar_gnomad_full.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
+    )
 
     logger.info("Filtering to rows with defined annotations and writing out...")
     ht = ht.filter(
@@ -368,7 +386,7 @@ def prepare_pop_path_ht(
         & hl.is_defined(ht.polyphen.score)
         & hl.is_defined(ht.misbad)
     )
-    ht.write(joint_clinvar_gnomad.path, overwrite=True)
+    ht.write(joint_clinvar_gnomad.path, overwrite=overwrite)
 
 
 def run_regressions(

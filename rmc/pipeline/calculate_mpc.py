@@ -36,7 +36,7 @@ def main(args):
     try:
         if args.command == "prepare-ht":
             hl.init(log="/write_pop_path_ht.log", tmp_dir=temp_dir)
-            prepare_pop_path_ht()
+            prepare_pop_path_ht(overwrite=args.overwrite)
 
         if args.command == "run-glm":
             hl.init(log="/run_regressions_using_glm.log", tmp_dir=temp_dir)
