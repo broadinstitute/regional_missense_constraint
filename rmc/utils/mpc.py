@@ -1,4 +1,5 @@
 import logging
+import numpy as np
 import pandas as pd
 from patsy import dmatrices
 import pickle
@@ -423,6 +424,20 @@ def run_regressions(
     ht = joint_clinvar_gnomad.ht()
     ht = ht.transmute(polyphen=ht.polyphen.score)
     df = ht.to_pandas()
+
+    # NOTE: `Table.to_pandas()` outputs a DataFrame with nullable dtypes
+    # for int and float fields, which patsy cannot handle
+    # These must be converted to non-nullable standard numpy dtypes
+    # prior to working with patsy
+    for column in df.columns:
+        if df[column].dtype == "Int32":
+            df[column] = df[column].astype(np.int32)
+        if df[column].dtype == "Int64":
+            df[column] = df[column].astype(np.int64)
+        if df[column].dtype == "Float32":
+            df[column] = df[column].astype(np.float32)
+        if df[column].dtype == "Float64":
+            df[column] = df[column].astype(np.float64)
 
     def _run_glm(
         formula: str,
