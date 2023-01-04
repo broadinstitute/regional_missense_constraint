@@ -432,6 +432,7 @@ def run_regressions(
     # for int and float fields, which patsy cannot handle
     # These must be converted to non-nullable standard numpy dtypes
     # prior to working with patsy
+    # See: https://github.com/hail-is/hail/commit/da557655ef1da99ddd1887bd32b33f4b5adcec9f
     for column in df.columns:
         if df[column].dtype == "Int32":
             df[column] = df[column].astype(np.int32)
