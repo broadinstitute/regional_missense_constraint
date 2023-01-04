@@ -313,7 +313,10 @@ def prepare_pop_path_ht(
     ht = clinvar_ht.select("pop_v_path").union(gnomad_ht.select("pop_v_path"))
     # Remove variants that are in both the benign and pathogenic set
     counts = ht.group_by(*ht.key).aggregate(n=hl.agg.count())
-    ht = ht.anti_join(counts.filter(counts.n > 1))
+    counts = counts.checkpoint(f"{TEMP_PATH_WITH_DEL}/clinvar_gnomad_counts.ht", overwrite=True)
+    overlap = counts.filter(counts.n > 1)
+    logger.info("%i ClinVar P/LP variants are common in gnomAD", overlap.count()) 
+    ht = ht.anti_join(overlap)
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad.ht",
         _read_if_exists=not overwrite,
