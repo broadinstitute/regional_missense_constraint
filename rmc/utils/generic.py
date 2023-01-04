@@ -25,7 +25,7 @@ from rmc.resources.basics import (
     CODON_TABLE_PATH,
     hi_genes,
 )
-from rmc.resources.gnomad import constraint_ht, filtered_exomes, mutation_rate
+from rmc.resources.gnomad import constraint_ht, mutation_rate
 from rmc.resources.rmc import (
     DIVERGENCE_SCORES_TSV_PATH,
     MUTATION_RATE_TABLE_PATH,
@@ -322,7 +322,7 @@ def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.T
 
     logger.info("Filtering to non-outlier transcripts...")
     # Keep transcripts used in LoF constraint only (remove all other outlier transcripts)
-    constraint_transcripts = get_constraint_transcripts(outlier=True)
+    constraint_transcripts = get_constraint_transcripts(outlier=False)
     ht = ht.filter(
         constraint_transcripts.contains(ht.transcript_consequences.transcript_id)
     )

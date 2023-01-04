@@ -1,4 +1,5 @@
 import logging
+import numpy as np
 import pandas as pd
 from patsy import dmatrices
 import pickle
@@ -19,6 +20,7 @@ from rmc.resources.basics import (
     grantham,
     grantham_txt_path,
     TEMP_PATH,
+    TEMP_PATH_WITH_DEL,
 )
 from rmc.resources.reference_data import cadd, clinvar_path_mis
 from rmc.resources.rmc import (
@@ -273,13 +275,13 @@ def create_context_with_oe(
     ht = ht.collect_by_key()
     ht = ht.annotate(oe=hl.nanmin(ht.values.oe))
     ht = ht.annotate(transcript=ht.values.find(lambda x: x.oe == ht.oe).transcript)
-    ht.write(
-        context_with_oe_dedup.path, _read_if_exists=not overwrite, overwrite=overwrite
-    )
+    ht.write(context_with_oe_dedup.path, overwrite=overwrite)
 
 
 def prepare_pop_path_ht(
-    gnomad_data_type: str = "exomes", af_threshold: float = 0.001
+    gnomad_data_type: str = "exomes",
+    af_threshold: float = 0.001,
+    overwrite: bool = True,
 ) -> None:
     """
     Prepare Table with 'population' (common gnomAD missense) and 'pathogenic' (ClinVar pathogenic/likely pathogenic missense) variants.
@@ -294,6 +296,9 @@ def prepare_pop_path_ht(
     :param float af_threshold: Allele frequency cutoff to filter gnomAD public dataset.
         Variants *above* this threshold will be kept.
         Default is 0.001.
+    :param bool overwrite: Whether to overwrite temporary data if it already exists.
+        If False, will read existing temporary data rather than overwriting.
+        Default is True.
     :return: None; function writes Table to resource path.
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
@@ -305,9 +310,21 @@ def prepare_pop_path_ht(
     gnomad_ht = gnomad_ht.filter(gnomad_ht.freq[0].AF > af_threshold)
     gnomad_ht = gnomad_ht.annotate(pop_v_path=1)
 
-    logger.info("Joining ClinVar and gnomAD HTs...")
+    logger.info("Joining ClinVar and gnomAD HTs and filtering out overlaps...")
     ht = clinvar_ht.select("pop_v_path").union(gnomad_ht.select("pop_v_path"))
-    ht = ht.checkpoint(f"{TEMP_PATH}/joint_clinvar_gnomad.ht", overwrite=True)
+    # Remove variants that are in both the benign and pathogenic set
+    counts = ht.group_by(*ht.key).aggregate(n=hl.agg.count())
+    counts = counts.checkpoint(
+        f"{TEMP_PATH_WITH_DEL}/clinvar_gnomad_counts.ht", overwrite=True
+    )
+    overlap = counts.filter(counts.n > 1)
+    logger.info("%i ClinVar P/LP variants are common in gnomAD", overlap.count())
+    ht = ht.anti_join(overlap)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
+    )
 
     logger.info("Adding CADD...")
     # TODO: Make sure future CADD HTs have already been split
@@ -322,13 +339,15 @@ def prepare_pop_path_ht(
     # Create VEP context HT filtered to missense variants in canonical transcripts
     # if they don't already exist
     if not file_exists(context_with_oe_dedup.path):
-        create_context_with_oe(overwrite=True)
+        create_context_with_oe(overwrite=overwrite)
 
     # Get transcript annotation from deduplicated context HT resource
     context_ht = context_with_oe_dedup.ht()
     ht = ht.annotate(transcript=context_ht[ht.key].transcript)
     ht = ht.checkpoint(
-        f"{TEMP_PATH}/joint_clinvar_gnomad_transcript.ht", overwrite=True
+        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad_transcript.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
     )
 
     logger.info(
@@ -339,7 +358,9 @@ def prepare_pop_path_ht(
     context_ht = context_ht.key_by("locus", "alleles", "transcript")
     ht = ht.annotate(**context_ht[ht.locus, ht.alleles, ht.transcript])
     ht = ht.checkpoint(
-        f"{TEMP_PATH}/joint_clinvar_gnomad_transcript_aa.ht", overwrite=True
+        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad_transcript_aa.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
     )
 
     logger.info("Getting missense badness annotation...")
@@ -357,7 +378,11 @@ def prepare_pop_path_ht(
         blosum=blosum_ht[ht.ref, ht.alt].score,
         grantham=grantham_ht[ht.ref, ht.alt].score,
     )
-    ht = ht.checkpoint(f"{TEMP_PATH}/joint_clinvar_gnomad_full.ht", overwrite=True)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad_full.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
+    )
 
     logger.info("Filtering to rows with defined annotations and writing out...")
     ht = ht.filter(
@@ -368,7 +393,7 @@ def prepare_pop_path_ht(
         & hl.is_defined(ht.polyphen.score)
         & hl.is_defined(ht.misbad)
     )
-    ht.write(joint_clinvar_gnomad.path, overwrite=True)
+    ht.write(joint_clinvar_gnomad.path, overwrite=overwrite)
 
 
 def run_regressions(
@@ -405,6 +430,21 @@ def run_regressions(
     ht = joint_clinvar_gnomad.ht()
     ht = ht.transmute(polyphen=ht.polyphen.score)
     df = ht.to_pandas()
+
+    # NOTE: `Table.to_pandas()` outputs a DataFrame with nullable dtypes
+    # for int and float fields, which patsy cannot handle
+    # These must be converted to non-nullable standard numpy dtypes
+    # prior to working with patsy
+    # See: https://github.com/hail-is/hail/commit/da557655ef1da99ddd1887bd32b33f4b5adcec9f
+    for column in df.columns:
+        if df[column].dtype == "Int32":
+            df[column] = df[column].astype(np.int32)
+        if df[column].dtype == "Int64":
+            df[column] = df[column].astype(np.int64)
+        if df[column].dtype == "Float32":
+            df[column] = df[column].astype(np.float32)
+        if df[column].dtype == "Float64":
+            df[column] = df[column].astype(np.float64)
 
     def _run_glm(
         formula: str,
