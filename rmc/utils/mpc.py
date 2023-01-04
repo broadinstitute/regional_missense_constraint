@@ -315,7 +315,7 @@ def prepare_pop_path_ht(
     counts = ht.group_by(*ht.key).aggregate(n=hl.agg.count())
     ht = ht.anti_join(counts.filter(counts.n > 1))
     ht = ht.checkpoint(
-        f"{TEMP_PATH}/joint_clinvar_gnomad.ht",
+        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )
@@ -339,7 +339,7 @@ def prepare_pop_path_ht(
     context_ht = context_with_oe_dedup.ht()
     ht = ht.annotate(transcript=context_ht[ht.key].transcript)
     ht = ht.checkpoint(
-        f"{TEMP_PATH}/joint_clinvar_gnomad_transcript.ht",
+        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad_transcript.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )
@@ -352,7 +352,7 @@ def prepare_pop_path_ht(
     context_ht = context_ht.key_by("locus", "alleles", "transcript")
     ht = ht.annotate(**context_ht[ht.locus, ht.alleles, ht.transcript])
     ht = ht.checkpoint(
-        f"{TEMP_PATH}/joint_clinvar_gnomad_transcript_aa.ht",
+        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad_transcript_aa.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )
@@ -373,7 +373,7 @@ def prepare_pop_path_ht(
         grantham=grantham_ht[ht.ref, ht.alt].score,
     )
     ht = ht.checkpoint(
-        f"{TEMP_PATH}/joint_clinvar_gnomad_full.ht",
+        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad_full.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )
