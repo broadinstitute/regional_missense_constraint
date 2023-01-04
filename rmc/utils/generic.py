@@ -25,7 +25,7 @@ from rmc.resources.basics import (
     CODON_TABLE_PATH,
     hi_genes,
 )
-from rmc.resources.gnomad import constraint_ht, filtered_exomes, mutation_rate
+from rmc.resources.gnomad import constraint_ht, mutation_rate
 from rmc.resources.rmc import (
     DIVERGENCE_SCORES_TSV_PATH,
     MUTATION_RATE_TABLE_PATH,
