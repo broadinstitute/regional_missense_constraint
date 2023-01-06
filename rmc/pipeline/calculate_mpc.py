@@ -36,11 +36,14 @@ def main(args):
     try:
         if args.command == "prepare-ht":
             hl.init(log="/write_pop_path_ht.log", tmp_dir=temp_dir)
-            prepare_pop_path_ht(overwrite=args.overwrite)
+            prepare_pop_path_ht(
+                include_rescue=args.include_rescue, overwrite=args.overwrite
+            )
 
         if args.command == "run-glm":
             hl.init(log="/run_regressions_using_glm.log", tmp_dir=temp_dir)
             run_regressions(
+                include_rescue=args.include_rescue,
                 variables=args.variables.split(","),
                 additional_variables=args.extra_variables.split(","),
                 overwrite=args.overwrite,
@@ -49,9 +52,11 @@ def main(args):
         if args.command == "calculate-mpc":
             hl.init(log="/calculate_mpc_release.log", tmp_dir=temp_dir)
             create_mpc_release_ht(
+                include_rescue=args.include_rescue,
                 overwrite=args.overwrite,
             )
 
+        # TODO: Add include_rescue option for annotate-hts
         if args.command == "annotate-hts":
             hl.init(log="/annotate_hts.log", tmp_dir=temp_dir)
             if args.clinvar:
@@ -112,6 +117,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
+    )
+    parser.add_argument(
+        "--include-rescue",
+        help="Include RMC results from rescue search in calculations.",
+        action="store_true",
     )
 
     # Create subparsers for each step
