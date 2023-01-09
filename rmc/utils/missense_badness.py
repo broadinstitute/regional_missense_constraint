@@ -350,9 +350,7 @@ def calculate_misbad(
             f"OE column named {oe_col} does not exist in table with all amino acid substitutions!"
         )
     if include_rescue:
-        if "oe" in ht.row:
-            ht = ht.drop("oe")
-        ht = ht.rename({oe_col: "oe"})
+        ht = ht.transmute(oe=ht.oe_rescue)
 
     if use_exac_oe_cutoffs:
         logger.info("Removing rows with OE greater than 0.6 and less than 0.8...")
