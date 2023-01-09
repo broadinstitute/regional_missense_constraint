@@ -353,6 +353,8 @@ def main(args):
 
         if args.merge_single_simul:
             if args.is_rescue and args.search_num == 1:
+                # NOTE: The first round of rescue search is performed using intermediate outputs
+                # from the first round of initial search
                 hl.init(
                     log=f"/rescue_round{args.search_num}_merge_single_simul.log",
                     tmp_dir=TEMP_PATH_WITH_DEL,
@@ -361,11 +363,14 @@ def main(args):
                     chisq_thresholds_dict = json.loads(args.chisq_thresholds_dict)
                 else:
                     chisq_thresholds_dict = CHISQ_THRESHOLDS
+                logger.info(
+                    "Creating outputs for first rescue search round and final no-break transcripts..."
+                )
                 get_rescue_transcripts_and_create_no_breaks_ht(
                     args.overwrite, chisq_thresholds_dict
                 )
 
-                # Use no_break_found HT from single breaks results to get locus input to simultaneous break search
+                # Get locus input to this simultaneous break search round from single search no-break HT
                 single_no_break_ht = hl.read_table(
                     single_search_round_ht_path(
                         is_rescue=not args.is_rescue,
@@ -380,7 +385,7 @@ def main(args):
                     log=f"/round{args.search_num}_merge_single_simul.log",
                     tmp_dir=TEMP_PATH_WITH_DEL,
                 )
-                # Use no_break_found HT from single breaks results to get locus input to simultaneous break search
+                # Get locus input to this simultaneous break search round from single search no-break HT
                 single_no_break_ht = hl.read_table(
                     single_search_round_ht_path(
                         is_rescue=args.is_rescue,
@@ -403,7 +408,7 @@ def main(args):
                 )
                 simul_by_section_ht = hl.read_table(f"{simul_results_path}/merged.ht")
 
-                # Filter to sections with simultaneous breaks
+                # Filter locus-level table (from single search no-break results) to sections with simultaneous breaks
                 single_no_break_ht = single_no_break_ht.annotate(
                     breakpoints=simul_by_section_ht[
                         single_no_break_ht.section
@@ -411,6 +416,9 @@ def main(args):
                 )
                 simul_break_ht = single_no_break_ht.filter(
                     hl.is_defined(single_no_break_ht.breakpoints)
+                )
+                logger.info(
+                    "Annotating simul breaks with new sections and re-keying for next search..."
                 )
                 simul_break_ht = simul_break_ht.annotate(
                     section_1=hl.if_else(
