@@ -415,9 +415,7 @@ def prepare_pop_path_ht(
     # If not including, drop rescue-included OE column
     context_ht_cols = set(context_ht.row)
     if include_rescue:
-        if "oe" in context_ht_cols:
-            context_ht = context_ht.drop("oe")
-        context_ht = context_ht.rename({"oe_rescue": "oe"})
+        context_ht = context_ht.transmute(oe=context_ht.oe_rescue)
     elif "oe_rescue" in context_ht_cols:
         context_ht = context_ht.drop("oe_rescue")
     # Get Polyphen, codon, o/e, amino acid annotations
@@ -435,9 +433,7 @@ def prepare_pop_path_ht(
     # If not including, drop rescue-included misbad column
     mb_ht_cols = set(mb_ht.row)
     if include_rescue:
-        if "misbad" in mb_ht_cols:
-            mb_ht = mb_ht.drop("misbad")
-        mb_ht = mb_ht.rename({"misbad_rescue": "misbad"})
+        mb_ht = mb_ht.transmute(misbad=mb_ht.misbad_rescue)
     elif "misbad_rescue" in mb_ht_cols:
         mb_ht = mb_ht.drop("misbad_rescue")
     # Get misbad annotation
