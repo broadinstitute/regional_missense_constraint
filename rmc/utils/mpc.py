@@ -918,7 +918,7 @@ def create_mpc_release_ht(
         # Checkpointing so that `mpc_release_dedup` can be overwritten to the same path
         ht = ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/mpc_dedup.ht")
         # Overwrite is set to True here to ensure newly-added columns are written out
-        ht = ht.write(mpc_release_dedup.path, overwrite=True)
+        ht.write(mpc_release_dedup.path, overwrite=True)
     else:
         ht.write(
             mpc_release_dedup.path,
