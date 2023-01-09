@@ -284,6 +284,8 @@ def create_context_with_oe(
         )
         ht = ht.select(oe_col)
         ht = context_with_oe_ht.annotate(**ht[context_with_oe_ht.key])
+        # Checkpointing so that `context_with_oe` can be overwritten to the same path
+        ht = ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/context_with_oe.ht")
         # Overwrite is set to True here to ensure newly-added columns are written out
         ht = ht.checkpoint(context_with_oe.path, overwrite=True)
     else:
@@ -310,6 +312,8 @@ def create_context_with_oe(
             [oe_col, transcript_col],
         )
         ht = context_with_oe_dedup_ht.annotate(**ht[context_with_oe_dedup_ht.key])
+        # Checkpointing so that `context_with_oe_dedup` can be overwritten to the same path
+        ht = ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/context_with_oe_dedup.ht")
         # Overwrite is set to True here to ensure newly-added columns are written out
         ht = ht.write(context_with_oe_dedup.path, overwrite=True)
     else:
@@ -875,6 +879,8 @@ def create_mpc_release_ht(
         )
         ht = ht.select(cols_to_add)
         ht = mpc_ht.annotate(**ht[mpc_ht.key])
+        # Checkpointing so that `mpc_release` can be overwritten to the same path
+        ht = ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/mpc.ht")
         # Overwrite is set to True here to ensure newly-added columns are written out
         ht = ht.checkpoint(mpc_release.path, overwrite=True)
     else:
@@ -909,6 +915,8 @@ def create_mpc_release_ht(
             [mpc_col, transcript_col],
         )
         ht = mpc_dedup_ht.annotate(**ht[mpc_dedup_ht.key])
+        # Checkpointing so that `mpc_release_dedup` can be overwritten to the same path
+        ht = ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/mpc_dedup.ht")
         # Overwrite is set to True here to ensure newly-added columns are written out
         ht = ht.write(mpc_release_dedup.path, overwrite=True)
     else:
