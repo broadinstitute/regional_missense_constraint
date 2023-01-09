@@ -361,14 +361,15 @@ def calculate_misbad(
     )
     logger.info("Creating high missense OE (OE > %s) HT...", oe_threshold)
     high_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=True)
+    rescue = "_rescue" if include_rescue else ""
     high_ht = high_ht.checkpoint(
-        f"{TEMP_PATH}/amino_acids_high_oe.ht", overwrite=overwrite
+        f"{TEMP_PATH}/amino_acids_high_oe{rescue}.ht", overwrite=overwrite
     )
 
     logger.info("Creating low missense OE (OE <= %s) HT...", oe_threshold)
     low_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=False)
     low_ht = low_ht.checkpoint(
-        f"{TEMP_PATH}/amino_acids_low_oe.ht", overwrite=overwrite
+        f"{TEMP_PATH}/amino_acids_low_oe{rescue}.ht", overwrite=overwrite
     )
 
     logger.info("Re-joining split HTs to calculate missense badness...")
