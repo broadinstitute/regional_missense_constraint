@@ -453,7 +453,7 @@ Table containing all possible amino acid substitutions and their missense badnes
 CURRENT_MPC_PREFIX = f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}"
 
 
-def joint_clinvar_gnomad_path(is_rescue: bool = False) -> str:
+def joint_clinvar_gnomad_path(include_rescue: bool = False) -> str:
     """
     Return path to Table containing "population" and "pathogenic" variants.
 
@@ -469,11 +469,11 @@ def joint_clinvar_gnomad_path(is_rescue: bool = False) -> str:
         If False, RMC results used in calculation are derived from the initial RMC search only.
     :return: Path to Table.
     """
-    rescue = "_rescue" if is_rescue else ""
+    rescue = "_rescue" if include_rescue else ""
     return f"{CURRENT_MPC_PREFIX}/joint_clinvar_gnomad{rescue}.ht"
 
 
-def mpc_model_pkl_path(is_rescue: bool = False) -> str:
+def mpc_model_pkl_path(include_rescue: bool = False) -> str:
     """
     Return path to model (stored as pickle) that contains relationship of MPC variables.
 
@@ -484,11 +484,11 @@ def mpc_model_pkl_path(is_rescue: bool = False) -> str:
         If False, RMC results used in calculation are derived from the initial RMC search only.
     :return: Path to model.
     """
-    rescue = "_rescue" if is_rescue else ""
+    rescue = "_rescue" if include_rescue else ""
     return f"{CURRENT_MPC_PREFIX}/mpc_model{rescue}.pkl"
 
 
-def gnomad_fitted_score_path(is_rescue: bool = False) -> str:
+def gnomad_fitted_score_path(include_rescue: bool = False) -> str:
     """
     Return path to Table of gnomAD variants and their fitted scores (from MPC model regression).
 
@@ -499,11 +499,11 @@ def gnomad_fitted_score_path(is_rescue: bool = False) -> str:
         If False, RMC results used in calculation are derived from the initial RMC search only.
     :return: Path to Table.
     """
-    rescue = "_rescue" if is_rescue else ""
+    rescue = "_rescue" if include_rescue else ""
     return f"{CURRENT_MPC_PREFIX}/gnomad_fitted_scores{rescue}.ht"
 
 
-def gnomad_fitted_score_group_path(is_rescue: bool = False) -> str:
+def gnomad_fitted_score_group_path(include_rescue: bool = False) -> str:
     """
     Return path to Table of fitted scores for common (AF > 0.001) variants in gnomAD, grouped by score.
 
@@ -514,7 +514,7 @@ def gnomad_fitted_score_group_path(is_rescue: bool = False) -> str:
         If False, RMC results used in calculation are derived from the initial RMC search only.
     :return: Path to Table.
     """
-    rescue = "_rescue" if is_rescue else ""
+    rescue = "_rescue" if include_rescue else ""
     return f"{CURRENT_MPC_PREFIX}/gnomad_fitted_scores_group{rescue}.ht"
 
 
