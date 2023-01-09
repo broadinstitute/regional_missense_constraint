@@ -75,6 +75,8 @@ def get_oe_annotation(ht: hl.Table, include_rescue: bool) -> hl.Table:
         - Assumes merged RMC results HT is annotated per transcript section with:
             - `section_oe`: Missense observed/expected ratio
             - `interval`: Transcript section start position to end position
+            - `search_type`: Whether transcript RMC was discovered through
+                initial (if "initial") or rescue (if "rescue") RMC search
 
     :param hl.Table ht: Input Table.
     :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
@@ -215,14 +217,22 @@ def prepare_amino_acid_ht(
     col = "oe_rescue" if include_rescue else "oe"
     if include_rescue:
         context_ht = context_ht.rename({"oe": col})
-    # If `amino_acids_oe` exists, add column for newly-calculated OE
-    if file_exists(amino_acids_oe.path):
+    # If `amino_acids_oe` HT already exists and overwrite is False,
+    # add column for newly-calculated OE
+    if file_exists(amino_acids_oe.path) and not overwrite:
         amino_acids_oe_ht = amino_acids_oe.ht()
+        logger.info(
+            "Amino acid OE HT already exists with fields %s. Adding column %s to existing table...",
+            set(amino_acids_oe_ht.row),
+            col,
+        )
         context_ht = context_ht.select(col)
         context_ht = amino_acids_oe_ht.annotate(**context_ht[amino_acids_oe_ht.key])
+        # Overwrite is set to True here to ensure newly-added columns are written out
         context_ht.write(amino_acids_oe.path, overwrite=True)
     else:
         context_ht.write(amino_acids_oe.path)
+    logger.info("Output amino acid OE HT fields: %s", set(context_ht.row))
 
 
 def variant_csq_expr(
@@ -334,7 +344,9 @@ def calculate_misbad(
     # Re-adjust OE column name if including rescue RMC results
     oe_col = "oe_rescue" if include_rescue else "oe"
     if oe_col not in ht.row:
-        raise DataException(f"OE column named {oe_col} does not exist!")
+        raise DataException(
+            f"OE column named {oe_col} does not exist in table with all amino acid substitutions!"
+        )
     if include_rescue:
         if "oe" in ht.row:
             ht = ht.drop("oe")
@@ -403,15 +415,23 @@ def calculate_misbad(
         ),
     )
 
+    mb_col = "misbad_rescue" if include_rescue else "misbad"
+    high_low_col = "high_low_rescue" if include_rescue else "high_low"
     if include_rescue:
-        mb_col = "misbad_rescue"
-        high_low_col = "high_low_rescue"
         mb_ht = mb_ht.rename({"high_low": high_low_col, "misbad": mb_col})
-    # If `misbad` exists, add column for newly-calculated missense badness
-    if file_exists(misbad.path):
+    # If `misbad` exists and overwrite is False,
+    # add column for newly-calculated missense badness
+    if file_exists(misbad.path) and not overwrite:
         misbad_ht = misbad.ht()
+        logger.info(
+            "Missense badness HT already exists with fields %s. Adding columns %s to existing table...",
+            set(misbad_ht.row),
+            [mb_col, high_low_col],
+        )
         mb_ht = mb_ht.select(high_low_col, mb_col)
-        misbad_ht = misbad_ht.annotate(**mb_ht[misbad_ht.key])
-        misbad_ht.write(misbad.path, overwrite=True)
+        mb_ht = misbad_ht.annotate(**mb_ht[misbad_ht.key])
+        # Overwrite is set to True here to ensure newly-added columns are written out
+        mb_ht.write(misbad.path, overwrite=True)
     else:
         mb_ht.write(misbad.path)
+    logger.info("Output missense badness HT fields: %s", set(mb_ht.row))
