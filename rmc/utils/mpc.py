@@ -27,7 +27,6 @@ from rmc.resources.rmc import (
     context_with_oe,
     context_with_oe_dedup,
     gnomad_fitted_score_path,
-    gnomad_fitted_score_group_path,
     joint_clinvar_gnomad_path,
     misbad,
     mpc_model_pkl_path,
@@ -782,7 +781,10 @@ def aggregate_gnomad_fitted_scores(
     gnomad_ht = gnomad_ht.add_index()
     gnomad_ht = gnomad_ht.annotate(idx=hl.int(gnomad_ht.idx))
     gnomad_ht = gnomad_ht.key_by("idx")
-    gnomad_ht.write(gnomad_fitted_score_group_path(include_rescue), overwrite=True)
+    gnomad_ht.write(
+        gnomad_fitted_score_path(include_rescue=include_rescue, is_grouped=True),
+        overwrite=True,
+    )
 
 
 def create_mpc_release_ht(
@@ -811,7 +813,9 @@ def create_mpc_release_ht(
     ht = calculate_fitted_scores(ht, mpc_model_pkl_path(include_rescue))
 
     logger.info("Aggregating gnomAD fitted scores...")
-    fitted_group_path = gnomad_fitted_score_group_path(include_rescue)
+    fitted_group_path = gnomad_fitted_score_path(
+        include_rescue=include_rescue, is_grouped=True
+    )
     if not file_exists(fitted_group_path):
         aggregate_gnomad_fitted_scores(include_rescue)
     gnomad_ht = hl.read_table(fitted_group_path)

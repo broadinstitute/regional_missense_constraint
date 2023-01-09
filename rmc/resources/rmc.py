@@ -488,34 +488,23 @@ def mpc_model_pkl_path(include_rescue: bool = False) -> str:
     return f"{CURRENT_MPC_PREFIX}/mpc_model{rescue}.pkl"
 
 
-def gnomad_fitted_score_path(include_rescue: bool = False) -> str:
+def gnomad_fitted_score_path(
+    include_rescue: bool = False, is_grouped: bool = False
+) -> str:
     """
-    Return path to Table of gnomAD variants and their fitted scores (from MPC model regression).
+    Return path to fitted scores (from MPC model regression) of common (AF > 0.001) gnomAD variants.
 
     Table is input to MPC (missense badness, polyphen-2, and constraint) calculations on other datasets.
 
     :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
         If True, RMC results used in calculation are derived from the initial and rescue RMC search.
         If False, RMC results used in calculation are derived from the initial RMC search only.
+    :param bool is_grouped: Whether the Table is grouped by score.
     :return: Path to Table.
     """
     rescue = "_rescue" if include_rescue else ""
-    return f"{CURRENT_MPC_PREFIX}/gnomad_fitted_scores{rescue}.ht"
-
-
-def gnomad_fitted_score_group_path(include_rescue: bool = False) -> str:
-    """
-    Return path to Table of fitted scores for common (AF > 0.001) variants in gnomAD, grouped by score.
-
-    Annotated with the total number of variants with and less than each score.
-
-    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
-        If True, RMC results used in calculation are derived from the initial and rescue RMC search.
-        If False, RMC results used in calculation are derived from the initial RMC search only.
-    :return: Path to Table.
-    """
-    rescue = "_rescue" if include_rescue else ""
-    return f"{CURRENT_MPC_PREFIX}/gnomad_fitted_scores_group{rescue}.ht"
+    group = "_group" if is_grouped else ""
+    return f"{CURRENT_MPC_PREFIX}/gnomad_fitted_scores{group}{rescue}.ht"
 
 
 mpc_release = VersionedTableResource(
