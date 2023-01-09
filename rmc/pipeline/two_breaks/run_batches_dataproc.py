@@ -17,7 +17,7 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
     grouped_single_no_break_ht_path,
     simul_search_round_bucket_path,
@@ -40,7 +40,7 @@ def main(args):
         logger.warning("This step should be run on an autoscaling cluster!")
         hl.init(
             log=f"/round{args.search_num}search_for_two_breaks_run_batches_dataproc.log",
-            tmp_dir=TEMP_PATH_WITH_DEL,
+            tmp_dir=TEMP_PATH_WITH_FAST_DEL,
         )
         save_chisq_ht = False
         if args.search_num == 1 and not args.is_rescue:

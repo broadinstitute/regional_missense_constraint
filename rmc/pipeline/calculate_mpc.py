@@ -11,7 +11,7 @@ import hail as hl
 
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 from rmc.slack_creds import slack_token
 from rmc.utils.mpc import (
@@ -32,7 +32,7 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Calculate MPC (Missense badness, Polyphen-2, and Constraint) score."""
-    temp_dir = f"{TEMP_PATH_WITH_DEL}/mpc/"
+    temp_dir = f"{TEMP_PATH_WITH_FAST_DEL}/mpc/"
     try:
         if args.command == "prepare-ht":
             hl.init(log="/write_pop_path_ht.log", tmp_dir=temp_dir)

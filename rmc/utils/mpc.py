@@ -20,7 +20,8 @@ from rmc.resources.basics import (
     grantham,
     grantham_txt_path,
     TEMP_PATH,
-    TEMP_PATH_WITH_DEL,
+    TEMP_PATH_WITH_FAST_DEL,
+    TEMP_PATH_WITH_SLOW_DEL,
 )
 from rmc.resources.reference_data import cadd, clinvar_path_mis
 from rmc.resources.rmc import (
@@ -207,7 +208,6 @@ def get_annotations_from_context_ht_vep(
 def create_context_with_oe(
     include_rescue: bool,
     missense_str: str = MISSENSE,
-    temp_path_with_del: str = "gs://gnomad-tmp/mpc",
     n_partitions: int = 30000,
     overwrite: bool = False,
 ) -> None:
@@ -225,9 +225,6 @@ def create_context_with_oe(
         If True, RMC results are derived from the initial and rescue RMC search.
         If False, RMC results are derived from the initial RMC search only.
     :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
-    :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
-        Default is 'gs://gnomad-tmp/mpc'.
-        TODO: Update this to `temp_path` (and set automatic deletion policy.)
     :param int n_partitions: Number of desired partitions for the VEP context Table.
         Repartition VEP context Table to this number on read.
         Default is 30000.
@@ -260,7 +257,7 @@ def create_context_with_oe(
     # before joining with RMC tables in `get_oe_annotation`
     # This computation is expensive, so overwrite only if specified (otherwise, read existing file)
     ht = ht.checkpoint(
-        f"{temp_path_with_del}/vep_context_mis_only_annot.ht",
+        f"{TEMP_PATH_WITH_SLOW_DEL}/vep_context_mis_only_annot.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )
@@ -285,7 +282,7 @@ def create_context_with_oe(
         ht = ht.select(oe_col)
         ht = context_with_oe_ht.annotate(**ht[context_with_oe_ht.key])
         # Checkpointing so that `context_with_oe` can be overwritten to the same path
-        ht = ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/context_with_oe.ht")
+        ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe.ht")
         # Overwrite is set to True here to ensure newly-added columns are written out
         ht = ht.checkpoint(context_with_oe.path, overwrite=True)
     else:
@@ -313,7 +310,7 @@ def create_context_with_oe(
         )
         ht = context_with_oe_dedup_ht.annotate(**ht[context_with_oe_dedup_ht.key])
         # Checkpointing so that `context_with_oe_dedup` can be overwritten to the same path
-        ht = ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/context_with_oe_dedup.ht")
+        ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe_dedup.ht")
         # Overwrite is set to True here to ensure newly-added columns are written out
         ht = ht.write(context_with_oe_dedup.path, overwrite=True)
     else:
@@ -365,7 +362,7 @@ def prepare_pop_path_ht(
     # Remove variants that are in both the benign and pathogenic set
     counts = ht.group_by(*ht.key).aggregate(n=hl.agg.count())
     counts = counts.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/clinvar_gnomad_counts.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/clinvar_gnomad_counts.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )
@@ -373,7 +370,7 @@ def prepare_pop_path_ht(
     logger.info("%i ClinVar P/LP variants are common in gnomAD", overlap.count())
     ht = ht.anti_join(overlap)
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )
@@ -401,7 +398,7 @@ def prepare_pop_path_ht(
     context_ht = context_with_oe_dedup.ht()
     ht = ht.annotate(transcript=context_ht[ht.key][transcript_col])
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad_transcript.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad_transcript.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )
@@ -421,7 +418,7 @@ def prepare_pop_path_ht(
     # Get Polyphen, codon, o/e, amino acid annotations
     ht = ht.annotate(**context_ht[ht.locus, ht.alleles, ht.transcript])
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad_transcript_aa.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad_transcript_aa.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )
@@ -451,7 +448,7 @@ def prepare_pop_path_ht(
         grantham=grantham_ht[ht.ref, ht.alt].score,
     )
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad_full.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad_full.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )
@@ -876,7 +873,7 @@ def create_mpc_release_ht(
         ht = ht.select(cols_to_add)
         ht = mpc_ht.annotate(**ht[mpc_ht.key])
         # Checkpointing so that `mpc_release` can be overwritten to the same path
-        ht = ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/mpc.ht")
+        ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/mpc.ht")
         # Overwrite is set to True here to ensure newly-added columns are written out
         ht = ht.checkpoint(mpc_release.path, overwrite=True)
     else:
@@ -912,7 +909,7 @@ def create_mpc_release_ht(
         )
         ht = mpc_dedup_ht.annotate(**ht[mpc_dedup_ht.key])
         # Checkpointing so that `mpc_release_dedup` can be overwritten to the same path
-        ht = ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/mpc_dedup.ht")
+        ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/mpc_dedup.ht")
         # Overwrite is set to True here to ensure newly-added columns are written out
         ht.write(mpc_release_dedup.path, overwrite=True)
     else:

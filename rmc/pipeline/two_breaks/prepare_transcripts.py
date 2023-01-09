@@ -14,7 +14,7 @@ import hail as hl
 
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
     grouped_single_no_break_ht_path,
     single_search_round_ht_path,
@@ -45,7 +45,7 @@ def main(args):
         if args.command == "create-grouped-ht":
             hl.init(
                 log=f"/round{args.search_num}_search_for_two_breaks_create_grouped_ht.log",
-                tmp_dir=TEMP_PATH_WITH_DEL,
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
             )
 
             logger.info(
@@ -66,7 +66,7 @@ def main(args):
         if args.command == "split-sections":
             hl.init(
                 log=f"/round{args.search_num}_search_for_two_breaks_split_sections.log",
-                tmp_dir=TEMP_PATH_WITH_DEL,
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
             )
             split_sections_by_len(
                 ht_path=grouped_ht_path,

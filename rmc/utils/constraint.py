@@ -13,7 +13,7 @@ from gnomad.utils.file_utils import file_exists
 from rmc.resources.basics import (
     SIMUL_BREAK_TEMP_PATH,
     TEMP_PATH,
-    TEMP_PATH_WITH_DEL,
+    TEMP_PATH_WITH_FAST_DEL,
 )
 from rmc.resources.gnomad import filtered_exomes
 from rmc.resources.reference_data import clinvar_path_mis, de_novo, gene_model
@@ -600,12 +600,14 @@ def search_for_break(
     )
 
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/round{search_num}_all_loci_chisq.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/round{search_num}_all_loci_chisq.ht", overwrite=True
     )
 
     # hl.agg.max ignores NaNs
     group_ht = ht.group_by(group_str).aggregate(max_chisq=hl.agg.max(ht.chisq))
-    group_ht = group_ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/max_chisq.ht", overwrite=True)
+    group_ht = group_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/max_chisq.ht", overwrite=True
+    )
     ht = ht.annotate(max_chisq=group_ht[ht[group_str]].max_chisq)
     return ht.annotate(
         is_break=((ht.chisq == ht.max_chisq) & (ht.chisq >= chisq_threshold))
@@ -766,7 +768,7 @@ def get_rescue_1break_transcripts(
     # Get merged no-break table of round 1 of initial search
     ht = merge_round_no_break_ht(is_rescue=False, search_num=1)
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/initial_round1_no_breaks.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/initial_round1_no_breaks.ht",
         overwrite=overwrite,
         _read_if_exists=not overwrite,
     )
@@ -845,10 +847,10 @@ def get_rescue_2breaks_transcripts(
         input_hts_path=SIMUL_BREAK_TEMP_PATH,
         batch_phrase="batch_temp_chisq",
         query_phrase="dataproc_temp_chisq",
-        output_ht_path=f"{TEMP_PATH_WITH_DEL}/rescue_simul_chisq.ht",
+        output_ht_path=f"{TEMP_PATH_WITH_FAST_DEL}/rescue_simul_chisq.ht",
         overwrite=overwrite,
     )
-    ht = hl.read_table(f"{TEMP_PATH_WITH_DEL}/rescue_simul_chisq.ht")
+    ht = hl.read_table(f"{TEMP_PATH_WITH_FAST_DEL}/rescue_simul_chisq.ht")
     ht = ht.filter(
         (ht.max_chisq < initial_threshold)
         & (ht.max_chisq >= rescue_threshold)
@@ -1195,7 +1197,7 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
     rmc_ht = hts[0].union(*hts[1:])
     rescue = "rescue" if is_rescue else "initial"
     rmc_ht = rmc_ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/{rescue}_search_union.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/{rescue}_search_union.ht", overwrite=True
     )
     # Calculate chi-square value for each section
     rmc_ht = rmc_ht.annotate(

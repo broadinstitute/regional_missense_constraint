@@ -7,7 +7,8 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
     LOGGING_PATH,
-    TEMP_PATH_WITH_DEL,
+    TEMP_PATH_WITH_FAST_DEL,
+    TEMP_PATH_WITH_SLOW_DEL,
 )
 from rmc.resources.gnomad import (
     constraint_ht,
@@ -59,7 +60,7 @@ def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
     try:
         if args.pre_process_data:
-            hl.init(log="/RMC_pre_process.log", tmp_dir=TEMP_PATH_WITH_DEL)
+            hl.init(log="/RMC_pre_process.log", tmp_dir=TEMP_PATH_WITH_FAST_DEL)
             # TODO: Add code to create annotations necessary for constraint_flag_expr and filter transcripts prior to running constraint
             logger.warning("Code currently only processes b37 data!")
 
@@ -94,7 +95,7 @@ def main(args):
             logger.info("Done preprocessing files")
 
         if args.prep_for_constraint:
-            hl.init(log="/RMC_prep_for_constraint.log", tmp_dir=TEMP_PATH_WITH_DEL)
+            hl.init(log="/RMC_prep_for_constraint.log", tmp_dir=TEMP_PATH_WITH_FAST_DEL)
             logger.info("Reading in exome HT...")
             exome_ht = filtered_exomes.ht()
 
@@ -242,7 +243,7 @@ def main(args):
             is_rescue = args.is_rescue
             hl.init(
                 log=f"/round{args.search_num}_single_break_search.log",
-                tmp_dir=TEMP_PATH_WITH_DEL,
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
             )
 
             logger.info(
@@ -283,7 +284,8 @@ def main(args):
                 chisq_threshold=args.chisq_threshold,
             )
             ht = ht.checkpoint(
-                f"{TEMP_PATH_WITH_DEL}/round{args.search_num}_temp.ht", overwrite=True
+                f"{TEMP_PATH_WITH_FAST_DEL}/round{args.search_num}_temp.ht",
+                overwrite=True,
             )
 
             logger.info(
@@ -347,7 +349,7 @@ def main(args):
 
             hl.init(
                 log=f"/round{args.search_num}_merge_single_simul.log",
-                tmp_dir=TEMP_PATH_WITH_DEL,
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
             )
 
             logger.info(
@@ -471,7 +473,7 @@ def main(args):
             # DONE: 4. Create and write final no break found ht for this round number
 
         if args.finalize:
-            hl.init(log="/RMC_finalize.log", tmp_dir=TEMP_PATH_WITH_DEL)
+            hl.init(log="/RMC_finalize.log", tmp_dir=TEMP_PATH_WITH_FAST_DEL)
 
             logger.info("Checking round paths in initial search...")
             initial_round_nums = check_break_search_round_nums(is_rescue=False)
@@ -483,14 +485,14 @@ def main(args):
                 round_nums=initial_round_nums, is_rescue=False
             )
             initial_rmc_ht = initial_rmc_ht.checkpoint(
-                f"{TEMP_PATH_WITH_DEL}/rmc_initial_search.ht",
+                f"{TEMP_PATH_WITH_SLOW_DEL}/rmc_initial_search.ht",
                 overwrite=args.overwrite,
                 _read_if_exists=not args.overwrite,
             )
             logger.info("Finalizing section-level RMC table from rescue search...")
             rescue_rmc_ht = merge_rmc_hts(round_nums=rescue_round_nums, is_rescue=True)
             rescue_rmc_ht = rescue_rmc_ht.checkpoint(
-                f"{TEMP_PATH_WITH_DEL}/rmc_rescue_search.ht",
+                f"{TEMP_PATH_WITH_FAST_DEL}/rmc_rescue_search.ht",
                 overwrite=args.overwrite,
                 _read_if_exists=not args.overwrite,
             )

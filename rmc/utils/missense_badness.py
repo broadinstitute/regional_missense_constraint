@@ -6,7 +6,11 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.vep import CSQ_NON_CODING
 
-from rmc.resources.basics import TEMP_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import (
+    TEMP_PATH,
+    TEMP_PATH_WITH_FAST_DEL,
+    TEMP_PATH_WITH_SLOW_DEL,
+)
 from rmc.resources.gnomad import constraint_ht
 from rmc.resources.rmc import amino_acids_oe, constraint_prep, misbad, rmc_results
 from rmc.utils.constraint import add_obs_annotation
@@ -114,7 +118,12 @@ def get_oe_annotation(ht: hl.Table, include_rescue: bool) -> hl.Table:
         raise DataException("Merged RMC results table does not exist!")
     rmc_ht = rmc_results.ht().key_by("interval")
     if not include_rescue:
-        rmc_ht = rmc_ht.filter(rmc_ht.search_type == "initial")
+        # Read initial-only RMC results from file if exists
+        initial_rmc_path = f"{TEMP_PATH_WITH_SLOW_DEL}/rmc_initial_search.ht"
+        if file_exists(initial_rmc_path):
+            rmc_ht = hl.read_table(initial_rmc_path)
+        else:
+            rmc_ht = rmc_ht.filter(rmc_ht.search_type == "initial")
 
     ht = ht.annotate(
         section_oe=rmc_ht.index(ht.locus, all_matches=True)
@@ -229,7 +238,9 @@ def prepare_amino_acid_ht(
         context_ht = context_ht.select(col)
         context_ht = amino_acids_oe_ht.annotate(**context_ht[amino_acids_oe_ht.key])
         # Checkpointing so that `amino_acids_oe` can be overwritten to the same path
-        context_ht = context_ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/amino_acids_oe.ht")
+        context_ht = context_ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_oe.ht"
+        )
         # Overwrite is set to True here to ensure newly-added columns are written out
         context_ht.write(amino_acids_oe.path, overwrite=True)
     else:
@@ -432,7 +443,7 @@ def calculate_misbad(
         mb_ht = mb_ht.select(high_low_col, mb_col)
         mb_ht = misbad_ht.annotate(**mb_ht[misbad_ht.key])
         # Checkpointing so that `misbad` can be overwritten to the same path
-        mb_ht = mb_ht.checkpoint(f"{TEMP_PATH_WITH_DEL}/misbad.ht")
+        mb_ht = mb_ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/misbad.ht")
         # Overwrite is set to True here to ensure newly-added columns are written out
         mb_ht.write(misbad.path, overwrite=True)
     else:

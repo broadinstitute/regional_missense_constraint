@@ -28,7 +28,7 @@ import hailtop.batch as hb
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import TEMP_PATH_WITH_DEL
+from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
     grouped_single_no_break_ht_path,
     simul_sections_split_by_len_path,
@@ -53,7 +53,7 @@ Adding this constant here to avoid ModuleNotFound errors in the
 PythonJobs. See `rmc.resources.basics` for full docstring.
 """
 
-TEMP_PATH_WITH_DEL = "gs://gnomad-tmp-4day/rmc/"
+TEMP_PATH_WITH_FAST_DEL = "gs://gnomad-tmp-4day/rmc/"
 """
 Path to bucket for temporary files.
 
@@ -371,7 +371,7 @@ def search_for_two_breaks(
         )
     else:
         group_ht = group_ht.checkpoint(
-            f"{TEMP_PATH_WITH_DEL}/batch_temp_chisq_group{count}.ht",
+            f"{TEMP_PATH_WITH_FAST_DEL}/batch_temp_chisq_group{count}.ht",
             overwrite=True,
         )
     # Remove rows with maximum chi square values below the threshold
@@ -440,7 +440,7 @@ def process_section_group(
             "spark.hadoop.fs.gs.requester.pays.buckets": f"{requester_pays_bucket.lstrip('gs://')}",
             "spark.hadoop.fs.gs.requester.pays.project.id": f"{google_project}",
         },
-        tmp_dir=TEMP_PATH_WITH_DEL,
+        tmp_dir=TEMP_PATH_WITH_FAST_DEL,
     )
     ht = hl.read_table(ht_path)
     ht = ht.filter(hl.literal(section_group).contains(ht.section))
@@ -559,7 +559,9 @@ def process_section_group(
 
 def main(args):
     """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
-    hl.init(log="search_for_two_breaks_run_batches.log", tmp_dir=TEMP_PATH_WITH_DEL)
+    hl.init(
+        log="search_for_two_breaks_run_batches.log", tmp_dir=TEMP_PATH_WITH_FAST_DEL
+    )
 
     # Make sure custom machine wasn't specified with under threshold
     if args.under_threshold and args.use_custom_machine:
