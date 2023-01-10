@@ -190,7 +190,9 @@ def prepare_amino_acid_ht(
 
     logger.info("Checkpointing HT before joining with gnomAD data...")
     context_ht = context_ht.checkpoint(
-        f"{TEMP_PATH}/codons.ht", _read_if_exists=not overwrite, overwrite=overwrite
+        f"{TEMP_PATH_WITH_FAST_DEL}/codons.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
     )
 
     logger.info("Filtering sites using gnomAD %s...", gnomad_data_type)
@@ -204,7 +206,7 @@ def prepare_amino_acid_ht(
 
     logger.info("Checkpointing HT after joining with gnomAD data...")
     context_ht = context_ht.checkpoint(
-        f"{TEMP_PATH}/codons_filt.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/codons_filt.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )
