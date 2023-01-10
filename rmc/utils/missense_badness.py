@@ -239,7 +239,7 @@ def prepare_amino_acid_ht(
         context_ht = amino_acids_oe_ht.annotate(**context_ht[amino_acids_oe_ht.key])
         # Checkpointing so that `amino_acids_oe` can be overwritten to the same path
         context_ht = context_ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_oe.ht"
+            f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_oe.ht", overwrite=True
         )
         # Overwrite is set to True here to ensure newly-added columns are written out
         context_ht.write(amino_acids_oe.path, overwrite=True)
@@ -443,7 +443,9 @@ def calculate_misbad(
         mb_ht = mb_ht.select(high_low_col, mb_col)
         mb_ht = misbad_ht.annotate(**mb_ht[misbad_ht.key])
         # Checkpointing so that `misbad` can be overwritten to the same path
-        mb_ht = mb_ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/misbad.ht")
+        mb_ht = mb_ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/misbad.ht", overwrite=True
+        )
         # Overwrite is set to True here to ensure newly-added columns are written out
         mb_ht.write(misbad.path, overwrite=True)
     else:
