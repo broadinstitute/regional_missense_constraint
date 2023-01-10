@@ -280,11 +280,10 @@ def create_context_with_oe(
             oe_col,
         )
         ht = ht.select(oe_col)
-        ht = context_with_oe_ht.annotate(**ht[context_with_oe_ht.key])
-        # Checkpointing so that `context_with_oe` can be overwritten to the same path
         ht = ht.checkpoint(
             f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe.ht", overwrite=True
         )
+        ht = context_with_oe_ht.annotate(**ht[context_with_oe_ht.key])
         # Overwrite is set to True here to ensure newly-added columns are written out
         ht = ht.checkpoint(context_with_oe.path, overwrite=True)
     else:
