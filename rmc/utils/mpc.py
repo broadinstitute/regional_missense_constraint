@@ -282,7 +282,9 @@ def create_context_with_oe(
         ht = ht.select(oe_col)
         ht = context_with_oe_ht.annotate(**ht[context_with_oe_ht.key])
         # Checkpointing so that `context_with_oe` can be overwritten to the same path
-        ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe.ht", overwrite=True)
+        ht = ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe.ht", overwrite=True
+        )
         # Overwrite is set to True here to ensure newly-added columns are written out
         ht = ht.checkpoint(context_with_oe.path, overwrite=True)
     else:
@@ -310,7 +312,9 @@ def create_context_with_oe(
         )
         ht = context_with_oe_dedup_ht.annotate(**ht[context_with_oe_dedup_ht.key])
         # Checkpointing so that `context_with_oe_dedup` can be overwritten to the same path
-        ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe_dedup.ht", overwrite=True)
+        ht = ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe_dedup.ht", overwrite=True
+        )
         # Overwrite is set to True here to ensure newly-added columns are written out
         ht = ht.write(context_with_oe_dedup.path, overwrite=True)
     else:
@@ -396,6 +400,10 @@ def prepare_pop_path_ht(
 
     # Get transcript annotation from deduplicated context HT resource
     context_ht = context_with_oe_dedup.ht()
+    if transcript_col not in context_ht.row:
+        raise DataException(
+            f"Transcript column named {transcript_col} does not exist in OE-annotated dedup context table!"
+        )
     ht = ht.annotate(transcript=context_ht[ht.key][transcript_col])
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad_transcript.ht",
@@ -411,8 +419,13 @@ def prepare_pop_path_ht(
     # If including rescue RMC results in calculations, drop initial-only OE column
     # If not including, drop rescue-included OE column
     context_ht_cols = set(context_ht.row)
+    oe_col = "oe_rescue" if include_rescue else "oe"
+    if oe_col not in context_ht_cols:
+        raise DataException(
+            f"OE column named {oe_col} does not exist in OE-annotated context table!"
+        )
     if include_rescue:
-        context_ht = context_ht.transmute(oe=context_ht.oe_rescue)
+        context_ht = context_ht.transmute(oe=context_ht[oe_col])
     elif "oe_rescue" in context_ht_cols:
         context_ht = context_ht.drop("oe_rescue")
     # Get Polyphen, codon, o/e, amino acid annotations
@@ -429,6 +442,11 @@ def prepare_pop_path_ht(
     # If including rescue RMC results in calculations, drop initial-only misbad column
     # If not including, drop rescue-included misbad column
     mb_ht_cols = set(mb_ht.row)
+    misbad_col = "misbad_rescue" if include_rescue else "misbad"
+    if misbad_col not in mb_ht_cols:
+        raise DataException(
+            f"Misbad column named {misbad_col} does not exist in misbad table!"
+        )
     if include_rescue:
         mb_ht = mb_ht.transmute(misbad=mb_ht.misbad_rescue)
     elif "misbad_rescue" in mb_ht_cols:
