@@ -30,7 +30,9 @@ def main(args):
         if args.command == "prepare-ht":
             hl.init(log="/calc_misbad_prep_context_gamma_ht.log", tmp_dir=temp_dir)
             prepare_amino_acid_ht(
-                include_rescue=args.include_rescue, overwrite=args.overwrite
+                include_rescue=args.include_rescue,
+                overwrite_temp=args.overwrite_temp,
+                overwrite_output=args.overwrite_output,
             )
 
         if args.command == "create-misbad":
@@ -38,6 +40,8 @@ def main(args):
             calculate_misbad(
                 include_rescue=args.include_rescue,
                 use_exac_oe_cutoffs=args.use_exac_oe_cutoffs,
+                overwrite_temp=args.overwrite_temp,
+                overwrite_output=args.overwrite_output,
             )
 
     finally:
@@ -50,7 +54,14 @@ if __name__ == "__main__":
         "This regional missense constraint script calculates missense badness."
     )
     parser.add_argument(
-        "--overwrite", help="Overwrite existing data.", action="store_true"
+        "--overwrite-temp",
+        help="Overwrite existing intermediate temporary data, for use in functions where existing final outputs may be modified.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--overwrite-output",
+        help="Completely overwrite existing final output data, for use in functions where existing final outputs may be modified.",
+        action="store_true",
     )
     parser.add_argument(
         "--slack-channel",

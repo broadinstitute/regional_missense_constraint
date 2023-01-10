@@ -37,7 +37,9 @@ def main(args):
         if args.command == "prepare-ht":
             hl.init(log="/write_pop_path_ht.log", tmp_dir=temp_dir)
             prepare_pop_path_ht(
-                include_rescue=args.include_rescue, overwrite=args.overwrite
+                include_rescue=args.include_rescue,
+                overwrite_temp=args.overwrite_temp,
+                overwrite_output=args.overwrite_output,
             )
 
         if args.command == "run-glm":
@@ -53,7 +55,8 @@ def main(args):
             hl.init(log="/calculate_mpc_release.log", tmp_dir=temp_dir)
             create_mpc_release_ht(
                 include_rescue=args.include_rescue,
-                overwrite=args.overwrite,
+                overwrite_temp=args.overwrite_temp,
+                overwrite_output=args.overwrite_output,
             )
 
         # TODO: Add include_rescue option for annotate-hts
@@ -113,6 +116,16 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--overwrite", help="Overwrite existing data.", action="store_true"
+    )
+    parser.add_argument(
+        "--overwrite-temp",
+        help="Overwrite existing intermediate temporary data, for use in functions where existing final outputs may be modified.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--overwrite-output",
+        help="Completely overwrite existing final output data, for use in functions where existing final outputs may be modified.",
+        action="store_true",
     )
     parser.add_argument(
         "--slack-channel",

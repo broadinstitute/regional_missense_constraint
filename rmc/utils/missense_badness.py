@@ -140,7 +140,10 @@ def get_oe_annotation(ht: hl.Table, include_rescue: bool) -> hl.Table:
 
 
 def prepare_amino_acid_ht(
-    include_rescue: bool, overwrite: bool, gnomad_data_type: str = "exomes"
+    include_rescue: bool,
+    overwrite_temp: bool,
+    overwrite_output: bool,
+    gnomad_data_type: str = "exomes",
 ) -> None:
     """
     Prepare Table with all possible amino acid substitutions and their missense observed to expected (OE) ratio.
@@ -155,8 +158,12 @@ def prepare_amino_acid_ht(
     :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
         If True, RMC results are derived from the initial and rescue RMC search.
         If False, RMC results are derived from the initial RMC search only.
-    :param bool overwrite: Whether to overwrite temporary data if it already exists.
-        If False, will read existing temporary data rather than overwriting.
+    :param bool overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
+        If False, will read existing intermediate temporary data rather than overwriting.
+    :param bool overwrite_output: Whether to entirely overwrite final output (OE-dependent) data if it already exists.
+        If False, will read and modify existing output data rather than overwriting entirely.
+        If True, will clear existing output data and write new output data.
+        The output Table is the amino acid Table.
     :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
@@ -191,8 +198,8 @@ def prepare_amino_acid_ht(
     logger.info("Checkpointing HT before joining with gnomAD data...")
     context_ht = context_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/codons.ht",
-        _read_if_exists=not overwrite,
-        overwrite=overwrite,
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
 
     logger.info("Filtering sites using gnomAD %s...", gnomad_data_type)
@@ -207,8 +214,8 @@ def prepare_amino_acid_ht(
     logger.info("Checkpointing HT after joining with gnomAD data...")
     context_ht = context_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/codons_filt.ht",
-        _read_if_exists=not overwrite,
-        overwrite=overwrite,
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
 
     logger.info(
@@ -230,7 +237,7 @@ def prepare_amino_acid_ht(
         context_ht = context_ht.rename({"oe": col})
     # If `amino_acids_oe` HT already exists and overwrite is False,
     # add column for newly-calculated OE
-    if file_exists(amino_acids_oe.path) and not overwrite:
+    if file_exists(amino_acids_oe.path) and not overwrite_output:
         amino_acids_oe_ht = amino_acids_oe.ht()
         logger.info(
             "Amino acid OE HT already exists with fields %s. Adding column %s to existing table...",
@@ -330,7 +337,8 @@ def get_total_csq_count(ht: hl.Table, csq: str, count_field: str) -> int:
 def calculate_misbad(
     include_rescue: bool,
     use_exac_oe_cutoffs: bool,
-    overwrite: bool,
+    overwrite_temp: bool,
+    overwrite_output: bool,
     oe_threshold: float = 0.6,
 ) -> None:
     """
@@ -342,8 +350,12 @@ def calculate_misbad(
         If True, RMC results used in calculation are derived from the initial and rescue RMC search.
         If False, RMC results used in calculation are derived from the initial RMC search only.
     :param bool use_exac_oe_cutoffs: Whether to use the same missense OE cutoffs as in ExAC missense badness calculation.
-    :param bool overwrite: Whether to overwrite temporary data if it already exists.
-        If False, will read existing temporary data rather than overwriting.
+    :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
+        If False, will read existing intermediate temporary data rather than overwriting.
+    :param bool overwrite_output: Whether to entirely overwrite final output data if it already exists.
+        If False, will read and modify existing output data rather than overwriting entirely.
+        If True, will clear existing output data and write new output data.
+        The output Table is the missense badness score Table.
     :param float oe_threshold: OE Threshold used to split Table.
         Rows with OE less or equal to this threshold will be considered "low" OE, and
         rows with OE greater than this threshold will considered "high" OE.
@@ -376,13 +388,17 @@ def calculate_misbad(
     high_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=True)
     rescue = "_rescue" if include_rescue else ""
     high_ht = high_ht.checkpoint(
-        f"{TEMP_PATH}/amino_acids_high_oe{rescue}.ht", overwrite=overwrite
+        f"{TEMP_PATH}/amino_acids_high_oe{rescue}.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
 
     logger.info("Creating low missense OE (OE <= %s) HT...", oe_threshold)
     low_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=False)
     low_ht = low_ht.checkpoint(
-        f"{TEMP_PATH}/amino_acids_low_oe{rescue}.ht", overwrite=overwrite
+        f"{TEMP_PATH}/amino_acids_low_oe{rescue}.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
 
     logger.info("Re-joining split HTs to calculate missense badness...")
@@ -435,7 +451,7 @@ def calculate_misbad(
         mb_ht = mb_ht.rename({"high_low": high_low_col, "misbad": mb_col})
     # If `misbad` exists and overwrite is False,
     # add column for newly-calculated missense badness
-    if file_exists(misbad.path) and not overwrite:
+    if file_exists(misbad.path) and not overwrite_output:
         misbad_ht = misbad.ht()
         logger.info(
             "Missense badness HT already exists with fields %s. Adding columns %s to existing table...",
@@ -445,9 +461,7 @@ def calculate_misbad(
         mb_ht = mb_ht.select(high_low_col, mb_col)
         mb_ht = misbad_ht.annotate(**mb_ht[misbad_ht.key])
         # Checkpointing so that `misbad` can be overwritten to the same path
-        mb_ht = mb_ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/misbad.ht", overwrite=True
-        )
+        mb_ht = mb_ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/misbad.ht", overwrite=True)
         # Overwrite is set to True here to ensure newly-added columns are written out
         mb_ht.write(misbad.path, overwrite=True)
     else:
