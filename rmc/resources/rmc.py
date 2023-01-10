@@ -467,6 +467,7 @@ def joint_clinvar_gnomad_path(include_rescue: bool = False) -> str:
     :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
         If True, RMC results used in calculation are derived from the initial and rescue RMC search.
         If False, RMC results used in calculation are derived from the initial RMC search only.
+        Default is False.
     :return: Path to Table.
     """
     rescue = "_rescue" if include_rescue else ""
@@ -482,6 +483,7 @@ def mpc_model_pkl_path(include_rescue: bool = False) -> str:
     :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
         If True, RMC results used in calculation are derived from the initial and rescue RMC search.
         If False, RMC results used in calculation are derived from the initial RMC search only.
+        Default is False.
     :return: Path to model.
     """
     rescue = "_rescue" if include_rescue else ""
@@ -499,7 +501,8 @@ def gnomad_fitted_score_path(
     :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
         If True, RMC results used in calculation are derived from the initial and rescue RMC search.
         If False, RMC results used in calculation are derived from the initial RMC search only.
-    :param bool is_grouped: Whether the Table is grouped by score.
+        Default is False.
+    :param bool is_grouped: Whether the Table is grouped by score. Default is False.
     :return: Path to Table.
     """
     rescue = "_rescue" if include_rescue else ""
