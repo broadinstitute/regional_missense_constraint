@@ -953,7 +953,7 @@ def create_mpc_release_ht(
         # Overwrite is set to True here to ensure newly-added columns are written out
         ht.write(mpc_release_dedup.path, overwrite=True)
     else:
-        ht.write(mpc_release_dedup.path)
+        ht.write(mpc_release_dedup.path, overwrite=overwrite_output)
     logger.info("Output MPC dedup HT fields: %s", set(ht.row))
 
 
