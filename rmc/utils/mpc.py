@@ -400,9 +400,13 @@ def prepare_pop_path_ht(
     # If OE-annotated VEP context HT filtered to missense variants
     # in canonical transcripts does not exist, create it
     # If HT exists but without specified version of OE annotation, add that OE annotation
-    transcript_col = "transcript_rescue" if include_rescue else "transcript"
+    rmc_cols = {
+        "transcript": "transcript_rescue" if include_rescue else "transcript",
+        "oe": "oe_rescue" if include_rescue else "oe",
+    }
     if not file_exists(context_with_oe_dedup.path) or (
-        transcript_col not in set(context_with_oe_dedup.ht().row)
+        len(set(rmc_cols.values()).intersection(context_with_oe_dedup.ht().row))
+        < len(set(rmc_cols.values()))
     ):
         create_context_with_oe(
             include_rescue=include_rescue,
@@ -412,11 +416,11 @@ def prepare_pop_path_ht(
 
     # Get transcript annotation from deduplicated context HT resource
     context_ht = context_with_oe_dedup.ht()
-    if transcript_col not in context_ht.row:
+    if rmc_cols["transcript"] not in context_ht.row:
         raise DataException(
-            f"Transcript column named {transcript_col} does not exist in OE-annotated dedup context table!"
+            f"Transcript column named {rmc_cols['transcript']} does not exist in OE-annotated dedup context table!"
         )
-    ht = ht.annotate(transcript=context_ht[ht.key][transcript_col])
+    ht = ht.annotate(transcript=context_ht[ht.key][rmc_cols["transcript"]])
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad_transcript.ht",
         _read_if_exists=not overwrite_temp,
@@ -431,13 +435,12 @@ def prepare_pop_path_ht(
     # If including rescue RMC results in calculations, drop initial-only OE column
     # If not including, drop rescue-included OE column
     context_ht_cols = set(context_ht.row)
-    oe_col = "oe_rescue" if include_rescue else "oe"
-    if oe_col not in context_ht_cols:
+    if rmc_cols["oe"] not in context_ht_cols:
         raise DataException(
-            f"OE column named {oe_col} does not exist in OE-annotated context table!"
+            f"OE column named {rmc_cols['oe']} does not exist in OE-annotated context table!"
         )
     if include_rescue:
-        context_ht = context_ht.transmute(oe=context_ht[oe_col])
+        context_ht = context_ht.transmute(oe=context_ht[rmc_cols["oe"]])
     elif "oe_rescue" in context_ht_cols:
         context_ht = context_ht.drop("oe_rescue")
     # Get Polyphen, codon, o/e, amino acid annotations
