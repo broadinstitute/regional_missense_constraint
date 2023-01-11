@@ -8,7 +8,7 @@ import hail as hl
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
 
-from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
     SIMUL_SEARCH_ANNOTATIONS,
     simul_search_round_bucket_path,
@@ -403,7 +403,8 @@ def search_for_two_breaks(
         )
     else:
         group_ht = group_ht.checkpoint(
-            f"{TEMP_PATH_WITH_DEL}/dataproc_temp_chisq_group{count}.ht", overwrite=True
+            f"{TEMP_PATH_WITH_FAST_DEL}/dataproc_temp_chisq_group{count}.ht",
+            overwrite=True,
         )
     # Remove rows with maximum chi square values below the threshold
     group_ht = group_ht.filter(group_ht.max_chisq >= chisq_threshold)

@@ -20,15 +20,15 @@ from rmc.resources.basics import (
     grantham,
     grantham_txt_path,
     TEMP_PATH,
-    TEMP_PATH_WITH_DEL,
+    TEMP_PATH_WITH_FAST_DEL,
+    TEMP_PATH_WITH_SLOW_DEL,
 )
 from rmc.resources.reference_data import cadd, clinvar_path_mis
 from rmc.resources.rmc import (
     context_with_oe,
     context_with_oe_dedup,
-    gnomad_fitted_score,
-    gnomad_fitted_score_group,
-    joint_clinvar_gnomad,
+    gnomad_fitted_score_path,
+    joint_clinvar_gnomad_path,
     misbad,
     mpc_model_pkl_path,
     mpc_release,
@@ -206,10 +206,11 @@ def get_annotations_from_context_ht_vep(
 
 
 def create_context_with_oe(
+    include_rescue: bool,
     missense_str: str = MISSENSE,
-    temp_path_with_del: str = "gs://gnomad-tmp/mpc",
     n_partitions: int = 30000,
-    overwrite: bool = False,
+    overwrite_temp: bool = False,
+    overwrite_output: bool = True,
 ) -> None:
     """
     Filter VEP context Table to missense variants in canonical transcripts, and add missense observed/expected.
@@ -221,16 +222,21 @@ def create_context_with_oe(
             Polyphen-2, and SIFT.
         - `context_with_oe_dedup`: Deduplicated version of `context_with_oe` that only contains missense o/e and transcript annotations.
 
+    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
+        If True, RMC results are derived from the initial and rescue RMC search.
+        If False, RMC results are derived from the initial RMC search only.
     :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
-    :param str temp_path_with_del: Path to bucket to store temporary data with automatic deletion policy.
-        Default is 'gs://gnomad-tmp/mpc'.
-        TODO: Update this to `temp_path` (and set automatic deletion policy.)
     :param int n_partitions: Number of desired partitions for the VEP context Table.
         Repartition VEP context Table to this number on read.
         Default is 30000.
-    :param bool overwrite: Whether to overwrite temporary data if it already exists.
-        If False, will read existing temporary data rather than overwriting.
+    :param bool overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
+        If False, will read existing intermediate temporary data rather than overwriting.
         Default is False.
+    :param bool overwrite_output: Whether to entirely overwrite final output (OE-dependent) data if it already exists.
+        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
+        If True, will clear existing output data and write new output data.
+        The output Tables are the OE-annotated context Tables with duplicated or deduplicated sections.
+        Default is True.
     :return: None; function writes Table to resource path.
     """
     logger.info("Importing set of transcripts to keep...")
@@ -255,33 +261,77 @@ def create_context_with_oe(
     # before joining with RMC tables in `get_oe_annotation`
     # This computation is expensive, so overwrite only if specified (otherwise, read existing file)
     ht = ht.checkpoint(
-        f"{temp_path_with_del}/vep_context_mis_only_annot.ht",
-        _read_if_exists=not overwrite,
-        overwrite=overwrite,
+        f"{TEMP_PATH_WITH_SLOW_DEL}/vep_context_mis_only_annot.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
 
     logger.info(
         "Adding regional missense constraint missense o/e annotation and writing to resource path..."
     )
-    ht = get_oe_annotation(ht)
-    ht = ht.checkpoint(
-        context_with_oe.path, _read_if_exists=not overwrite, overwrite=overwrite
-    )
+    ht = get_oe_annotation(ht, include_rescue)
+    ht = ht.key_by("locus", "alleles", "transcript")
+    oe_col = "oe_rescue" if include_rescue else "oe"
+    if include_rescue:
+        ht = ht.rename({"oe": oe_col})
+    # If `context_with_oe` HT already exists and overwrite is False,
+    # add column for newly-calculated OE
+    if file_exists(context_with_oe.path) and not overwrite_output:
+        context_with_oe_ht = context_with_oe.ht()
+        logger.info(
+            "OE-annotated context HT already exists with fields %s. Adding column %s to existing table...",
+            set(context_with_oe_ht.row),
+            oe_col,
+        )
+        ht = ht.select(oe_col)
+        ht = ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe.ht", overwrite=True
+        )
+        ht = context_with_oe_ht.annotate(**ht[context_with_oe_ht.key])
+        ht = ht.checkpoint(context_with_oe.path, overwrite=overwrite_output)
+    else:
+        ht = ht.checkpoint(context_with_oe.path, overwrite=overwrite_output)
+    logger.info("Output OE-annotated context HT fields: %s", set(ht.row))
 
     logger.info(
         "Creating dedup context with oe (with oe and transcript annotations only)..."
     )
-    ht = ht.select("transcript", "oe")
+    ht = ht.select(oe_col).key_by("locus", "alleles")
     ht = ht.collect_by_key()
-    ht = ht.annotate(oe=hl.nanmin(ht.values.oe))
-    ht = ht.annotate(transcript=ht.values.find(lambda x: x.oe == ht.oe).transcript)
-    ht.write(context_with_oe_dedup.path, overwrite=overwrite)
+    ht = ht.annotate(**{oe_col: hl.nanmin(ht.values[oe_col])})
+    transcript_col = "transcript_rescue" if include_rescue else "transcript"
+    ht = ht.annotate(
+        **{transcript_col: ht.values.find(lambda x: x[oe_col] == ht[oe_col]).transcript}
+    )
+    # If `context_with_oe` HT already exists and overwrite is False,
+    # add columns for newly-calculated OE and corresponding transcript
+    if file_exists(context_with_oe_dedup.path) and not overwrite_output:
+        context_with_oe_dedup_ht = context_with_oe_dedup.ht()
+        logger.info(
+            "OE-annotated dedup context HT already exists with fields %s. Adding columns %s to existing table...",
+            set(context_with_oe_dedup_ht.row),
+            [oe_col, transcript_col],
+        )
+        ht = context_with_oe_dedup_ht.annotate(**ht[context_with_oe_dedup_ht.key])
+        # Checkpointing so that `context_with_oe_dedup` can be overwritten to the same path
+        ht = ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe_dedup.ht", overwrite=True
+        )
+        ht = ht.write(context_with_oe_dedup.path, overwrite=overwrite_output)
+    else:
+        ht.write(
+            context_with_oe_dedup.path,
+            overwrite=overwrite_output,
+        )
+    logger.info("Output OE-annotated dedup context HT fields: %s", set(ht.row))
 
 
 def prepare_pop_path_ht(
+    include_rescue: bool,
     gnomad_data_type: str = "exomes",
     af_threshold: float = 0.001,
-    overwrite: bool = True,
+    overwrite_temp: bool = False,
+    overwrite_output: bool = True,
 ) -> None:
     """
     Prepare Table with 'population' (common gnomAD missense) and 'pathogenic' (ClinVar pathogenic/likely pathogenic missense) variants.
@@ -290,14 +340,23 @@ def prepare_pop_path_ht(
         This function reads in data from a requester-pays bucket and will fail if requester-pays
         is not enabled on the cluster.
 
+    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results in calculations.
+        If True, RMC results are derived from the initial and rescue RMC search.
+        If False, RMC results are derived from the initial RMC search only.
     :param str gnomad_data_type: gnomAD data type. Used to retrieve public release Table.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
     :param float af_threshold: Allele frequency cutoff to filter gnomAD public dataset.
         Variants *above* this threshold will be kept.
         Default is 0.001.
-    :param bool overwrite: Whether to overwrite temporary data if it already exists.
-        If False, will read existing temporary data rather than overwriting.
+    :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
+        If False, will read existing intermediate temporary data rather than overwriting.
+        Default is False.
+    :param bool overwrite_output: Whether to entirely overwrite final output data if it already exists.
+        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
+        If True, will clear existing output data and write new output data.
+        The output Tables are the OE-annotated context Tables with duplicated or deduplicated sections
+        and the population/pathogenic variant Table.
         Default is True.
     :return: None; function writes Table to resource path.
     """
@@ -315,15 +374,17 @@ def prepare_pop_path_ht(
     # Remove variants that are in both the benign and pathogenic set
     counts = ht.group_by(*ht.key).aggregate(n=hl.agg.count())
     counts = counts.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/clinvar_gnomad_counts.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/clinvar_gnomad_counts.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
     overlap = counts.filter(counts.n > 1)
     logger.info("%i ClinVar P/LP variants are common in gnomAD", overlap.count())
     ht = ht.anti_join(overlap)
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad.ht",
-        _read_if_exists=not overwrite,
-        overwrite=overwrite,
+        f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
 
     logger.info("Adding CADD...")
@@ -336,35 +397,76 @@ def prepare_pop_path_ht(
     ht = ht.annotate(cadd=hl.struct(**cadd_ht[ht.key]))
 
     logger.info("Getting transcript annotations...")
-    # Create VEP context HT filtered to missense variants in canonical transcripts
-    # if they don't already exist
-    if not file_exists(context_with_oe_dedup.path):
-        create_context_with_oe(overwrite=overwrite)
+    # If OE-annotated VEP context HT filtered to missense variants
+    # in canonical transcripts does not exist, create it
+    # If HT exists but without specified version of OE annotation, add that OE annotation
+    rmc_cols = {
+        "transcript": "transcript_rescue" if include_rescue else "transcript",
+        "oe": "oe_rescue" if include_rescue else "oe",
+    }
+    if not file_exists(context_with_oe_dedup.path) or (
+        len(set(rmc_cols.values()).intersection(context_with_oe_dedup.ht().row))
+        < len(set(rmc_cols.values()))
+    ):
+        create_context_with_oe(
+            include_rescue=include_rescue,
+            overwrite_temp=overwrite_temp,
+            overwrite_output=overwrite_output,
+        )
 
     # Get transcript annotation from deduplicated context HT resource
     context_ht = context_with_oe_dedup.ht()
-    ht = ht.annotate(transcript=context_ht[ht.key].transcript)
+    if rmc_cols["transcript"] not in context_ht.row:
+        raise DataException(
+            f"Transcript column named {rmc_cols['transcript']} does not exist in OE-annotated dedup context table!"
+        )
+    ht = ht.annotate(transcript=context_ht[ht.key][rmc_cols["transcript"]])
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad_transcript.ht",
-        _read_if_exists=not overwrite,
-        overwrite=overwrite,
+        f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad_transcript.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
 
     logger.info(
         "Getting PolyPhen-2, codon, and regional missense constraint missense o/e annotations..."
     )
-    # Get Polyphen, codon, o/e, amino acid annotations
     context_ht = context_with_oe.ht()
-    context_ht = context_ht.key_by("locus", "alleles", "transcript")
+    # Re-adjust columns of context HT based on whether rescue RMC results are included in calculations
+    # If including rescue RMC results in calculations, drop initial-only OE column
+    # If not including, drop rescue-included OE column
+    context_ht_cols = set(context_ht.row)
+    if rmc_cols["oe"] not in context_ht_cols:
+        raise DataException(
+            f"OE column named {rmc_cols['oe']} does not exist in OE-annotated context table!"
+        )
+    if include_rescue:
+        context_ht = context_ht.transmute(oe=context_ht[rmc_cols["oe"]])
+    elif "oe_rescue" in context_ht_cols:
+        context_ht = context_ht.drop("oe_rescue")
+    # Get Polyphen, codon, o/e, amino acid annotations
     ht = ht.annotate(**context_ht[ht.locus, ht.alleles, ht.transcript])
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad_transcript_aa.ht",
-        _read_if_exists=not overwrite,
-        overwrite=overwrite,
+        f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad_transcript_aa.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
 
     logger.info("Getting missense badness annotation...")
     mb_ht = misbad.ht()
+    # Re-adjust columns of misbad HT based on whether rescue RMC results are included in calculations
+    # If including rescue RMC results in calculations, drop initial-only misbad column
+    # If not including, drop rescue-included misbad column
+    mb_ht_cols = set(mb_ht.row)
+    misbad_col = "misbad_rescue" if include_rescue else "misbad"
+    if misbad_col not in mb_ht_cols:
+        raise DataException(
+            f"Misbad column named {misbad_col} does not exist in misbad table!"
+        )
+    if include_rescue:
+        mb_ht = mb_ht.transmute(misbad=mb_ht.misbad_rescue)
+    elif "misbad_rescue" in mb_ht_cols:
+        mb_ht = mb_ht.drop("misbad_rescue")
+    # Get misbad annotation
     ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
 
     logger.info("Adding BLOSUM and Grantham annotations...")
@@ -379,9 +481,9 @@ def prepare_pop_path_ht(
         grantham=grantham_ht[ht.ref, ht.alt].score,
     )
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/joint_clinvar_gnomad_full.ht",
-        _read_if_exists=not overwrite,
-        overwrite=overwrite,
+        f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad_full.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
 
     logger.info("Filtering to rows with defined annotations and writing out...")
@@ -393,10 +495,11 @@ def prepare_pop_path_ht(
         & hl.is_defined(ht.polyphen.score)
         & hl.is_defined(ht.misbad)
     )
-    ht.write(joint_clinvar_gnomad.path, overwrite=overwrite)
+    ht.write(joint_clinvar_gnomad_path(include_rescue), overwrite=overwrite_output)
 
 
 def run_regressions(
+    include_rescue: bool,
     variables: List[str] = ["oe", "misbad", "polyphen"],
     additional_variables: List[str] = ["blosum", "grantham"],
     overwrite: bool = True,
@@ -418,6 +521,9 @@ def run_regressions(
     Note that higher MPC scores predict increased missense deleteriousness, and
     smaller n_less values and fitted scores will lead to higher MPC scores.
 
+    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
+        If True, RMC results are derived from the initial and rescue RMC search.
+        If False, RMC results are derived from the initial RMC search only.
     :param List[str] variables: Variables to include in all regressions (single, joint).
         Default is ["oe", "misbad", "polyphen"].
     :param List[str] additional_variables: Additional variables to include in single variable regressions only.
@@ -427,7 +533,7 @@ def run_regressions(
         and model coefficients as pickle to resource paths.
     """
     # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
-    ht = joint_clinvar_gnomad.ht()
+    ht = hl.read_table(joint_clinvar_gnomad_path(include_rescue))
     ht = ht.transmute(polyphen=ht.polyphen.score)
     df = ht.to_pandas()
 
@@ -564,29 +670,33 @@ def run_regressions(
         X = spec_X
 
     logger.info("Saving model as pickle...")
-    with hl.hadoop_open(mpc_model_pkl_path, "wb") as p:
+    model_path = mpc_model_pkl_path(include_rescue)
+    with hl.hadoop_open(model_path, "wb") as p:
         pickle.dump(model, p, protocol=pickle.HIGHEST_PROTOCOL)
 
     logger.info(
         "Annotating gnomAD variants with fitted score and writing to gnomad_fitted_score path..."
     )
     ht = ht.filter(ht.pop_v_path == 1)
-    ht = calculate_fitted_scores(ht)
-    ht.write(gnomad_fitted_score.path, overwrite=overwrite)
+    ht = calculate_fitted_scores(ht, model_path)
+    ht.write(gnomad_fitted_score_path(include_rescue), overwrite=overwrite)
 
 
 def calculate_fitted_scores(
-    ht: hl.Table, interaction_char: str = ":", intercept_str: str = "Intercept"
+    ht: hl.Table,
+    model_path: str,
+    interaction_char: str = ":",
+    intercept_str: str = "Intercept",
 ) -> hl.Table:
     """
     Use model and relationship determined in `run_regressions` to calculate fitted scores for input Table.
 
     .. note::
-        - Assumes model has been written as pickle to `mpc_model_pkl_path`.
         - Assumes input Table has missense observed/expected (`oe`) and `polyphen` annotations.
         - Function will remove any rows with undefined annotations from input Table.
 
     :param hl.Table ht: Input Table with variants to be annotated.
+    :param str model_path: Path to (pickled) MPC model.
     :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
         Default is ":".
     :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
@@ -595,7 +705,7 @@ def calculate_fitted_scores(
     assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
 
     logger.info("Extracting MPC model relationships from pickle...")
-    with hl.hadoop_open(mpc_model_pkl_path, "rb") as p:
+    with hl.hadoop_open(model_path, "rb") as p:
         model = pickle.load(p)
     mpc_rel_vars = model.params.to_dict()
     try:
@@ -664,10 +774,15 @@ def calculate_fitted_scores(
     return ht.annotate(fitted_score=intercept + combined_annot_expr)
 
 
-def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
+def aggregate_gnomad_fitted_scores(
+    include_rescue: bool, n_less_eq0_float: float = 0.83
+) -> None:
     """
     Aggregate gnomAD fitted scores to count number of variants with a score less than a given score.
 
+    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
+        If True, RMC results are derived from the initial and rescue RMC search.
+        If False, RMC results are derived from the initial RMC search only.
     :param float n_less_eq0_float: Set `n_less` annotation to this float if `n_less` is 0.
         This avoids errors in the `hl.log10` call and ensures that MPC for variants with a fitted score
         more severe than any common gnomAD variant score (`n_less` = 0) is more severe (by a controlled amount)
@@ -675,7 +790,7 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
     :return: None; function writes Table to resource path.
     """
     logger.info("Aggregating gnomAD fitted scores...")
-    gnomad_ht = gnomad_fitted_score.ht()
+    gnomad_ht = hl.read_table(gnomad_fitted_score_path(include_rescue))
     gnomad_ht = gnomad_ht.group_by("fitted_score").aggregate(n_var=hl.agg.count())
     gnomad_ht = gnomad_ht.order_by("fitted_score")
     gnomad_ht = gnomad_ht.key_by("fitted_score")
@@ -696,11 +811,16 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
     gnomad_ht = gnomad_ht.add_index()
     gnomad_ht = gnomad_ht.annotate(idx=hl.int(gnomad_ht.idx))
     gnomad_ht = gnomad_ht.key_by("idx")
-    gnomad_ht.write(gnomad_fitted_score_group.path, overwrite=True)
+    gnomad_ht.write(
+        gnomad_fitted_score_path(include_rescue=include_rescue, is_grouped=True),
+        overwrite=True,
+    )
 
 
 def create_mpc_release_ht(
-    overwrite: bool = True,
+    include_rescue: bool,
+    overwrite_temp: bool = True,
+    overwrite_output: bool = True,
 ) -> None:
     """
     Annotate VEP context Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
@@ -712,29 +832,42 @@ def create_mpc_release_ht(
 
     For more information on the fitted score and MPC calculation, see the docstring of `run_regressions`.
 
-    :param bool overwrite: Whether to overwrite output table if it already exists. Default is True.
+    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
+        If True, RMC results are derived from the initial and rescue RMC search.
+        If False, RMC results are derived from the initial RMC search only.
+    :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
+        If False, will read existing intermediate temporary data rather than overwriting.
+        Default is True.
+    :param bool overwrite_output: Whether to entirely overwrite final output data if it already exists.
+        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
+        If True, will clear existing output data and write new output data.
+        The output Tables are the MPC score Tables with duplicated or deduplicated loci.
+        Default is True.
     :return: None; function writes Table to resource path.
     """
     logger.info("Calculating fitted scores...")
     ht = context_with_oe.ht()
     ht = ht.transmute(polyphen=ht.polyphen.score)
-    ht = calculate_fitted_scores(ht)
+    ht = calculate_fitted_scores(ht, mpc_model_pkl_path(include_rescue))
 
     logger.info("Aggregating gnomAD fitted scores...")
-    if not file_exists(gnomad_fitted_score_group.path):
-        aggregate_gnomad_fitted_scores()
-    gnomad_ht = gnomad_fitted_score_group.ht()
+    fitted_group_path = gnomad_fitted_score_path(
+        include_rescue=include_rescue, is_grouped=True
+    )
+    if not file_exists(fitted_group_path):
+        aggregate_gnomad_fitted_scores(include_rescue)
+    gnomad_ht = hl.read_table(fitted_group_path)
     scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
     scores_len = len(scores)
 
     # Get total number of gnomAD common variants
-    gnomad_var_count = gnomad_fitted_score.ht().count()
+    gnomad_var_count = hl.read_table(gnomad_fitted_score_path(include_rescue)).count()
 
     logger.info("Getting n_less annotation...")
     # Annotate HT with sorted array of gnomAD fitted scores
     ht = ht.annotate_globals(gnomad_scores=scores)
     # Checkpoint here to force the gnomAD join to complete
-    ht = ht.checkpoint(f"{TEMP_PATH}/mpc_temp_gnomad.ht", overwrite=True)
+    ht = ht.checkpoint(f"{TEMP_PATH}/mpc_temp_gnomad.ht", overwrite=overwrite_temp)
 
     # Search all gnomAD scores to find first score that is
     # greater than or equal to score to be annotated
@@ -756,16 +889,71 @@ def create_mpc_release_ht(
         )
     )
     # Checkpoint here to force the binary search to compute
-    ht = ht.checkpoint(f"{TEMP_PATH}/mpc_temp_binary.ht", overwrite=True)
-    ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
-    ht = ht.checkpoint(mpc_release.path, overwrite=overwrite)
+    ht = ht.checkpoint(f"{TEMP_PATH}/mpc_temp_binary.ht", overwrite=overwrite_temp)
 
+    logger.info("Creating MPC release and writing out...")
+    ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
+
+    # Re-adjust column names if including rescue RMC results
+    cols_to_add = {"oe", "misbad", "fitted_score", "idx", "n_less", "mpc"}
+    if include_rescue:
+        cols_renamed = {k: k + "_rescue" for k in cols_to_add}
+        ht = ht.rename(cols_renamed)
+        cols_to_add = list(cols_renamed.values())
+
+    # If `mpc_release` HT already exists and overwrite is False,
+    # add columns for newly-calculated MPC-related data
+    if file_exists(mpc_release.path) and not overwrite_output:
+        # Keys of `ht` and `mpc_release` should be ['locus', 'alleles', 'transcript']
+        mpc_ht = mpc_release.ht()
+        logger.info(
+            "MPC HT already exists with fields %s. Adding columns %s to existing table...",
+            set(mpc_ht.row),
+            cols_to_add,
+        )
+        ht = ht.select(cols_to_add)
+        ht = mpc_ht.annotate(**ht[mpc_ht.key])
+        # Checkpointing so that `mpc_release` can be overwritten to the same path
+        ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/mpc.ht", overwrite=True)
+        ht = ht.checkpoint(mpc_release.path, overwrite=overwrite_output)
+    else:
+        ht = ht.checkpoint(
+            mpc_release.path,
+            overwrite=overwrite_output,
+        )
+    logger.info("Output MPC HT fields: %s", set(ht.row))
+
+    logger.info("Creating dedup MPC release and writing out...")
     # Create deduplicated MPC release
-    ht = ht.select("transcript", "mpc")
+    mpc_col = "mpc_rescue" if include_rescue else "mpc"
+    ht = ht.select(mpc_col).key_by("locus", "alleles")
     ht = ht.collect_by_key()
-    ht = ht.annotate(mpc=hl.nanmax(ht.values.mpc))
-    ht = ht.annotate(transcript=ht.values.find(lambda x: x.mpc == ht.mpc).transcript)
-    ht.write(mpc_release_dedup.path, overwrite=overwrite)
+    ht = ht.annotate(**{mpc_col: hl.nanmax(ht.values[mpc_col])})
+    transcript_col = "transcript_rescue" if include_rescue else "transcript"
+    ht = ht.annotate(
+        **{
+            transcript_col: ht.values.find(
+                lambda x: x[mpc_col] == ht[mpc_col]
+            ).transcript
+        }
+    )
+
+    # If `mpc_release` HT already exists and overwrite is False,
+    # add columns for newly-calculated MPC and corresponding transcript
+    if file_exists(mpc_release_dedup.path) and not overwrite_output:
+        mpc_dedup_ht = mpc_release_dedup.ht()
+        logger.info(
+            "MPC dedup HT already exists with fields %s. Adding columns %s to existing table...",
+            set(mpc_dedup_ht.row),
+            [mpc_col, transcript_col],
+        )
+        ht = mpc_dedup_ht.annotate(**ht[mpc_dedup_ht.key])
+        # Checkpointing so that `mpc_release_dedup` can be overwritten to the same path
+        ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/mpc_dedup.ht", overwrite=True)
+        ht.write(mpc_release_dedup.path, overwrite=overwrite_output)
+    else:
+        ht.write(mpc_release_dedup.path, overwrite=overwrite_output)
+    logger.info("Output MPC dedup HT fields: %s", set(ht.row))
 
 
 def annotate_mpc(

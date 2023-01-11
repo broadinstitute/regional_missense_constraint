@@ -6,7 +6,11 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.vep import CSQ_NON_CODING
 
-from rmc.resources.basics import TEMP_PATH
+from rmc.resources.basics import (
+    TEMP_PATH,
+    TEMP_PATH_WITH_FAST_DEL,
+    TEMP_PATH_WITH_SLOW_DEL,
+)
 from rmc.resources.gnomad import constraint_ht
 from rmc.resources.rmc import amino_acids_oe, constraint_prep, misbad, rmc_results
 from rmc.utils.constraint import add_obs_annotation
@@ -62,7 +66,7 @@ def annotate_and_filter_codons(ht: hl.Table) -> hl.Table:
     return ht.filter((ht.ref != "Unk") & (ht.alt != "Unk"))
 
 
-def get_oe_annotation(ht: hl.Table) -> hl.Table:
+def get_oe_annotation(ht: hl.Table, include_rescue: bool) -> hl.Table:
     """
     Annotate input Table with observed to expected missense (OE) ratio per transcript.
 
@@ -75,8 +79,13 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
         - Assumes merged RMC results HT is annotated per transcript section with:
             - `section_oe`: Missense observed/expected ratio
             - `interval`: Transcript section start position to end position
+            - `search_type`: Whether transcript RMC was discovered through
+                initial (if "initial") or rescue (if "rescue") RMC search
 
     :param hl.Table ht: Input Table.
+    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
+        If True, RMC results are derived from the initial and rescue RMC search.
+        If False, RMC results are derived from the initial RMC search only.
     :return: Table with `oe` annotation.
     """
     overall_oe_ht = (
@@ -108,6 +117,14 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
     if not file_exists(rmc_results.path):
         raise DataException("Merged RMC results table does not exist!")
     rmc_ht = rmc_results.ht().key_by("interval")
+    if not include_rescue:
+        # Read initial-only RMC results from file if exists
+        initial_rmc_path = f"{TEMP_PATH_WITH_SLOW_DEL}/rmc_initial_search.ht"
+        if file_exists(initial_rmc_path):
+            rmc_ht = hl.read_table(initial_rmc_path)
+        else:
+            rmc_ht = rmc_ht.filter(rmc_ht.search_type == "initial")
+
     ht = ht.annotate(
         section_oe=rmc_ht.index(ht.locus, all_matches=True)
         .filter(lambda x: x.transcript == ht.transcript)
@@ -122,7 +139,12 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
     return ht.transmute(oe=hl.coalesce(ht.section_oe, ht.transcript_oe))
 
 
-def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
+def prepare_amino_acid_ht(
+    include_rescue: bool,
+    overwrite_temp: bool,
+    overwrite_output: bool,
+    gnomad_data_type: str = "exomes",
+) -> None:
     """
     Prepare Table with all possible amino acid substitutions and their missense observed to expected (OE) ratio.
 
@@ -133,6 +155,15 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
         - Add observed and OE annotation
         - Write to `amino_acids_oe` resource path
 
+    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
+        If True, RMC results are derived from the initial and rescue RMC search.
+        If False, RMC results are derived from the initial RMC search only.
+    :param bool overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
+        If False, will read existing intermediate temporary data rather than overwriting.
+    :param bool overwrite_output: Whether to entirely overwrite final output (OE-dependent) data if it already exists.
+        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
+        If True, will clear existing output data and write new output data.
+        The output Table is the amino acid Table.
     :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
@@ -165,7 +196,11 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     context_ht = annotate_and_filter_codons(context_ht)
 
     logger.info("Checkpointing HT before joining with gnomAD data...")
-    context_ht = context_ht.checkpoint(f"{TEMP_PATH}/codons.ht", overwrite=True)
+    context_ht = context_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/codons.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
 
     logger.info("Filtering sites using gnomAD %s...", gnomad_data_type)
     context_ht = filter_context_using_gnomad(
@@ -177,14 +212,18 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
     context_ht = add_obs_annotation(context_ht)
 
     logger.info("Checkpointing HT after joining with gnomAD data...")
-    context_ht = context_ht.checkpoint(f"{TEMP_PATH}/codons_filt.ht", overwrite=True)
+    context_ht = context_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/codons_filt.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
 
     logger.info(
         "Getting observed to expected ratio, rekeying Table, and writing to output path..."
     )
     # Note that `get_oe_annotation` is pulling the missense OE ratio
-    context_ht = get_oe_annotation(context_ht)
-    context_ht = context_ht.key_by().select(
+    context_ht = get_oe_annotation(context_ht, include_rescue)
+    context_ht = context_ht.select(
         "ref",
         "alt",
         "observed",
@@ -192,7 +231,29 @@ def prepare_amino_acid_ht(gnomad_data_type: str = "exomes") -> None:
         "amino_acids",
         "oe",
     )
-    context_ht.write(amino_acids_oe.path, overwrite=True)
+
+    col = "oe_rescue" if include_rescue else "oe"
+    if include_rescue:
+        context_ht = context_ht.rename({"oe": col})
+    # If `amino_acids_oe` HT already exists and overwrite is False,
+    # add column for newly-calculated OE
+    if file_exists(amino_acids_oe.path) and not overwrite_output:
+        amino_acids_oe_ht = amino_acids_oe.ht()
+        logger.info(
+            "Amino acid OE HT already exists with fields %s. Adding column %s to existing table...",
+            set(amino_acids_oe_ht.row),
+            col,
+        )
+        context_ht = context_ht.select(col)
+        context_ht = amino_acids_oe_ht.annotate(**context_ht[amino_acids_oe_ht.key])
+        # Checkpointing so that `amino_acids_oe` can be overwritten to the same path
+        context_ht = context_ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_oe.ht", overwrite=True
+        )
+        context_ht.write(amino_acids_oe.path, overwrite=overwrite_output)
+    else:
+        context_ht.write(amino_acids_oe.path, overwrite=overwrite_output)
+    logger.info("Output amino acid OE HT fields: %s", set(context_ht.row))
 
 
 def variant_csq_expr(
@@ -272,13 +333,28 @@ def get_total_csq_count(ht: hl.Table, csq: str, count_field: str) -> int:
     return ht.aggregate(hl.agg.filter(ht.mut_type == csq, hl.agg.sum(ht[count_field])))
 
 
-def calculate_misbad(use_exac_oe_cutoffs: bool, oe_threshold: float = 0.6) -> None:
+def calculate_misbad(
+    include_rescue: bool,
+    use_exac_oe_cutoffs: bool,
+    overwrite_temp: bool,
+    overwrite_output: bool,
+    oe_threshold: float = 0.6,
+) -> None:
     """
     Calculate missense badness score using Table with all amino acid substitutions and their missense observed/expected (OE) ratio.
 
     If `use_exac_oe_cutoffs` is set, will remove all rows with 0.6 < OE <= 0.8.
 
+    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
+        If True, RMC results used in calculation are derived from the initial and rescue RMC search.
+        If False, RMC results used in calculation are derived from the initial RMC search only.
     :param bool use_exac_oe_cutoffs: Whether to use the same missense OE cutoffs as in ExAC missense badness calculation.
+    :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
+        If False, will read existing intermediate temporary data rather than overwriting.
+    :param bool overwrite_output: Whether to entirely overwrite final output data if it already exists.
+        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
+        If True, will clear existing output data and write new output data.
+        The output Table is the missense badness score Table.
     :param float oe_threshold: OE Threshold used to split Table.
         Rows with OE less or equal to this threshold will be considered "low" OE, and
         rows with OE greater than this threshold will considered "high" OE.
@@ -291,6 +367,15 @@ def calculate_misbad(use_exac_oe_cutoffs: bool, oe_threshold: float = 0.6) -> No
         )
 
     ht = amino_acids_oe.ht()
+    # Re-adjust OE column name if including rescue RMC results
+    oe_col = "oe_rescue" if include_rescue else "oe"
+    if oe_col not in ht.row:
+        raise DataException(
+            f"OE column named {oe_col} does not exist in table with all amino acid substitutions!"
+        )
+    if include_rescue:
+        ht = ht.transmute(oe=ht.oe_rescue)
+
     if use_exac_oe_cutoffs:
         logger.info("Removing rows with OE greater than 0.6 and less than 0.8...")
         ht = ht.filter((ht.oe <= 0.6) | (ht.oe > 0.8))
@@ -300,11 +385,20 @@ def calculate_misbad(use_exac_oe_cutoffs: bool, oe_threshold: float = 0.6) -> No
     )
     logger.info("Creating high missense OE (OE > %s) HT...", oe_threshold)
     high_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=True)
-    high_ht = high_ht.checkpoint(f"{TEMP_PATH}/amino_acids_high_oe.ht", overwrite=True)
+    rescue = "_rescue" if include_rescue else ""
+    high_ht = high_ht.checkpoint(
+        f"{TEMP_PATH}/amino_acids_high_oe{rescue}.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
 
     logger.info("Creating low missense OE (OE <= %s) HT...", oe_threshold)
     low_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=False)
-    low_ht = low_ht.checkpoint(f"{TEMP_PATH}/amino_acids_low_oe.ht", overwrite=True)
+    low_ht = low_ht.checkpoint(
+        f"{TEMP_PATH}/amino_acids_low_oe{rescue}.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
 
     logger.info("Re-joining split HTs to calculate missense badness...")
     high_ht = high_ht.transmute(
@@ -349,4 +443,25 @@ def calculate_misbad(use_exac_oe_cutoffs: bool, oe_threshold: float = 0.6) -> No
             hl.min((mb_ht.high_low - syn_rate) / (non_rate - syn_rate), 1),
         ),
     )
-    mb_ht.write(misbad.path, overwrite=True)
+
+    mb_col = "misbad_rescue" if include_rescue else "misbad"
+    high_low_col = "high_low_rescue" if include_rescue else "high_low"
+    if include_rescue:
+        mb_ht = mb_ht.rename({"high_low": high_low_col, "misbad": mb_col})
+    # If `misbad` exists and overwrite is False,
+    # add column for newly-calculated missense badness
+    if file_exists(misbad.path) and not overwrite_output:
+        misbad_ht = misbad.ht()
+        logger.info(
+            "Missense badness HT already exists with fields %s. Adding columns %s to existing table...",
+            set(misbad_ht.row),
+            [mb_col, high_low_col],
+        )
+        mb_ht = mb_ht.select(high_low_col, mb_col)
+        mb_ht = misbad_ht.annotate(**mb_ht[misbad_ht.key])
+        # Checkpointing so that `misbad` can be overwritten to the same path
+        mb_ht = mb_ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/misbad.ht", overwrite=True)
+        mb_ht.write(misbad.path, overwrite=overwrite_output)
+    else:
+        mb_ht.write(misbad.path, overwrite=overwrite_output)
+    logger.info("Output missense badness HT fields: %s", set(mb_ht.row))

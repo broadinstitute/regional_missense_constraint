@@ -450,64 +450,65 @@ Table containing all possible amino acid substitutions and their missense badnes
 ####################################################################################
 ## MPC related resources
 ####################################################################################
-joint_clinvar_gnomad = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/joint_clinvar_gnomad.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Table containing "population" and "pathogenic" variants.
+CURRENT_MPC_PREFIX = f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}"
 
-Table contains common (AF > 0.001) gnomAD variants ("population") and
-ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes
-that cause severe disease ("pathogenic") with defined CADD, BLOSUM, Grantham, missense observed/expected ratios,
-missense badness, and PolyPhen-2 scores.
 
-Input to MPC (missense badness, polyphen-2, and constraint) calculations.
-"""
+def joint_clinvar_gnomad_path(include_rescue: bool = False) -> str:
+    """
+    Return path to Table containing "population" and "pathogenic" variants.
 
-mpc_model_pkl_path = (
-    f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/mpc_model.pkl"
-)
-"""
-Path to model (stored as pickle) that contains relationship of MPC variables.
+    Table contains common (AF > 0.001) gnomAD variants ("population") and
+    ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes
+    that cause severe disease ("pathogenic") with defined CADD, BLOSUM, Grantham, missense observed/expected ratios,
+    missense badness, and PolyPhen-2 scores.
 
-Created using logistic regression.
-"""
+    Table is input to MPC (missense badness, polyphen-2, and constraint) calculations.
 
-gnomad_fitted_score = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/gnomad_fitted_scores.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Table of gnomAD variants and their fitted scores (from MPC model regression).
+    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
+        If True, RMC results used in calculation are derived from the initial and rescue RMC search.
+        If False, RMC results used in calculation are derived from the initial RMC search only.
+        Default is False.
+    :return: Path to Table.
+    """
+    rescue = "_rescue" if include_rescue else ""
+    return f"{CURRENT_MPC_PREFIX}/joint_clinvar_gnomad{rescue}.ht"
 
-Input to MPC (missense badness, polyphen-2, and constraint) calculations on other datasets.
-"""
 
-gnomad_fitted_score_group = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/gnomad_fitted_scores_group.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Table of fitted scores for common (AF > 0.001) variants in gnomAD, grouped by score.
+def mpc_model_pkl_path(include_rescue: bool = False) -> str:
+    """
+    Return path to model (stored as pickle) that contains relationship of MPC variables.
 
-Annotated with the total number of variants with and less than each score.
-"""
+    Model created using logistic regression.
+
+    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
+        If True, RMC results used in calculation are derived from the initial and rescue RMC search.
+        If False, RMC results used in calculation are derived from the initial RMC search only.
+        Default is False.
+    :return: Path to model.
+    """
+    rescue = "_rescue" if include_rescue else ""
+    return f"{CURRENT_MPC_PREFIX}/mpc_model{rescue}.pkl"
+
+
+def gnomad_fitted_score_path(
+    include_rescue: bool = False, is_grouped: bool = False
+) -> str:
+    """
+    Return path to fitted scores (from MPC model regression) of common (AF > 0.001) gnomAD variants.
+
+    Table is input to MPC (missense badness, polyphen-2, and constraint) calculations on other datasets.
+
+    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
+        If True, RMC results used in calculation are derived from the initial and rescue RMC search.
+        If False, RMC results used in calculation are derived from the initial RMC search only.
+        Default is False.
+    :param bool is_grouped: Whether the Table is grouped by score. Default is False.
+    :return: Path to Table.
+    """
+    rescue = "_rescue" if include_rescue else ""
+    group = "_group" if is_grouped else ""
+    return f"{CURRENT_MPC_PREFIX}/gnomad_fitted_scores{group}{rescue}.ht"
+
 
 mpc_release = VersionedTableResource(
     default_version=CURRENT_FREEZE,
