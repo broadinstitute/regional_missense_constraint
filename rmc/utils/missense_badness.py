@@ -250,7 +250,7 @@ def prepare_amino_acid_ht(
         context_ht = context_ht.checkpoint(
             f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_oe.ht", overwrite=True
         )
-        context_ht.write(amino_acids_oe.path, overwrite=overwrite_output)
+        context_ht.write(amino_acids_oe.path, overwrite=True)
     else:
         context_ht.write(amino_acids_oe.path, overwrite=overwrite_output)
     logger.info("Output amino acid OE HT fields: %s", set(context_ht.row))
