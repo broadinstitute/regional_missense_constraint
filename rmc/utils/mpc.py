@@ -288,8 +288,7 @@ def create_context_with_oe(
             f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe.ht", overwrite=True
         )
         ht = context_with_oe_ht.annotate(**ht[context_with_oe_ht.key])
-        # Overwrite is set to True here to ensure newly-added columns are written out
-        ht = ht.checkpoint(context_with_oe.path, overwrite=True)
+        ht = ht.checkpoint(context_with_oe.path, overwrite=overwrite_output)
     else:
         ht = ht.checkpoint(context_with_oe.path, overwrite=overwrite_output)
     logger.info("Output OE-annotated context HT fields: %s", set(ht.row))
@@ -318,8 +317,7 @@ def create_context_with_oe(
         ht = ht.checkpoint(
             f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe_dedup.ht", overwrite=True
         )
-        # Overwrite is set to True here to ensure newly-added columns are written out
-        ht = ht.write(context_with_oe_dedup.path, overwrite=True)
+        ht = ht.write(context_with_oe_dedup.path, overwrite=overwrite_output)
     else:
         ht.write(
             context_with_oe_dedup.path,
@@ -914,8 +912,7 @@ def create_mpc_release_ht(
         ht = mpc_ht.annotate(**ht[mpc_ht.key])
         # Checkpointing so that `mpc_release` can be overwritten to the same path
         ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/mpc.ht", overwrite=True)
-        # Overwrite is set to True here to ensure newly-added columns are written out
-        ht = ht.checkpoint(mpc_release.path, overwrite=True)
+        ht = ht.checkpoint(mpc_release.path, overwrite=overwrite_output)
     else:
         ht = ht.checkpoint(
             mpc_release.path,
@@ -950,8 +947,7 @@ def create_mpc_release_ht(
         ht = mpc_dedup_ht.annotate(**ht[mpc_dedup_ht.key])
         # Checkpointing so that `mpc_release_dedup` can be overwritten to the same path
         ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/mpc_dedup.ht", overwrite=True)
-        # Overwrite is set to True here to ensure newly-added columns are written out
-        ht.write(mpc_release_dedup.path, overwrite=True)
+        ht.write(mpc_release_dedup.path, overwrite=overwrite_output)
     else:
         ht.write(mpc_release_dedup.path, overwrite=overwrite_output)
     logger.info("Output MPC dedup HT fields: %s", set(ht.row))

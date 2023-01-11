@@ -250,10 +250,9 @@ def prepare_amino_acid_ht(
         context_ht = context_ht.checkpoint(
             f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_oe.ht", overwrite=True
         )
-        # Overwrite is set to True here to ensure newly-added columns are written out
-        context_ht.write(amino_acids_oe.path, overwrite=True)
+        context_ht.write(amino_acids_oe.path, overwrite=overwrite_output)
     else:
-        context_ht.write(amino_acids_oe.path)
+        context_ht.write(amino_acids_oe.path, overwrite=overwrite_output)
     logger.info("Output amino acid OE HT fields: %s", set(context_ht.row))
 
 
@@ -462,8 +461,7 @@ def calculate_misbad(
         mb_ht = misbad_ht.annotate(**mb_ht[misbad_ht.key])
         # Checkpointing so that `misbad` can be overwritten to the same path
         mb_ht = mb_ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/misbad.ht", overwrite=True)
-        # Overwrite is set to True here to ensure newly-added columns are written out
-        mb_ht.write(misbad.path, overwrite=True)
+        mb_ht.write(misbad.path, overwrite=overwrite_output)
     else:
-        mb_ht.write(misbad.path)
+        mb_ht.write(misbad.path, overwrite=overwrite_output)
     logger.info("Output missense badness HT fields: %s", set(mb_ht.row))
