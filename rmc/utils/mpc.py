@@ -285,9 +285,12 @@ def create_context_with_oe(
         )
         ht = ht.select(oe_col)
         ht = ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe.ht", overwrite=True
+            f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe_filt.ht", overwrite=True
         )
         ht = context_with_oe_ht.annotate(**ht[context_with_oe_ht.key])
+        ht = ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe_join.ht", overwrite=True
+        )
         ht = ht.checkpoint(context_with_oe.path, overwrite=overwrite_output)
     else:
         ht = ht.checkpoint(context_with_oe.path, overwrite=overwrite_output)
