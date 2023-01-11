@@ -461,7 +461,7 @@ def calculate_misbad(
         mb_ht = misbad_ht.annotate(**mb_ht[misbad_ht.key])
         # Checkpointing so that `misbad` can be overwritten to the same path
         mb_ht = mb_ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/misbad.ht", overwrite=True)
-        mb_ht.write(misbad.path, overwrite=overwrite_output)
+        mb_ht.write(misbad.path, overwrite=True)
     else:
         mb_ht.write(misbad.path, overwrite=overwrite_output)
     logger.info("Output missense badness HT fields: %s", set(mb_ht.row))
