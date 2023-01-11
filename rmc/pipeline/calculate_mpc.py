@@ -119,12 +119,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--overwrite-temp",
-        help="Overwrite existing intermediate temporary data, for use in functions where existing final outputs may be modified.",
+        help="Overwrite existing intermediate temporary data, for use in functions with option to modify existing final output data.",
         action="store_true",
     )
     parser.add_argument(
         "--overwrite-output",
-        help="Completely overwrite existing final output data, for use in functions where existing final outputs may be modified.",
+        help="Completely overwrite existing final output data, for use in functions with option to modify existing final output data.",
         action="store_true",
     )
     parser.add_argument(
