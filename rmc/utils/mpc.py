@@ -233,7 +233,7 @@ def create_context_with_oe(
         If False, will read existing intermediate temporary data rather than overwriting.
         Default is False.
     :param bool overwrite_output: Whether to entirely overwrite final output (OE-dependent) data if it already exists.
-        If False, will read and modify existing output data rather than overwriting entirely.
+        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
         If True, will clear existing output data and write new output data.
         The output Tables are the OE-annotated context Tables with duplicated or deduplicated sections.
         Default is True.
@@ -355,7 +355,7 @@ def prepare_pop_path_ht(
         If False, will read existing intermediate temporary data rather than overwriting.
         Default is False.
     :param bool overwrite_output: Whether to entirely overwrite final output data if it already exists.
-        If False, will read and modify existing output data rather than overwriting entirely.
+        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
         If True, will clear existing output data and write new output data.
         The output Tables are the OE-annotated context Tables with duplicated or deduplicated sections
         and the population/pathogenic variant Table.
@@ -838,7 +838,7 @@ def create_mpc_release_ht(
         If False, will read existing intermediate temporary data rather than overwriting.
         Default is True.
     :param bool overwrite_output: Whether to entirely overwrite final output data if it already exists.
-        If False, will read and modify existing output data rather than overwriting entirely.
+        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
         If True, will clear existing output data and write new output data.
         The output Tables are the MPC score Tables with duplicated or deduplicated loci.
         Default is True.

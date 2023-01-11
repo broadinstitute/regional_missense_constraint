@@ -161,7 +161,7 @@ def prepare_amino_acid_ht(
     :param bool overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
     :param bool overwrite_output: Whether to entirely overwrite final output (OE-dependent) data if it already exists.
-        If False, will read and modify existing output data rather than overwriting entirely.
+        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
         If True, will clear existing output data and write new output data.
         The output Table is the amino acid Table.
     :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
@@ -353,7 +353,7 @@ def calculate_misbad(
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
     :param bool overwrite_output: Whether to entirely overwrite final output data if it already exists.
-        If False, will read and modify existing output data rather than overwriting entirely.
+        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
         If True, will clear existing output data and write new output data.
         The output Table is the missense badness score Table.
     :param float oe_threshold: OE Threshold used to split Table.
