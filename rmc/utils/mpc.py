@@ -322,7 +322,7 @@ def create_context_with_oe(
         ht = ht.checkpoint(
             f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe_dedup.ht", overwrite=True
         )
-        ht = ht.write(context_with_oe_dedup.path, overwrite=True)
+        ht.write(context_with_oe_dedup.path, overwrite=True)
     else:
         ht.write(
             context_with_oe_dedup.path,
