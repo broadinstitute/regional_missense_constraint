@@ -872,7 +872,11 @@ def create_mpc_release_ht(
     # Annotate HT with sorted array of gnomAD fitted scores
     ht = ht.annotate_globals(gnomad_scores=scores)
     # Checkpoint here to force the gnomAD join to complete
-    ht = ht.checkpoint(f"{TEMP_PATH}/mpc_temp_gnomad.ht", overwrite=overwrite_temp)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH}/mpc_temp_gnomad.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
 
     # Search all gnomAD scores to find first score that is
     # greater than or equal to score to be annotated
@@ -894,7 +898,11 @@ def create_mpc_release_ht(
         )
     )
     # Checkpoint here to force the binary search to compute
-    ht = ht.checkpoint(f"{TEMP_PATH}/mpc_temp_binary.ht", overwrite=overwrite_temp)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH}/mpc_temp_binary.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
 
     logger.info("Creating MPC release and writing out...")
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
