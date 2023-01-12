@@ -964,7 +964,7 @@ def create_mpc_release_ht(
         ht = mpc_dedup_ht.annotate(**ht[mpc_dedup_ht.key])
         # Checkpointing so that `mpc_release_dedup` can be overwritten to the same path
         ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/mpc_dedup.ht", overwrite=True)
-        ht.write(mpc_release_dedup.path, overwrite=overwrite_output)
+        ht.write(mpc_release_dedup.path, overwrite=True)
     else:
         ht.write(mpc_release_dedup.path, overwrite=overwrite_output)
     logger.info("Output MPC dedup HT fields: %s", set(ht.row))
