@@ -306,6 +306,8 @@ def create_context_with_oe(
     ht = ht.annotate(
         **{transcript_col: ht.values.find(lambda x: x[oe_col] == ht[oe_col]).transcript}
     )
+    ht = ht.drop("values")
+
     # If `context_with_oe` HT already exists and overwrite is False,
     # add columns for newly-calculated OE and corresponding transcript
     if file_exists(context_with_oe_dedup.path) and not overwrite_output:
@@ -940,6 +942,7 @@ def create_mpc_release_ht(
             ).transcript
         }
     )
+    ht = ht.drop("values")
 
     # If `mpc_release` HT already exists and overwrite is False,
     # add columns for newly-calculated MPC and corresponding transcript
