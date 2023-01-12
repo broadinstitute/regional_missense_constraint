@@ -230,6 +230,7 @@ def prepare_amino_acid_ht(
         "codons",
         "amino_acids",
         "oe",
+        "transcript",
     )
 
     col = "oe_rescue" if include_rescue else "oe"
