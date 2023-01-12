@@ -223,6 +223,7 @@ def prepare_amino_acid_ht(
     )
     # Note that `get_oe_annotation` is pulling the missense OE ratio
     context_ht = get_oe_annotation(context_ht, include_rescue)
+    context_ht = context_ht.key_by("locus", "alleles", "transcript")
     context_ht = context_ht.select(
         "ref",
         "alt",
@@ -230,7 +231,6 @@ def prepare_amino_acid_ht(
         "codons",
         "amino_acids",
         "oe",
-        "transcript",
     )
 
     col = "oe_rescue" if include_rescue else "oe"
