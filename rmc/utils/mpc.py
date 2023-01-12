@@ -291,7 +291,7 @@ def create_context_with_oe(
         ht = ht.checkpoint(
             f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe_join.ht", overwrite=True
         )
-        ht = ht.checkpoint(context_with_oe.path, overwrite=overwrite_output)
+        ht = ht.checkpoint(context_with_oe.path, overwrite=True)
     else:
         ht = ht.checkpoint(context_with_oe.path, overwrite=overwrite_output)
     logger.info("Output OE-annotated context HT fields: %s", set(ht.row))
@@ -320,7 +320,7 @@ def create_context_with_oe(
         ht = ht.checkpoint(
             f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe_dedup.ht", overwrite=True
         )
-        ht = ht.write(context_with_oe_dedup.path, overwrite=overwrite_output)
+        ht = ht.write(context_with_oe_dedup.path, overwrite=True)
     else:
         ht.write(
             context_with_oe_dedup.path,
@@ -918,7 +918,7 @@ def create_mpc_release_ht(
         ht = mpc_ht.annotate(**ht[mpc_ht.key])
         # Checkpointing so that `mpc_release` can be overwritten to the same path
         ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/mpc.ht", overwrite=True)
-        ht = ht.checkpoint(mpc_release.path, overwrite=overwrite_output)
+        ht = ht.checkpoint(mpc_release.path, overwrite=True)
     else:
         ht = ht.checkpoint(
             mpc_release.path,
