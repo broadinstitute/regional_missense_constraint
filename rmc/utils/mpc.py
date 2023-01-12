@@ -916,7 +916,7 @@ def create_mpc_release_ht(
             set(mpc_ht.row),
             cols_to_add,
         )
-        ht = ht.select(cols_to_add)
+        ht = ht.select(*cols_to_add)
         ht = mpc_ht.annotate(**ht[mpc_ht.key])
         # Checkpointing so that `mpc_release` can be overwritten to the same path
         ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/mpc.ht", overwrite=True)
