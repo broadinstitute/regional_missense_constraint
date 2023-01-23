@@ -46,9 +46,6 @@ def main(args):
         if args.search_num == 1 and not args.is_rescue:
             save_chisq_ht = True
 
-        if args.run_ttn:
-            section_groups = [[args.ttn_id]]
-
         if args.run_sections_over_threshold:
             sections_to_run = list(
                 hl.eval(
@@ -80,9 +77,6 @@ def main(args):
             bucket_type="raw_results",
         )
         for counter, group in enumerate(section_groups):
-            # Double check TTN has been removed
-            if args.ttn_id in group:
-                group.remove(args.ttn_id)
 
             output_ht_path = (
                 f"{raw_path}/simul_break_dataproc_ttn.ht"
