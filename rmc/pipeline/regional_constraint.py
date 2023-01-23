@@ -407,9 +407,7 @@ def main(args):
                 logger.info(
                     "Converting merged simultaneous breaks HT from section-level to locus-level..."
                 )
-                simul_break_by_section_ht = hl.read_table(
-                    f"{simul_results_path}/merged.ht"
-                )
+                simul_break_by_section_ht = hl.read_table(simul_break_by_section_path)
 
                 # Filter locus-level table (from single search no-break results) to sections with simultaneous breaks
                 single_no_break_ht = single_no_break_ht.annotate(
