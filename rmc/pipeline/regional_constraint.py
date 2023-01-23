@@ -498,6 +498,10 @@ def main(args):
                     args.search_num,
                 )
 
+            merged_path = merged_search_path(
+                is_rescue=args.is_rescue,
+                search_num=args.search_num,
+            )
             if single_exists and simul_exists:
                 logger.info(
                     "Merging break results from single and simultaneous search and writing..."
