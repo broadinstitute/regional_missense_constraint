@@ -544,7 +544,7 @@ def get_max_chisq_per_group(
     """
     Group input Table by given field and return maximum chi square value per group.
 
-    'Group' in this context refers toeither a transcript or transcript subsection.
+    'Group' in this context refers to either a transcript or transcript subsection.
 
     :param ht: Input Table.
     :param group_str: String of field containing transcript or transcript subsection information.
