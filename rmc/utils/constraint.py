@@ -952,7 +952,7 @@ def get_rescue_transcripts_and_create_no_breaks_he(
     overwrite: bool, chisq_thresholds: Dict[str, Dict[str, float]] = CHISQ_THRESHOLDS
 ) -> None:
     """
-    Get transcripts found in rescue pipeline and write final no breaks HT.
+    Get transcripts found in rescue pipeline and write final no breaks HailExpression.
 
     Function gets transcripts found in rescue single and simultaneous breaks searches
     and creates final HT with all transcripts that do not have evidence of RMC.
