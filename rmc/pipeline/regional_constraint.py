@@ -458,26 +458,19 @@ def main(args):
                     args.search_num,
                 )
 
-            if file_exists(
-                single_search_round_ht_path(
-                    is_rescue=args.is_rescue,
-                    search_num=args.search_num,
-                    is_break_found=True,
-                    is_breakpoint_only=False,
-                )
-            ):
+            single_break_path = single_search_round_ht_path(
+                is_rescue=args.is_rescue,
+                search_num=args.search_num,
+                is_break_found=True,
+                is_breakpoint_only=False,
+            )
+
+            if file_exists(single_break_path):
                 single_exists = True
                 logger.info(
                     "Annotating single breaks with new sections and re-keying for next search..."
                 )
-                single_break_ht = hl.read_table(
-                    single_search_round_ht_path(
-                        is_rescue=args.is_rescue,
-                        search_num=args.search_num,
-                        is_break_found=True,
-                        is_breakpoint_only=False,
-                    )
-                )
+                single_break_ht = hl.read_table(single_break_path)
                 single_break_ht = single_break_ht.annotate(
                     section_1=hl.if_else(
                         single_break_ht.locus.position > single_break_ht.breakpoint,
