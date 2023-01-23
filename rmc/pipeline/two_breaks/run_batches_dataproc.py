@@ -58,18 +58,32 @@ def main(args):
                     )
                 )
             )
-            if args.group_size:
-                logger.info(
-                    "Splitting transcripts/transcript sections into groups of %i",
-                    args.group_size,
+
+        if args.run_sections_under_threshold:
+            sections_to_run = list(
+                hl.eval(
+                    hl.experimental.read_expression(
+                        simul_sections_split_by_len_path(
+                            is_rescue=args.is_rescue,
+                            search_num=args.search_num,
+                            is_over_threshold=False,
+                        )
+                    )
                 )
-                section_groups = [
-                    sections_to_run[x : x + args.group_size]
-                    for x in range(0, len(sections_to_run), args.group_size)
-                ]
-            else:
-                logger.info("Running transcripts/transcript sections one at a time...")
-                section_groups = [[section] for section in sections_to_run]
+            )
+
+        if args.group_size:
+            logger.info(
+                "Splitting transcripts/transcript sections into groups of %i",
+                args.group_size,
+            )
+            section_groups = [
+                sections_to_run[x : x + args.group_size]
+                for x in range(0, len(sections_to_run), args.group_size)
+            ]
+        else:
+            logger.info("Running transcripts/transcript sections one at a time...")
+            section_groups = [[section] for section in sections_to_run]
 
         raw_path = simul_search_round_bucket_path(
             is_rescue=args.is_rescue,
