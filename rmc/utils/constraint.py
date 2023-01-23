@@ -792,7 +792,6 @@ def process_sections(
 
 def get_rescue_1break_transcripts(
     overwrite: bool,
-    initial_threshold: float,
     rescue_threshold: float,
 ) -> Tuple[hl.expr.SetExpression]:
     """
@@ -813,8 +812,6 @@ def get_rescue_1break_transcripts(
     break search, and removes transcripts with two simultaneous breaks or one single break.
 
     :param overwrite: Whether to overwrite output data if it exists.
-    :param initial_threshold: Chi square significance threshold associated with
-        the initial search pathway.
     :param rescue_threshold: Lower chi square significance threshold associated with
         the 'rescue' search pathway.
     :return: Tuple set of sections (transcript_start_stop) with two simultaneous breaks in
@@ -972,7 +969,6 @@ def get_rescue_transcripts_and_create_no_breaks_he(
     # rescue single break search, and rescue simultaneous breaks search
     init_simul_sections, rescue_single_sections = get_rescue_1break_transcripts(
         overwrite=overwrite,
-        initial_threshold=chisq_thresholds["initial"]["single"],
         rescue_threshold=chisq_thresholds["rescue"]["single"],
     )
     rescue_simul_sections = get_rescue_2breaks_transcripts(
