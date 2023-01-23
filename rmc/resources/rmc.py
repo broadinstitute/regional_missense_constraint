@@ -279,10 +279,10 @@ def merged_search_path(
     Return path to Table with merged single and simultaneous breaks search results.
 
     Function returns path to HT for break found sections based on search number and
-    and whether HT is associated with "rescue" pathway
+    whether HT is associated with "rescue" pathway
     (pathway with lowered chi square significance cutoff).
 
-    Function also has ability to return path to HailExpression path containing
+    Function also has ability to return path to HailExpression containing
     set of sections without breakpoints, though this functionality isn't
     currently being used.
 

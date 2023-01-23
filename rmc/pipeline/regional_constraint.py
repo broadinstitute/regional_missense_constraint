@@ -401,7 +401,8 @@ def main(args):
                 search_num=args.search_num,
                 bucket_type="final_results",
             )
-            if file_exists(f"{simul_results_path}/merged.ht"):
+            simul_break_by_section_path = f"{simul_results_path}/merged.ht"
+            if file_exists(simul_break_by_section_path):
                 simul_exists = True
                 logger.info(
                     "Converting merged simultaneous breaks HT from section-level to locus-level..."
@@ -756,7 +757,7 @@ if __name__ == "__main__":
         `CHISQ_THRESHOLDS`.
 
         Example format (using only 'initial' key):
-        '{"initial": {"single": 6.6, ul": 9.2}}'
+        '{"initial": {"single": 6.6, "simul": 9.2}}'
         """,
     )
     parser.add_argument(

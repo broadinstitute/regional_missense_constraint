@@ -544,7 +544,7 @@ def get_max_chisq_per_group(
     """
     Group input Table by given field and return maximum chi square value per group.
 
-    'Group' in this context refers toeither a transcript or transcript subsection.
+    'Group' in this context refers to either a transcript or transcript subsection.
 
     :param ht: Input Table.
     :param group_str: String of field containing transcript or transcript subsection information.
@@ -948,11 +948,11 @@ def get_rescue_2breaks_transcripts(
     return ht.aggregate(hl.agg.collect_as_set(ht.section))
 
 
-def get_rescue_transcripts_and_create_no_breaks_ht(
+def get_rescue_transcripts_and_create_no_breaks_he(
     overwrite: bool, chisq_thresholds: Dict[str, Dict[str, float]] = CHISQ_THRESHOLDS
 ) -> None:
     """
-    Get transcripts found in rescue pipeline and write final no breaks HT.
+    Get transcripts found in rescue pipeline and write final no breaks HailExpression.
 
     Function gets transcripts found in rescue single and simultaneous breaks searches
     and creates final HT with all transcripts that do not have evidence of RMC.
@@ -966,7 +966,7 @@ def get_rescue_transcripts_and_create_no_breaks_ht(
     :param overwrite: Whether to overwrite output data if it exists.
     :param chisq_thresholds: Dictionary of chi square significance thresholds.
         Default is CHISQ_THRESHOLDS.
-    :return: None; function writes HT to resource path.
+    :return: None; function writes HailExpression to resource path.
     """
     # Get the sections (transcript_start_stop) found in initial simultaneous breaks search,
     # rescue single break search, and rescue simultaneous breaks search
