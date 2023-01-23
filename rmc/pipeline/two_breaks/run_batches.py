@@ -619,9 +619,13 @@ def main(args):
         # Use a docker image that specifies spark memory allocation if --use-custom-machine was specified
         if args.use_custom_machine:
             args.docker_image = "gcr.io/broad-mpg-gnomad/rmc:20220930"
+            logger.warning(
+                "Using %s image; please make sure Hail version in image is up to date",
+                args.docker_image,
+            )
         # Otherwise, use the default docker image
         else:
-            args.docker_image = "gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220930"
+            args.docker_image = "gcr.io/broad-mpg-gnomad/tgg-methods-vm:20230123"
 
     logger.info("Setting up Batch parameters...")
     backend = hb.ServiceBackend(
@@ -840,12 +844,12 @@ if __name__ == "__main__":
         "--docker-image",
         help="""
         Docker image to provide to hail Batch. Must have dill, hail, and python installed.
-        Suggested image: gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220930.
+        Suggested image: gcr.io/broad-mpg-gnomad/tgg-methods-vm:20230123.
 
         If running with --use-custom-machine, Docker image must also contain this line:
         `ENV PYSPARK_SUBMIT_ARGS="--driver-memory 8g --executor-memory 8g pyspark-shell"`
         to make sure the job allocates memory correctly.
-        Suggested image: gcr.io/broad-mpg-gnomad/rmc:20220930.
+        Example image: gcr.io/broad-mpg-gnomad/rmc:20220930.
 
         Default is None -- script will select default image if not specified on the command line.
         """,
