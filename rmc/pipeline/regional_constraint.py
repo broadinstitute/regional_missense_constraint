@@ -35,7 +35,7 @@ from rmc.utils.constraint import (
     add_obs_annotation,
     calculate_exp_per_transcript,
     calculate_observed,
-    get_rescue_transcripts_and_create_no_breaks_ht,
+    get_rescue_transcripts_and_create_no_breaks_he,
     GROUPINGS,
     process_sections,
 )
@@ -366,7 +366,7 @@ def main(args):
                 logger.info(
                     "Creating outputs for first rescue search round and final no-break transcripts..."
                 )
-                get_rescue_transcripts_and_create_no_breaks_ht(
+                get_rescue_transcripts_and_create_no_breaks_he(
                     args.overwrite, chisq_thresholds_dict
                 )
 
