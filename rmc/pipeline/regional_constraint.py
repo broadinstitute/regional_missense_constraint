@@ -756,7 +756,7 @@ if __name__ == "__main__":
         `CHISQ_THRESHOLDS`.
 
         Example format (using only 'initial' key):
-        '{"initial": {"single": 6.6, ul": 9.2}}'
+        '{"initial": {"single": 6.6, "simul": 9.2}}'
         """,
     )
     parser.add_argument(
