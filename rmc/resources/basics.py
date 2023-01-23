@@ -38,7 +38,7 @@ Path to bucket for temporary files.
 Used when checkpointing intermediate files that can't be deleted immediately.
 """
 
-TEMP_PATH_WITH_FAST_DEL = "gs://gnomad-tmp-4day/rmc/"
+TEMP_PATH_WITH_FAST_DEL = "gs://gnomad-tmp-4day/rmc"
 """
 Path to bucket for temporary files.
 
@@ -47,7 +47,7 @@ Used when checkpointing intermediate files that can be removed immediately
 Used for RMC-relevant temporary files, including files for missense badness and MPC.
 """
 
-TEMP_PATH_WITH_SLOW_DEL = "gs://gnomad-tmp/rmc/"
+TEMP_PATH_WITH_SLOW_DEL = "gs://gnomad-tmp/rmc"
 """
 Path to bucket for temporary files.
 

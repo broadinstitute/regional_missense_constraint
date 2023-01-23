@@ -223,6 +223,7 @@ def prepare_amino_acid_ht(
     )
     # Note that `get_oe_annotation` is pulling the missense OE ratio
     context_ht = get_oe_annotation(context_ht, include_rescue)
+    context_ht = context_ht.key_by("locus", "alleles", "transcript")
     context_ht = context_ht.select(
         "ref",
         "alt",
@@ -250,7 +251,7 @@ def prepare_amino_acid_ht(
         context_ht = context_ht.checkpoint(
             f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_oe.ht", overwrite=True
         )
-        context_ht.write(amino_acids_oe.path, overwrite=overwrite_output)
+        context_ht.write(amino_acids_oe.path, overwrite=True)
     else:
         context_ht.write(amino_acids_oe.path, overwrite=overwrite_output)
     logger.info("Output amino acid OE HT fields: %s", set(context_ht.row))
@@ -461,7 +462,7 @@ def calculate_misbad(
         mb_ht = misbad_ht.annotate(**mb_ht[misbad_ht.key])
         # Checkpointing so that `misbad` can be overwritten to the same path
         mb_ht = mb_ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/misbad.ht", overwrite=True)
-        mb_ht.write(misbad.path, overwrite=overwrite_output)
+        mb_ht.write(misbad.path, overwrite=True)
     else:
         mb_ht.write(misbad.path, overwrite=overwrite_output)
     logger.info("Output missense badness HT fields: %s", set(mb_ht.row))
