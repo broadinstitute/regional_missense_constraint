@@ -511,13 +511,12 @@ def main(args):
                 merged_break_ht.write(merged_path, overwrite=args.overwrite)
             elif single_exists:
                 single_break_ht.write(merged_path, overwrite=args.overwrite)
+            elif simul_exists:
+                simul_break_ht.write(merged_path, overwrite=args.overwrite)
             else:
-                simul_break_ht.write(
-                    merged_search_path(
-                        is_rescue=args.is_rescue,
-                        search_num=args.search_num,
-                    ),
-                    overwrite=args.overwrite,
+                logger.info(
+                    "No sections in round %i had breakpoints (neither in single nor in simultaneous search).",
+                    args.search_num,
                 )
 
             # DONE: 1. Annotate this newly found simul_ht with same annotations as on break_found_ht
