@@ -948,7 +948,7 @@ def get_rescue_2breaks_transcripts(
     return ht.aggregate(hl.agg.collect_as_set(ht.section))
 
 
-def get_rescue_transcripts_and_create_no_breaks_ht(
+def get_rescue_transcripts_and_create_no_breaks_he(
     overwrite: bool, chisq_thresholds: Dict[str, Dict[str, float]] = CHISQ_THRESHOLDS
 ) -> None:
     """
