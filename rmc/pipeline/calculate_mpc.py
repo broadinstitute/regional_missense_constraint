@@ -11,7 +11,7 @@ import hail as hl
 
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 from rmc.slack_creds import slack_token
 from rmc.utils.mpc import (
@@ -32,15 +32,20 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Calculate MPC (Missense badness, Polyphen-2, and Constraint) score."""
-    temp_dir = f"{TEMP_PATH_WITH_DEL}/mpc/"
+    temp_dir = f"{TEMP_PATH_WITH_FAST_DEL}/mpc/"
     try:
         if args.command == "prepare-ht":
             hl.init(log="/write_pop_path_ht.log", tmp_dir=temp_dir)
-            prepare_pop_path_ht()
+            prepare_pop_path_ht(
+                include_rescue=args.include_rescue,
+                overwrite_temp=args.overwrite_temp,
+                overwrite_output=args.overwrite_output,
+            )
 
         if args.command == "run-glm":
             hl.init(log="/run_regressions_using_glm.log", tmp_dir=temp_dir)
             run_regressions(
+                include_rescue=args.include_rescue,
                 variables=args.variables.split(","),
                 additional_variables=args.extra_variables.split(","),
                 overwrite=args.overwrite,
@@ -49,9 +54,12 @@ def main(args):
         if args.command == "calculate-mpc":
             hl.init(log="/calculate_mpc_release.log", tmp_dir=temp_dir)
             create_mpc_release_ht(
-                overwrite=args.overwrite,
+                include_rescue=args.include_rescue,
+                overwrite_temp=args.overwrite_temp,
+                overwrite_output=args.overwrite_output,
             )
 
+        # TODO: Add include_rescue option for annotate-hts
         if args.command == "annotate-hts":
             hl.init(log="/annotate_hts.log", tmp_dir=temp_dir)
             if args.clinvar:
@@ -110,8 +118,23 @@ if __name__ == "__main__":
         "--overwrite", help="Overwrite existing data.", action="store_true"
     )
     parser.add_argument(
+        "--overwrite-temp",
+        help="Overwrite existing intermediate temporary data, for use in functions with option to modify existing final output data.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--overwrite-output",
+        help="Completely overwrite existing final output data, for use in functions with option to modify existing final output data.",
+        action="store_true",
+    )
+    parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
+    )
+    parser.add_argument(
+        "--include-rescue",
+        help="Include RMC results from rescue search in calculations.",
+        action="store_true",
     )
 
     # Create subparsers for each step

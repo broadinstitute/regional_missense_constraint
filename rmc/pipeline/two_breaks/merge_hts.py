@@ -10,7 +10,7 @@ import hail as hl
 
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import simul_search_round_bucket_path
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import merge_simul_break_temp_hts
@@ -29,7 +29,7 @@ def main(args):
     try:
         hl.init(
             log=f"/round{args.search_num}_search_for_two_breaks_merge_hts.log",
-            tmp_dir=TEMP_PATH_WITH_DEL,
+            tmp_dir=TEMP_PATH_WITH_FAST_DEL,
         )
 
         logger.info("Merging all temp HTs...")

@@ -17,7 +17,7 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
     grouped_single_no_break_ht_path,
     simul_search_round_bucket_path,
@@ -40,7 +40,7 @@ def main(args):
         logger.warning("This step should be run on an autoscaling cluster!")
         hl.init(
             log=f"/round{args.search_num}search_for_two_breaks_run_batches_dataproc.log",
-            tmp_dir=TEMP_PATH_WITH_DEL,
+            tmp_dir=TEMP_PATH_WITH_FAST_DEL,
         )
         save_chisq_ht = False
         if args.search_num == 1 and not args.is_rescue:
@@ -108,6 +108,7 @@ def main(args):
                 search_num=args.search_num,
                 over_threshold=True,
                 output_ht_path=output_ht_path,
+                output_n_partitions=args.output_n_partitions,
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.split_list_len,
                 read_if_exists=args.read_if_exists,
@@ -130,9 +131,19 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--chisq-threshold",
-        help="Chi-square significance threshold. Value should be 9.2 (value adjusted from ExAC code due to discussion with Mark).",
+        help="""
+        Chi-square significance threshold.
+        Value should be 9.2 (p = 0.01) for initial search
+        and 7.4 (p = 0.025) for rescue search.
+        """,
         type=float,
         default=9.2,
+    )
+    parser.add_argument(
+        "--output-n-partitions",
+        help="Number of desired partitions for output Tables. Default is 10.",
+        type=int,
+        default=10,
     )
     parser.add_argument(
         "--slack-channel",

@@ -10,7 +10,7 @@ import hail as hl
 
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.slack_creds import slack_token
 from rmc.utils.missense_badness import calculate_misbad, prepare_amino_acid_ht
 
@@ -25,15 +25,24 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Calculate missense badness."""
-    temp_dir = f"{TEMP_PATH_WITH_DEL}/mb/"
+    temp_dir = f"{TEMP_PATH_WITH_FAST_DEL}/mb/"
     try:
         if args.command == "prepare-ht":
             hl.init(log="/calc_misbad_prep_context_gamma_ht.log", tmp_dir=temp_dir)
-            prepare_amino_acid_ht()
+            prepare_amino_acid_ht(
+                include_rescue=args.include_rescue,
+                overwrite_temp=args.overwrite_temp,
+                overwrite_output=args.overwrite_output,
+            )
 
         if args.command == "create-misbad":
             hl.init(log="/calc_misbad_create_score.log", tmp_dir=temp_dir)
-            calculate_misbad(args.use_exac_oe_cutoffs)
+            calculate_misbad(
+                include_rescue=args.include_rescue,
+                use_exac_oe_cutoffs=args.use_exac_oe_cutoffs,
+                overwrite_temp=args.overwrite_temp,
+                overwrite_output=args.overwrite_output,
+            )
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -45,12 +54,24 @@ if __name__ == "__main__":
         "This regional missense constraint script calculates missense badness."
     )
     parser.add_argument(
-        "--overwrite", help="Overwrite existing data.", action="store_true"
+        "--overwrite-temp",
+        help="Overwrite existing temporary data, for use in functions with option to modify existing final output data.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--overwrite-output",
+        help="Completely overwrite existing final output data, for use in functions with option to modify existing final output data.",
+        action="store_true",
     )
     parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
         default="@kc (she/her)",
+    )
+    parser.add_argument(
+        "--include-rescue",
+        help="Include RMC results from rescue search in calculations.",
+        action="store_true",
     )
 
     # Create subparsers for each step

@@ -6,7 +6,7 @@ import hail as hl
 
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
 
-from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_DEL
+from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
     simul_search_round_bucket_path,
     simul_sections_split_by_len_path,
@@ -30,6 +30,7 @@ def group_no_single_break_found_ht(
     ht_path: str,
     out_ht_path: str,
     group_str: str,
+    overwrite: bool,
 ) -> None:
     """
     Group HT containing transcripts/transcript sections that don't have a single significant break and collect annotations into lists.
@@ -49,6 +50,7 @@ def group_no_single_break_found_ht(
     :param out_ht_path: Path to output Table grouped by transcripts/transcript sections with lists
         of cumulative observed, expected missense counts.
     :param group_str: Field used to group observed and expected values.
+    :param overwrite: Whether to overwrite existing grouped Table.
     :return: None; writes Table grouped by transcript/transcript section with cumulative observed, expected missense counts
         and all positions collected into lists to resource path.
     """
@@ -75,7 +77,7 @@ def group_no_single_break_found_ht(
         cum_exp=group_ht.values.cum_exp,
         positions=group_ht.values.positions,
     )
-    group_ht.write(out_ht_path, overwrite=True)
+    group_ht.write(out_ht_path, overwrite=overwrite)
 
 
 def split_sections_by_len(
@@ -130,6 +132,7 @@ def split_sections_by_len(
         len(under_threshold),
         len(over_threshold),
     )
+
     if len(under_threshold) > 0:
         hl.experimental.write_expression(
             under_threshold,
@@ -391,7 +394,8 @@ def search_for_two_breaks(
         )
     else:
         group_ht = group_ht.checkpoint(
-            f"{TEMP_PATH_WITH_DEL}/dataproc_temp_chisq_group{count}.ht", overwrite=True
+            f"{TEMP_PATH_WITH_FAST_DEL}/dataproc_temp_chisq_group{count}.ht",
+            overwrite=True,
         )
     # Remove rows with maximum chi square values below the threshold
     group_ht = group_ht.filter(group_ht.max_chisq >= chisq_threshold)
@@ -406,6 +410,7 @@ def process_section_group(
     search_num: int,
     over_threshold: bool,
     output_ht_path: str,
+    output_n_partitions: int = 10,
     chisq_threshold: float = 9.2,
     min_num_exp_mis: float = 10,
     split_list_len: int = 500,
@@ -417,26 +422,28 @@ def process_section_group(
 
     Designed for use with Hail Batch.
 
-    :param str ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
-    :param List[str] section_group: List of transcripts or transcript sections to process.
+    :param ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
+    :param section_group: List of transcripts or transcript sections to process.
     :param count: Which transcript or transcript section group is being run (based on counter generated in `main`).
     :param is_rescue: Whether to return path to HT created in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
-    :param bool over_threshold: Whether input transcript/sections have more
+    :param over_threshold: Whether input transcript/sections have more
         possible missense sites than threshold specified in `run_simultaneous_breaks`.
-    :param str output_ht_path: Path to output results Table.
-    :param float chisq_threshold: Chi-square significance threshold. Default is 9.2.
+    :param output_ht_path: Path to output results Table.
+    :param output_n_partitions: Desired number of partitions for output Table.
+        Default is 10.
+    :param chisq_threshold: Chi-square significance threshold. Default is 9.2.
         This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
-    :param float min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
+    :param min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
-    :param int split_list_len: Max length to divide transcript/sections observed or expected missense and position lists into.
+    :param split_list_len: Max length to divide transcript/sections observed or expected missense and position lists into.
         E.g., if split_list_len is 500, and the list lengths are 998, then the transcript/section will be
         split into two rows with lists of length 500 and 498.
         Only used if over_threshold is True. Default is 500.
-    :param bool read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
+    :param read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
         Only applies to Table that is input to `search_for_two_breaks`
         (`f"{temp_ht_path}/{transcript_group[0]}_prep.ht"`).
         Default is False.
@@ -544,6 +551,7 @@ def process_section_group(
             ht = ht.filter(ht.max_chisq == ht.section_max_chisq)
 
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
+    ht = ht.naive_coalesce(output_n_partitions)
     # TODO: Restructure ht to match locus-level formats from single breaks
     ht.write(output_ht_path, overwrite=True)
     # TODO: Consider whether we want to write out temp information on chisq values for each potential break combination

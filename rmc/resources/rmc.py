@@ -100,6 +100,70 @@ Context Table ready for RMC calculations.
 HT is annotated with observed and expected variant counts per base.
 """
 
+CONSTRAINT_ANNOTATIONS = {
+    "mu_snp",
+    "observed",
+    "coverage",
+    "total_exp",
+    "total_mu",
+    "total_obs",
+    "cumulative_obs",
+    "cumulative_exp",
+    "forward_oe",
+    "mu_scan",
+    "section_mu",
+    "section_exp",
+    "section_obs",
+    "section_oe",
+    "reverse",
+    "reverse_obs_exp",
+    "total_null",
+    "total_alt",
+    "chisq",
+    "max_chisq",
+}
+"""
+Set of annotations used to calculate constraint and to hold resulting statistics.
+
+Used to drop unnecessary fields when starting rescue break search.
+
+TODO: assess which annotations in this list can be removed
+"""
+
+FINAL_ANNOTATIONS = {
+    "section_obs",
+    "section_exp",
+    "section_oe",
+}
+"""
+Set of annotations to keep from individual break search round result HTs when finalizing release HT.
+"""
+
+
+def single_search_bucket_path(
+    is_rescue: bool,
+    search_num: int = None,
+) -> str:
+    """
+    Return path to bucket associated with single break search inputs and results.
+
+    Function returns path to top level initial or "rescue"
+    (search with lowered chi square significance cutoff) bucket,
+    or bucket based on search number in either initial or rescue bucket.
+
+    :param is_rescue: Whether to return path corresponding to rescue pathway.
+    :param search_num: Search iteration number
+        (e.g., second round of searching for single break would be 2).
+        Default is None.
+    :return: Path to single break search round bucket.
+    """
+    rescue = "rescue" if is_rescue else "initial"
+    return (
+        f"{SINGLE_BREAK_TEMP_PATH}/{rescue}/round{search_num}"
+        if search_num
+        else f"{SINGLE_BREAK_TEMP_PATH}/{rescue}"
+    )
+
 
 def single_search_round_ht_path(
     is_rescue: bool,
@@ -167,7 +231,7 @@ Note that this field will also be kept (`section` is a key field):
 
 def simul_search_bucket_path(
     is_rescue: bool,
-    search_num: int,
+    search_num: int = None,
 ) -> str:
     """
     Return path to bucket associated with simultaneous break search inputs and results.
@@ -178,7 +242,8 @@ def simul_search_bucket_path(
 
     :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
-        (e.g., second round of searching for single break would be 2).
+        (e.g., second round of searching for simultaneous break would be 2).
+        Default is None.
     :return: Path to simultaneous break search round bucket.
     """
     rescue = "rescue" if is_rescue else "initial"
@@ -303,78 +368,6 @@ def merged_search_path(
     return f"{TEMP_PATH}/{rescue}round{search_num}_no_break_found.he"
 
 
-one_break = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/one_break.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Table containing transcripts with at least one break.
-
-Found when searching constraint_prep HT for transcripts for a single (first) break.
-"""
-
-not_one_break = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/not_one_break.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Table containing transcripts without one significant break.
-
-Transcripts in this table will be processed to check for two simultaneous breaks.
-"""
-
-not_one_break_grouped = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/not_one_break_grouped.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Not one break Table grouped by transcript with observed missense, expected missense, and positions collected into lists.
-
-Input to searching for simultaneous breaks.
-"""
-
-multiple_breaks = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/multiple_breaks.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Table containing transcripts with multiple breaks.
-"""
-
-
-simul_break = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/simul_break.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Table containing transcripts with two simultaneous breaks.
-"""
-
 no_breaks = (
     f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/no_breaks.he"
 )
@@ -480,64 +473,65 @@ Table containing all possible amino acid substitutions and their missense badnes
 ####################################################################################
 ## MPC related resources
 ####################################################################################
-joint_clinvar_gnomad = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/joint_clinvar_gnomad.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Table containing "population" and "pathogenic" variants.
+CURRENT_MPC_PREFIX = f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}"
 
-Table contains common (AF > 0.001) gnomAD variants ("population") and
-ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes
-that cause severe disease ("pathogenic") with defined CADD, BLOSUM, Grantham, missense observed/expected ratios,
-missense badness, and PolyPhen-2 scores.
 
-Input to MPC (missense badness, polyphen-2, and constraint) calculations.
-"""
+def joint_clinvar_gnomad_path(include_rescue: bool = False) -> str:
+    """
+    Return path to Table containing "population" and "pathogenic" variants.
 
-mpc_model_pkl_path = (
-    f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/mpc_model.pkl"
-)
-"""
-Path to model (stored as pickle) that contains relationship of MPC variables.
+    Table contains common (AF > 0.001) gnomAD variants ("population") and
+    ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes
+    that cause severe disease ("pathogenic") with defined CADD, BLOSUM, Grantham, missense observed/expected ratios,
+    missense badness, and PolyPhen-2 scores.
 
-Created using logistic regression.
-"""
+    Table is input to MPC (missense badness, polyphen-2, and constraint) calculations.
 
-gnomad_fitted_score = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/gnomad_fitted_scores.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Table of gnomAD variants and their fitted scores (from MPC model regression).
+    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
+        If True, RMC results used in calculation are derived from the initial and rescue RMC search.
+        If False, RMC results used in calculation are derived from the initial RMC search only.
+        Default is False.
+    :return: Path to Table.
+    """
+    rescue = "_rescue" if include_rescue else ""
+    return f"{CURRENT_MPC_PREFIX}/joint_clinvar_gnomad{rescue}.ht"
 
-Input to MPC (missense badness, polyphen-2, and constraint) calculations on other datasets.
-"""
 
-gnomad_fitted_score_group = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/gnomad_fitted_scores_group.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Table of fitted scores for common (AF > 0.001) variants in gnomAD, grouped by score.
+def mpc_model_pkl_path(include_rescue: bool = False) -> str:
+    """
+    Return path to model (stored as pickle) that contains relationship of MPC variables.
 
-Annotated with the total number of variants with and less than each score.
-"""
+    Model created using logistic regression.
+
+    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
+        If True, RMC results used in calculation are derived from the initial and rescue RMC search.
+        If False, RMC results used in calculation are derived from the initial RMC search only.
+        Default is False.
+    :return: Path to model.
+    """
+    rescue = "_rescue" if include_rescue else ""
+    return f"{CURRENT_MPC_PREFIX}/mpc_model{rescue}.pkl"
+
+
+def gnomad_fitted_score_path(
+    include_rescue: bool = False, is_grouped: bool = False
+) -> str:
+    """
+    Return path to fitted scores (from MPC model regression) of common (AF > 0.001) gnomAD variants.
+
+    Table is input to MPC (missense badness, polyphen-2, and constraint) calculations on other datasets.
+
+    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
+        If True, RMC results used in calculation are derived from the initial and rescue RMC search.
+        If False, RMC results used in calculation are derived from the initial RMC search only.
+        Default is False.
+    :param bool is_grouped: Whether the Table is grouped by score. Default is False.
+    :return: Path to Table.
+    """
+    rescue = "_rescue" if include_rescue else ""
+    group = "_group" if is_grouped else ""
+    return f"{CURRENT_MPC_PREFIX}/gnomad_fitted_scores{group}{rescue}.ht"
+
 
 mpc_release = VersionedTableResource(
     default_version=CURRENT_FREEZE,
