@@ -626,6 +626,10 @@ def main(args):
         # Otherwise, use the default docker image
         else:
             args.docker_image = "gcr.io/broad-mpg-gnomad/tgg-methods-vm:20230123"
+            logger.warning(
+                "Using %s image; please make sure Hail version in image is up to date",
+                args.docker_image,
+            )
 
     logger.info("Setting up Batch parameters...")
     backend = hb.ServiceBackend(
