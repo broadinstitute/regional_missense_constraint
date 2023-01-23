@@ -22,12 +22,12 @@ from rmc.resources.basics import (
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
 
-FREEZES = [1, 2]
+FREEZES = [1, 2, 3]
 """
 RMC/MPC data versions computed with current gnomAD version.
 """
 
-CURRENT_FREEZE = 2
+CURRENT_FREEZE = 3
 """
 Current RMC/MPC data version.
 """
@@ -153,6 +153,7 @@ def single_search_round_ht_path(
     search_num: int,
     is_break_found: bool,
     is_breakpoint_only: bool,
+    freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
     Return path to a Table with results from a specified round of single break search.
@@ -174,12 +175,13 @@ def single_search_round_ht_path(
         that have significant single break results.
     :param is_breakpoint_only: Whether to return path to HT with breakpoint positions
         only.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Path to specified HT resulting from single break search.
     """
     rescue = "rescue" if is_rescue else "initial"
     break_status = "break_found" if is_break_found else "no_break_found"
     breakpoint_status = "_breakpoint_only" if is_breakpoint_only else ""
-    return f"{SINGLE_BREAK_TEMP_PATH}/{rescue}/round{search_num}/{break_status}{breakpoint_status}.ht"
+    return f"{SINGLE_BREAK_TEMP_PATH}/{freeze}/{rescue}/round{search_num}/{break_status}{breakpoint_status}.ht"
 
 
 SIMUL_SEARCH_BUCKET_NAMES = {"prep", "raw_results", "final_results", "success_files"}
