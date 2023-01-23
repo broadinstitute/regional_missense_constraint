@@ -510,13 +510,7 @@ def main(args):
                 # TODO: Change break results bucket structure to have round first, then simul vs. single split
                 merged_break_ht.write(merged_path, overwrite=args.overwrite)
             elif single_exists:
-                single_break_ht.write(
-                    merged_search_path(
-                        is_rescue=args.is_rescue,
-                        search_num=args.search_num,
-                    ),
-                    overwrite=args.overwrite,
-                )
+                single_break_ht.write(merged_path, overwrite=args.overwrite)
             else:
                 simul_break_ht.write(
                     merged_search_path(
