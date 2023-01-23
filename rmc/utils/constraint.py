@@ -966,7 +966,7 @@ def get_rescue_transcripts_and_create_no_breaks_he(
     :param overwrite: Whether to overwrite output data if it exists.
     :param chisq_thresholds: Dictionary of chi square significance thresholds.
         Default is CHISQ_THRESHOLDS.
-    :return: None; function writes HT to resource path.
+    :return: None; function writes HailExpression to resource path.
     """
     # Get the sections (transcript_start_stop) found in initial simultaneous breaks search,
     # rescue single break search, and rescue simultaneous breaks search
