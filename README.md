@@ -1,6 +1,7 @@
 # Regional missense constraint and MPC
+This branch contains the code used to generate the second data freeze (freeze 2) of gnomAD v2 RMC/MPC.
 
-**WARNING: This repository is under active development!**
+**WARNING: This branch is not actively being maintained!**
 
 * Regional missense constraint (RMC): Regional variability in tolerance to missense variation within a gene
 * Missense badness: Score that predicts deleteriousness of specific amino acid subsitution
