@@ -72,6 +72,11 @@ def main(args):
                 )
             )
 
+        logger.info(
+            "Found %i transcripts or transcript sections to search...",
+            len(sections_to_run),
+        )
+
         if args.group_size:
             logger.info(
                 "Splitting transcripts/transcript sections into groups of %i",
