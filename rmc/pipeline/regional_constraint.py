@@ -5,6 +5,7 @@ import logging
 import hail as hl
 
 from gnomad.utils.slack import slack_notifications
+from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import (
     LOGGING_PATH,
