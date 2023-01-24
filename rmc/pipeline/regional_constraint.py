@@ -500,34 +500,18 @@ def main(args):
 
             logger.info("Checking round paths in initial search...")
             initial_round_nums = check_break_search_round_nums(is_rescue=False)
-            logger.info("Checking round paths in rescue search...")
-            rescue_round_nums = check_break_search_round_nums(is_rescue=True)
 
             logger.info("Finalizing section-level RMC table from initial search...")
             initial_rmc_ht = merge_rmc_hts(
                 round_nums=initial_round_nums, is_rescue=False
             )
             initial_rmc_ht = initial_rmc_ht.checkpoint(
-                f"{TEMP_PATH_WITH_SLOW_DEL}/rmc_initial_search.ht",
-                overwrite=args.overwrite,
-                _read_if_exists=not args.overwrite,
-            )
-            logger.info("Finalizing section-level RMC table from rescue search...")
-            rescue_rmc_ht = merge_rmc_hts(round_nums=rescue_round_nums, is_rescue=True)
-            rescue_rmc_ht = rescue_rmc_ht.checkpoint(
-                f"{TEMP_PATH_WITH_FAST_DEL}/rmc_rescue_search.ht",
+                f"{TEMP_PATH_WITH_SLOW_DEL}/rmc_results.ht",
                 overwrite=args.overwrite,
                 _read_if_exists=not args.overwrite,
             )
 
-            logger.info(
-                "Merging RMC tables from initial and rescue searches together..."
-            )
-            logger.warning(
-                "This performs a join followed by a rekey, which will trigger a shuffle!"
-            )
-            rmc_ht = initial_rmc_ht.union(rescue_rmc_ht)
-
+            logger.info("Merging RMC tables...")
             logger.info("Removing outlier transcripts...")
             constraint_transcripts = get_constraint_transcripts(outlier=False)
             rmc_ht = rmc_ht.filter(constraint_transcripts.contains(rmc_ht.transcript))
