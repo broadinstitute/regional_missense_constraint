@@ -518,7 +518,7 @@ def get_max_chisq_per_group(
         section_max_chisq=hl.agg.max(ht[chisq_str])
     )
     group_ht = group_ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/group_max_chisq.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/group_max_chisq.ht", overwrite=True
     )
     ht = ht.annotate(section_max_chisq=group_ht[ht.section].section_max_chisq)
     return ht
