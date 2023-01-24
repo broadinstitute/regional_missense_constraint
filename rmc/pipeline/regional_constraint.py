@@ -34,7 +34,6 @@ from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
     check_break_search_round_nums,
-    get_rescue_transcripts_and_create_no_breaks_he,
     GROUPINGS,
     merge_rmc_hts,
     process_sections,
@@ -353,48 +352,19 @@ def main(args):
             )
 
         if args.merge_single_simul:
-            if args.is_rescue and args.search_num == 1:
-                # NOTE: The first round of rescue search is performed using intermediate outputs
-                # from the first round of initial search
-                hl.init(
-                    log=f"/rescue_round{args.search_num}_merge_single_simul.log",
-                    tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+            hl.init(
+                log=f"/round{args.search_num}_merge_single_simul.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+            )
+            # Get locus input to this simultaneous break search round from single search no-break HT
+            single_no_break_ht = hl.read_table(
+                single_search_round_ht_path(
+                    is_rescue=args.is_rescue,
+                    search_num=args.search_num,
+                    is_break_found=False,
+                    is_breakpoint_only=False,
                 )
-                if args.chisq_thresholds_dict:
-                    chisq_thresholds_dict = json.loads(args.chisq_thresholds_dict)
-                else:
-                    chisq_thresholds_dict = CHISQ_THRESHOLDS
-                logger.info(
-                    "Creating outputs for first rescue search round and final no-break transcripts..."
-                )
-                get_rescue_transcripts_and_create_no_breaks_he(
-                    args.overwrite, chisq_thresholds_dict
-                )
-
-                # Get locus input to this simultaneous break search round from single search no-break HT
-                single_no_break_ht = hl.read_table(
-                    single_search_round_ht_path(
-                        is_rescue=not args.is_rescue,
-                        search_num=args.search_num,
-                        is_break_found=False,
-                        is_breakpoint_only=False,
-                    )
-                )
-
-            else:
-                hl.init(
-                    log=f"/round{args.search_num}_merge_single_simul.log",
-                    tmp_dir=TEMP_PATH_WITH_FAST_DEL,
-                )
-                # Get locus input to this simultaneous break search round from single search no-break HT
-                single_no_break_ht = hl.read_table(
-                    single_search_round_ht_path(
-                        is_rescue=args.is_rescue,
-                        search_num=args.search_num,
-                        is_break_found=False,
-                        is_breakpoint_only=False,
-                    )
-                )
+            )
 
             logger.info("Checking if simul breaks merged HT exists...")
             simul_results_path = simul_search_round_bucket_path(
