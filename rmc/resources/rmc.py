@@ -339,7 +339,7 @@ def simul_sections_split_by_len_path(
     return f"{bucket_path}/sections_to_simul_{threshold_relation}_threshold.he"
 
 
-def merged_search_path(
+def merged_search_ht_path(
     is_rescue: bool,
     search_num: int,
     is_break_found: bool = True,
