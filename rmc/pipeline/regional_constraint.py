@@ -357,7 +357,7 @@ def main(args):
                 # from the first round of initial search
                 hl.init(
                     log=f"/rescue_round{args.search_num}_merge_single_simul.log",
-                    tmp_dir=TEMP_PATH_WITH_DEL,
+                    tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 )
                 if args.chisq_thresholds_dict:
                     chisq_thresholds_dict = json.loads(args.chisq_thresholds_dict)
@@ -383,7 +383,7 @@ def main(args):
             else:
                 hl.init(
                     log=f"/round{args.search_num}_merge_single_simul.log",
-                    tmp_dir=TEMP_PATH_WITH_DEL,
+                    tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 )
                 # Get locus input to this simultaneous break search round from single search no-break HT
                 single_no_break_ht = hl.read_table(
