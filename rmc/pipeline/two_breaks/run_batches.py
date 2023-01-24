@@ -81,7 +81,8 @@ PythonJobs. See `rmc.resources.rmc` for full docstring.
 
 def simul_search_bucket_path(
     is_rescue: bool,
-    search_num: int,
+    search_num: int = None,
+    freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
     Return path to bucket associated with simultaneous break search inputs and results.
@@ -91,14 +92,16 @@ def simul_search_bucket_path(
 
     :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
-        (e.g., second round of searching for single break would be 2).
+        (e.g., second round of searching for simultaneous break would be 2).
+        Default is None.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Path to simultaneous break search round bucket.
     """
     rescue = "rescue" if is_rescue else "initial"
     return (
-        f"{SIMUL_BREAK_TEMP_PATH}/{rescue}/round{search_num}"
+        f"{SIMUL_BREAK_TEMP_PATH}/{freeze}/{rescue}/round{search_num}"
         if search_num
-        else f"{SIMUL_BREAK_TEMP_PATH}/{rescue}"
+        else f"{SIMUL_BREAK_TEMP_PATH}/{freeze}/{rescue}"
     )
 
 
