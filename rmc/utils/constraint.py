@@ -1274,7 +1274,6 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
             'section_exp': float64
             'section_oe': float64
             'section_chisq': float64
-            'search_type': str
             'transcript': str
             'interval': interval<locus<GRCh37>>
         ----------------------------------------
@@ -1318,8 +1317,6 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
     rmc_ht = rmc_ht.annotate(
         section_chisq=calculate_section_chisq(rmc_ht.section_obs, rmc_ht.section_exp)
     )
-    # Annotate search pathway type (initial or rescue)
-    rmc_ht = rmc_ht.annotate(search_type=rescue)
 
     # Convert section label to transcript and start and end positions
     rmc_ht = rmc_ht.key_by()
