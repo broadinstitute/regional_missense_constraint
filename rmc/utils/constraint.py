@@ -876,10 +876,9 @@ def get_rescue_2breaks_transcripts(
         output_ht_path=f"{TEMP_PATH_WITH_FAST_DEL}/rescue_simul_chisq.ht",
         overwrite=overwrite,
     )
-    
+
     ht = hl.read_table(f"{TEMP_PATH_WITH_FAST_DEL}/rescue_simul_chisq.ht")
     ht = get_max_chisq_per_group(ht, "section", "max_chisq")
-    ht = ht.filter(ht.max_chisq == ht.section_max_chisq)
     ht = ht.filter(
         (ht.max_chisq == ht.section_max_chisq)
         & (ht.section_max_chisq < initial_threshold)
