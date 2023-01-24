@@ -279,7 +279,7 @@ def main(args):
             else:
                 # Read in merged single and simultaneous breaks results HT
                 ht = hl.read_table(
-                    merged_search_path(
+                    merged_search_ht_path(
                         is_rescue=is_rescue,
                         search_num=args.search_num - 1,
                     ),
@@ -499,7 +499,7 @@ def main(args):
                     args.search_num,
                 )
 
-            merged_path = merged_search_path(
+            merged_path = merged_search_ht_path(
                 is_rescue=args.is_rescue,
                 search_num=args.search_num,
             )
