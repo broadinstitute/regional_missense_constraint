@@ -502,10 +502,8 @@ def main(args):
             initial_round_nums = check_break_search_round_nums(is_rescue=False)
 
             logger.info("Finalizing section-level RMC table from initial search...")
-            initial_rmc_ht = merge_rmc_hts(
-                round_nums=initial_round_nums, is_rescue=False
-            )
-            initial_rmc_ht = initial_rmc_ht.checkpoint(
+            rmc_ht = merge_rmc_hts(round_nums=initial_round_nums, is_rescue=False)
+            rmc_ht = rmc_ht.checkpoint(
                 f"{TEMP_PATH_WITH_SLOW_DEL}/rmc_results.ht",
                 overwrite=args.overwrite,
                 _read_if_exists=not args.overwrite,
