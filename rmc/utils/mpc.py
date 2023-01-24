@@ -285,10 +285,13 @@ def create_context_with_oe(
         )
         ht = ht.select(oe_col)
         ht = ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe.ht", overwrite=True
+            f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe_filt.ht", overwrite=True
         )
         ht = context_with_oe_ht.annotate(**ht[context_with_oe_ht.key])
-        ht = ht.checkpoint(context_with_oe.path, overwrite=overwrite_output)
+        ht = ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe_join.ht", overwrite=True
+        )
+        ht = ht.checkpoint(context_with_oe.path, overwrite=True)
     else:
         ht = ht.checkpoint(context_with_oe.path, overwrite=overwrite_output)
     logger.info("Output OE-annotated context HT fields: %s", set(ht.row))
@@ -303,6 +306,8 @@ def create_context_with_oe(
     ht = ht.annotate(
         **{transcript_col: ht.values.find(lambda x: x[oe_col] == ht[oe_col]).transcript}
     )
+    ht = ht.drop("values")
+
     # If `context_with_oe` HT already exists and overwrite is False,
     # add columns for newly-calculated OE and corresponding transcript
     if file_exists(context_with_oe_dedup.path) and not overwrite_output:
@@ -317,7 +322,7 @@ def create_context_with_oe(
         ht = ht.checkpoint(
             f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe_dedup.ht", overwrite=True
         )
-        ht = ht.write(context_with_oe_dedup.path, overwrite=overwrite_output)
+        ht.write(context_with_oe_dedup.path, overwrite=True)
     else:
         ht.write(
             context_with_oe_dedup.path,
@@ -867,7 +872,11 @@ def create_mpc_release_ht(
     # Annotate HT with sorted array of gnomAD fitted scores
     ht = ht.annotate_globals(gnomad_scores=scores)
     # Checkpoint here to force the gnomAD join to complete
-    ht = ht.checkpoint(f"{TEMP_PATH}/mpc_temp_gnomad.ht", overwrite=overwrite_temp)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH}/mpc_temp_gnomad.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
 
     # Search all gnomAD scores to find first score that is
     # greater than or equal to score to be annotated
@@ -889,7 +898,11 @@ def create_mpc_release_ht(
         )
     )
     # Checkpoint here to force the binary search to compute
-    ht = ht.checkpoint(f"{TEMP_PATH}/mpc_temp_binary.ht", overwrite=overwrite_temp)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH}/mpc_temp_binary.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
 
     logger.info("Creating MPC release and writing out...")
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
@@ -911,11 +924,11 @@ def create_mpc_release_ht(
             set(mpc_ht.row),
             cols_to_add,
         )
-        ht = ht.select(cols_to_add)
+        ht = ht.select(*cols_to_add)
         ht = mpc_ht.annotate(**ht[mpc_ht.key])
         # Checkpointing so that `mpc_release` can be overwritten to the same path
         ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/mpc.ht", overwrite=True)
-        ht = ht.checkpoint(mpc_release.path, overwrite=overwrite_output)
+        ht = ht.checkpoint(mpc_release.path, overwrite=True)
     else:
         ht = ht.checkpoint(
             mpc_release.path,
@@ -937,6 +950,7 @@ def create_mpc_release_ht(
             ).transcript
         }
     )
+    ht = ht.drop("values")
 
     # If `mpc_release` HT already exists and overwrite is False,
     # add columns for newly-calculated MPC and corresponding transcript
@@ -950,7 +964,7 @@ def create_mpc_release_ht(
         ht = mpc_dedup_ht.annotate(**ht[mpc_dedup_ht.key])
         # Checkpointing so that `mpc_release_dedup` can be overwritten to the same path
         ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/mpc_dedup.ht", overwrite=True)
-        ht.write(mpc_release_dedup.path, overwrite=overwrite_output)
+        ht.write(mpc_release_dedup.path, overwrite=True)
     else:
         ht.write(mpc_release_dedup.path, overwrite=overwrite_output)
     logger.info("Output MPC dedup HT fields: %s", set(ht.row))
