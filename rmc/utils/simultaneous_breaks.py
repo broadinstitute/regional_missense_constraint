@@ -1,20 +1,21 @@
 """This script contains functions used to search for two simultaneous breaks."""
 import logging
-import subprocess
 from typing import List
 
 import hail as hl
 
-from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
 
 from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
-    SIMUL_SEARCH_ANNOTATIONS,
     simul_search_round_bucket_path,
     simul_sections_split_by_len_path,
 )
-from rmc.utils.constraint import get_dpois_expr, get_obs_exp_expr
+from rmc.utils.constraint import (
+    get_dpois_expr,
+    get_obs_exp_expr,
+    get_max_chisq_per_group,
+)
 
 
 logging.basicConfig(
@@ -85,7 +86,6 @@ def split_sections_by_len(
     is_rescue: bool,
     search_num: int,
     missense_len_threshold: int,
-    ttn_id: str,
     overwrite: bool,
 ) -> None:
     """
@@ -100,7 +100,6 @@ def split_sections_by_len(
         (e.g., second round of searching for single break would be 2).
     :param is_rescue: Whether current search is in rescue pathway.
     :param missense_len_threshold: Cutoff based on possible number of missense sites in section.
-    :param ttn_id: TTN transcript ID. TTN is large and needs to be processed separately.
     :param overwrite: Whether to overwrite existing SetExpressions.
     :return: None; writes SetExpressions to resource paths.
     """
@@ -133,14 +132,6 @@ def split_sections_by_len(
         len(under_threshold),
         len(over_threshold),
     )
-    # TODO: Re-evaluate if this check is necessary for v4
-    if ttn_id in list(over_threshold):
-        logger.warning(
-            "TTN is present in input transcripts! It will need to be run separately."
-        )
-        over_threshold = list(over_threshold)
-        over_threshold.remove(ttn_id)
-        over_threshold = set(over_threshold)
 
     if len(under_threshold) > 0:
         hl.experimental.write_expression(
@@ -556,10 +547,7 @@ def process_section_group(
         # If any rows had a significant breakpoint,
         # find the one "best" breakpoint (breakpoint with largest chi square value)
         if ht.count() > 0:
-            group_ht = ht.group_by("section").aggregate(
-                section_max_chisq=hl.agg.max(ht.max_chisq)
-            )
-            ht = ht.annotate(section_max_chisq=group_ht[ht.section].section_max_chisq)
+            ht = get_max_chisq_per_group(ht, "section", "max_chisq")
             ht = ht.filter(ht.max_chisq == ht.section_max_chisq)
 
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)

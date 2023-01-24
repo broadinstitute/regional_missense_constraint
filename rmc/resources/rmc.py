@@ -32,6 +32,23 @@ CURRENT_FREEZE = 2
 Current RMC/MPC data version.
 """
 
+CHISQ_THRESHOLDS = {
+    "initial": {"single": 6.6, "simul": 9.2},
+    "rescue": {"single": 5.0, "simul": 7.4},
+}
+"""
+Default chi square significance thresholds for each search type.
+
+Thresholds are set for break search type ('single' or 'simul')
+within each search type ('initial', 'rescue'),
+
+Defaults correspond to p = 0.01 (initial search)
+and p = 0.025 (rescue search).
+
+Reference: https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
+"""
+
+
 ####################################################################################
 ## Original regional missense constraint resource files
 ####################################################################################
@@ -318,17 +335,21 @@ def simul_sections_split_by_len_path(
     return f"{bucket_path}/sections_to_simul_{threshold_relation}_threshold.he"
 
 
-def merged_search_ht_path(
+def merged_search_path(
     is_rescue: bool,
     search_num: int,
-    is_break_found: bool,
+    is_break_found: bool = True,
 ) -> str:
     """
     Return path to Table with merged single and simultaneous breaks search results.
 
-    Function returns path to HT based on search number, break status,
-    and whether HT is associated with "rescue" pathway
+    Function returns path to HT for break found sections based on search number and
+    whether HT is associated with "rescue" pathway
     (pathway with lowered chi square significance cutoff).
+
+    Function also has ability to return path to HailExpression containing
+    set of sections without breakpoints, though this functionality isn't
+    currently being used.
 
     Break status refers to whether transcripts/sections in HT have at least one
     single significant breakpoint.
@@ -338,11 +359,13 @@ def merged_search_ht_path(
         (e.g., second round of searching for single break would be 2).
     :param is_break_found: Whether to return path to HT with transcript/sections
         that have significant single break results.
-    :return: Path to merged break found HT or no break found HT.
+        Default is True.
+    :return: Path to merged break found HT or no break found HailExpression.
     """
     rescue = "rescue_" if is_rescue else ""
-    break_status = "break_found" if is_break_found else "no_break_found"
-    return f"{TEMP_PATH}/{rescue}round{search_num}_merged_{break_status}.ht"
+    if is_break_found:
+        return f"{TEMP_PATH}/{rescue}round{search_num}_merged_break_found.ht"
+    return f"{TEMP_PATH}/{rescue}round{search_num}_no_break_found.he"
 
 
 no_breaks = (

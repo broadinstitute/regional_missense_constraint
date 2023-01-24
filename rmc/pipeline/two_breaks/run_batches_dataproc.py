@@ -46,9 +46,6 @@ def main(args):
         if args.search_num == 1 and not args.is_rescue:
             save_chisq_ht = True
 
-        if args.run_ttn:
-            section_groups = [[args.ttn_id]]
-
         if args.run_sections_over_threshold:
             sections_to_run = list(
                 hl.eval(
@@ -61,18 +58,32 @@ def main(args):
                     )
                 )
             )
-            if args.group_size:
-                logger.info(
-                    "Splitting transcripts/transcript sections into groups of %i",
-                    args.group_size,
+
+        if args.run_sections_under_threshold:
+            sections_to_run = list(
+                hl.eval(
+                    hl.experimental.read_expression(
+                        simul_sections_split_by_len_path(
+                            is_rescue=args.is_rescue,
+                            search_num=args.search_num,
+                            is_over_threshold=False,
+                        )
+                    )
                 )
-                section_groups = [
-                    sections_to_run[x : x + args.group_size]
-                    for x in range(0, len(sections_to_run), args.group_size)
-                ]
-            else:
-                logger.info("Running transcripts/transcript sections one at a time...")
-                section_groups = [[section] for section in sections_to_run]
+            )
+
+        if args.group_size:
+            logger.info(
+                "Splitting transcripts/transcript sections into groups of %i",
+                args.group_size,
+            )
+            section_groups = [
+                sections_to_run[x : x + args.group_size]
+                for x in range(0, len(sections_to_run), args.group_size)
+            ]
+        else:
+            logger.info("Running transcripts/transcript sections one at a time...")
+            section_groups = [[section] for section in sections_to_run]
 
         raw_path = simul_search_round_bucket_path(
             is_rescue=args.is_rescue,
@@ -80,15 +91,8 @@ def main(args):
             bucket_type="raw_results",
         )
         for counter, group in enumerate(section_groups):
-            # Double check TTN has been removed
-            if args.ttn_id in group:
-                group.remove(args.ttn_id)
 
-            output_ht_path = (
-                f"{raw_path}/simul_break_dataproc_ttn.ht"
-                if args.run_ttn
-                else f"{raw_path}/simul_break_dataproc_{counter}.ht"
-            )
+            output_ht_path = f"{raw_path}/simul_break_dataproc_{counter}.ht"
             if file_exists(output_ht_path):
                 raise DataException(
                     f"Output already exists at {output_ht_path}! Double check before running script again."
@@ -178,14 +182,9 @@ if __name__ == "__main__":
         action="store_true",
     )
     section_ids.add_argument(
-        "--run-ttn",
-        help="Run TTN. TTN is so large that it needs to be treated separately.",
+        "--run-sections-under-threshold",
+        help="Search for simultaneous breaks in sections that are under length cutoff.",
         action="store_true",
-    )
-    parser.add_argument(
-        "--ttn-id",
-        help="TTN transcript ID. TTN is so large that it needs to be treated separately.",
-        default="ENST00000589042",
     )
     parser.add_argument(
         "--read-if-exists",

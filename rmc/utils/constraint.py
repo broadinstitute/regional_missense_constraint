@@ -24,11 +24,13 @@ from rmc.utils.generic import (
     import_de_novo_variants,
 )
 from rmc.resources.rmc import (
+    CHISQ_THRESHOLDS,
     CONSTRAINT_ANNOTATIONS,
     FINAL_ANNOTATIONS,
     no_breaks,
     oe_bin_counts_tsv,
     simul_search_bucket_path,
+    SIMUL_SEARCH_ANNOTATIONS,
     simul_search_round_bucket_path,
     single_search_bucket_path,
     single_search_round_ht_path,
@@ -495,10 +497,37 @@ def get_dpois_expr(
     )
 
 
+def get_max_chisq_per_group(
+    ht: hl.Table,
+    group_str: str,
+    chisq_str: str,
+) -> hl.Table:
+    """
+    Group input Table by given field and return maximum chi square value per group.
+
+    'Group' in this context refers to either a transcript or transcript subsection.
+
+    :param ht: Input Table.
+    :param group_str: String of field containing transcript or transcript subsection information.
+        Used to group observed and expected values.
+    :param chisq_str: String of field containing chi square values to be checked.
+    :return: Table annotated with maximum chi square value per group
+    """
+    group_ht = ht.group_by(group_str).aggregate(
+        # hl.agg.max ignores NaNs
+        section_max_chisq=hl.agg.max(ht[chisq_str])
+    )
+    group_ht = group_ht.checkpoint(
+        f"{TEMP_PATH_WITH_DEL}/group_max_chisq.ht", overwrite=True
+    )
+    ht = ht.annotate(section_max_chisq=group_ht[ht.section].section_max_chisq)
+    return ht
+
+
 def search_for_break(
     ht: hl.Table,
     search_num: int,
-    chisq_threshold: float = 6.6,
+    chisq_threshold: float,
     group_str: str = "section",
     min_num_exp_mis: float = 10.0,
 ) -> hl.Table:
@@ -529,7 +558,6 @@ def search_for_break(
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param chisq_threshold: Chi-square significance threshold.
-        Default is 6.6 (single break; p = 0.01).
     :param group_str: Field used to group Table observed and expected values. Default is 'section'.
     :param min_num_exp_mis: Minimum number of expected missense per transcript/transcript section.
         Sections that have fewer than this number of expected missense variants will not
@@ -603,14 +631,9 @@ def search_for_break(
         f"{TEMP_PATH_WITH_FAST_DEL}/round{search_num}_all_loci_chisq.ht", overwrite=True
     )
 
-    # hl.agg.max ignores NaNs
-    group_ht = ht.group_by(group_str).aggregate(max_chisq=hl.agg.max(ht.chisq))
-    group_ht = group_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/max_chisq.ht", overwrite=True
-    )
-    ht = ht.annotate(max_chisq=group_ht[ht[group_str]].max_chisq)
+    ht = get_max_chisq_per_group(ht, group_str, "chisq")
     return ht.annotate(
-        is_break=((ht.chisq == ht.max_chisq) & (ht.chisq >= chisq_threshold))
+        is_break=((ht.chisq == ht.section_max_chisq) & (ht.chisq >= chisq_threshold))
     )
 
 
@@ -691,7 +714,6 @@ def process_sections(
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param chisq_threshold: Chi-square significance threshold.
-        Value should be 6.6 (single break) or 9.2 (two breaks) (p = 0.01).
     :param group_str: Field used to group observed and expected values. Default is 'section'.
     :return: Table annotated with whether position is a breakpoint.
     """
@@ -730,7 +752,8 @@ def process_sections(
 
 
 def get_rescue_1break_transcripts(
-    overwrite: bool, rescue_threshold: float = 5.0
+    overwrite: bool,
+    rescue_threshold: float = 5.0,
 ) -> Tuple[hl.expr.SetExpression]:
     """
     Get transcripts that have a single breakpoint in the first round of the 'rescue' search.
@@ -803,12 +826,15 @@ def get_rescue_1break_transcripts(
         ),
         overwrite=overwrite,
     )
+
     rescue_single_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
     return simul_sections, rescue_single_sections
 
 
 def get_rescue_2breaks_transcripts(
-    overwrite: bool, initial_threshold: float = 6.6, rescue_threshold: float = 5.0
+    overwrite: bool,
+    initial_threshold: float,
+    rescue_threshold: float,
 ) -> hl.expr.SetExpression:
     """
     Get transcripts that have two simultaneous breakpoints above the 'rescue' threshold.
@@ -850,13 +876,15 @@ def get_rescue_2breaks_transcripts(
         output_ht_path=f"{TEMP_PATH_WITH_FAST_DEL}/rescue_simul_chisq.ht",
         overwrite=overwrite,
     )
+
     ht = hl.read_table(f"{TEMP_PATH_WITH_FAST_DEL}/rescue_simul_chisq.ht")
+    ht = get_max_chisq_per_group(ht, "section", "max_chisq")
     ht = ht.filter(
-        (ht.max_chisq < initial_threshold)
-        & (ht.max_chisq >= rescue_threshold)
+        (ht.max_chisq == ht.section_max_chisq)
+        & (ht.section_max_chisq < initial_threshold)
+        & (ht.section_max_chisq >= rescue_threshold)
         & ~hl.literal(single_break_rescue_sections).contains(ht.section)
     )
-    ht = ht.drop("transcript")
     results_path = simul_search_round_bucket_path(
         is_rescue=True,
         search_num=1,
@@ -866,22 +894,37 @@ def get_rescue_2breaks_transcripts(
     return ht.aggregate(hl.agg.collect_as_set(ht.section))
 
 
-def get_rescue_transcripts_and_create_no_breaks_ht(overwrite: bool) -> None:
+def get_rescue_transcripts_and_create_no_breaks_he(
+    overwrite: bool, chisq_thresholds: Dict[str, Dict[str, float]] = CHISQ_THRESHOLDS
+) -> None:
     """
-    Get transcripts found in rescue pipeline and write final no breaks HT.
+    Get transcripts found in rescue pipeline and write final no breaks HailExpression.
 
     Function gets transcripts found in rescue single and simultaneous breaks searches
     and creates final HT with all transcripts that do not have evidence of RMC.
 
+    .. note::
+        - Assumes top level keys in `chisq_threshold` dictionary are "initial"
+        and "rescue"
+        - Assumes nested keys in `chisq_threshold` dictionary are "single" and
+        "simul"
+
     :param overwrite: Whether to overwrite output data if it exists.
-    :return: None; function writes HT to resource path.
+    :param chisq_thresholds: Dictionary of chi square significance thresholds.
+        Default is CHISQ_THRESHOLDS.
+    :return: None; function writes HailExpression to resource path.
     """
     # Get the sections (transcript_start_stop) found in initial simultaneous breaks search,
     # rescue single break search, and rescue simultaneous breaks search
     init_simul_sections, rescue_single_sections = get_rescue_1break_transcripts(
-        overwrite=overwrite
+        overwrite=overwrite,
+        rescue_threshold=chisq_thresholds["rescue"]["single"],
     )
-    rescue_simul_sections = get_rescue_2breaks_transcripts(overwrite=overwrite)
+    rescue_simul_sections = get_rescue_2breaks_transcripts(
+        overwrite=overwrite,
+        initial_threshold=chisq_thresholds["initial"]["simul"],
+        rescue_threshold=chisq_thresholds["rescue"]["simul"],
+    )
     sections_with_breaks = init_simul_sections.union(rescue_simul_sections).union(
         rescue_single_sections
     )
@@ -897,6 +940,9 @@ def get_rescue_transcripts_and_create_no_breaks_ht(overwrite: bool) -> None:
     )
     ht = ht.filter(~hl.literal(sections_with_breaks).contains(ht.section))
     no_break_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
+    logger.info(
+        "%i transcripts did not have any evidence of RMC", len(no_break_sections)
+    )
     no_break_transcripts = hl.map(lambda x: x.split("_")[0], no_break_sections)
     hl.experimental.write_expression(
         no_break_transcripts, no_breaks, overwrite=overwrite
@@ -911,6 +957,75 @@ def merge_simul_break_temp_hts(
     overwrite: bool,
     google_project: str = "broad-mpg-gnomad",
 ) -> None:
+    """
+    Read in simultaneous breaks temporary HTs at specified path and merge.
+
+    .. note::
+        - Assumes temp HTs are keyed by "section" or ("section", "i", "j")
+        - Assumes temp HTs contain all annotations in SIMUL_BREAK_ANNOTATIONS
+
+    :param input_hts_path: Path to bucket containing input temporary HTs.
+    :param batch_phrase: String indicating name associated with HTs created
+        using Hail Batch jobs, e.g. "under", or "batch_temp_chisq".
+    :param query_phrase: String indicating name associated with HTs created
+        using Hail Query jobs via Dataproc, e.g. "dataproc", or "dataproc_temp_chisq".
+    :param output_ht_path: Desired path for output HT.
+    :param overwrite: Whether to overwrite output HT if it exists.
+    :param google_project: Google project to use to read data from requester-pays buckets.
+        Default is 'broad-mpg-gnomad'.
+    :return: None; function writes HT to specified path.
+    """
+    logger.info("Collecting all HT paths...")
+    temp_ht_paths = (
+        subprocess.check_output(
+            ["gsutil", "-u", f"{google_project}", "ls", f"{input_hts_path}"]
+        )
+        .decode("utf8")
+        .strip()
+        .split("\n")
+    )
+
+    intermediate_hts = []
+    ht_count = 0
+    for ht_path in temp_ht_paths:
+        ht_path = ht_path.strip("/")
+        if (batch_phrase in ht_path or query_phrase in ht_path) and ht_path.endswith(
+            "ht"
+        ):
+            ht_count += 1
+            logger.info("Working on %s", ht_path)
+            temp = hl.read_table(ht_path)
+            if temp.count() > 0:
+                # Tables containing transcripts/transcript sections that are over the transcript/section length threshold
+                # are keyed by section, i, j
+                # Tables containing transcripts/transcript sections that are under the length threshold are keyed
+                # only by section
+                # Rekey all tables here and select only the required fields to ensure the union on line 83 is able to work
+                # This `key_by` should not shuffle because `section` is already the first key for both Tables
+                temp = temp.key_by("section")
+                row_fields = set(temp.row)
+                if len(SIMUL_SEARCH_ANNOTATIONS.intersection(row_fields)) < len(
+                    SIMUL_SEARCH_ANNOTATIONS
+                ):
+                    raise DataException(
+                        f"The following fields are missing from the temp table: {SIMUL_SEARCH_ANNOTATIONS.difference(row_fields)}!"
+                    )
+                temp = temp.select(*SIMUL_SEARCH_ANNOTATIONS)
+                intermediate_hts.append(temp)
+
+    logger.info("Found %i HTs and appended %i", ht_count, len(intermediate_hts))
+    if len(intermediate_hts) == 0:
+        raise DataException(
+            "All temp tables had 0 rows. Please double check the temp tables!"
+        )
+    ht = intermediate_hts[0].union(*intermediate_hts[1:])
+    ht.write(output_ht_path, overwrite=overwrite)
+
+
+def calculate_section_chisq(
+    obs_expr: hl.expr.Int64Expression,
+    exp_expr: hl.expr.Float64Expression,
+) -> hl.expr.Float64Expression:
     """
     Read in simultaneous breaks temporary HTs at specified path and merge.
 
