@@ -143,6 +143,7 @@ Set of annotations to keep from individual break search round result HTs when fi
 def single_search_bucket_path(
     is_rescue: bool,
     search_num: int = None,
+    freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
     Return path to bucket associated with single break search inputs and results.
@@ -155,13 +156,14 @@ def single_search_bucket_path(
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
         Default is None.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Path to single break search round bucket.
     """
     rescue = "rescue" if is_rescue else "initial"
     return (
-        f"{SINGLE_BREAK_TEMP_PATH}/{rescue}/round{search_num}"
+        f"{SINGLE_BREAK_TEMP_PATH}/{freeze}/{rescue}/round{search_num}"
         if search_num
-        else f"{SINGLE_BREAK_TEMP_PATH}/{rescue}"
+        else f"{SINGLE_BREAK_TEMP_PATH}/{freeze}/{rescue}"
     )
 
 
