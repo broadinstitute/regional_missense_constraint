@@ -139,7 +139,7 @@ FINAL_ANNOTATIONS = {
 Set of annotations to keep from individual break search round result HTs when finalizing release HT.
 """
 
-
+# TODO: Remove all references to rescue search pathway
 def single_search_bucket_path(
     is_rescue: bool,
     search_num: int = None,
