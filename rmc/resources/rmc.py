@@ -32,15 +32,11 @@ CURRENT_FREEZE = 3
 Current RMC/MPC data version.
 """
 
-CHISQ_THRESHOLDS = {
-    "initial": {"single": 6.6, "simul": 9.2},
-    "rescue": {"single": 5.0, "simul": 7.4},
-}
+CHISQ_THRESHOLDS = {"single": 6.6, "simul": 9.2}
 """
 Default chi square significance thresholds for each search type.
 
-Thresholds are set for break search type ('single' or 'simul')
-within each search type ('initial', 'rescue'),
+Thresholds are set for break search type ('single' or 'simul').
 
 Defaults correspond to p = 0.01 (initial search)
 and p = 0.025 (rescue search).
