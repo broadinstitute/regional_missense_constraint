@@ -38,8 +38,7 @@ Default chi square significance thresholds for each search type.
 
 Thresholds are set for break search type ('single' or 'simul').
 
-Defaults correspond to p = 0.01 (initial search)
-and p = 0.025 (rescue search).
+Defaults correspond to p = 0.01 (initial search).
 
 Reference: https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
 """
