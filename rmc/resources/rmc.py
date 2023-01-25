@@ -142,9 +142,7 @@ def single_search_bucket_path(
     """
     Return path to bucket associated with single break search inputs and results.
 
-    Function returns path to top level initial or "rescue"
-    (search with lowered chi square significance cutoff) bucket,
-    or bucket based on search number in either initial or rescue bucket.
+    Function returns path to top level bucket or bucket based on search number.
 
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
@@ -168,9 +166,7 @@ def single_search_round_ht_path(
     """
     Return path to a Table with results from a specified round of single break search.
 
-    Function returns path to HT based on search number, break status,
-    breakpoint status, and whether HT is associated with "rescue" pathway
-    (pathway with lowered chi square significance cutoff).
+    Function returns path to HT based on search number, break status, and breakpoint status.
 
     Break status refers to whether transcripts/sections in HT have at least one
     single significant breakpoint.
@@ -228,9 +224,7 @@ def simul_search_bucket_path(
     """
     Return path to bucket associated with simultaneous break search inputs and results.
 
-    Function returns path to top level initial or "rescue"
-    (search with lowered chi square significance cutoff) bucket,
-    or bucket based on search number in either initial or rescue bucket.
+    Function returns path to top level bucket or bucket based on search number.
 
     :param search_num: Search iteration number
         (e.g., second round of searching for simultaneous break would be 2).
@@ -254,9 +248,7 @@ def simul_search_round_bucket_path(
     """
     Return path to bucket with  Tables resulting from a specific round of simultaneous break search.
 
-    Function returns path to bucket based on search number, whether search is in
-    "rescue" pathway (pathway with lowered chi square significance cutoff), and
-    bucket type.
+    Function returns path to bucket based on search number and bucket type.
 
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
@@ -278,8 +270,7 @@ def grouped_single_no_break_ht_path(
     """
     Return path to Table of transcripts/transcript sections without a significant break in a single break search round, grouped by transcript/transcript section.
 
-    Function returns path to Table based on search number and whether search is
-    in "rescue" pathway (pathway with lowered chi square significance cutoff).
+    Function returns path to Table based on search number.
 
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
@@ -302,8 +293,7 @@ def simul_sections_split_by_len_path(
     """
     Return path to transcripts/transcript sections entering a specific round of simultaneous break search.
 
-    Function returns path to SetExpression based on search number, whether search is
-    in "rescue" pathway (pathway with lowered chi square significance cutoff), and
+    Function returns path to SetExpression based on search number and
     whether the transcripts/transcript sections have greater than or equal to the
     cutoff for possible missense positions.
 
@@ -334,9 +324,7 @@ def merged_search_ht_path(
     """
     Return path to Table with merged single and simultaneous breaks search results.
 
-    Function returns path to HT for break found sections based on search number and
-    whether HT is associated with "rescue" pathway
-    (pathway with lowered chi square significance cutoff).
+    Function returns path to HT for break found sections based on search number.
 
     Function also has ability to return path to HailExpression containing
     set of sections without breakpoints, though this functionality isn't
@@ -466,7 +454,7 @@ Table containing all possible amino acid substitutions and their missense badnes
 CURRENT_MPC_PREFIX = f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}"
 
 
-def joint_clinvar_gnomad_path(include_rescue: bool = False) -> str:
+def joint_clinvar_gnomad_path() -> str:
     """
     Return path to Table containing "population" and "pathogenic" variants.
 
@@ -477,50 +465,34 @@ def joint_clinvar_gnomad_path(include_rescue: bool = False) -> str:
 
     Table is input to MPC (missense badness, polyphen-2, and constraint) calculations.
 
-    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
-        If True, RMC results used in calculation are derived from the initial and rescue RMC search.
-        If False, RMC results used in calculation are derived from the initial RMC search only.
-        Default is False.
     :return: Path to Table.
     """
-    rescue = "_rescue" if include_rescue else ""
-    return f"{CURRENT_MPC_PREFIX}/joint_clinvar_gnomad{rescue}.ht"
+    # TODO: convert back into TableResource
+    return f"{CURRENT_MPC_PREFIX}/joint_clinvar_gnomad.ht"
 
 
-def mpc_model_pkl_path(include_rescue: bool = False) -> str:
+def mpc_model_pkl_path() -> str:
     """
     Return path to model (stored as pickle) that contains relationship of MPC variables.
 
     Model created using logistic regression.
 
-    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
-        If True, RMC results used in calculation are derived from the initial and rescue RMC search.
-        If False, RMC results used in calculation are derived from the initial RMC search only.
-        Default is False.
     :return: Path to model.
     """
-    rescue = "_rescue" if include_rescue else ""
-    return f"{CURRENT_MPC_PREFIX}/mpc_model{rescue}.pkl"
+    return f"{CURRENT_MPC_PREFIX}/mpc_model.pkl"
 
 
-def gnomad_fitted_score_path(
-    include_rescue: bool = False, is_grouped: bool = False
-) -> str:
+def gnomad_fitted_score_path(is_grouped: bool = False) -> str:
     """
     Return path to fitted scores (from MPC model regression) of common (AF > 0.001) gnomAD variants.
 
     Table is input to MPC (missense badness, polyphen-2, and constraint) calculations on other datasets.
 
-    :param bool include_rescue: Whether to include regional missense OE from rescue RMC results.
-        If True, RMC results used in calculation are derived from the initial and rescue RMC search.
-        If False, RMC results used in calculation are derived from the initial RMC search only.
-        Default is False.
     :param bool is_grouped: Whether the Table is grouped by score. Default is False.
     :return: Path to Table.
     """
-    rescue = "_rescue" if include_rescue else ""
     group = "_group" if is_grouped else ""
-    return f"{CURRENT_MPC_PREFIX}/gnomad_fitted_scores{group}{rescue}.ht"
+    return f"{CURRENT_MPC_PREFIX}/gnomad_fitted_scores{group}.ht"
 
 
 mpc_release = VersionedTableResource(
