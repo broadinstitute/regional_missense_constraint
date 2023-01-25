@@ -43,7 +43,7 @@ def main(args):
             tmp_dir=TEMP_PATH_WITH_FAST_DEL,
         )
         save_chisq_ht = False
-        if args.search_num == 1 and not args.is_rescue:
+        if args.search_num == 1:
             save_chisq_ht = True
 
         if args.run_sections_over_threshold:
@@ -51,7 +51,6 @@ def main(args):
                 hl.eval(
                     hl.experimental.read_expression(
                         simul_sections_split_by_len_path(
-                            is_rescue=args.is_rescue,
                             search_num=args.search_num,
                             is_over_threshold=True,
                         )
@@ -64,7 +63,6 @@ def main(args):
                 hl.eval(
                     hl.experimental.read_expression(
                         simul_sections_split_by_len_path(
-                            is_rescue=args.is_rescue,
                             search_num=args.search_num,
                             is_over_threshold=False,
                         )
@@ -91,7 +89,6 @@ def main(args):
             section_groups = [[section] for section in sections_to_run]
 
         raw_path = simul_search_round_bucket_path(
-            is_rescue=args.is_rescue,
             search_num=args.search_num,
             bucket_type="raw_results",
         )
@@ -104,12 +101,9 @@ def main(args):
                 )
 
             process_section_group(
-                ht_path=grouped_single_no_break_ht_path(
-                    args.is_rescue, args.search_num
-                ),
+                ht_path=grouped_single_no_break_ht_path(args.search_num),
                 section_group=group,
                 count=counter,
-                is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 over_threshold=True,
                 output_ht_path=output_ht_path,
@@ -138,8 +132,7 @@ if __name__ == "__main__":
         "--chisq-threshold",
         help="""
         Chi-square significance threshold.
-        Value should be 9.2 (p = 0.01) for initial search
-        and 7.4 (p = 0.025) for rescue search.
+        Defaut is 9.2 (p = 0.01).
         """,
         type=float,
         default=9.2,
@@ -158,14 +151,6 @@ if __name__ == "__main__":
         "--search-num",
         help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
         type=int,
-    )
-    parser.add_argument(
-        "--is-rescue",
-        help="""
-        Whether search is part of the 'rescue' pathway (pathway
-        with lower chi square significance cutoff).
-        """,
-        action="store_true",
     )
     parser.add_argument(
         "--group-size",
