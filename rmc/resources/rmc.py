@@ -139,9 +139,10 @@ FINAL_ANNOTATIONS = {
 Set of annotations to keep from individual break search round result HTs when finalizing release HT.
 """
 
-# TODO: Remove all references to rescue search pathway
+# NOTE: Removed all references to rescue search pathway,
+# but freeze 2 and 3 temp results were written with code that
+# differentiated between "initial" and "rescue" search
 def single_search_bucket_path(
-    is_rescue: bool,
     search_num: int = None,
     freeze: int = CURRENT_FREEZE,
 ) -> str:
@@ -152,23 +153,20 @@ def single_search_bucket_path(
     (search with lowered chi square significance cutoff) bucket,
     or bucket based on search number in either initial or rescue bucket.
 
-    :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
         Default is None.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Path to single break search round bucket.
     """
-    rescue = "rescue" if is_rescue else "initial"
     return (
-        f"{SINGLE_BREAK_TEMP_PATH}/{freeze}/{rescue}/round{search_num}"
+        f"{SINGLE_BREAK_TEMP_PATH}/{freeze}/round{search_num}"
         if search_num
-        else f"{SINGLE_BREAK_TEMP_PATH}/{freeze}/{rescue}"
+        else f"{SINGLE_BREAK_TEMP_PATH}/{freeze}/"
     )
 
 
 def single_search_round_ht_path(
-    is_rescue: bool,
     search_num: int,
     is_break_found: bool,
     is_breakpoint_only: bool,
@@ -187,7 +185,6 @@ def single_search_round_ht_path(
     Breakpoint status refers to whether HT contains breakpoint positions only
     or all positions in transcripts/sections.
 
-    :param is_rescue: Whether to return path to HT created in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param is_break_found: Whether to return path to HT with transcript/sections
@@ -197,10 +194,9 @@ def single_search_round_ht_path(
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Path to specified HT resulting from single break search.
     """
-    rescue = "rescue" if is_rescue else "initial"
     break_status = "break_found" if is_break_found else "no_break_found"
     breakpoint_status = "_breakpoint_only" if is_breakpoint_only else ""
-    return f"{SINGLE_BREAK_TEMP_PATH}/{freeze}/{rescue}/round{search_num}/{break_status}{breakpoint_status}.ht"
+    return f"{SINGLE_BREAK_TEMP_PATH}/{freeze}/round{search_num}/{break_status}{breakpoint_status}.ht"
 
 
 SIMUL_SEARCH_BUCKET_NAMES = {"prep", "raw_results", "final_results", "success_files"}
@@ -209,13 +205,12 @@ Names of buckets nested within round bucket of `SIMUL_BREAK_TEMP_PATH`.
 
 Bucket structure:
     `SIMUL_BREAK_TEMP_PATH`
-        initial/ or rescue/
-            round/
-            (anything not specific to round number at this level)
-                prep/
-                raw_results/
-                final_results/
-                success_files/
+        round/
+        (anything not specific to round number at this level)
+            prep/
+            raw_results/
+            final_results/
+            success_files/
 """
 
 SIMUL_SEARCH_ANNOTATIONS = {"max_chisq", "breakpoints"}
@@ -234,7 +229,6 @@ Note that this field will also be kept (`section` is a key field):
 
 
 def simul_search_bucket_path(
-    is_rescue: bool,
     search_num: int = None,
     freeze: int = CURRENT_FREEZE,
 ) -> str:
@@ -245,26 +239,24 @@ def simul_search_bucket_path(
     (search with lowered chi square significance cutoff) bucket,
     or bucket based on search number in either initial or rescue bucket.
 
-    :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for simultaneous break would be 2).
         Default is None.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Path to simultaneous break search round bucket.
     """
-    rescue = "rescue" if is_rescue else "initial"
     return (
-        f"{SIMUL_BREAK_TEMP_PATH}/{freeze}/{rescue}/round{search_num}"
+        f"{SIMUL_BREAK_TEMP_PATH}/{freeze}/round{search_num}"
         if search_num
-        else f"{SIMUL_BREAK_TEMP_PATH}/{freeze}/{rescue}"
+        else f"{SIMUL_BREAK_TEMP_PATH}/{freeze}/"
     )
 
 
 def simul_search_round_bucket_path(
-    is_rescue: bool,
     search_num: int,
     bucket_type: str,
     bucket_names: Set[str] = SIMUL_SEARCH_BUCKET_NAMES,
+    freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
     Return path to bucket with  Tables resulting from a specific round of simultaneous break search.
@@ -273,22 +265,22 @@ def simul_search_round_bucket_path(
     "rescue" pathway (pathway with lowered chi square significance cutoff), and
     bucket type.
 
-    :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param bucket_type: Bucket type.
         Must be in `bucket_names`.
     :param bucket_names: Possible bucket names for simultaneous search bucket type.
         Default is `SIMUL_SEARCH_BUCKET_NAMES`.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Path to a bucket in the simultaneous break search round bucket.
     """
     assert bucket_type in bucket_names, f"Bucket type must be one of {bucket_names}!"
-    return f"{simul_search_bucket_path(is_rescue, search_num)}/{bucket_type}"
+    return f"{simul_search_bucket_path(search_num, freeze)}/{bucket_type}"
 
 
 def grouped_single_no_break_ht_path(
-    is_rescue: bool,
     search_num: int,
+    freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
     Return path to Table of transcripts/transcript sections without a significant break in a single break search round, grouped by transcript/transcript section.
@@ -296,23 +288,23 @@ def grouped_single_no_break_ht_path(
     Function returns path to Table based on search number and whether search is
     in "rescue" pathway (pathway with lowered chi square significance cutoff).
 
-    :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Path to grouped Table.
     """
     bucket_path = simul_search_round_bucket_path(
-        is_rescue=is_rescue,
         search_num=search_num,
         bucket_type="prep",
+        freeze=freeze,
     )
     return f"{bucket_path}/grouped_single_no_break_found.ht"
 
 
 def simul_sections_split_by_len_path(
-    is_rescue: bool,
     search_num: int,
     is_over_threshold: bool,
+    freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
     Return path to transcripts/transcript sections entering a specific round of simultaneous break search.
@@ -322,7 +314,6 @@ def simul_sections_split_by_len_path(
     whether the transcripts/transcript sections have greater than or equal to the
     cutoff for possible missense positions.
 
-    :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param is_over_threshold: Whether to return path for transcripts/transcript
@@ -330,19 +321,19 @@ def simul_sections_split_by_len_path(
         in `prepare_transcripts.py`. If True, those with greater than or equal to
         this cutoff will be returned. If False, those with fewer than this cutoff
         will be returned.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Path to SetExpression containing transcripts/transcript sections.
     """
     bucket_path = simul_search_round_bucket_path(
-        is_rescue=is_rescue,
         search_num=search_num,
         bucket_type="prep",
+        freeze=freeze,
     )
     threshold_relation = "over" if is_over_threshold else "under"
     return f"{bucket_path}/sections_to_simul_{threshold_relation}_threshold.he"
 
 
 def merged_search_ht_path(
-    is_rescue: bool,
     search_num: int,
     is_break_found: bool = True,
     freeze: int = CURRENT_FREEZE,
@@ -361,7 +352,6 @@ def merged_search_ht_path(
     Break status refers to whether transcripts/sections in HT have at least one
     single significant breakpoint.
 
-    :param is_rescue: Whether to return path to HT created in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param is_break_found: Whether to return path to HT with transcript/sections
@@ -370,10 +360,9 @@ def merged_search_ht_path(
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Path to merged break found HT or no break found HailExpression.
     """
-    rescue = "rescue_" if is_rescue else ""
     if is_break_found:
-        return f"{TEMP_PATH}/freeze{freeze}_{rescue}round{search_num}_merged_break_found.ht"
-    return f"{TEMP_PATH}/freeze{freeze}_{rescue}round{search_num}_no_break_found.he"
+        return f"{TEMP_PATH}/freeze{freeze}_round{search_num}_merged_break_found.ht"
+    return f"{TEMP_PATH}/freeze{freeze}_round{search_num}_no_break_found.he"
 
 
 no_breaks = (
