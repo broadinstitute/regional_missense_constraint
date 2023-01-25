@@ -34,12 +34,10 @@ def main(args):
 
         logger.info("Merging all temp HTs...")
         raw_path = simul_search_round_bucket_path(
-            is_rescue=args.is_rescue,
             search_num=args.search_num,
             bucket_type="raw_results",
         )
         results_path = simul_search_round_bucket_path(
-            is_rescue=args.is_rescue,
             search_num=args.search_num,
             bucket_type="final_results",
         )
@@ -94,14 +92,6 @@ if __name__ == "__main__":
         "--search-num",
         help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
         type=int,
-    )
-    parser.add_argument(
-        "--is-rescue",
-        help="""
-        Whether search is part of the 'rescue' pathway (pathway
-        with lower chi square significance cutoff).
-        """,
-        action="store_true",
     )
     parser.add_argument(
         "--google-project",
