@@ -23,9 +23,9 @@ from gnomad_constraint.utils.constraint import prepare_ht_for_constraint_calcula
 from rmc.resources.basics import (
     ACID_NAMES_PATH,
     CODON_TABLE_PATH,
-    hi_genes,
 )
 from rmc.resources.gnomad import constraint_ht, mutation_rate
+from rmc.resources.reference_data import hi_genes
 from rmc.resources.rmc import (
     DIVERGENCE_SCORES_TSV_PATH,
     MUTATION_RATE_TABLE_PATH,
