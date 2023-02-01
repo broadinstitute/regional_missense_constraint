@@ -1,5 +1,4 @@
 """Script containing generic resources and Google cloud bucket paths."""
-from gnomad.resources.resource_utils import TableResource
 
 from rmc.resources.resource_utils import CURRENT_BUILD
 

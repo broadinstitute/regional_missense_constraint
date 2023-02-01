@@ -4,7 +4,11 @@ from gnomad.resources.resource_utils import (
     VersionedTableResource,
 )
 
-from rmc.resources.basics import RESOURCE_BUILD_PREFIX
+from rmc.resources.basics import (
+    AMINO_ACIDS_PREFIX,
+    RESOURCE_PREFIX,
+    RESOURCE_BUILD_PREFIX,
+)
 from rmc.resources.resource_utils import CURRENT_BUILD
 
 
