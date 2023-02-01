@@ -363,8 +363,8 @@ def prepare_pop_path_ht(
     # If HT exists but without specified version of OE annotation, add that OE annotation
     rmc_cols = {"transcript", "oe"}
     if not file_exists(context_with_oe_dedup.path) or (
-        len(set(rmc_cols.values()).intersection(context_with_oe_dedup.ht().row))
-        < len(set(rmc_cols.values()))
+        len(rmc_cols).intersection(context_with_oe_dedup.ht().row))
+        < len(rmc_cols)
     ):
         create_context_with_oe(
             overwrite_temp=overwrite_temp,
