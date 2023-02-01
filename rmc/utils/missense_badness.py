@@ -9,7 +9,6 @@ from gnomad.utils.vep import CSQ_NON_CODING
 from rmc.resources.basics import (
     TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
-    TEMP_PATH_WITH_SLOW_DEL,
 )
 from rmc.resources.gnomad import constraint_ht
 from rmc.resources.rmc import amino_acids_oe, constraint_prep, misbad, rmc_results
