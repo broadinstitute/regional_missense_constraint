@@ -758,7 +758,7 @@ def create_no_breaks_he(overwrite: bool) -> None:
     :param overwrite: Whether to overwrite output data if it exists.
     :return: None; function writes HailExpression to resource path.
     """
-    # Get the sections (transcript_start_stop) found in initial simultaneous breaks search,
+    # Get the sections (transcript_start_stop) found in first round of simultaneous breaks search
     simul_results_path = simul_search_round_bucket_path(
         search_num=1,
         bucket_type="final_results",
