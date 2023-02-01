@@ -54,7 +54,7 @@ Adding this constant here to avoid ModuleNotFound errors in the
 PythonJobs. See `rmc.resources.basics` for full docstring.
 """
 
-TEMP_PATH_WITH_FAST_DEL = "gs://gnomad-tmp-4day/rmc/"
+TEMP_PATH_WITH_FAST_DEL = "gs://gnomad-tmp-4day/rmc"
 """
 Path to bucket for temporary files.
 
