@@ -39,20 +39,51 @@ Table containing transcript start and stop positions displayed in the browser.
 ####################################################################################
 ## Assessment related resources
 ####################################################################################
+REF_DATA_PREFIX = f"{RESOURCE_BUILD_PREFIX}/reference_data"
+"""
+Path to bucket containing reference data resources.
+"""
+
 clinvar_path_mis = TableResource(
-    path=f"{RESOURCE_BUILD_PREFIX}/reference_data/ht/clinvar_pathogenic_missense.ht",
+    path=f"{REF_DATA_PREFIX}/ht/clinvar_pathogenic_missense.ht",
 )
 """
 ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes that cause severe disease.
 """
 
-de_novo_tsv = f"{RESOURCE_BUILD_PREFIX}/reference_data/fordist_KES_combined_asc_dd_dnms_2020_04_21_annotated.txt"
+ddd_autism_de_novo_tsv = (
+    f"{REF_DATA_PREFIX}/fordist_KES_combined_asc_dd_dnms_2020_04_21_annotated.txt"
+)
 """
-De novo missense variants from 31,058 cases with developmental disorders, 6,430 cases with autism spectrum disorders, and 2,179 controls.
+De novo variants from 31,058 cases with developmental disorders, 6,430 cases with autism spectrum disorders, and 2,179 controls.
+
 Controls are the siblings of the autism cases.
 Samples are from:
 Kaplanis et al. (Evidence for 28 genetic disorders discovered by combining healthcare and research data.)
 Satterstrom et al. (Large-Scale Exome Sequencing Study Implicates Both Developmental and Functional Changes in the Neurobiology of Autism.)
+"""
+
+autism_spark_de_novo_tsv = f"{REF_DATA_PREFIX}/fu_2022_supp20.txt"
+"""
+De novo variants from 63,237 samples.
+
+Sample count breakdown:
+- 15,036 probands, 5,492 siblings, 28,522 parents
+- 5,591 cases, 8,597 controls
+
+.. note::
+    Fu et al. note that:
+    "one family is in both SPARK and unpublished ASC data, with different probands;
+    one mother in the unpublished ASC data is also a proband in a different trio
+    in the same dataset"
+
+Samples are from the following cohorts:
+- Autism Sequencing Consortium (ASC)
+- Simons Foundation Autism Research Initiative (SFARI) Simons Simplex Collection (SSC)
+- Simons Foundation Powering Autism Research for Knowledge (SPARK initiative)
+
+Samples are from:
+Fu et al. (Rare coding variation provides insight into the genetic architecture and phenotypic context of autism/)
 """
 
 de_novo = TableResource(
