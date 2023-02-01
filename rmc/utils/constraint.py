@@ -867,7 +867,7 @@ def get_break_search_round_nums(
     google_project: str = "broad-mpg-gnomad",
 ) -> List[str]:
     r"""
-    Get round numbers for a particular type of break search, e.g. single break in initial search.
+    Get round numbers for a particular type of break search, e.g. single break search.
 
     Function returns all round numbers for a particular type of break search
     by matching the round paths in a top-level bucket to a regex pattern.
