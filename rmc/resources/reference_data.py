@@ -36,6 +36,17 @@ Table containing transcript start and stop positions displayed in the browser.
 """
 
 
+######################################################################
+## Gene/transcript resources
+######################################################################
+hi_genes = f"{RESOURCE_PREFIX}/HI_genes.rCNV.txt"
+"""
+Path to haploinsufficient genes that cause severe disease.
+
+List is from Ryan Collins.
+"""
+
+
 ####################################################################################
 ## Assessment related resources
 ####################################################################################
@@ -101,4 +112,32 @@ cadd = TableResource(
 )
 """
 Table with CADD (v1.6) raw and phredd scores.
+"""
+
+blosum_txt_path = f"{AMINO_ACIDS_PREFIX}/blosum62.txt"
+"""
+Text file containing matrix of BLOSUM scores for each amino acid pair.
+"""
+
+blosum = TableResource(
+    path=f"{AMINO_ACIDS_PREFIX}/ht/blosum.ht",
+)
+"""
+Table containing BLOSUM scores for each amino acid pair.
+
+Hail Table representation of scores in `blosum_txt_path`.
+"""
+
+grantham_txt_path = f"{AMINO_ACIDS_PREFIX}/grantham.matrix.txt"
+"""
+Text file containing matrix of Grantham scores for each amino acid pair.
+"""
+
+grantham = TableResource(
+    path=f"{AMINO_ACIDS_PREFIX}/ht/grantham.ht",
+)
+"""
+Table containing Grantham scores for each amino acid pair.
+
+Hail Table representation of scores in `grantham_txt_path`.
 """
