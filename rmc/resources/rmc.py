@@ -153,7 +153,7 @@ def single_search_bucket_path(
     return (
         f"{SINGLE_BREAK_TEMP_PATH}/{freeze}/round{search_num}"
         if search_num
-        else f"{SINGLE_BREAK_TEMP_PATH}/{freeze}/"
+        else f"{SINGLE_BREAK_TEMP_PATH}/{freeze}"
     )
 
 
