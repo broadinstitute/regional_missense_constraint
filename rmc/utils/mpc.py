@@ -277,11 +277,11 @@ def create_context_with_oe(
     logger.info(
         "Creating dedup context with oe (with oe and transcript annotations only)..."
     )
-    ht = ht.select(oe_col).key_by("locus", "alleles")
+    ht = ht.select("oe").key_by("locus", "alleles")
     ht = ht.collect_by_key()
-    ht = ht.annotate(**{oe_col: hl.nanmin(ht.values[oe_col])})
+    ht = ht.annotate(**{"oe": hl.nanmin(ht.values.oe)})
     ht = ht.annotate(
-        **{"transcript": ht.values.find(lambda x: x[oe_col] == ht[oe_col]).transcript}
+        **{"transcript": ht.values.find(lambda x: x.oe == ht.oe).transcript}
     )
     ht = ht.drop("values")
     ht.write(
@@ -363,8 +363,7 @@ def prepare_pop_path_ht(
     # If HT exists but without specified version of OE annotation, add that OE annotation
     rmc_cols = {"transcript", "oe"}
     if not file_exists(context_with_oe_dedup.path) or (
-        len(rmc_cols).intersection(context_with_oe_dedup.ht().row))
-        < len(rmc_cols)
+        len(rmc_cols.intersection(context_with_oe_dedup.ht().row)) < len(rmc_cols)
     ):
         create_context_with_oe(
             overwrite_temp=overwrite_temp,
