@@ -484,7 +484,7 @@ def main(args):
             hl.init(log="/RMC_finalize.log", tmp_dir=TEMP_PATH_WITH_FAST_DEL)
 
             logger.info("Checking round paths...")
-            round_nums = check_break_search_round_nums(e)
+            round_nums = check_break_search_round_nums()
 
             logger.info("Finalizing section-level RMC table...")
             rmc_ht = merge_rmc_hts(round_nums=round_nums)
