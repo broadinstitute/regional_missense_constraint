@@ -1,7 +1,7 @@
 import logging
 import re
 import subprocess
-from typing import Dict, List, Set, Tuple, Union
+from typing import Dict, List, Set, Union
 
 import hail as hl
 
@@ -11,7 +11,6 @@ from gnomad.utils.constraint import annotate_mutation_type
 from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import (
-    SIMUL_BREAK_TEMP_PATH,
     TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
 )
@@ -527,7 +526,7 @@ def get_max_chisq_per_group(
 def search_for_break(
     ht: hl.Table,
     search_num: int,
-    chisq_threshold: float,
+    chisq_threshold: float = CHISQ_THRESHOLDS["single"],
     group_str: str = "section",
     min_num_exp_mis: float = 10.0,
 ) -> hl.Table:
@@ -558,6 +557,7 @@ def search_for_break(
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param chisq_threshold: Chi-square significance threshold.
+        Default is CHISQ_THRESHOLDS['single'].
     :param group_str: Field used to group Table observed and expected values. Default is 'section'.
     :param min_num_exp_mis: Minimum number of expected missense per transcript/transcript section.
         Sections that have fewer than this number of expected missense variants will not
@@ -693,7 +693,7 @@ def get_subsection_exprs(
 def process_sections(
     ht: hl.Table,
     search_num: int,
-    chisq_threshold: float,
+    chisq_threshold: float = CHISQ_THRESHOLDS["single"],
     group_str: str = "section",
 ):
     """
@@ -714,6 +714,7 @@ def process_sections(
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param chisq_threshold: Chi-square significance threshold.
+        Default is CHISQ_THRESHOLDS['single'].
     :param group_str: Field used to group observed and expected values. Default is 'section'.
     :return: Table annotated with whether position is a breakpoint.
     """
