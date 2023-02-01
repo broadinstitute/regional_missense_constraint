@@ -86,11 +86,18 @@ def main(args):
             exome_ht = exome_ht.select(
                 ac=exome_ht.freq[0].AC,
                 af=exome_ht.freq[0].AF,
-                pass_filters=exome_ht.pass_filters,
+                filters=exome_ht.filters,
                 exome_coverage=exome_ht.coverage.exomes.median,
                 transcript_consequences=exome_ht.transcript_consequences,
             )
-            exome_ht = exome_ht.filter(keep_criteria(exome_ht))
+            exome_ht = exome_ht.filter(
+                keep_criteria(
+                    ac_expr=exome_ht.ac,
+                    af_expr=exome_ht.af,
+                    filters_expr=exome_ht.filters,
+                    cov_expr=exome_ht.exome_coverage,
+                )
+            )
             exome_ht.write(filtered_exomes.path, overwrite=args.overwrite)
 
             logger.info("Done preprocessing files")
