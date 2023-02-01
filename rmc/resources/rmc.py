@@ -38,7 +38,7 @@ Default chi square significance thresholds for each search type.
 
 Thresholds are set for break search type ('single' or 'simul').
 
-Defaults correspond to p = 0.01 (initial search).
+Defaults correspond to p = 0.01.
 
 Reference: https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
 """
@@ -153,7 +153,7 @@ def single_search_bucket_path(
     return (
         f"{SINGLE_BREAK_TEMP_PATH}/{freeze}/round{search_num}"
         if search_num
-        else f"{SINGLE_BREAK_TEMP_PATH}/{freeze}/"
+        else f"{SINGLE_BREAK_TEMP_PATH}/{freeze}"
     )
 
 
@@ -194,12 +194,13 @@ Names of buckets nested within round bucket of `SIMUL_BREAK_TEMP_PATH`.
 
 Bucket structure:
     `SIMUL_BREAK_TEMP_PATH`
-        round/
-        (anything not specific to round number at this level)
-            prep/
-            raw_results/
-            final_results/
-            success_files/
+        freeze/
+            round/
+            (anything not specific to round number at this level)
+                prep/
+                raw_results/
+                final_results/
+                success_files/
 """
 
 SIMUL_SEARCH_ANNOTATIONS = {"max_chisq", "breakpoints"}
@@ -235,7 +236,7 @@ def simul_search_bucket_path(
     return (
         f"{SIMUL_BREAK_TEMP_PATH}/{freeze}/round{search_num}"
         if search_num
-        else f"{SIMUL_BREAK_TEMP_PATH}/{freeze}/"
+        else f"{SIMUL_BREAK_TEMP_PATH}/{freeze}"
     )
 
 

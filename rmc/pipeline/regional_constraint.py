@@ -483,7 +483,7 @@ def main(args):
             hl.init(log="/RMC_finalize.log", tmp_dir=TEMP_PATH_WITH_FAST_DEL)
 
             logger.info("Checking round paths...")
-            round_nums = check_break_search_round_nums(e)
+            round_nums = check_break_search_round_nums()
 
             logger.info("Finalizing section-level RMC table...")
             rmc_ht = merge_rmc_hts(round_nums=round_nums)
@@ -493,7 +493,6 @@ def main(args):
                 _read_if_exists=not args.overwrite,
             )
 
-            logger.info("Merging RMC tables...")
             logger.info("Removing outlier transcripts...")
             constraint_transcripts = get_constraint_transcripts(outlier=False)
             rmc_ht = rmc_ht.filter(constraint_transcripts.contains(rmc_ht.transcript))
