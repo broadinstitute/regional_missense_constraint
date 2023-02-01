@@ -360,11 +360,7 @@ def prepare_pop_path_ht(
     logger.info("Getting transcript annotations...")
     # If OE-annotated VEP context HT filtered to missense variants
     # in canonical transcripts does not exist, create it
-    # If HT exists but without specified version of OE annotation, add that OE annotation
-    rmc_cols = {"transcript", "oe"}
-    if not file_exists(context_with_oe_dedup.path) or (
-        len(rmc_cols.intersection(context_with_oe_dedup.ht().row)) < len(rmc_cols)
-    ):
+    if not file_exists(context_with_oe_dedup.path):
         create_context_with_oe(
             overwrite_temp=overwrite_temp,
             overwrite_output=overwrite_output,
@@ -372,11 +368,7 @@ def prepare_pop_path_ht(
 
     # Get transcript annotation from deduplicated context HT resource
     context_ht = context_with_oe_dedup.ht()
-    if rmc_cols["transcript"] not in context_ht.row:
-        raise DataException(
-            f"Transcript column named {rmc_cols['transcript']} does not exist in OE-annotated dedup context table!"
-        )
-    ht = ht.annotate(transcript=context_ht[ht.key][rmc_cols["transcript"]])
+    ht = ht.annotate(transcript=context_ht[ht.key].transcript)
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad_transcript.ht",
         _read_if_exists=not overwrite_temp,
