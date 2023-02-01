@@ -284,27 +284,10 @@ def create_context_with_oe(
         **{"transcript": ht.values.find(lambda x: x[oe_col] == ht[oe_col]).transcript}
     )
     ht = ht.drop("values")
-
-    # If `context_with_oe` HT already exists and overwrite is False,
-    # add columns for newly-calculated OE and corresponding transcript
-    if file_exists(context_with_oe_dedup.path) and not overwrite_output:
-        context_with_oe_dedup_ht = context_with_oe_dedup.ht()
-        logger.info(
-            "OE-annotated dedup context HT already exists with fields %s. Adding columns %s to existing table...",
-            set(context_with_oe_dedup_ht.row),
-            [oe_col, transcript_col],
-        )
-        ht = context_with_oe_dedup_ht.annotate(**ht[context_with_oe_dedup_ht.key])
-        # Checkpointing so that `context_with_oe_dedup` can be overwritten to the same path
-        ht = ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/context_with_oe_dedup.ht", overwrite=True
-        )
-        ht.write(context_with_oe_dedup.path, overwrite=True)
-    else:
-        ht.write(
-            context_with_oe_dedup.path,
-            overwrite=overwrite_output,
-        )
+    ht.write(
+        context_with_oe_dedup.path,
+        overwrite=overwrite_output,
+    )
     logger.info("Output OE-annotated dedup context HT fields: %s", set(ht.row))
 
 
