@@ -194,12 +194,13 @@ Names of buckets nested within round bucket of `SIMUL_BREAK_TEMP_PATH`.
 
 Bucket structure:
     `SIMUL_BREAK_TEMP_PATH`
-        round/
-        (anything not specific to round number at this level)
-            prep/
-            raw_results/
-            final_results/
-            success_files/
+        freeze/
+            round/
+            (anything not specific to round number at this level)
+                prep/
+                raw_results/
+                final_results/
+                success_files/
 """
 
 SIMUL_SEARCH_ANNOTATIONS = {"max_chisq", "breakpoints"}
