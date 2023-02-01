@@ -768,7 +768,7 @@ def create_no_breaks_he(overwrite: bool) -> None:
     )
     simul_sections = simul_ht.aggregate(hl.agg.collect_as_set(simul_ht.section))
 
-    # Read in the no break found HT from initial search round 1
+    # Read in the no break found HT from the first round of single search
     ht = hl.read_table(
         single_search_round_ht_path(
             search_num=1,
