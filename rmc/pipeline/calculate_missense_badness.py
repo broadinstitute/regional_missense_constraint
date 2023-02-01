@@ -30,7 +30,6 @@ def main(args):
         if args.command == "prepare-ht":
             hl.init(log="/calc_misbad_prep_context_gamma_ht.log", tmp_dir=temp_dir)
             prepare_amino_acid_ht(
-                include_rescue=args.include_rescue,
                 overwrite_temp=args.overwrite_temp,
                 overwrite_output=args.overwrite_output,
             )
@@ -38,7 +37,6 @@ def main(args):
         if args.command == "create-misbad":
             hl.init(log="/calc_misbad_create_score.log", tmp_dir=temp_dir)
             calculate_misbad(
-                include_rescue=args.include_rescue,
                 use_exac_oe_cutoffs=args.use_exac_oe_cutoffs,
                 overwrite_temp=args.overwrite_temp,
                 overwrite_output=args.overwrite_output,
@@ -67,11 +65,6 @@ if __name__ == "__main__":
         "--slack-channel",
         help="Send message to Slack channel/user.",
         default="@kc (she/her)",
-    )
-    parser.add_argument(
-        "--include-rescue",
-        help="Include RMC results from rescue search in calculations.",
-        action="store_true",
     )
 
     # Create subparsers for each step

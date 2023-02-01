@@ -83,7 +83,6 @@ def group_no_single_break_found_ht(
 def split_sections_by_len(
     ht_path: str,
     group_str: str,
-    is_rescue: bool,
     search_num: int,
     missense_len_threshold: int,
     overwrite: bool,
@@ -98,7 +97,6 @@ def split_sections_by_len(
     :param group_str: Field used to group observed and expected values.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
-    :param is_rescue: Whether current search is in rescue pathway.
     :param missense_len_threshold: Cutoff based on possible number of missense sites in section.
     :param overwrite: Whether to overwrite existing SetExpressions.
     :return: None; writes SetExpressions to resource paths.
@@ -137,7 +135,6 @@ def split_sections_by_len(
         hl.experimental.write_expression(
             under_threshold,
             simul_sections_split_by_len_path(
-                is_rescue=is_rescue,
                 search_num=search_num,
                 is_over_threshold=False,
             ),
@@ -147,7 +144,6 @@ def split_sections_by_len(
         hl.experimental.write_expression(
             over_threshold,
             simul_sections_split_by_len_path(
-                is_rescue=is_rescue,
                 search_num=search_num,
                 is_over_threshold=True,
             ),
@@ -157,7 +153,6 @@ def split_sections_by_len(
 
 def get_sections_to_run(
     sections: List[str],
-    is_rescue: bool,
     search_num: int,
     in_parallel: bool = True,
 ) -> List[str]:
@@ -170,14 +165,12 @@ def get_sections_to_run(
     :param List[str] sections: List of transcripts/transcript sections to check.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
-    :param is_rescue: Whether search is in rescue pathway.
     :param bool in_parallel: Whether to check if successful file exist in parallel.
         If True, must be run locally and not in Dataproc. Default is True.
     :return: List of transcripts/sections that didn't have success TSVs and therefore still need to be processed.
     """
     logger.info("Checking if any transcripts have already been searched...")
     success_file_path = simul_search_round_bucket_path(
-        is_rescue=is_rescue,
         search_num=search_num,
         bucket_type="success_files",
     )
@@ -406,7 +399,6 @@ def process_section_group(
     ht_path: str,
     section_group: List[str],
     count: int,
-    is_rescue: bool,
     search_num: int,
     over_threshold: bool,
     output_ht_path: str,
@@ -425,7 +417,6 @@ def process_section_group(
     :param ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param section_group: List of transcripts or transcript sections to process.
     :param count: Which transcript or transcript section group is being run (based on counter generated in `main`).
-    :param is_rescue: Whether to return path to HT created in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param over_threshold: Whether input transcript/sections have more
@@ -508,7 +499,6 @@ def process_section_group(
         # (would sometimes repartition to a lower number of partitions)
         ht = ht.repartition(n_rows)
         prep_path = simul_search_round_bucket_path(
-            is_rescue=is_rescue,
             search_num=search_num,
             bucket_type="prep",
         )
@@ -539,7 +529,6 @@ def process_section_group(
     # If over threshold, checkpoint HT and check if there were any breaks
     if over_threshold:
         raw_path = simul_search_round_bucket_path(
-            is_rescue=is_rescue,
             search_num=search_num,
             bucket_type="raw_results",
         )
@@ -558,7 +547,6 @@ def process_section_group(
     #   like in single breaks
 
     success_tsvs_path = simul_search_round_bucket_path(
-        is_rescue=is_rescue,
         search_num=search_num,
         bucket_type="success_files",
     )

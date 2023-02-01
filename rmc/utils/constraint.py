@@ -1,7 +1,7 @@
 import logging
 import re
 import subprocess
-from typing import Dict, List, Set, Tuple, Union
+from typing import Dict, List, Set, Union
 
 import hail as hl
 
@@ -11,7 +11,6 @@ from gnomad.utils.constraint import annotate_mutation_type
 from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import (
-    SIMUL_BREAK_TEMP_PATH,
     TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
 )
@@ -518,7 +517,7 @@ def get_max_chisq_per_group(
         section_max_chisq=hl.agg.max(ht[chisq_str])
     )
     group_ht = group_ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/group_max_chisq.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/group_max_chisq.ht", overwrite=True
     )
     ht = ht.annotate(section_max_chisq=group_ht[ht.section].section_max_chisq)
     return ht
@@ -527,7 +526,7 @@ def get_max_chisq_per_group(
 def search_for_break(
     ht: hl.Table,
     search_num: int,
-    chisq_threshold: float,
+    chisq_threshold: float = CHISQ_THRESHOLDS["single"],
     group_str: str = "section",
     min_num_exp_mis: float = 10.0,
 ) -> hl.Table:
@@ -558,6 +557,7 @@ def search_for_break(
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param chisq_threshold: Chi-square significance threshold.
+        Default is CHISQ_THRESHOLDS['single'].
     :param group_str: Field used to group Table observed and expected values. Default is 'section'.
     :param min_num_exp_mis: Minimum number of expected missense per transcript/transcript section.
         Sections that have fewer than this number of expected missense variants will not
@@ -693,7 +693,7 @@ def get_subsection_exprs(
 def process_sections(
     ht: hl.Table,
     search_num: int,
-    chisq_threshold: float,
+    chisq_threshold: float = CHISQ_THRESHOLDS["single"],
     group_str: str = "section",
 ):
     """
@@ -714,6 +714,7 @@ def process_sections(
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param chisq_threshold: Chi-square significance threshold.
+        Default is CHISQ_THRESHOLDS['single'].
     :param group_str: Field used to group observed and expected values. Default is 'section'.
     :return: Table annotated with whether position is a breakpoint.
     """
@@ -751,35 +752,15 @@ def process_sections(
     return ht
 
 
-def get_rescue_1break_transcripts(
-    overwrite: bool,
-    rescue_threshold: float = 5.0,
-) -> Tuple[hl.expr.SetExpression]:
+def create_no_breaks_he(overwrite: bool) -> None:
     """
-    Get transcripts that have a single breakpoint in the first round of the 'rescue' search.
-
-    These transcripts did not have a single or simultaneous breakpoint that was over
-    the initial search threshold but do have a single breakpoint that is above
-    the lower 'rescue' search threshold.
-
-    This function performs the single break search for the first 'rescue' round
-    using the statistics already computed during the single break search for the
-    first 'initial' round and writes out the resulting tables:
-    a section (transcript)-level breakpoint table and a locus-level table
-    for transcripts where a 'rescue' breakpoint was found.
-
-    Function uses the no-break results from the first round of the single and
-    simultaneous break searches.
+    Write final no breaks HailExpression.
 
     :param overwrite: Whether to overwrite output data if it exists.
-    :param rescue_threshold: Lower chi square significance threshold associated with
-        the 'rescue' search pathway.
-    :return: Tuple set of sections (transcript_start_stop) with two simultaneous breaks in
-        the initial search and set of sections with single breakpoint above 'rescue' threshold.
+    :return: None; function writes HailExpression to resource path.
     """
-    # Read in the simultaneous breaks results from initial search round 1
+    # Get the sections (transcript_start_stop) found in first round of simultaneous breaks search
     simul_results_path = simul_search_round_bucket_path(
-        is_rescue=False,
         search_num=1,
         bucket_type="final_results",
     )
@@ -788,157 +769,15 @@ def get_rescue_1break_transcripts(
     )
     simul_sections = simul_ht.aggregate(hl.agg.collect_as_set(simul_ht.section))
 
-    # Get merged no-break table of round 1 of initial search
-    ht = merge_round_no_break_ht(is_rescue=False, search_num=1)
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/initial_round1_no_breaks.ht",
-        overwrite=overwrite,
-        _read_if_exists=not overwrite,
-    )
-
-    # Filter to transcripts with candidate breakpoints over the rescue threshold
-    ht = ht.filter(ht.max_chisq >= rescue_threshold)
-
-    # Annotate breakpoints of transcripts found with rescue threshold and checkpoint
-    breakpoint_ht = ht.annotate(is_break=(ht.chisq == ht.max_chisq))
-    breakpoint_ht = breakpoint_ht.filter(breakpoint_ht.is_break)
-    breakpoint_ht = breakpoint_ht.annotate_globals(chisq_threshold=rescue_threshold)
-    breakpoint_ht = breakpoint_ht.key_by("section")
-    breakpoint_ht = breakpoint_ht.checkpoint(
-        single_search_round_ht_path(
-            is_rescue=True,
-            search_num=1,
-            is_break_found=True,
-            is_breakpoint_only=True,
-        ),
-        overwrite=overwrite,
-    )
-
-    # Write break found HT for rescue search
-    ht = ht.annotate(breakpoint=breakpoint_ht[ht.section].locus.position)
-    ht = ht.filter(hl.is_defined(ht.breakpoint))
-    ht = ht.checkpoint(
-        single_search_round_ht_path(
-            is_rescue=True,
-            search_num=1,
-            is_break_found=True,
-            is_breakpoint_only=False,
-        ),
-        overwrite=overwrite,
-    )
-
-    rescue_single_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
-    return simul_sections, rescue_single_sections
-
-
-def get_rescue_2breaks_transcripts(
-    overwrite: bool,
-    initial_threshold: float,
-    rescue_threshold: float,
-) -> hl.expr.SetExpression:
-    """
-    Get transcripts that have two simultaneous breakpoints above the 'rescue' threshold.
-
-    These transcripts did not have a single break/simultaneous breaks over the initial search threshold
-    but have simultaneous breakpoints that are above the lower 'rescue' search threshold.
-
-    .. note::
-        This function assumes that `process_sections` was run with `save_full_chisq_ht`
-        set to True during the initial simultaneous breaks search (round 1).
-
-    :param overwrite: Whether to overwrite output data if it exists.
-    :param initial_threshold: Chi square significance threshold associated with
-        the initial search pathway.
-    :param rescue_threshold: Lower chi square significance threshold associated with
-        the 'rescue' search pathway.
-    :return: SetExpression of sections (transcript_start_stop)
-        above 'rescue' threshold.
-    """
-    # Read in the transcripts found in the single break rescue search
-    single_ht = hl.read_table(
-        single_search_round_ht_path(
-            is_rescue=True,
-            search_num=1,
-            is_break_found=True,
-            is_breakpoint_only=True,
-        )
-    )
-    single_break_rescue_sections = single_ht.aggregate(
-        hl.agg.collect_as_set(single_ht.section)
-    )
-
-    # Merge all of the temporary chi square HTs saved in round 1 of
-    # initial simul breaks search
-    merge_simul_break_temp_hts(
-        input_hts_path=SIMUL_BREAK_TEMP_PATH,
-        batch_phrase="batch_temp_chisq",
-        query_phrase="dataproc_temp_chisq",
-        output_ht_path=f"{TEMP_PATH_WITH_FAST_DEL}/rescue_simul_chisq.ht",
-        overwrite=overwrite,
-    )
-
-    ht = hl.read_table(f"{TEMP_PATH_WITH_FAST_DEL}/rescue_simul_chisq.ht")
-    ht = get_max_chisq_per_group(ht, "section", "max_chisq")
-    ht = ht.filter(
-        (ht.max_chisq == ht.section_max_chisq)
-        & (ht.section_max_chisq < initial_threshold)
-        & (ht.section_max_chisq >= rescue_threshold)
-        & ~hl.literal(single_break_rescue_sections).contains(ht.section)
-    )
-    results_path = simul_search_round_bucket_path(
-        is_rescue=True,
-        search_num=1,
-        bucket_type="final_results",
-    )
-    ht = ht.checkpoint(f"{results_path}/merged.ht", overwrite=overwrite)
-    return ht.aggregate(hl.agg.collect_as_set(ht.section))
-
-
-def get_rescue_transcripts_and_create_no_breaks_he(
-    overwrite: bool, chisq_thresholds: Dict[str, Dict[str, float]] = CHISQ_THRESHOLDS
-) -> None:
-    """
-    Get transcripts found in rescue pipeline and write final no breaks HailExpression.
-
-    Function gets transcripts found in rescue single and simultaneous breaks searches
-    and creates final HT with all transcripts that do not have evidence of RMC.
-
-    .. note::
-        - Assumes top level keys in `chisq_threshold` dictionary are "initial"
-        and "rescue"
-        - Assumes nested keys in `chisq_threshold` dictionary are "single" and
-        "simul"
-
-    :param overwrite: Whether to overwrite output data if it exists.
-    :param chisq_thresholds: Dictionary of chi square significance thresholds.
-        Default is CHISQ_THRESHOLDS.
-    :return: None; function writes HailExpression to resource path.
-    """
-    # Get the sections (transcript_start_stop) found in initial simultaneous breaks search,
-    # rescue single break search, and rescue simultaneous breaks search
-    init_simul_sections, rescue_single_sections = get_rescue_1break_transcripts(
-        overwrite=overwrite,
-        rescue_threshold=chisq_thresholds["rescue"]["single"],
-    )
-    rescue_simul_sections = get_rescue_2breaks_transcripts(
-        overwrite=overwrite,
-        initial_threshold=chisq_thresholds["initial"]["simul"],
-        rescue_threshold=chisq_thresholds["rescue"]["simul"],
-    )
-    sections_with_breaks = init_simul_sections.union(rescue_simul_sections).union(
-        rescue_single_sections
-    )
-
-    # Read in the no break found HT from initial search round 1
+    # Read in the no break found HT from the first round of single search
     ht = hl.read_table(
         single_search_round_ht_path(
-            is_rescue=False,
             search_num=1,
             is_break_found=False,
             is_breakpoint_only=False,
         )
     )
-    ht = ht.filter(~hl.literal(sections_with_breaks).contains(ht.section))
+    ht = ht.filter(~hl.literal(simul_sections).contains(ht.section))
     no_break_sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
     logger.info(
         "%i transcripts did not have any evidence of RMC", len(no_break_sections)
@@ -1022,82 +861,13 @@ def merge_simul_break_temp_hts(
     ht.write(output_ht_path, overwrite=overwrite)
 
 
-def calculate_section_chisq(
-    obs_expr: hl.expr.Int64Expression,
-    exp_expr: hl.expr.Float64Expression,
-) -> hl.expr.Float64Expression:
-    """
-    Read in simultaneous breaks temporary HTs at specified path and merge.
-
-    .. note::
-        - Assumes temp HTs are keyed by "section" or ("section", "i", "j")
-        - Assumes temp HTs contain all annotations in SIMUL_BREAK_ANNOTATIONS
-
-    :param input_hts_path: Path to bucket containing input temporary HTs.
-    :param batch_phrase: String indicating name associated with HTs created
-        using Hail Batch jobs, e.g. "under", or "batch_temp_chisq".
-    :param query_phrase: String indicating name associated with HTs created
-        using Hail Query jobs via Dataproc, e.g. "dataproc", or "dataproc_temp_chisq".
-    :param output_ht_path: Desired path for output HT.
-    :param overwrite: Whether to overwrite output HT if it exists.
-    :param google_project: Google project to use to read data from requester-pays buckets.
-        Default is 'broad-mpg-gnomad'.
-    :return: None; function writes HT to specified path.
-    """
-    logger.info("Collecting all HT paths...")
-    temp_ht_paths = (
-        subprocess.check_output(
-            ["gsutil", "-u", f"{google_project}", "ls", f"{input_hts_path}"]
-        )
-        .decode("utf8")
-        .strip()
-        .split("\n")
-    )
-
-    intermediate_hts = []
-    ht_count = 0
-    for ht_path in temp_ht_paths:
-        ht_path = ht_path.strip("/")
-        if (batch_phrase in ht_path or query_phrase in ht_path) and ht_path.endswith(
-            "ht"
-        ):
-            ht_count += 1
-            logger.info("Working on %s", ht_path)
-            temp = hl.read_table(ht_path)
-            if temp.count() > 0:
-                # Tables containing transcripts/transcript sections that are over the transcript/section length threshold
-                # are keyed by section, i, j
-                # Tables containing transcripts/transcript sections that are under the length threshold are keyed
-                # only by section
-                # Rekey all tables here and select only the required fields to ensure the union on line 83 is able to work
-                # This `key_by` should not shuffle because `section` is already the first key for both Tables
-                temp = temp.key_by("section")
-                row_fields = set(temp.row)
-                if len(SIMUL_SEARCH_ANNOTATIONS.intersection(row_fields)) < len(
-                    SIMUL_SEARCH_ANNOTATIONS
-                ):
-                    raise DataException(
-                        f"The following fields are missing from the temp table: {SIMUL_SEARCH_ANNOTATIONS.difference(row_fields)}!"
-                    )
-                temp = temp.select(*SIMUL_SEARCH_ANNOTATIONS)
-                intermediate_hts.append(temp)
-
-    logger.info("Found %i HTs and appended %i", ht_count, len(intermediate_hts))
-    if len(intermediate_hts) == 0:
-        raise DataException(
-            "All temp tables had 0 rows. Please double check the temp tables!"
-        )
-    ht = intermediate_hts[0].union(*intermediate_hts[1:])
-    ht.write(output_ht_path, overwrite=overwrite)
-
-
 def get_break_search_round_nums(
     rounds_path: str,
     round_num_regex: str = r"round(\d+)/$",
     google_project: str = "broad-mpg-gnomad",
 ) -> List[str]:
     r"""
-    Get round numbers for a particular type of break search, e.g. single break in initial search.
+    Get round numbers for a particular type of break search, e.g. single break search.
 
     Function returns all round numbers for a particular type of break search
     by matching the round paths in a top-level bucket to a regex pattern.
@@ -1129,7 +899,7 @@ def get_break_search_round_nums(
     return sorted(round_nums)
 
 
-def check_break_search_round_nums(is_rescue: bool) -> List[int]:
+def check_break_search_round_nums() -> List[int]:
     """
     Check for valid single and simultaneous break search round number outputs.
 
@@ -1139,16 +909,11 @@ def check_break_search_round_nums(is_rescue: bool) -> List[int]:
     .. note::
         Assumes there is a folder for each search round run, regardless of whether there were breaks discovered
 
-    :param is_rescue: Whether to operate on searches in rescue pathway.
     :return: Sorted list of round numbers.
     """
     # Get sorted round numbers
-    single_search_round_nums = get_break_search_round_nums(
-        single_search_bucket_path(is_rescue=is_rescue)
-    )
-    simul_search_round_nums = get_break_search_round_nums(
-        simul_search_bucket_path(is_rescue=is_rescue)
-    )
+    single_search_round_nums = get_break_search_round_nums(single_search_bucket_path())
+    simul_search_round_nums = get_break_search_round_nums(simul_search_bucket_path())
     logger.info(
         "Single search round numbers: %s\nSimultaneous search round numbers: %s",
         ",".join(map(str, single_search_round_nums)),
@@ -1178,7 +943,6 @@ def check_break_search_round_nums(is_rescue: bool) -> List[int]:
 
 
 def merge_round_no_break_ht(
-    is_rescue: bool,
     search_num: int,
     keep_annotations: Set[str] = CONSTRAINT_ANNOTATIONS,
 ) -> hl.Table:
@@ -1188,7 +952,6 @@ def merge_round_no_break_ht(
     Function starts with the round-specific single search no-breaks table
     and removes all sections in the round-specific simultaneous search breaks table.
 
-    :param is_rescue: Whether to operate on search in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param keep_annotations: Fields to keep in the table. Default is `CONSTRAINT_ANNOTATIONS`.
@@ -1204,7 +967,6 @@ def merge_round_no_break_ht(
         Note that there may be additional row fields depending on `keep_annotations`.
     """
     single_no_break_path = single_search_round_ht_path(
-        is_rescue=is_rescue,
         search_num=search_num,
         is_break_found=False,
         is_breakpoint_only=False,
@@ -1224,7 +986,6 @@ def merge_round_no_break_ht(
     ht = ht.select(*keep_annotations)
 
     simul_results_path = simul_search_round_bucket_path(
-        is_rescue=is_rescue,
         search_num=search_num,
         bucket_type="final_results",
     )
@@ -1261,12 +1022,11 @@ def calculate_section_chisq(
     return ((obs_expr - exp_expr) ** 2) / exp_expr
 
 
-def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
+def merge_rmc_hts(round_nums: List[int]) -> hl.Table:
     """
-    Get table of final RMC sections in a given pathway (initial or rescue) after all break searches are complete.
+    Get table of final RMC sections after all break searches are complete.
 
     :param round_nums: List of round numbers to merge results across.
-    :param is_rescue: Whether to operate on search in rescue pathway.
     :return: Table of final RMC sections. Schema:
         ----------------------------------------
         Row fields:
@@ -1274,7 +1034,6 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
             'section_exp': float64
             'section_oe': float64
             'section_chisq': float64
-            'search_type': str
             'transcript': str
             'interval': interval<locus<GRCh37>>
         ----------------------------------------
@@ -1297,7 +1056,6 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
         # For each search round:
         # Get locus-level merged no-break table (no breaks in both single and simultaneous searches)
         ht = merge_round_no_break_ht(
-            is_rescue=is_rescue,
             search_num=search_num,
             keep_annotations=FINAL_ANNOTATIONS,
         )
@@ -1310,16 +1068,13 @@ def merge_rmc_hts(round_nums: List[int], is_rescue: bool) -> hl.Table:
         )
         hts.append(ht)
     rmc_ht = hts[0].union(*hts[1:])
-    rescue = "rescue" if is_rescue else "initial"
     rmc_ht = rmc_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/{rescue}_search_union.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/search_union.ht", overwrite=True
     )
     # Calculate chi-square value for each section
     rmc_ht = rmc_ht.annotate(
         section_chisq=calculate_section_chisq(rmc_ht.section_obs, rmc_ht.section_exp)
     )
-    # Annotate search pathway type (initial or rescue)
-    rmc_ht = rmc_ht.annotate(search_type=rescue)
 
     # Convert section label to transcript and start and end positions
     rmc_ht = rmc_ht.key_by()

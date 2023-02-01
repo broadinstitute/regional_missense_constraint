@@ -15,8 +15,7 @@ This repository contains code to determine RMC regions in gnomAD (currently v2.1
 * regional_missense_constraint/rmc/utils: Contains utility functions that prepare input data or calculate results (RMC, missense badness, MPC).
 
 ## Regional missense constraint
-Flowchart:
-![https://lucid.app/lucidchart/f359ebaa-5c40-4fa2-9641-01b7804751a2/edit?invitationId=inv_3ae908f2-7fba-43fa-b1a2-9369a1bd8a89#]
+[Flowchart](https://lucid.app/lucidchart/39bade4b-34f0-4a94-aef8-0779e36e6263/edit?viewport_loc=-506%2C-91%2C2983%2C1721%2CghqP1gcpaGqb&invitationId=inv_69b9d328-0bb2-452a-8ae6-e0ee0e5c8007)
 
 Inputs:
 * Hail Table with all possible missense variants in the human exome (called VEP context)

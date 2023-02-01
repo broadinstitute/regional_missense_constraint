@@ -30,6 +30,7 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
+    CURRENT_FREEZE,
     grouped_single_no_break_ht_path,
     simul_sections_split_by_len_path,
 )
@@ -53,7 +54,7 @@ Adding this constant here to avoid ModuleNotFound errors in the
 PythonJobs. See `rmc.resources.basics` for full docstring.
 """
 
-TEMP_PATH_WITH_FAST_DEL = "gs://gnomad-tmp-4day/rmc/"
+TEMP_PATH_WITH_FAST_DEL = "gs://gnomad-tmp-4day/rmc"
 """
 Path to bucket for temporary files.
 
@@ -80,8 +81,8 @@ PythonJobs. See `rmc.resources.rmc` for full docstring.
 
 
 def simul_search_bucket_path(
-    is_rescue: bool,
-    search_num: int,
+    search_num: int = None,
+    freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
     Return path to bucket associated with simultaneous break search inputs and results.
@@ -89,24 +90,24 @@ def simul_search_bucket_path(
     Adding this constant here to avoid ModuleNotFound errors in the
     PythonJobs. See `rmc.resources.rmc` for full docstring.
 
-    :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
-        (e.g., second round of searching for single break would be 2).
+        (e.g., second round of searching for simultaneous break would be 2).
+        Default is None.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Path to simultaneous break search round bucket.
     """
-    rescue = "rescue" if is_rescue else "initial"
     return (
-        f"{SIMUL_BREAK_TEMP_PATH}/{rescue}/round{search_num}"
+        f"{SIMUL_BREAK_TEMP_PATH}/{freeze}/round{search_num}"
         if search_num
-        else f"{SIMUL_BREAK_TEMP_PATH}/{rescue}"
+        else f"{SIMUL_BREAK_TEMP_PATH}/{freeze}"
     )
 
 
 def simul_search_round_bucket_path(
-    is_rescue: bool,
     search_num: int,
     bucket_type: str,
     bucket_names: Set[str] = SIMUL_SEARCH_BUCKET_NAMES,
+    freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
     Return path to bucket with  Tables resulting from a specific round of simultaneous break search.
@@ -114,17 +115,17 @@ def simul_search_round_bucket_path(
     Adding this constant here to avoid ModuleNotFound errors in the
     PythonJobs. See `rmc.resources.rmc` for full docstring.
 
-    :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param bucket_type: Bucket type.
         Must be in `bucket_names`.
     :param bucket_names: Possible bucket names for simultaneous search bucket type.
         Default is `SIMUL_SEARCH_BUCKET_NAMES`.
+        :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Path to a bucket in the simultaneous break search round bucket.
     """
     assert bucket_type in bucket_names, f"Bucket type must be one of {bucket_names}!"
-    return f"{simul_search_bucket_path(is_rescue, search_num)}/{bucket_type}"
+    return f"{simul_search_bucket_path(search_num, freeze)}/{bucket_type}"
 
 
 def get_obs_exp_expr(
@@ -383,7 +384,6 @@ def process_section_group(
     ht_path: str,
     section_group: List[str],
     count: int,
-    is_rescue: bool,
     search_num: int,
     over_threshold: bool,
     output_ht_path: str,
@@ -404,7 +404,6 @@ def process_section_group(
     :param str ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param List[str] section_group: List of transcripts or transcript sections to process.
     :param count: Which transcript group is being run (based on counter generated in `main`).
-    :param is_rescue: Whether to return path to HT created in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param bool over_threshold: Whether input transcript/sections have more
@@ -497,7 +496,6 @@ def process_section_group(
         # (would sometimes repartition to a lower number of partitions)
         ht = ht.repartition(n_rows)
         prep_path = simul_search_round_bucket_path(
-            is_rescue=is_rescue,
             search_num=search_num,
             bucket_type="prep",
         )
@@ -528,7 +526,6 @@ def process_section_group(
     # If over threshold, checkpoint HT and check if there were any breaks
     if over_threshold:
         raw_path = simul_search_round_bucket_path(
-            is_rescue=is_rescue,
             search_num=search_num,
             bucket_type="raw_results",
         )
@@ -547,7 +544,6 @@ def process_section_group(
     ht.write(output_ht_path, overwrite=True)
 
     success_tsvs_path = simul_search_round_bucket_path(
-        is_rescue=is_rescue,
         search_num=search_num,
         bucket_type="success_files",
     )
@@ -570,7 +566,7 @@ def main(args):
         )
 
     save_chisq_ht = False
-    if args.search_num == 1 and not args.is_rescue:
+    if args.search_num == 1:
         save_chisq_ht = True
 
     logger.info("Importing SetExpression with transcripts or transcript sections...")
@@ -580,7 +576,6 @@ def main(args):
                 hl.eval(
                     hl.experimental.read_expression(
                         simul_sections_split_by_len_path(
-                            is_rescue=args.is_rescue,
                             search_num=args.search_num,
                             is_over_threshold=False,
                         )
@@ -592,7 +587,6 @@ def main(args):
                 hl.eval(
                     hl.experimental.read_expression(
                         simul_sections_split_by_len_path(
-                            is_rescue=args.is_rescue,
                             search_num=args.search_num,
                             is_over_threshold=True,
                         )
@@ -600,7 +594,6 @@ def main(args):
                 )
             )
         ),
-        is_rescue=args.is_rescue,
         search_num=args.search_num,
     )
 
@@ -609,7 +602,6 @@ def main(args):
     )
 
     raw_path = simul_search_round_bucket_path(
-        is_rescue=args.is_rescue,
         search_num=args.search_num,
         bucket_type="raw_results",
     )
@@ -619,9 +611,17 @@ def main(args):
         # Use a docker image that specifies spark memory allocation if --use-custom-machine was specified
         if args.use_custom_machine:
             args.docker_image = "gcr.io/broad-mpg-gnomad/rmc:20220930"
+            logger.warning(
+                "Using %s image; please make sure Hail version in image is up to date",
+                args.docker_image,
+            )
         # Otherwise, use the default docker image
         else:
-            args.docker_image = "gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220930"
+            args.docker_image = "gcr.io/broad-mpg-gnomad/tgg-methods-vm:20230123"
+            logger.warning(
+                "Using %s image; please make sure Hail version in image is up to date",
+                args.docker_image,
+            )
 
     logger.info("Setting up Batch parameters...")
     backend = hb.ServiceBackend(
@@ -666,12 +666,9 @@ def main(args):
             j.storage(args.batch_storage)
             j.call(
                 process_section_group,
-                ht_path=grouped_single_no_break_ht_path(
-                    args.is_rescue, args.search_num
-                ),
+                ht_path=grouped_single_no_break_ht_path(args.search_num),
                 section_group=group,
                 count=group_num,
-                is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 over_threshold=False,
                 output_ht_path=f"{raw_path}/simul_break_{job_name}.ht",
@@ -706,12 +703,9 @@ def main(args):
                 j.storage(args.batch_storage)
             j.call(
                 process_section_group,
-                ht_path=grouped_single_no_break_ht_path(
-                    args.is_rescue, args.search_num
-                ),
+                ht_path=grouped_single_no_break_ht_path(args.search_num),
                 section_group=group,
                 count=group_num,
-                is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 over_threshold=True,
                 output_ht_path=f"{raw_path}/simul_break_{group[0]}.ht",
@@ -753,14 +747,6 @@ if __name__ == "__main__":
         "--search-num",
         help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
         type=int,
-    )
-    parser.add_argument(
-        "--is-rescue",
-        help="""
-        Whether search is part of the 'rescue' pathway (pathway
-        with lower chi square significance cutoff).
-        """,
-        action="store_true",
     )
     parser.add_argument(
         "--counter",
@@ -840,12 +826,12 @@ if __name__ == "__main__":
         "--docker-image",
         help="""
         Docker image to provide to hail Batch. Must have dill, hail, and python installed.
-        Suggested image: gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220930.
+        Suggested image: gcr.io/broad-mpg-gnomad/tgg-methods-vm:20230123.
 
         If running with --use-custom-machine, Docker image must also contain this line:
         `ENV PYSPARK_SUBMIT_ARGS="--driver-memory 8g --executor-memory 8g pyspark-shell"`
         to make sure the job allocates memory correctly.
-        Suggested image: gcr.io/broad-mpg-gnomad/rmc:20220930.
+        Example image: gcr.io/broad-mpg-gnomad/rmc:20220930.
 
         Default is None -- script will select default image if not specified on the command line.
         """,
