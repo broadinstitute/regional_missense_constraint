@@ -494,7 +494,6 @@ def main(args):
                 _read_if_exists=not args.overwrite,
             )
 
-            logger.info("Merging RMC tables...")
             logger.info("Removing outlier transcripts...")
             constraint_transcripts = get_constraint_transcripts(outlier=False)
             rmc_ht = rmc_ht.filter(constraint_transcripts.contains(rmc_ht.transcript))
