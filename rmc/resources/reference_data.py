@@ -80,11 +80,12 @@ Satterstrom et al. (Large-Scale Exome Sequencing Study Implicates Both Developme
 
 autism_spark_de_novo_tsv = f"{REF_DATA_PREFIX}/fu_2022_supp20.txt"
 """
-De novo variants from 63,237 samples.
+De novo variants from 20,528 samples.
 
-Sample count breakdown:
-- 15,036 probands, 5,492 siblings, 28,522 parents
-- 5,591 cases, 8,597 controls
+Sample count* breakdown:
+- 15,036 probands
+- 5,492 siblings
+(28,522 parents)
 
 .. note::
     Fu et al. note that:
@@ -96,10 +97,9 @@ Samples are from the following cohorts:
 - Autism Sequencing Consortium (ASC)
 - Simons Foundation Autism Research Initiative (SFARI) Simons Simplex Collection (SSC)
 - Simons Foundation Powering Autism Research for Knowledge (SPARK initiative)
-- Case-control samples are Danish iPSYCH and Swedish PAGES samples
 
 Samples are from:
-Fu et al. (Rare coding variation provides insight into the genetic architecture and phenotypic context of autism/)
+Fu et al. (Rare coding variation provides insight into the genetic architecture and phenotypic context of autism)
 """
 
 de_novo = TableResource(
