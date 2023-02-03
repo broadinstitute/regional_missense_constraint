@@ -19,6 +19,7 @@ from rmc.resources.gnomad import (
 )
 from rmc.resources.reference_data import filtered_context, gene_model
 from rmc.resources.rmc import (
+    CURRENT_FREEZE,
     CHISQ_THRESHOLDS,
     constraint_prep,
     merged_search_ht_path,
@@ -279,6 +280,7 @@ def main(args):
                 ht = hl.read_table(
                     merged_search_ht_path(
                         search_num=args.search_num - 1,
+                        freeze=args.freeze,
                     ),
                 )
 
@@ -309,6 +311,7 @@ def main(args):
                     search_num=args.search_num,
                     is_break_found=True,
                     is_breakpoint_only=True,
+                    freeze=args.freeze,
                 ),
                 overwrite=args.overwrite,
             )
@@ -364,6 +367,7 @@ def main(args):
             simul_results_path = simul_search_round_bucket_path(
                 search_num=args.search_num,
                 bucket_type="final_results",
+                freeze=args.freeze,
             )
             simul_break_by_section_path = f"{simul_results_path}/merged.ht"
             if file_exists(simul_break_by_section_path):
@@ -463,6 +467,7 @@ def main(args):
 
             merged_path = merged_search_ht_path(
                 search_num=args.search_num,
+                freeze=args.freeze,
             )
             if single_exists and simul_exists:
                 logger.info(
@@ -505,7 +510,7 @@ def main(args):
             rmc_ht = rmc_ht.filter(constraint_transcripts.contains(rmc_ht.transcript))
 
             logger.info("Writing out RMC results...")
-            rmc_ht.write(rmc_results.path)
+            rmc_ht.write(rmc_results.versions[args.freeze].path)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -588,6 +593,11 @@ if __name__ == "__main__":
         Example format:
         '{"single": 6.6, "simul": 9.2}'
         """,
+    )
+    parser.add_argument(
+        "--freeze",
+        help="RMC data freeze number",
+        default=CURRENT_FREEZE,
     )
     parser.add_argument(
         "--overwrite", help="Overwrite existing data.", action="store_true"
