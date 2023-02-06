@@ -23,6 +23,7 @@ from gnomad_constraint.utils.constraint import prepare_ht_for_constraint_calcula
 from rmc.resources.basics import (
     ACID_NAMES_PATH,
     CODON_TABLE_PATH,
+    TEMP_PATH_WITH_FAST_DEL,
 )
 from rmc.resources.gnomad import constraint_ht, mutation_rate
 from rmc.resources.reference_data import hi_genes
@@ -542,6 +543,91 @@ def import_clinvar_hi_variants(overwrite: bool) -> None:
         )
 
 
+def import_fu_data(overwrite: bool) -> None:
+    """
+    Import de novo variants from Fu et al. (2022) paper.
+
+    Function imports variants from TSV into HT, removes malformed rows,
+    and lifts data from GRCh38 to GRCh37.
+
+    :param overwrite: Whether to overwrite Table if it exists.
+    :return: None; Function writes Table to temporary path.
+    """
+    import reference_data.asc_ssc_spark_de_novo_tsv as fu_tsv_path
+
+    fu_ht = hl.import_table(
+        fu_tsv_path,
+        impute=True,
+        # Skip blank lines at the bottom of this TSV
+        missing="",
+        skip_blank_lines=True,
+    )
+    # Remove lines from bottom of TSV that are parsed incorrectly upon import
+    # These lines contain metadata about the TSV, e.g.:
+    # "Supplementary Table 20. The de novo SNV/indel variants used in TADA
+    # association analyses from assembled ASD cohorts"
+    fu_ht = fu_ht.filter(hl.is_missing(fu_ht.Role))
+
+    # Prepare to lift dataset back to GRCh37
+    rg37 = hl.get_reference("GRCh37")
+    rg38 = hl.get_reference("GRCh38")
+    rg38.add_liftover(
+        "gs://hail-common/references/grch38_to_grch37.over.chain.gz", rg37
+    )
+
+    fu_ht = fu_ht.annotate(
+        new_locus=hl.liftover(fu_ht.locus, "GRCh37", include_strand=True),
+        old_locus=fu_ht.locus,
+    )
+    liftover_stats = fu_ht.aggregate(
+        hl.struct(
+            liftover_fail=hl.agg.count_where(hl.is_missing(fu_ht.new_locus)),
+            flip_strand=hl.agg.count_where(fu_ht.new_locus.is_negative_strand),
+        )
+    )
+    logger.info(
+        "%i variants failed to liftover, and %i variants flipped strands",
+        liftover_stats.liftover_fail,
+        liftover_stats.flip_strand,
+    )
+    fu_ht = fu_ht.filter(
+        hl.is_defined(fu_ht.new_locus) & ~fu_ht.new_locus.is_negative_strand
+    )
+    fu_ht = fu_ht.key_by(locus=fu_ht.new_locus.result, alleles=fu_ht.alleles)
+    fu_ht = fu_ht.group_by("locus", "alleles").aggregate(
+        role=hl.agg.collect_as_set(fu_ht.Role),
+        samples=hl.agg.collect_as_set(fu_ht.Sample),
+    )
+    fu_ht.write(f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht", overwrite=overwrite)
+
+
+def import_kaplanis_data(overwrite: bool) -> None:
+    """
+    Import de novo variants from Kaplanis et al. (2020) paper.
+
+    Function imports variants from TSV into HT, and filters to cases with
+    neurodevelopmental disorders only.
+    Input TSV also contains autistic individuals, but these individuals overlap with
+    data from Fu et al. paper.
+
+    :param overwrite: Whether to overwrite Table if it exists.
+    :return: None; Function writes Table to temporary path.
+    """
+    import reference_data.ddd_autism_de_novo_tsv as kaplanis_tsv_path
+
+    kap_ht = hl.import_table(kaplanis_tsv_path, impute=True)
+    kap_ht = kap_ht.transmute(
+        locus=hl.locus(kap_ht.chrom, kap_ht.pos),
+        alleles=[kap_ht.ref, kap_ht.alt],
+    )
+    kap_ht = kap_ht.filter(hl.is_snp(kap_ht.alleles[0], kap_ht.alleles[1]))
+    kap_ht = kap_ht.group_by("locus", "alleles").aggregate(
+        study=hl.agg.collect(kap_ht.study),
+        case_control=hl.agg.collect(kap_ht.case_control),
+    )
+    kap_ht.write(f"{TEMP_PATH_WITH_FAST_DEL}/kaplanis_dn.ht", overwrite=overwrite)
+
+
 def import_de_novo_variants(
     overwrite: bool,
     csq_str: str = "consequence",
@@ -559,16 +645,16 @@ def import_de_novo_variants(
     :param str missense_str: String representing missense variant effect. Default is MISSENSE.
     :return: None; writes HT to resource path.
     """
-    import reference_data.de_novo_tsv as tsv_path
     import reference_data.de_novo.path as ht_path
 
-    dn_ht = hl.import_table(tsv_path, impute=True)
-    dn_ht = dn_ht.filter(dn_ht[csq_str] == missense_str)
-    dn_ht = dn_ht.transmute(
-        locus=hl.locus(dn_ht.chrom, dn_ht.pos),
-        alleles=[dn_ht.ref, dn_ht.alt],
-    )
-    # Key by locus and alleles for easy MPC annotation
-    # (MPC annotation requires input Table to be keyed by locus and alleles)
-    dn_ht = dn_ht.key_by("locus", "alleles")
-    dn_ht.write(ht_path, overwrite=overwrite)
+    fu_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht"
+    kaplanis_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/kaplanis_dn.ht"
+    if not file_exists(fu_ht_path) or overwrite:
+        import_fu_data(overwrite=overwrite)
+        fu_ht = hl.read_table(fu_ht_path)
+    if not file_exists(kaplanis_ht_path) or overwrite:
+        import_kaplanis_data(overwrite=overwrite)
+        kap_ht = hl.read_table(kaplanis_ht_path)
+
+    ht = kap_ht.join(fu_ht, how="outer")
+    ht.write(ht_path, overwrite=overwrite)
