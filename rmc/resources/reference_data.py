@@ -43,22 +43,6 @@ Table containing transcript start and stop positions displayed in the browser.
 ######################################################################
 ## Gene/transcript resources
 ######################################################################
-hi_genes = f"{RESOURCE_PREFIX}/HI_genes.rCNV.txt"
-"""
-Path to haploinsufficient genes that cause severe disease.
-
-List is from Ryan Collins.
-"""
-
-
-####################################################################################
-## Assessment related resources
-####################################################################################
-REF_DATA_PREFIX = f"{RESOURCE_BUILD_PREFIX}/reference_data"
-"""
-Path to bucket containing reference data resources.
-"""
-
 dosage_tsv = f"{REF_DATA_PREFIX}/Collins_rCNV_2022.dosage_sensitivity_scores.tsv.gz"
 """
 TSV of genes and dosage sensitivity scores.
@@ -91,6 +75,15 @@ triplo_genes = f"{REF_DATA_PREFIX}/ht/ptriplo_genes.he"
 HailExpression of triplosensitive genes.
 
 List of triplosensitive genes was determined by filtering to genes with pTriplo >= 0.94.
+"""
+
+
+####################################################################################
+## Assessment related resources
+####################################################################################
+REF_DATA_PREFIX = f"{RESOURCE_BUILD_PREFIX}/reference_data"
+"""
+Path to bucket containing reference data resources.
 """
 
 clinvar = TableResource(
