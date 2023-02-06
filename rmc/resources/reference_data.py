@@ -70,7 +70,7 @@ ddd_autism_de_novo_tsv = (
     f"{REF_DATA_PREFIX}/fordist_KES_combined_asc_dd_dnms_2020_04_21_annotated.txt"
 )
 """
-De novo variants from 31,058 cases with developmental disorders, 6,430 cases with autism spectrum disorders, and 2,179 controls.
+De novo variants from 31,058 cases with developmental disorders, 6,430 autistic individuals, and 2,179 controls.
 
 Controls are the siblings of the autism cases.
 Samples are from:
@@ -78,7 +78,7 @@ Kaplanis et al. (Evidence for 28 genetic disorders discovered by combining healt
 Satterstrom et al. (Large-Scale Exome Sequencing Study Implicates Both Developmental and Functional Changes in the Neurobiology of Autism.)
 """
 
-autism_spark_de_novo_tsv = f"{REF_DATA_PREFIX}/fu_2022_supp20.txt"
+asc_ssc_spark_de_novo_tsv = f"{REF_DATA_PREFIX}/fu_2022_supp20.txt"
 """
 De novo variants from 20,528 samples.
 
@@ -103,10 +103,17 @@ Fu et al. (Rare coding variation provides insight into the genetic architecture 
 """
 
 de_novo = TableResource(
-    path=f"{RESOURCE_BUILD_PREFIX}/reference_data/ht/dd_de_novo.ht",
+    path=f"{RESOURCE_BUILD_PREFIX}/reference_data/ht/ddd_autism_de_novo.ht",
 )
 """
-De novo missense variants from 37,488 cases and 2,179 controls (same as above).
+De novo missense variants from 46,094 cases and 5,492 controls.
+
+Cases:
+- 31,058 neurodevelopmental cases (from `ddd_autism_de_novo_tsv`)
+- 15,036 autistic individuals (from `autism_spark_de_novo_tsv`)
+
+Controls:
+- 5,492 siblings (from `autism_spark_de_novo_tsv`)
 """
 
 ####################################################################################
