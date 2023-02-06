@@ -26,7 +26,18 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_FAST_DEL,
 )
 from rmc.resources.gnomad import constraint_ht, mutation_rate
-from rmc.resources.reference_data import hi_genes
+from rmc.resources.reference_data import (
+    asc_ssc_spark_de_novo_tsv,
+    ddd_autism_de_novo_tsv,
+    dosage_ht,
+    dosage_tsv,
+    clinvar,
+    clinvar_plp_hi_mis,
+    clinvar_plp_trip_mis,
+    de_novo,
+    haplo_genes_he,
+    triplo_genes_he,
+)
 from rmc.resources.rmc import (
     DIVERGENCE_SCORES_TSV_PATH,
     MUTATION_RATE_TABLE_PATH,
@@ -498,48 +509,92 @@ def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
 
 
 ## Assessment utils
-## TODO: update these with code used to import newest resources
-def import_clinvar_hi_variants(overwrite: bool) -> None:
+def import_dosage(
+    overwrite: bool,
+    haplo_threshold: float = 0.86,
+    triplo_threshold: float = 0.94,
+) -> None:
     """
-    Import ClinVar HT and filter to pathogenic/likely pathogenic missense variants in haploinsufficient genes.
+    Import gene dosage sensitivity information.
+
+    Also create HailExpressions with haploinsufficient
+    and triplosensitive genes.
+
+    :param overwrite: Whether to overwrite output data.
+    :param haplo_threshold: Threshold for determining whether a gene is haploinsufficient.
+        Default is 0.86 (from Collins et al. paper).
+    :param triplo_threshold: Threshold for determining whether a gene is triplosensitive.
+        Default is 0.94 (from Collins et al. paper).
+    :return: None; function writes data to resource paths.
+    """
+    ht = hl.import_table(dosage_tsv, impute=True, force=True)
+    ht = ht.transmute(gene=ht["#gene"])
+    ht = ht.key_by("gene")
+    ht = ht.annotate_globals(
+        haplo_cutoff=haplo_threshold,
+        triplo_cutoff=triplo_threshold,
+    )
+    ht = ht.checkpoint(dosage_ht.path, overwrite=overwrite)
+
+    haplo = ht.filter(ht.pHaplo >= haplo_threshold)
+    hl.experimental.write_expression(
+        haplo,
+        haplo_genes,
+        overwrite=overwrite,
+    )
+    triplo = ht.filter(ht.pTriplo >= triplo_threshold)
+    hl.experimental.write_expression(
+        triplo,
+        triplo_genes,
+        overwrite=overwrite,
+    )
+
+
+def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
+    """
+    Import ClinVar HT and pathogenic/likely pathogenic missense variants.
+
+    Also filter P/LP missense variants to variants in haploinsufficient
+    and triplosensitive genes.
 
     .. note::
         This function currently only works for build GRCh37.
 
-    :param bool overwrite: Whether to overwrite ClinVar HT.
-    :return: None; writes HT to resource path.
+    :param bool overwrite: Whether to overwrite output data.
+    :param missense_str: String that corresponds to missense variant consequence.
+        Default is MISSENSE.
+    :return: None; writes HTs and HEs to resource paths.
     """
-    from gnomad.resources.grch37.reference_data import clinvar
-
-    clinvar_ht_path = reference_data.clinvar_path_mis.path
-
     if not file_exists(clinvar_ht_path) or overwrite:
         logger.info("Reading in ClinVar HT...")
-        clinvar_ht = clinvar.ht()
-        clinvar_ht = filter_to_clinvar_pathogenic(clinvar_ht)
+        ht = clinvar.ht()
+        ht = filter_to_clinvar_pathogenic(ht)
 
         logger.info("Filtering to missense variants...")
-        clinvar_ht = clinvar_ht.annotate(mc=clinvar_ht.info.MC)
-        clinvar_ht = clinvar_ht.filter(
-            clinvar_ht.mc.any(lambda x: x.contains("missense_variant"))
-        )
-        logger.info(
-            "Number of variants after filtering to missense: %i", clinvar_ht.count()
-        )
+        ht = ht.annotate(mc=ht.info.MC)
+        ht = ht.filter(ht.mc.any(lambda x: x.contains(missense_str)))
+        logger.info("Getting gene information from ClinVar HT...")
+        ht = ht.annotate(gene=ht.info.GENEINFO.split(":")[0])
+        ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/clinvar.ht", overwrite=True)
+        logger.info("Number of variants after filtering to missense: %i", ht.count())
 
         logger.info("Filtering to variants in haploinsufficient genes...")
-        # File header is '#gene'
-        hi_ht = hl.import_table(hi_genes)
-        hi_gene_set = hi_ht.aggregate(
-            hl.agg.collect_as_set(hi_ht["#gene"]), _localize=False
-        )
-
-        logger.info("Getting gene information from ClinVar HT...")
-        clinvar_ht = clinvar_ht.annotate(gene=clinvar_ht.info.GENEINFO.split(":")[0])
-        clinvar_ht = clinvar_ht.filter(hi_gene_set.contains(clinvar_ht.gene))
-        clinvar_ht = clinvar_ht.checkpoint(clinvar_ht_path, overwrite=overwrite)
+        if not file_exists(haplo_genes):
+            import_dosage(overwrite)
+        hi_genes = hl.experimental.read_expression(haplo_genes_he)
+        haplo_ht = ht.filter(hi_genes.contains(ht.gene))
+        haplo_ht = haplo_ht.checkpoint(clinvar_plp_hi_mis.path, overwrite=overwrite)
         logger.info(
             "Number of variants after filtering to HI genes: %i", clinvar_ht.count()
+        )
+
+        logger.info("Filtering to variants in triplosensitive genes...")
+        triplo_genes = hl.experimental.read_expression(triplo_genes_he)
+        triplo_ht = ht.filter(triplo_genes.contains(ht.gene))
+        triplo_ht = triplo_ht.checkpoint(clinvar_plp_trip_mis.path, overwrite=overwrite)
+        logger.info(
+            "Number of variants after filtering to triplosensitive genes: %i",
+            clinvar_ht.count(),
         )
 
 
@@ -553,10 +608,8 @@ def import_fu_data(overwrite: bool) -> None:
     :param overwrite: Whether to overwrite Table if it exists.
     :return: None; Function writes Table to temporary path.
     """
-    import reference_data.asc_ssc_spark_de_novo_tsv as fu_tsv_path
-
     fu_ht = hl.import_table(
-        fu_tsv_path,
+        asc_ssc_spark_de_novo_tsv,
         impute=True,
         # Skip blank lines at the bottom of this TSV
         missing="",
@@ -613,9 +666,7 @@ def import_kaplanis_data(overwrite: bool) -> None:
     :param overwrite: Whether to overwrite Table if it exists.
     :return: None; Function writes Table to temporary path.
     """
-    import reference_data.ddd_autism_de_novo_tsv as kaplanis_tsv_path
-
-    kap_ht = hl.import_table(kaplanis_tsv_path, impute=True)
+    kap_ht = hl.import_table(ddd_autism_de_novo_tsv, impute=True)
     kap_ht = kap_ht.transmute(
         locus=hl.locus(kap_ht.chrom, kap_ht.pos),
         alleles=[kap_ht.ref, kap_ht.alt],
@@ -628,11 +679,7 @@ def import_kaplanis_data(overwrite: bool) -> None:
     kap_ht.write(f"{TEMP_PATH_WITH_FAST_DEL}/kaplanis_dn.ht", overwrite=overwrite)
 
 
-def import_de_novo_variants(
-    overwrite: bool,
-    csq_str: str = "consequence",
-    missense_str: str = MISSENSE,
-) -> None:
+def import_de_novo_variants(overwrite: bool) -> None:
     """
     Import de novo missense variants.
 
@@ -640,13 +687,8 @@ def import_de_novo_variants(
         These files currently only exist for build GRCh37.
 
     :param bool overwrite: Whether to overwrite de novo Table.
-    :param str csq_str: Name of field in de novo TSV that contains variant consequence.
-        Default is 'consequence'.
-    :param str missense_str: String representing missense variant effect. Default is MISSENSE.
     :return: None; writes HT to resource path.
     """
-    import reference_data.de_novo.path as ht_path
-
     fu_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht"
     kaplanis_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/kaplanis_dn.ht"
     if not file_exists(fu_ht_path) or overwrite:
@@ -657,4 +699,4 @@ def import_de_novo_variants(
         kap_ht = hl.read_table(kaplanis_ht_path)
 
     ht = kap_ht.join(fu_ht, how="outer")
-    ht.write(ht_path, overwrite=overwrite)
+    ht.write(de_novo.path, overwrite=overwrite)

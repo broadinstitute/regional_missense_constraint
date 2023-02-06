@@ -63,14 +63,14 @@ HT of genes and genes and dosage sensitivity scores.
 Imported from `dosage_tsv`.
 """
 
-haplo_genes = f"{REF_DATA_PREFIX}/ht/phaplo_genes.he"
+haplo_genes_he = f"{REF_DATA_PREFIX}/ht/phaplo_genes.he"
 """
 HailExpression of haploinsufficient genes.
 
 List of HI genes was determined by filtering to genes with pHaplo >= 0.86.
 """
 
-triplo_genes = f"{REF_DATA_PREFIX}/ht/ptriplo_genes.he"
+triplo_genes_he = f"{REF_DATA_PREFIX}/ht/ptriplo_genes.he"
 """
 HailExpression of triplosensitive genes.
 
