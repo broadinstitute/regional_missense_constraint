@@ -59,11 +59,63 @@ REF_DATA_PREFIX = f"{RESOURCE_BUILD_PREFIX}/reference_data"
 Path to bucket containing reference data resources.
 """
 
-clinvar_path_mis = TableResource(
+dosage_tsv = f"{REF_DATA_PREFIX}/Collins_rCNV_2022.dosage_sensitivity_scores.tsv.gz"
+"""
+TSV of genes and dosage sensitivity scores.
+
+Scores are pHaplo (haplosensitivity score) and pTriplo
+(triplosensitivity score).
+
+TSV was downloaded from: https://zenodo.org/record/6347673.
+
+Data are from Collins et al. A cross-disorder dosage sensitivity map of the human genome.
+(2022)
+"""
+
+dosage_ht = TableResource(path=f"{REF_DATA_PREFIX}/ht/dosage_sensitivity.ht")
+"""
+HT of genes and genes and dosage sensitivity scores.
+
+Imported from `dosage_tsv`.
+"""
+
+haplo_genes = f"{REF_DATA_PREFIX}/ht/phaplo_genes.he"
+"""
+HailExpression of haploinsufficient genes.
+
+List of HI genes was determined by filtering to genes with pHaplo >= 0.86.
+"""
+
+triplo_genes = f"{REF_DATA_PREFIX}/ht/ptriplo_genes.he"
+"""
+HailExpression of triplosensitive genes.
+
+List of triplosensitive genes was determined by filtering to genes with pTriplo >= 0.94.
+"""
+
+clinvar = TableResource(
+    path="gs://seqr-reference-data/GRCh37/clinvar/clinvar.GRCh37.ht",
+)
+"""
+
+Table of ClinVar variants maintained by the seqr team.
+
+Last version of this HT accessed by RMC team corresponds to 20230121 ClinVar release.
+"""
+
+clinvar_plp_hi_mis = TableResource(
     path=f"{REF_DATA_PREFIX}/ht/clinvar_pathogenic_missense.ht",
 )
 """
-ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes that cause severe disease.
+ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient (HI)
+genes.
+"""
+
+clinvar_plp_trip_mis = TableResource(
+    path=f"{REF_DATA_PREFIX}/ht/clinvar_pathogenic_missense_triplo.ht",
+)
+"""
+ClinVar pathogenic/likely pathogenic missense variants in triplosensitive genes.
 """
 
 ddd_autism_de_novo_tsv = (
@@ -74,8 +126,10 @@ De novo variants from 31,058 cases with developmental disorders, 6,430 autistic 
 
 Controls are the siblings of the autism cases.
 Samples are from:
-Kaplanis et al. (Evidence for 28 genetic disorders discovered by combining healthcare and research data.)
-Satterstrom et al. (Large-Scale Exome Sequencing Study Implicates Both Developmental and Functional Changes in the Neurobiology of Autism.)
+Kaplanis et al. Evidence for 28 genetic disorders discovered by
+combining healthcare and research data. (2020)
+Satterstrom et al. Large-Scale Exome Sequencing Study Implicates Both Developmental
+and Functional Changes in the Neurobiology of Autism. (2020)
 """
 
 asc_ssc_spark_de_novo_tsv = f"{REF_DATA_PREFIX}/fu_2022_supp20.txt"
@@ -99,7 +153,8 @@ Samples are from the following cohorts:
 - Simons Foundation Powering Autism Research for Knowledge (SPARK initiative)
 
 Samples are from:
-Fu et al. (Rare coding variation provides insight into the genetic architecture and phenotypic context of autism)
+Fu et al. Rare coding variation provides insight into the genetic architecture
+and phenotypic context of autism (2022)
 """
 
 de_novo = TableResource(
