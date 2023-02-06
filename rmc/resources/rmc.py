@@ -22,7 +22,7 @@ from rmc.resources.basics import (
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
 
-FREEZES = [1, 2, 3, 4]
+FREEZES = [1, 2, 3, 4, 5, 6, 7]
 """
 RMC/MPC data versions computed with current gnomAD version.
 """
