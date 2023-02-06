@@ -497,6 +497,7 @@ def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
 
 
 ## Assessment utils
+## TODO: update these with code used to import newest resources
 def import_clinvar_hi_variants(overwrite: bool) -> None:
     """
     Import ClinVar HT and filter to pathogenic/likely pathogenic missense variants in haploinsufficient genes.
