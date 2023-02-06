@@ -489,10 +489,9 @@ def get_dpois_expr(
     :return: log10 of the probability under Poisson model.
     """
     # log_p = True returns the natural logarithm of the probability density
-    # Divide this value by hl.log(10) to convert to log base 10
     return hl.or_missing(
         cond_expr,
-        hl.dpois(obs_expr, exp_expr * section_oe_expr, log_p=True) / hl.log(10),
+        hl.dpois(obs_expr, exp_expr * section_oe_expr, log_p=True),
     )
 
 
