@@ -161,7 +161,7 @@ def get_dpois_expr(
     ],
 ) -> hl.expr.StructExpression:
     """
-    Calculate probabilities (in log10 space) of the observed values under a Poisson model.
+    Calculate probabilities (natural log) of the observed values under a Poisson model.
 
     Typically imported from `constraint.py`. See `constraint.py` for full docstring.
 
@@ -169,7 +169,7 @@ def get_dpois_expr(
     :param section_oe_expr: Expression of section observed/expected value.
     :param obs_expr: Expression containing observed variants count.
     :param exp_expr: Expression containing expected variants count.
-    :return: log10 of the probability under Poisson model.
+    :return: natural log of the probability under Poisson model.
     """
     # log_p = True returns the natural logarithm of the probability density
     return hl.or_missing(
