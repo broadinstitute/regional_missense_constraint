@@ -161,7 +161,7 @@ def get_dpois_expr(
     ],
 ) -> hl.expr.StructExpression:
     """
-    Calculate probabilities (in log10 space) of the observed values under a Poisson model.
+    Calculate probabilities (natural log) of the observed values under a Poisson model.
 
     Typically imported from `constraint.py`. See `constraint.py` for full docstring.
 
@@ -169,13 +169,11 @@ def get_dpois_expr(
     :param section_oe_expr: Expression of section observed/expected value.
     :param obs_expr: Expression containing observed variants count.
     :param exp_expr: Expression containing expected variants count.
-    :return: log10 of the probability under Poisson model.
+    :return: natural log of the probability under Poisson model.
     """
     # log_p = True returns the natural logarithm of the probability density
-    # Divide this value by hl.log(10) to convert to log base 10
     return hl.or_missing(
-        cond_expr,
-        hl.dpois(obs_expr, exp_expr * section_oe_expr, log_p=True) / hl.log(10),
+        cond_expr, hl.dpois(obs_expr, exp_expr * section_oe_expr, log_p=True)
     )
 
 
@@ -193,7 +191,7 @@ def calculate_window_chisq(
 
     Used only when calculating simultaneous breaks.
 
-    Chi square formula: 2 * (hl.log10(total_alt) - hl.log10(total_null))
+    Chi square formula: 2 * (hl.log(total_alt) - hl.log(total_null))
 
     :param hl.expr.Int32Expression max_idx: Largest list index value.
     :param hl.expr.Int32Expression i: Smaller list index value corresponding to the smaller position of the two break window.

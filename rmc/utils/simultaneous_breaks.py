@@ -208,7 +208,7 @@ def calculate_window_chisq(
 
     Used only when calculating simultaneous breaks.
 
-    Chi square formula: 2 * (hl.log10(total_alt) - hl.log10(total_null))
+    Chi square formula: 2 * (hl.log(total_alt) - hl.log(total_null))
 
     :param hl.expr.Int32Expression max_idx: Largest list index value.
     :param hl.expr.Int32Expression i: Smaller list index value corresponding to the smaller position of the two break window.

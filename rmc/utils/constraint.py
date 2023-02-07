@@ -478,7 +478,7 @@ def get_dpois_expr(
     ],
 ) -> hl.expr.StructExpression:
     """
-    Calculate probabilities (in log10 space) of the observed values under a Poisson model.
+    Calculate probabilities (natural log) of the observed values under a Poisson model.
 
     Rate in model given by expected * section observed/expected values.
 
@@ -486,13 +486,12 @@ def get_dpois_expr(
     :param section_oe_expr: Expression of section observed/expected value.
     :param obs_expr: Expression containing observed variants count.
     :param exp_expr: Expression containing expected variants count.
-    :return: log10 of the probability under Poisson model.
+    :return: natural log of the probability under Poisson model.
     """
     # log_p = True returns the natural logarithm of the probability density
-    # Divide this value by hl.log(10) to convert to log base 10
     return hl.or_missing(
         cond_expr,
-        hl.dpois(obs_expr, exp_expr * section_oe_expr, log_p=True) / hl.log(10),
+        hl.dpois(obs_expr, exp_expr * section_oe_expr, log_p=True),
     )
 
 
