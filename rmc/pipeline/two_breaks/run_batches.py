@@ -30,6 +30,7 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
+    CHISQ_THRESHOLDS,
     CURRENT_FREEZE,
     grouped_single_no_break_ht_path,
     simul_sections_split_by_len_path,
@@ -121,7 +122,7 @@ def simul_search_round_bucket_path(
         Must be in `bucket_names`.
     :param bucket_names: Possible bucket names for simultaneous search bucket type.
         Default is `SIMUL_SEARCH_BUCKET_NAMES`.
-        :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Path to a bucket in the simultaneous break search round bucket.
     """
     assert bucket_type in bucket_names, f"Bucket type must be one of {bucket_names}!"
@@ -290,6 +291,7 @@ def search_for_two_breaks(
     min_num_exp_mis: float = 10,
     min_chisq_threshold: float = 7.4,
     save_chisq_ht: bool = False,
+    freeze: int = CURRENT_FREEZE,
 ) -> hl.Table:
     """
     Search for transcripts/transcript sections with simultaneous breaks.
@@ -312,6 +314,7 @@ def search_for_two_breaks(
         (as long as chi square value is >= min_chisq_threshold).
         This saves a lot of extra data and should only occur during the initial search round.
         Default is False.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Table filtered to transcript/sections with significant simultaneous breakpoints
         and annotated with breakpoint information.
     """
@@ -365,12 +368,12 @@ def search_for_two_breaks(
     )
     if save_chisq_ht:
         group_ht = group_ht.checkpoint(
-            f"{SIMUL_BREAK_TEMP_PATH}/batch_temp_chisq_group{count}.ht",
+            f"{SIMUL_BREAK_TEMP_PATH}/freeze{freeze}_batch_temp_chisq_group{count}.ht",
             overwrite=True,
         )
     else:
         group_ht = group_ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/batch_temp_chisq_group{count}.ht",
+            f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_batch_temp_chisq_group{count}.ht",
             overwrite=True,
         )
     # Remove rows with maximum chi square values below the threshold
@@ -393,6 +396,7 @@ def process_section_group(
     save_chisq_ht: bool = False,
     requester_pays_bucket: str = RMC_PREFIX,
     google_project: str = "broad-mpg-gnomad",
+    freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
     Run two simultaneous breaks search on a group of transcripts or transcript sections.
@@ -496,6 +500,7 @@ def process_section_group(
         prep_path = simul_search_round_bucket_path(
             search_num=search_num,
             bucket_type="prep",
+            freeze=freeze,
         )
         ht = ht.checkpoint(
             f"{prep_path}/{section_group[0]}.ht",
@@ -526,6 +531,7 @@ def process_section_group(
         raw_path = simul_search_round_bucket_path(
             search_num=search_num,
             bucket_type="raw_results",
+            freeze=freeze,
         )
         ht = ht.checkpoint(f"{raw_path}/{section_group[0]}.ht", overwrite=True)
         # If any rows had a significant breakpoint,
@@ -544,6 +550,7 @@ def process_section_group(
     success_tsvs_path = simul_search_round_bucket_path(
         search_num=search_num,
         bucket_type="success_files",
+        freeze=freeze,
     )
     for section in section_group:
         tsv_path = f"{success_tsvs_path}/{section}.tsv"
@@ -576,6 +583,7 @@ def main(args):
                         simul_sections_split_by_len_path(
                             search_num=args.search_num,
                             is_over_threshold=False,
+                            freeze=args.freeze,
                         )
                     )
                 )
@@ -587,6 +595,7 @@ def main(args):
                         simul_sections_split_by_len_path(
                             search_num=args.search_num,
                             is_over_threshold=True,
+                            freeze=args.freeze,
                         )
                     )
                 )
@@ -602,6 +611,7 @@ def main(args):
     raw_path = simul_search_round_bucket_path(
         search_num=args.search_num,
         bucket_type="raw_results",
+        freeze=args.freeze,
     )
 
     if not args.docker_image:
@@ -664,7 +674,7 @@ def main(args):
             j.storage(args.batch_storage)
             j.call(
                 process_section_group,
-                ht_path=grouped_single_no_break_ht_path(args.search_num),
+                ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
                 section_group=group,
                 count=group_num,
                 search_num=args.search_num,
@@ -675,6 +685,7 @@ def main(args):
                 split_list_len=args.group_size,
                 save_chisq_ht=save_chisq_ht,
                 google_project=args.google_project,
+                freeze=args.freeze,
             )
             count += 1
 
@@ -701,7 +712,7 @@ def main(args):
                 j.storage(args.batch_storage)
             j.call(
                 process_section_group,
-                ht_path=grouped_single_no_break_ht_path(args.search_num),
+                ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
                 section_group=group,
                 count=group_num,
                 search_num=args.search_num,
@@ -712,6 +723,7 @@ def main(args):
                 split_list_len=args.group_size,
                 save_chisq_ht=save_chisq_ht,
                 google_project=args.google_project,
+                freeze=args.freeze,
             )
             count += 1
     b.run(wait=False)
@@ -727,9 +739,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--chisq-threshold",
-        help="Chi-square significance threshold. Value should be 9.2 (value adjusted from ExAC code due to discussion with Mark).",
+        help="Chi-square significance threshold. Default is `CHISQ_THRESHOLDS['simul']`.",
         type=float,
-        default=9.2,
+        default=CHISQ_THRESHOLDS["simul"],
     )
     parser.add_argument(
         "--output-n-partitions",
@@ -754,6 +766,11 @@ if __name__ == "__main__":
         specified for any batches that failed the first submission.
         """,
         action="store_true",
+    )
+    parser.add_argument(
+        "--freeze",
+        help="RMC data freeze number",
+        default=CURRENT_FREEZE,
     )
 
     section_size = parser.add_mutually_exclusive_group(required=True)
