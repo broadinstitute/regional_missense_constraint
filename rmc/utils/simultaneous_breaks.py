@@ -86,6 +86,7 @@ def split_sections_by_len(
     search_num: int,
     missense_len_threshold: int,
     overwrite: bool,
+    freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
     Split transcripts/transcript sections based on the specified number of possible missense sites.
@@ -99,6 +100,7 @@ def split_sections_by_len(
         (e.g., second round of searching for single break would be 2).
     :param missense_len_threshold: Cutoff based on possible number of missense sites in section.
     :param overwrite: Whether to overwrite existing SetExpressions.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: None; writes SetExpressions to resource paths.
     """
     ht = hl.read_table(ht_path)
@@ -137,6 +139,7 @@ def split_sections_by_len(
             simul_sections_split_by_len_path(
                 search_num=search_num,
                 is_over_threshold=False,
+                freeze=freeze,
             ),
             overwrite,
         )
@@ -146,6 +149,7 @@ def split_sections_by_len(
             simul_sections_split_by_len_path(
                 search_num=search_num,
                 is_over_threshold=True,
+                freeze=freeze,
             ),
             overwrite,
         )
@@ -155,6 +159,7 @@ def get_sections_to_run(
     sections: List[str],
     search_num: int,
     in_parallel: bool = True,
+    freeze: int = CURRENT_FREEZE,
 ) -> List[str]:
     """
     Check if any transcripts/sections have been previously searched by searching for success TSV existence.
@@ -167,12 +172,14 @@ def get_sections_to_run(
         (e.g., second round of searching for single break would be 2).
     :param bool in_parallel: Whether to check if successful file exist in parallel.
         If True, must be run locally and not in Dataproc. Default is True.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: List of transcripts/sections that didn't have success TSVs and therefore still need to be processed.
     """
     logger.info("Checking if any transcripts have already been searched...")
     success_file_path = simul_search_round_bucket_path(
         search_num=search_num,
         bucket_type="success_files",
+        freeze=freeze,
     )
     section_success_map = {}
     sections_to_run = []
@@ -307,6 +314,7 @@ def search_for_two_breaks(
     min_num_exp_mis: float = 10,
     min_chisq_threshold: float = 7.4,
     save_chisq_ht: bool = False,
+    freeze: int = CURRENT_FREEZE,
 ) -> hl.Table:
     """
     Search for transcripts/transcript sections with simultaneous breaks.
@@ -329,6 +337,7 @@ def search_for_two_breaks(
         (as long as chi square value is >= min_chisq_threshold).
         This saves a lot of extra data and should only occur during the initial search round.
         Default is False.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Table filtered to transcript/sections with significant simultaneous breakpoints
         and annotated with breakpoint information.
     """
@@ -382,12 +391,12 @@ def search_for_two_breaks(
     )
     if save_chisq_ht:
         group_ht = group_ht.checkpoint(
-            f"{SIMUL_BREAK_TEMP_PATH}/dataproc_temp_chisq_group{count}.ht",
+            f"{SIMUL_BREAK_TEMP_PATH}/freeze{freeze}_dataproc_temp_chisq_group{count}.ht",
             overwrite=True,
         )
     else:
         group_ht = group_ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/dataproc_temp_chisq_group{count}.ht",
+            f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_dataproc_temp_chisq_group{count}.ht",
             overwrite=True,
         )
     # Remove rows with maximum chi square values below the threshold
@@ -408,6 +417,7 @@ def process_section_group(
     split_list_len: int = 500,
     read_if_exists: bool = False,
     save_chisq_ht: bool = False,
+    freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
     Run two simultaneous breaks search on a group of transcripts or transcript sections.
@@ -442,6 +452,7 @@ def process_section_group(
         (as long as chi square value is >= min_chisq_threshold).
         This saves a lot of extra data and should only occur during the initial search round.
         Default is False.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: None; processes Table and writes to path. Also writes success TSV to path.
     """
     ht = hl.read_table(ht_path)
@@ -501,6 +512,7 @@ def process_section_group(
         prep_path = simul_search_round_bucket_path(
             search_num=search_num,
             bucket_type="prep",
+            freeze=freeze,
         )
         ht = ht.checkpoint(
             f"{prep_path}/{section_group[0]}.ht",
@@ -531,6 +543,7 @@ def process_section_group(
         raw_path = simul_search_round_bucket_path(
             search_num=search_num,
             bucket_type="raw_results",
+            freeze=freeze,
         )
         ht = ht.checkpoint(f"{raw_path}/{section_group[0]}.ht", overwrite=True)
         # If any rows had a significant breakpoint,
@@ -549,6 +562,7 @@ def process_section_group(
     success_tsvs_path = simul_search_round_bucket_path(
         search_num=search_num,
         bucket_type="success_files",
+        freeze=freeze,
     )
     for section in section_group:
         tsv_path = f"{success_tsvs_path}/{section}.tsv"
