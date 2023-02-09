@@ -11,6 +11,7 @@ from gnomad.utils.constraint import annotate_mutation_type
 from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import (
+    SINGLE_BREAK_TEMP_PATH,
     TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
 )
@@ -529,6 +530,7 @@ def search_for_break(
     chisq_threshold: float = CHISQ_THRESHOLDS["single"],
     group_str: str = "section",
     min_num_exp_mis: float = 10.0,
+    save_chisq_ht: bool = False,
 ) -> hl.Table:
     """
     Search for breakpoints in a transcript or within a transcript subsection.
@@ -563,6 +565,10 @@ def search_for_break(
         Sections that have fewer than this number of expected missense variants will not
         be computed (chi square will be annotated as a missing value).
         Default is 10.
+    :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
+        (as long as chi square value is >= min_chisq_threshold).
+        This saves a lot of extra data and should only occur during the initial search round.
+        Default is False.
     :return: Table annotated with whether position is a breakpoint (`is_break`).
     """
     logger.info(
@@ -627,8 +633,9 @@ def search_for_break(
         )
     )
 
+    temp_path = SINGLE_BREAK_TEMP_PATH if save_chisq_ht else TEMP_PATH_WITH_FAST_DEL
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/round{search_num}_all_loci_chisq.ht", overwrite=True
+        f"{temp_path}/round{search_num}_all_loci_chisq.ht", overwrite=True
     )
 
     ht = get_max_chisq_per_group(ht, group_str, "chisq")
@@ -695,6 +702,7 @@ def process_sections(
     search_num: int,
     chisq_threshold: float = CHISQ_THRESHOLDS["single"],
     group_str: str = "section",
+    save_chisq_ht: bool = False,
 ):
     """
     Search for breaks within given sections of a transcript.
@@ -716,6 +724,10 @@ def process_sections(
     :param chisq_threshold: Chi-square significance threshold.
         Default is CHISQ_THRESHOLDS['single'].
     :param group_str: Field used to group observed and expected values. Default is 'section'.
+    :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
+        (as long as chi square value is >= min_chisq_threshold).
+        This saves a lot of extra data and should only occur during the initial search round.
+        Default is False.
     :return: Table annotated with whether position is a breakpoint.
     """
     # TODO: When re-running, make sure `get_subsection_exprs`,
@@ -748,6 +760,7 @@ def process_sections(
         ht,
         search_num,
         chisq_threshold=chisq_threshold,
+        save_chisq_ht=save_chisq_ht,
     )
     return ht
 

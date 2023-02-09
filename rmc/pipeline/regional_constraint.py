@@ -266,24 +266,44 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
+            run_single_search = True
 
             logger.info(
                 "Searching for transcripts or transcript subsections with a single significant break..."
             )
             if args.search_num == 1:
-                # Read constraint_prep resource HT if this is the first search
-                ht = constraint_prep.ht()
 
-                logger.info(
-                    "Adding section annotation before searching for first break..."
+                all_loci_chisq_ht_path = (
+                    f"{SINGLE_BREAK_TEMP_PATH}/round{args.search_num}_all_loci_chisq.ht"
                 )
-                # Add transcript start and stop positions from browser HT
-                transcript_ht = gene_model.ht().select("start", "stop")
-                ht = ht.annotate(**transcript_ht[ht.transcript])
-                ht = ht.annotate(
-                    section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop)
-                ).drop("start", "stop")
-                ht = ht.key_by("locus", "section").drop("transcript")
+                if file_exists(all_loci_chisq_ht_path):
+                    ht = hl.read_table(all_loci_chisq_ht_path)
+                    ht = get_max_chisq_per_group(ht, "section", "chisq")
+                    ht = ht.annotate(
+                        is_break=(
+                            (ht.chisq == ht.section_max_chisq)
+                            & (ht.chisq >= args.chisq_threshold)
+                        )
+                    )
+                    run_single_search = False
+
+                else:
+                    # Read constraint_prep resource HT if this is the first search
+                    ht = constraint_prep.ht()
+
+                    logger.info(
+                        "Adding section annotation before searching for first break..."
+                    )
+                    # Add transcript start and stop positions from browser HT
+                    transcript_ht = gene_model.ht().select("start", "stop")
+                    ht = ht.annotate(**transcript_ht[ht.transcript])
+                    ht = ht.annotate(
+                        section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop)
+                    ).drop("start", "stop")
+                    ht = ht.key_by("locus", "section").drop("transcript")
+
+                    # Save temporary HT with all chi square values
+                    save_chisq_ht = True
             else:
                 # Read in merged single and simultaneous breaks results HT
                 ht = hl.read_table(
@@ -292,19 +312,22 @@ def main(args):
                         freeze=args.freeze,
                     ),
                 )
+                save_chisq_ht = False
 
-            logger.info(
-                "Calculating nulls, alts, and chi square values and checkpointing..."
-            )
-            ht = process_sections(
-                ht=ht,
-                search_num=args.search_num,
-                chisq_threshold=chisq_threshold,
-            )
-            ht = ht.checkpoint(
-                f"{TEMP_PATH_WITH_FAST_DEL}/round{args.search_num}_temp.ht",
-                overwrite=True,
-            )
+            if run_single_search:
+                logger.info(
+                    "Calculating nulls, alts, and chi square values and checkpointing..."
+                )
+                ht = process_sections(
+                    ht=ht,
+                    search_num=args.search_num,
+                    chisq_threshold=chisq_threshold,
+                    save_chisq_ht=save_chisq_ht,
+                )
+                ht = ht.checkpoint(
+                    f"{TEMP_PATH_WITH_FAST_DEL}/round{args.search_num}_temp.ht",
+                    overwrite=True,
+                )
 
             logger.info(
                 "Extracting breakpoints found in round %i...",
