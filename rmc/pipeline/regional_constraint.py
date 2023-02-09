@@ -62,7 +62,11 @@ def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
     try:
         if args.pre_process_data:
-            hl.init(log="/RMC_pre_process.log", tmp_dir=TEMP_PATH_WITH_FAST_DEL)
+            hl.init(
+                log="/RMC_pre_process.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
+            )
             # TODO: Add code to create annotations necessary for constraint_flag_expr and filter transcripts prior to running constraint
             logger.warning("Code currently only processes b37 data!")
 
@@ -104,7 +108,11 @@ def main(args):
             logger.info("Done preprocessing files")
 
         if args.prep_for_constraint:
-            hl.init(log="/RMC_prep_for_constraint.log", tmp_dir=TEMP_PATH_WITH_FAST_DEL)
+            hl.init(
+                log="/RMC_prep_for_constraint.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
+            )
             logger.info("Reading in exome HT...")
             exome_ht = filtered_exomes.ht()
 
@@ -256,6 +264,7 @@ def main(args):
             hl.init(
                 log=f"/round{args.search_num}_single_break_search.log",
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
             )
 
             logger.info(
@@ -353,6 +362,7 @@ def main(args):
             hl.init(
                 log=f"/round{args.search_num}_merge_single_simul.log",
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
             )
             # Get locus input to this simultaneous break search round from single search no-break HT
             single_no_break_ht = hl.read_table(
@@ -492,7 +502,11 @@ def main(args):
             # DONE: 4. Create and write final no break found ht for this round number
 
         if args.finalize:
-            hl.init(log="/RMC_finalize.log", tmp_dir=TEMP_PATH_WITH_FAST_DEL)
+            hl.init(
+                log="/RMC_finalize.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
+            )
 
             logger.info("Checking round paths...")
             round_nums = check_break_search_round_nums()
@@ -605,6 +619,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
+    )
+    parser.add_argument(
+        "--quiet",
+        help="Initialize Hail with `quiet=True` to print fewer log messages",
+        action="store_true",
     )
     args = parser.parse_args()
 
