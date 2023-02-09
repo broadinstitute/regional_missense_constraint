@@ -531,6 +531,7 @@ def search_for_break(
     group_str: str = "section",
     min_num_exp_mis: float = 10.0,
     save_chisq_ht: bool = False,
+    min_chisq_threshold: float = 2.7,
 ) -> hl.Table:
     """
     Search for breakpoints in a transcript or within a transcript subsection.
@@ -565,8 +566,7 @@ def search_for_break(
         Sections that have fewer than this number of expected missense variants will not
         be computed (chi square will be annotated as a missing value).
         Default is 10.
-    :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
-        (as long as chi square value is >= min_chisq_threshold).
+    :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus.
         This saves a lot of extra data and should only occur during the initial search round.
         Default is False.
     :return: Table annotated with whether position is a breakpoint (`is_break`).
@@ -724,8 +724,7 @@ def process_sections(
     :param chisq_threshold: Chi-square significance threshold.
         Default is CHISQ_THRESHOLDS['single'].
     :param group_str: Field used to group observed and expected values. Default is 'section'.
-    :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
-        (as long as chi square value is >= min_chisq_threshold).
+    :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus.
         This saves a lot of extra data and should only occur during the initial search round.
         Default is False.
     :return: Table annotated with whether position is a breakpoint.
