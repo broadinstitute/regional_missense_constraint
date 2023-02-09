@@ -36,10 +36,12 @@ def main(args):
         raw_path = simul_search_round_bucket_path(
             search_num=args.search_num,
             bucket_type="raw_results",
+            freeze=args.freeze,
         )
         results_path = simul_search_round_bucket_path(
             search_num=args.search_num,
             bucket_type="final_results",
+            freeze=args.freeze,
         )
         merge_simul_break_temp_hts(
             input_hts_path=raw_path,
@@ -80,6 +82,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="This regional missense constraint script merges all intermediate simultaneous breaks results Tables into a single Table.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--freeze",
+        help="RMC data freeze number",
+        default=CURRENT_FREEZE,
     )
     parser.add_argument(
         "--overwrite", help="Overwrite existing data.", action="store_true"
