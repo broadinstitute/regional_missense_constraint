@@ -370,6 +370,7 @@ def main(args):
                     search_num=args.search_num,
                     is_break_found=False,
                     is_breakpoint_only=False,
+                    freeze=args.freeze,
                 )
             )
 
@@ -440,6 +441,7 @@ def main(args):
                 search_num=args.search_num,
                 is_break_found=True,
                 is_breakpoint_only=False,
+                freeze=args.freeze,
             )
 
             if file_exists(single_break_path):
@@ -509,7 +511,7 @@ def main(args):
             )
 
             logger.info("Checking round paths...")
-            round_nums = check_break_search_round_nums()
+            round_nums = check_break_search_round_nums(args.freeze)
 
             logger.info("Finalizing section-level RMC table...")
             rmc_ht = merge_rmc_hts(round_nums=round_nums)

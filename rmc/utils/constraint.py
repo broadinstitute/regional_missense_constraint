@@ -25,6 +25,7 @@ from rmc.utils.generic import (
 from rmc.resources.rmc import (
     CHISQ_THRESHOLDS,
     CONSTRAINT_ANNOTATIONS,
+    CURRENT_FREEZE,
     FINAL_ANNOTATIONS,
     no_breaks,
     oe_bin_counts_tsv,
@@ -898,7 +899,7 @@ def get_break_search_round_nums(
     return sorted(round_nums)
 
 
-def check_break_search_round_nums() -> List[int]:
+def check_break_search_round_nums(freeze: int = CURRENT_FREEZE) -> List[int]:
     """
     Check for valid single and simultaneous break search round number outputs.
 
@@ -908,11 +909,16 @@ def check_break_search_round_nums() -> List[int]:
     .. note::
         Assumes there is a folder for each search round run, regardless of whether there were breaks discovered
 
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Sorted list of round numbers.
     """
     # Get sorted round numbers
-    single_search_round_nums = get_break_search_round_nums(single_search_bucket_path())
-    simul_search_round_nums = get_break_search_round_nums(simul_search_bucket_path())
+    single_search_round_nums = get_break_search_round_nums(
+        single_search_bucket_path(freeze)
+    )
+    simul_search_round_nums = get_break_search_round_nums(
+        simul_search_bucket_path(freeze)
+    )
     logger.info(
         "Single search round numbers: %s\nSimultaneous search round numbers: %s",
         ",".join(map(str, single_search_round_nums)),
