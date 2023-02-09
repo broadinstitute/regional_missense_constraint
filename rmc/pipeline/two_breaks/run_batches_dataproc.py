@@ -53,6 +53,7 @@ def main(args):
                         simul_sections_split_by_len_path(
                             search_num=args.search_num,
                             is_over_threshold=True,
+                            freeze=args.freeze,
                         )
                     )
                 )
@@ -65,6 +66,7 @@ def main(args):
                         simul_sections_split_by_len_path(
                             search_num=args.search_num,
                             is_over_threshold=False,
+                            freeze=args.freeze,
                         )
                     )
                 )
@@ -91,6 +93,7 @@ def main(args):
         raw_path = simul_search_round_bucket_path(
             search_num=args.search_num,
             bucket_type="raw_results",
+            freeze=args.freeze,
         )
         for counter, group in enumerate(section_groups):
 
@@ -101,7 +104,10 @@ def main(args):
                 )
 
             process_section_group(
-                ht_path=grouped_single_no_break_ht_path(args.search_num),
+                ht_path=grouped_single_no_break_ht_path(
+                    args.search_num,
+                    args.freeze,
+                ),
                 section_group=group,
                 count=counter,
                 search_num=args.search_num,
@@ -127,6 +133,11 @@ if __name__ == "__main__":
         """,
         # Add default values for args to help message
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--freeze",
+        help="RMC data freeze number",
+        default=CURRENT_FREEZE,
     )
     parser.add_argument(
         "--chisq-threshold",
