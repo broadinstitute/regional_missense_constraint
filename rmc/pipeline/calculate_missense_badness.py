@@ -13,6 +13,7 @@ from gnomad.utils.slack import slack_notifications
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.slack_creds import slack_token
 from rmc.utils.missense_badness import calculate_misbad, prepare_amino_acid_ht
+from rmc.utils.generic import copy_logs_when_finished
 
 
 logging.basicConfig(
@@ -26,7 +27,7 @@ logger.setLevel(logging.INFO)
 def main(args):
     """Calculate missense badness."""
     temp_dir = f"{TEMP_PATH_WITH_FAST_DEL}/mb/"
-    try:
+    with copy_logs_when_finished(LOGGING_PATH):
         if args.command == "prepare-ht":
             hl.init(log="/calc_misbad_prep_context_gamma_ht.log", tmp_dir=temp_dir)
             prepare_amino_acid_ht(
@@ -41,10 +42,6 @@ def main(args):
                 overwrite_temp=args.overwrite_temp,
                 overwrite_output=args.overwrite_output,
             )
-
-    finally:
-        logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(LOGGING_PATH)
 
 
 if __name__ == "__main__":
