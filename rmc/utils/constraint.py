@@ -21,6 +21,7 @@ from rmc.utils.generic import (
     keep_criteria,
     import_clinvar_hi_variants,
     import_de_novo_variants,
+    list_requester_pays_bucket,
 )
 from rmc.resources.rmc import (
     CHISQ_THRESHOLDS,
@@ -814,14 +815,7 @@ def merge_simul_break_temp_hts(
     :return: None; function writes HT to specified path.
     """
     logger.info("Collecting all HT paths...")
-    temp_ht_paths = (
-        subprocess.check_output(
-            ["gsutil", "-u", f"{google_project}", "ls", f"{input_hts_path}"]
-        )
-        .decode("utf8")
-        .strip()
-        .split("\n")
-    )
+    temp_ht_paths = list_requester_pays_bucket(input_hts_path, google_project)
 
     intermediate_hts = []
     ht_count = 0
@@ -881,14 +875,7 @@ def get_break_search_round_nums(
     :return: Sorted list of round numbers.
     """
     r = re.compile(round_num_regex)
-    round_paths = (
-        subprocess.check_output(
-            ["gsutil", "-u", f"{google_project}", "ls", f"{rounds_path}"]
-        )
-        .decode("utf8")
-        .strip()
-        .split("\n")
-    )
+    round_paths = list_requester_pays_bucket(rounds_path, google_project)
     round_nums = []
     for path in round_paths:
         m = r.findall(path)
