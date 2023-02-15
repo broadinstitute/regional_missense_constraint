@@ -13,7 +13,7 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
-from rmc.slack_creds import slack_token
+from rmc.utils.settings import SLACK_TOKEN
 from rmc.utils.mpc import (
     annotate_mpc,
     create_mpc_release_ht,
@@ -204,8 +204,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.slack_channel:
-        with slack_notifications(slack_token, args.slack_channel):
+    if args.slack_channel and SLACK_TOKEN:
+        with slack_notifications(SLACK_TOKEN, args.slack_channel):
             main(args)
     else:
         main(args)

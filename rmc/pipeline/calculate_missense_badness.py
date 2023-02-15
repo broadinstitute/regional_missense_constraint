@@ -11,7 +11,7 @@ import hail as hl
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
-from rmc.slack_creds import slack_token
+from rmc.utils.settings import SLACK_TOKEN
 from rmc.utils.missense_badness import calculate_misbad, prepare_amino_acid_ht
 
 
@@ -96,8 +96,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.slack_channel:
-        with slack_notifications(slack_token, args.slack_channel):
+    if args.slack_channel and SLACK_TOKEN:
+        with slack_notifications(SLACK_TOKEN, args.slack_channel):
             main(args)
     else:
         main(args)
