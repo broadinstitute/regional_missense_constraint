@@ -20,6 +20,8 @@ from gnomad.utils.vep import (
 
 from gnomad_constraint.utils.constraint import prepare_ht_for_constraint_calculations
 
+from google.cloud import storage
+
 from rmc.resources.basics import (
     ACID_NAMES_PATH,
     CODON_TABLE_PATH,
@@ -573,3 +575,21 @@ def import_de_novo_variants(
     # (MPC annotation requires input Table to be keyed by locus and alleles)
     dn_ht = dn_ht.key_by("locus", "alleles")
     dn_ht.write(ht_path, overwrite=overwrite)
+
+
+def list_requester_pays_bucket(path, billing_project) -> list[str]:
+    """Return full paths for objects in requester pays bucket."""
+    if not path.startswith("gs://"):
+        raise ValueError("Can only list contents for GCS requester pays buckets")
+
+    # uses application default credentials
+    client = storage.Client(project=billing_project)
+    components = path.removeprefix("gs://").split("/", maxsplit=1)
+    if len(components) > 1:
+        bucket_name, bucket_path = components
+    else:
+        bucket_name = components[0]
+        bucket_path = ""
+    blobs = client.list_blobs(bucket_name, prefix=bucket_path, delimiter="/")
+    # return fully qualified paths
+    return [f"gs://{bucket_name}/{blob.name}" for blob in blobs]
