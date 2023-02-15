@@ -1,6 +1,6 @@
 hail
 gnomad
-gnomad_constraint`
+gnomad_constraint
 patsy
 statsmodels
 tqdm
