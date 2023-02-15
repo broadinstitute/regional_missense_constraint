@@ -23,7 +23,7 @@ from rmc.resources.rmc import (
     simul_search_round_bucket_path,
     simul_sections_split_by_len_path,
 )
-from rmc.slack_creds import slack_token
+from rmc.utils.settings import SLACK_TOKEN
 from rmc.utils.simultaneous_breaks import process_section_group
 
 logging.basicConfig(
@@ -185,7 +185,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     if args.slack_channel:
-        with slack_notifications(slack_token, args.slack_channel):
+        with slack_notifications(SLACK_TOKEN, args.slack_channel):
             main(args)
     else:
         main(args)
