@@ -578,6 +578,7 @@ def import_de_novo_variants(
 
 @contextmanager
 def copy_logs_when_finished(logging_path):
+    """Copy log files when completed task, wrap task in try, finally to ensure log copy."""
     try:
         yield
     finally:
