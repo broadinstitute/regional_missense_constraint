@@ -48,9 +48,9 @@ Table containing transcript start and stop positions displayed in the browser.
 ######################################################################
 ## Gene/transcript resources
 ######################################################################
-dosage_tsv = f"{REF_DATA_PREFIX}/Collins_rCNV_2022.dosage_sensitivity_scores.tsv.gz"
+dosage_tsv_path = f"{REF_DATA_PREFIX}/Collins_rCNV_2022.dosage_sensitivity_scores.tsv.gz"
 """
-TSV of genes and dosage sensitivity scores.
+Path to TSV of genes and dosage sensitivity scores.
 
 Scores are pHaplo (haplosensitivity score) and pTriplo
 (triplosensitivity score).
@@ -70,14 +70,14 @@ Imported from `dosage_tsv`.
 
 haplo_genes_he = f"{REF_DATA_PREFIX}/ht/phaplo_genes.he"
 """
-HailExpression of haploinsufficient genes.
+Path to HailExpression of haploinsufficient genes.
 
 List of HI genes was determined by filtering to genes with pHaplo >= 0.86.
 """
 
 triplo_genes_he = f"{REF_DATA_PREFIX}/ht/ptriplo_genes.he"
 """
-HailExpression of triplosensitive genes.
+Path to HailExpression of triplosensitive genes.
 
 List of triplosensitive genes was determined by filtering to genes with pTriplo >= 0.94.
 """
@@ -112,7 +112,7 @@ clinvar_plp_mis_triplo = TableResource(
 ClinVar pathogenic/likely pathogenic missense variants in triplosensitive genes.
 """
 
-ddd_autism_de_novo_tsv = (
+ndd_de_novo_2020_tsv_path = (
     f"{REF_DATA_PREFIX}/fordist_KES_combined_asc_dd_dnms_2020_04_21_annotated.txt"
 )
 """

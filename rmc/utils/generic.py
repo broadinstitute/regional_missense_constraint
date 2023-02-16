@@ -521,9 +521,9 @@ def import_dosage(
     and triplosensitive genes.
 
     :param overwrite: Whether to overwrite output data.
-    :param haplo_threshold: Threshold for determining whether a gene is haploinsufficient.
+    :param haplo_threshold: pHaplo score threshold for determining whether a gene is predicted haploinsufficient.
         Default is 0.86 (from Collins et al. paper).
-    :param triplo_threshold: Threshold for determining whether a gene is triplosensitive.
+    :param triplo_threshold: pTriplo score threshold for determining whether a gene is predicted triplosensitive.
         Default is 0.94 (from Collins et al. paper).
     :return: None; function writes data to resource paths.
     """
@@ -565,7 +565,11 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
         Default is MISSENSE.
     :return: None; writes HTs and HEs to resource paths.
     """
-    if not file_exists(clinvar_ht_path) or overwrite:
+    if (
+        not file_exists(clinvar_plp_mis_haplo.path)
+        or not file_exists(clinvar_plp_mis_triplo.path)
+        or overwrite
+    ):
         logger.info("Reading in ClinVar HT...")
         ht = clinvar.ht()
         ht = filter_to_clinvar_pathogenic(ht)
