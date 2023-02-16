@@ -50,7 +50,7 @@ Table containing transcript start and stop positions displayed in the browser.
 ######################################################################
 dosage_tsv = f"{REF_DATA_PREFIX}/Collins_rCNV_2022.dosage_sensitivity_scores.tsv.gz"
 """
-TSV of genes and dosage sensitivity scores.
+Path to TSV of genes and dosage sensitivity scores.
 
 Scores are pHaplo (haplosensitivity score) and pTriplo
 (triplosensitivity score).
