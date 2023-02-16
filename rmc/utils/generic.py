@@ -534,7 +534,9 @@ def import_dosage(
         haplo_cutoff=haplo_threshold,
         triplo_cutoff=triplo_threshold,
     )
-    ht = ht.checkpoint(dosage_ht.path, overwrite=overwrite)
+    ht = ht.checkpoint(
+        dosage_ht.path, _read_if_exists=not overwrite, overwrite=overwrite
+    )
 
     haplo = ht.filter(ht.pHaplo >= haplo_threshold)
     hl.experimental.write_expression(
