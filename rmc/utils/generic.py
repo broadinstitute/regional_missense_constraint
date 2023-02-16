@@ -584,7 +584,9 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
         logger.info("Getting gene information from ClinVar HT...")
         ht = ht.annotate(gene=ht.info.GENEINFO.split(":")[0])
         ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/clinvar.ht", overwrite=True)
-        logger.info("Number of variants after filtering to missense: %i", ht.count())
+        logger.info(
+            "Number of variants after filtering to P/LP missense: %i", ht.count()
+        )
 
         logger.info("Filtering to variants in haploinsufficient genes...")
         if not file_exists(haplo_genes):
