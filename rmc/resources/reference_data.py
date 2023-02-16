@@ -70,14 +70,14 @@ HT of genes and genes and dosage sensitivity scores.
 Imported from TSV at `dosage_tsv_path`.
 """
 
-haplo_genes_he = f"{REF_DATA_PREFIX}/ht/phaplo_genes.he"
+haplo_genes_path = f"{REF_DATA_PREFIX}/ht/phaplo_genes.he"
 """
 Path to HailExpression of haploinsufficient genes.
 
 List of HI genes was determined by filtering to genes with pHaplo >= 0.86.
 """
 
-triplo_genes_he = f"{REF_DATA_PREFIX}/ht/ptriplo_genes.he"
+triplo_genes_path = f"{REF_DATA_PREFIX}/ht/ptriplo_genes.he"
 """
 Path to HailExpression of triplosensitive genes.
 
