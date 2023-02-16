@@ -671,7 +671,7 @@ def import_kaplanis_data(overwrite: bool) -> None:
     Function imports variants from TSV into HT, and filters to cases ascertained for
     developmental delay/intellectual disability only.
     Input TSV also contains autistic individuals, but these individuals overlap with
-    data from Fu et al. paper.
+    data from Fu et al. paper and are therefore not retained.
 
     :param overwrite: Whether to overwrite Table if it exists.
     :return: None; Function writes Table to temporary path.
