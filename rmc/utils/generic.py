@@ -29,7 +29,7 @@ from rmc.resources.gnomad import constraint_ht, mutation_rate
 from rmc.resources.reference_data import (
     autism_de_novo_2022_tsv_path,
     dosage_ht,
-    dosage_tsv,
+    dosage_tsv_path,
     clinvar,
     clinvar_plp_hi_mis,
     clinvar_plp_trip_mis,
@@ -527,7 +527,7 @@ def import_dosage(
         Default is 0.94 (from Collins et al. paper).
     :return: None; function writes data to resource paths.
     """
-    ht = hl.import_table(dosage_tsv, impute=True, force=True)
+    ht = hl.import_table(dosage_tsv_path, impute=True, force=True)
     ht = ht.transmute(gene=ht["#gene"])
     ht = ht.key_by("gene")
     ht = ht.annotate_globals(
