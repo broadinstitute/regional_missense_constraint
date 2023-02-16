@@ -109,7 +109,7 @@ clinvar_plp_mis_triplo = TableResource(
     path=f"{REF_DATA_PREFIX}/ht/clinvar_pathogenic_missense_triplo.ht",
 )
 """
-ClinVar pathogenic/likely pathogenic missense variants in triplosensitive genes.
+ClinVar pathogenic/likely pathogenic missense variants in triplosensitive (TS) genes.
 """
 
 ndd_de_novo_2020_tsv_path = (
