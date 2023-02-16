@@ -77,7 +77,7 @@ Path to HailExpression of haploinsufficient genes.
 List of HI genes was determined by filtering to genes with pHaplo >= 0.86.
 """
 
-triplo_genes_he = f"{REF_DATA_PREFIX}/ht/ptriplo_genes.he"
+triplo_genes_path = f"{REF_DATA_PREFIX}/ht/ptriplo_genes.he"
 """
 Path to HailExpression of triplosensitive genes.
 
