@@ -546,6 +546,7 @@ def import_dosage(
         overwrite=overwrite,
     )
     triplo = ht.filter(ht.pTriplo >= triplo_threshold)
+    triplo = triplo.aggregate(hl.agg.collect_as_set(triplo.gene))
     hl.experimental.write_expression(
         triplo,
         triplo_genes,
