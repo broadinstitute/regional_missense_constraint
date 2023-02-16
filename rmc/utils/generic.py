@@ -603,8 +603,8 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
         triplo_ht = ht.filter(triplo_genes.contains(ht.gene))
         triplo_ht = triplo_ht.checkpoint(clinvar_plp_trip_mis.path, overwrite=overwrite)
         logger.info(
-            "Number of variants after filtering to triplosensitive genes: %i",
-            clinvar_ht.count(),
+            "Number of variants after filtering to TS genes: %i",
+            triplo_ht.count(),
         )
 
 
