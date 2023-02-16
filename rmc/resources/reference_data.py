@@ -130,8 +130,8 @@ asc_ssc_spark_de_novo_tsv = f"{REF_DATA_PREFIX}/fu_2022_supp20.txt"
 De novo variants from 20,528 samples.
 
 Sample count* breakdown:
-- 15,036 probands
-- 5,492 siblings
+- 15,036 autistic probands
+- 5,492 control siblings without NDDs
 (28,522 parents)
 
 .. note::
