@@ -111,7 +111,7 @@ clinvar_plp_mis_triplo = TableResource(
 ClinVar pathogenic/likely pathogenic missense variants in triplosensitive genes.
 """
 
-ddd_autism_de_novo_tsv = (
+ndd_de_novo_2020_tsv_path = (
     f"{REF_DATA_PREFIX}/fordist_KES_combined_asc_dd_dnms_2020_04_21_annotated.txt"
 )
 """
