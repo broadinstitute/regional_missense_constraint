@@ -24,7 +24,7 @@ filtered_context = VersionedTableResource(
     default_version="v1",
     versions={
         "v1": TableResource(
-            path=f"{RESOURCE_BUILD_PREFIX}/reference_data/ht/context_fasta_snps_only_vep_v1.ht",
+            path=f"{REF_DATA_PREFIX}/ht/context_fasta_snps_only_vep_v1.ht",
         )
     },
 )
