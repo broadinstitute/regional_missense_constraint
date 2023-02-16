@@ -138,7 +138,6 @@ De novo variants from 20,528 samples.
 Sample count* breakdown:
 - 15,036 autistic probands
 - 5,492 control siblings without NDDs
-(28,522 parents)
 
 .. note::
     Fu et al. note that:
