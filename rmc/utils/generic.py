@@ -565,7 +565,11 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
         Default is MISSENSE.
     :return: None; writes HTs and HEs to resource paths.
     """
-    if not file_exists(clinvar_ht_path) or overwrite:
+    if (
+        not file_exists(clinvar_plp_mis_haplo.path)
+        or not file_exists(clinvar_plp_mis_triplo.path)
+        or overwrite
+    ):
         logger.info("Reading in ClinVar HT...")
         ht = clinvar.ht()
         ht = filter_to_clinvar_pathogenic(ht)
