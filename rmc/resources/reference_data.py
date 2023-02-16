@@ -96,15 +96,15 @@ Table of ClinVar variants maintained by the seqr team.
 Last version of this HT accessed by RMC team corresponds to 20230121 ClinVar release.
 """
 
-clinvar_plp_hi_mis = TableResource(
-    path=f"{REF_DATA_PREFIX}/ht/clinvar_pathogenic_missense.ht",
+clinvar_plp_mis_haplo = TableResource(
+    path=f"{REF_DATA_PREFIX}/ht/clinvar_pathogenic_missense_haplo.ht",
 )
 """
 ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient (HI)
 genes.
 """
 
-clinvar_plp_trip_mis = TableResource(
+clinvar_plp_mis_triplo = TableResource(
     path=f"{REF_DATA_PREFIX}/ht/clinvar_pathogenic_missense_triplo.ht",
 )
 """
@@ -115,7 +115,12 @@ ddd_autism_de_novo_tsv = (
     f"{REF_DATA_PREFIX}/fordist_KES_combined_asc_dd_dnms_2020_04_21_annotated.txt"
 )
 """
-De novo variants from 31,058 cases with developmental disorders, 6,430 autistic individuals, and 2,179 controls.
+Path to de novo variants from 39,667 samples.
+
+Sample count breakdown:
+- 31,058 individuals with developmental delay or intellectual disability (DD/ID)
+- 6,430 autistic individuals
+- 2,179 control individuals without NDDs
 
 Controls are the siblings of the autism cases.
 Samples are from:
@@ -130,8 +135,8 @@ asc_ssc_spark_de_novo_tsv = f"{REF_DATA_PREFIX}/fu_2022_supp20.txt"
 De novo variants from 20,528 samples.
 
 Sample count* breakdown:
-- 15,036 probands
-- 5,492 siblings
+- 15,036 autistic probands
+- 5,492 control siblings without NDDs
 (28,522 parents)
 
 .. note::
@@ -154,10 +159,10 @@ de_novo = TableResource(
     path=f"{RESOURCE_BUILD_PREFIX}/reference_data/ht/ddd_autism_de_novo.ht",
 )
 """
-De novo missense variants from 46,094 cases and 5,492 controls.
+De novo missense variants from 46,094 neurodevelopmental disorder (NDD) cases and 5,492 controls.
 
 Cases:
-- 31,058 neurodevelopmental cases (from `ddd_autism_de_novo_tsv`)
+- 31,058 individuals with DD/ID (from `ndd_de_novo_tsv`)
 - 15,036 autistic individuals (from `autism_de_novo_2022_tsv`)
 
 Controls:
