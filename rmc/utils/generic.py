@@ -595,7 +595,7 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
         haplo_ht = ht.filter(hi_genes.contains(ht.gene))
         haplo_ht = haplo_ht.checkpoint(clinvar_plp_hi_mis.path, overwrite=overwrite)
         logger.info(
-            "Number of variants after filtering to HI genes: %i", clinvar_ht.count()
+           "Number of variants after filtering to HI genes: %i", haplo_ht.count()
         )
 
         logger.info("Filtering to variants in triplosensitive genes...")
