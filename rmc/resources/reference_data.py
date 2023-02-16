@@ -70,7 +70,7 @@ HT of genes and genes and dosage sensitivity scores.
 Imported from TSV at `dosage_tsv_path`.
 """
 
-haplo_genes_he = f"{REF_DATA_PREFIX}/ht/phaplo_genes.he"
+haplo_genes_path = f"{REF_DATA_PREFIX}/ht/phaplo_genes.he"
 """
 Path to HailExpression of haploinsufficient genes.
 
