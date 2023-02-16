@@ -131,7 +131,7 @@ Satterstrom et al. Large-Scale Exome Sequencing Study Implicates Both Developmen
 and Functional Changes in the Neurobiology of Autism. (2020)
 """
 
-asc_ssc_spark_de_novo_tsv = f"{REF_DATA_PREFIX}/fu_2022_supp20.txt"
+autism_de_novo_2022_tsv_path = f"{REF_DATA_PREFIX}/fu_2022_supp20.txt"
 """
 De novo variants from 20,528 samples.
 
