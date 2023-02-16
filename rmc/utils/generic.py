@@ -28,7 +28,6 @@ from rmc.resources.basics import (
 from rmc.resources.gnomad import constraint_ht, mutation_rate
 from rmc.resources.reference_data import (
     asc_ssc_spark_de_novo_tsv,
-    ddd_autism_de_novo_tsv,
     dosage_ht,
     dosage_tsv,
     clinvar,
@@ -36,6 +35,7 @@ from rmc.resources.reference_data import (
     clinvar_plp_trip_mis,
     de_novo,
     haplo_genes_he,
+    ndd_de_novo_2020_tsv_path,
     triplo_genes_he,
 )
 from rmc.resources.rmc import (
@@ -666,7 +666,7 @@ def import_kaplanis_data(overwrite: bool) -> None:
     :param overwrite: Whether to overwrite Table if it exists.
     :return: None; Function writes Table to temporary path.
     """
-    kap_ht = hl.import_table(ddd_autism_de_novo_tsv, impute=True)
+    kap_ht = hl.import_table(ndd_de_novo_2020_tsv_path, impute=True)
     kap_ht = kap_ht.transmute(
         locus=hl.locus(kap_ht.chrom, kap_ht.pos),
         alleles=[kap_ht.ref, kap_ht.alt],
