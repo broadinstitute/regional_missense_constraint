@@ -595,7 +595,7 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
         haplo_ht = ht.filter(hi_genes.contains(ht.gene))
         haplo_ht = haplo_ht.checkpoint(clinvar_plp_hi_mis.path, overwrite=overwrite)
         logger.info(
-           "Number of variants after filtering to HI genes: %i", haplo_ht.count()
+            "Number of variants after filtering to HI genes: %i", haplo_ht.count()
         )
 
         logger.info("Filtering to variants in triplosensitive genes...")
@@ -682,6 +682,7 @@ def import_kaplanis_data(overwrite: bool) -> None:
         alleles=[kap_ht.ref, kap_ht.alt],
     )
     kap_ht = kap_ht.filter(hl.is_snp(kap_ht.alleles[0], kap_ht.alleles[1]))
+    kap_ht = kap_ht.filter(kap_ht.case_control == "DD")
     kap_ht = kap_ht.group_by("locus", "alleles").aggregate(
         study=hl.agg.collect(kap_ht.study),
         case_control=hl.agg.collect(kap_ht.case_control),
