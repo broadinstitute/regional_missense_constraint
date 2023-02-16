@@ -70,7 +70,7 @@ Imported from `dosage_tsv`.
 
 haplo_genes_he = f"{REF_DATA_PREFIX}/ht/phaplo_genes.he"
 """
-HailExpression of haploinsufficient genes.
+Path to HailExpression of haploinsufficient genes.
 
 List of HI genes was determined by filtering to genes with pHaplo >= 0.86.
 """
