@@ -111,7 +111,7 @@ clinvar_plp_mis_triplo = TableResource(
     path=f"{REF_DATA_PREFIX}/ht/clinvar_pathogenic_missense_triplo.ht",
 )
 """
-ClinVar pathogenic/likely pathogenic missense variants in triplosensitive genes.
+ClinVar pathogenic/likely pathogenic missense variants in triplosensitive (TS) genes.
 """
 
 ndd_de_novo_2020_tsv_path = (
@@ -133,9 +133,9 @@ Satterstrom et al. Large-Scale Exome Sequencing Study Implicates Both Developmen
 and Functional Changes in the Neurobiology of Autism. (2020)
 """
 
-asc_ssc_spark_de_novo_tsv = f"{REF_DATA_PREFIX}/fu_2022_supp20.txt"
+autism_de_novo_2022_tsv_path = f"{REF_DATA_PREFIX}/fu_2022_supp20.txt"
 """
-De novo variants from 20,528 samples.
+Path to de novo variants from 20,528 samples.
 
 Sample count* breakdown:
 - 15,036 autistic probands

@@ -534,15 +534,19 @@ def import_dosage(
         haplo_cutoff=haplo_threshold,
         triplo_cutoff=triplo_threshold,
     )
-    ht = ht.checkpoint(dosage_ht.path, overwrite=overwrite)
+    ht = ht.checkpoint(
+        dosage_ht.path, _read_if_exists=not overwrite, overwrite=overwrite
+    )
 
     haplo = ht.filter(ht.pHaplo >= haplo_threshold)
+    haplo = haplo.aggregate(hl.agg.collect_as_set(haplo.gene))
     hl.experimental.write_expression(
         haplo,
         haplo_genes,
         overwrite=overwrite,
     )
     triplo = ht.filter(ht.pTriplo >= triplo_threshold)
+    triplo = triplo.aggregate(hl.agg.collect_as_set(triplo.gene))
     hl.experimental.write_expression(
         triplo,
         triplo_genes,
@@ -580,7 +584,9 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
         logger.info("Getting gene information from ClinVar HT...")
         ht = ht.annotate(gene=ht.info.GENEINFO.split(":")[0])
         ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/clinvar.ht", overwrite=True)
-        logger.info("Number of variants after filtering to missense: %i", ht.count())
+        logger.info(
+            "Number of variants after filtering to P/LP missense: %i", ht.count()
+        )
 
         logger.info("Filtering to variants in haploinsufficient genes...")
         if not file_exists(haplo_genes):
@@ -589,7 +595,7 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
         haplo_ht = ht.filter(hi_genes.contains(ht.gene))
         haplo_ht = haplo_ht.checkpoint(clinvar_plp_hi_mis.path, overwrite=overwrite)
         logger.info(
-            "Number of variants after filtering to HI genes: %i", clinvar_ht.count()
+           "Number of variants after filtering to HI genes: %i", haplo_ht.count()
         )
 
         logger.info("Filtering to variants in triplosensitive genes...")
@@ -597,8 +603,8 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
         triplo_ht = ht.filter(triplo_genes.contains(ht.gene))
         triplo_ht = triplo_ht.checkpoint(clinvar_plp_trip_mis.path, overwrite=overwrite)
         logger.info(
-            "Number of variants after filtering to triplosensitive genes: %i",
-            clinvar_ht.count(),
+            "Number of variants after filtering to TS genes: %i",
+            triplo_ht.count(),
         )
 
 
@@ -662,10 +668,10 @@ def import_kaplanis_data(overwrite: bool) -> None:
     """
     Import de novo variants from Kaplanis et al. (2020) paper.
 
-    Function imports variants from TSV into HT, and filters to cases with
-    neurodevelopmental disorders only.
+    Function imports variants from TSV into HT, and filters to cases ascertained for
+    developmental delay/intellectual disability only.
     Input TSV also contains autistic individuals, but these individuals overlap with
-    data from Fu et al. paper.
+    data from Fu et al. paper and are therefore not retained.
 
     :param overwrite: Whether to overwrite Table if it exists.
     :return: None; Function writes Table to temporary path.
