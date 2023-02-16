@@ -12,6 +12,12 @@ from rmc.resources.basics import (
 from rmc.resources.resource_utils import CURRENT_BUILD
 
 
+REF_DATA_PREFIX = f"{RESOURCE_BUILD_PREFIX}/reference_data"
+"""
+Path to bucket containing reference data resources.
+"""
+
+
 ####################################################################################
 ## Reference genome related resources
 ####################################################################################
@@ -81,11 +87,6 @@ List of triplosensitive genes was determined by filtering to genes with pTriplo 
 ####################################################################################
 ## Assessment related resources
 ####################################################################################
-REF_DATA_PREFIX = f"{RESOURCE_BUILD_PREFIX}/reference_data"
-"""
-Path to bucket containing reference data resources.
-"""
-
 clinvar = TableResource(
     path="gs://seqr-reference-data/GRCh37/clinvar/clinvar.GRCh37.ht",
 )
