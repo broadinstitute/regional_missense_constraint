@@ -104,7 +104,7 @@ ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient (HI)
 genes.
 """
 
-clinvar_plp_trip_mis = TableResource(
+clinvar_plp_mis_triplo = TableResource(
     path=f"{REF_DATA_PREFIX}/ht/clinvar_pathogenic_missense_triplo.ht",
 )
 """
