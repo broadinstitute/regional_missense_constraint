@@ -27,7 +27,7 @@ from rmc.resources.basics import (
 )
 from rmc.resources.gnomad import constraint_ht, mutation_rate
 from rmc.resources.reference_data import (
-    asc_ssc_spark_de_novo_tsv,
+    autism_de_novo_2022_tsv_path,
     dosage_ht,
     dosage_tsv,
     clinvar,
@@ -613,7 +613,7 @@ def import_fu_data(overwrite: bool) -> None:
     :return: None; Function writes Table to temporary path.
     """
     fu_ht = hl.import_table(
-        asc_ssc_spark_de_novo_tsv,
+        autism_de_novo_2022_tsv_path,
         impute=True,
         # Skip blank lines at the bottom of this TSV
         missing="",
