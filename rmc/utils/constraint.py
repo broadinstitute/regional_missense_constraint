@@ -16,7 +16,7 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_FAST_DEL,
 )
 from rmc.resources.gnomad import filtered_exomes
-from rmc.resources.reference_data import clinvar_path_mis, de_novo, gene_model
+from rmc.resources.reference_data import clinvar_plp_mis_haplo, de_novo, gene_model
 from rmc.utils.generic import (
     get_coverage_correction_expr,
     keep_criteria,
@@ -518,7 +518,7 @@ def get_max_chisq_per_group(
         section_max_chisq=hl.agg.max(ht[chisq_str])
     )
     group_ht = group_ht.checkpoint(
-        f"{TEMP_PATH_WITH_DEL}/group_max_chisq.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/group_max_chisq.ht", overwrite=True
     )
     ht = ht.annotate(section_max_chisq=group_ht[ht.section].section_max_chisq)
     return ht
@@ -1022,75 +1022,6 @@ def merge_simul_break_temp_hts(
     ht.write(output_ht_path, overwrite=overwrite)
 
 
-def calculate_section_chisq(
-    obs_expr: hl.expr.Int64Expression,
-    exp_expr: hl.expr.Float64Expression,
-) -> hl.expr.Float64Expression:
-    """
-    Read in simultaneous breaks temporary HTs at specified path and merge.
-
-    .. note::
-        - Assumes temp HTs are keyed by "section" or ("section", "i", "j")
-        - Assumes temp HTs contain all annotations in SIMUL_BREAK_ANNOTATIONS
-
-    :param input_hts_path: Path to bucket containing input temporary HTs.
-    :param batch_phrase: String indicating name associated with HTs created
-        using Hail Batch jobs, e.g. "under", or "batch_temp_chisq".
-    :param query_phrase: String indicating name associated with HTs created
-        using Hail Query jobs via Dataproc, e.g. "dataproc", or "dataproc_temp_chisq".
-    :param output_ht_path: Desired path for output HT.
-    :param overwrite: Whether to overwrite output HT if it exists.
-    :param google_project: Google project to use to read data from requester-pays buckets.
-        Default is 'broad-mpg-gnomad'.
-    :return: None; function writes HT to specified path.
-    """
-    logger.info("Collecting all HT paths...")
-    temp_ht_paths = (
-        subprocess.check_output(
-            ["gsutil", "-u", f"{google_project}", "ls", f"{input_hts_path}"]
-        )
-        .decode("utf8")
-        .strip()
-        .split("\n")
-    )
-
-    intermediate_hts = []
-    ht_count = 0
-    for ht_path in temp_ht_paths:
-        ht_path = ht_path.strip("/")
-        if (batch_phrase in ht_path or query_phrase in ht_path) and ht_path.endswith(
-            "ht"
-        ):
-            ht_count += 1
-            logger.info("Working on %s", ht_path)
-            temp = hl.read_table(ht_path)
-            if temp.count() > 0:
-                # Tables containing transcripts/transcript sections that are over the transcript/section length threshold
-                # are keyed by section, i, j
-                # Tables containing transcripts/transcript sections that are under the length threshold are keyed
-                # only by section
-                # Rekey all tables here and select only the required fields to ensure the union on line 83 is able to work
-                # This `key_by` should not shuffle because `section` is already the first key for both Tables
-                temp = temp.key_by("section")
-                row_fields = set(temp.row)
-                if len(SIMUL_SEARCH_ANNOTATIONS.intersection(row_fields)) < len(
-                    SIMUL_SEARCH_ANNOTATIONS
-                ):
-                    raise DataException(
-                        f"The following fields are missing from the temp table: {SIMUL_SEARCH_ANNOTATIONS.difference(row_fields)}!"
-                    )
-                temp = temp.select(*SIMUL_SEARCH_ANNOTATIONS)
-                intermediate_hts.append(temp)
-
-    logger.info("Found %i HTs and appended %i", ht_count, len(intermediate_hts))
-    if len(intermediate_hts) == 0:
-        raise DataException(
-            "All temp tables had 0 rows. Please double check the temp tables!"
-        )
-    ht = intermediate_hts[0].union(*intermediate_hts[1:])
-    ht.write(output_ht_path, overwrite=overwrite)
-
-
 def get_break_search_round_nums(
     rounds_path: str,
     round_num_regex: str = r"round(\d+)/$",
@@ -1424,12 +1355,12 @@ def get_oe_bins(ht: hl.Table) -> None:
     :return: None; writes TSV with OE bins + annotations to `oe_bin_counts_tsv` resource path.
     """
     logger.info("Reading in ClinVar, de novo missense, and transcript HTs...")
-    if not file_exists(clinvar_path_mis.path):
+    if not file_exists(clinvar_plp_mis_haplo.path):
         import_clinvar_hi_variants(overwrite=True)
     if not file_exists(de_novo.path):
         import_de_novo_variants(overwrite=True)
 
-    clinvar_ht = clinvar_path_mis.ht()
+    clinvar_ht = clinvar_plp_mis_haplo.ht()
     dn_ht = de_novo.ht()
     transcript_ht = gene_model.ht()
 

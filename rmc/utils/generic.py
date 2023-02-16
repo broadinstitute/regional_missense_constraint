@@ -31,18 +31,17 @@ from rmc.resources.reference_data import (
     dosage_ht,
     dosage_tsv_path,
     clinvar,
-    clinvar_plp_hi_mis,
-    clinvar_plp_trip_mis,
-    haplo_genes_he,
+    clinvar_plp_mis_haplo,
+    clinvar_plp_mis_triplo,
+    haplo_genes_path,
     ndd_de_novo,
     ndd_de_novo_2020_tsv_path,
-    triplo_genes_he,
+    triplo_genes_path,
 )
 from rmc.resources.rmc import (
     DIVERGENCE_SCORES_TSV_PATH,
     MUTATION_RATE_TABLE_PATH,
 )
-import rmc.resources.reference_data as reference_data
 from rmc.resources.resource_utils import MISSENSE
 
 
@@ -538,18 +537,18 @@ def import_dosage(
         dosage_ht.path, _read_if_exists=not overwrite, overwrite=overwrite
     )
 
-    haplo = ht.filter(ht.pHaplo >= haplo_threshold)
-    haplo = haplo.aggregate(hl.agg.collect_as_set(haplo.gene))
+    haplo_genes = ht.filter(ht.pHaplo >= haplo_threshold)
+    haplo_genes = haplo_genes.aggregate(hl.agg.collect_as_set(haplo_genes.gene))
     hl.experimental.write_expression(
-        haplo,
         haplo_genes,
+        haplo_genes_path,
         overwrite=overwrite,
     )
-    triplo = ht.filter(ht.pTriplo >= triplo_threshold)
-    triplo = triplo.aggregate(hl.agg.collect_as_set(triplo.gene))
+    triplo_genes = ht.filter(ht.pTriplo >= triplo_threshold)
+    triplo_genes = triplo_genes.aggregate(hl.agg.collect_as_set(triplo_genes.gene))
     hl.experimental.write_expression(
-        triplo,
         triplo_genes,
+        triplo_genes_path,
         overwrite=overwrite,
     )
 
@@ -589,19 +588,21 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
         )
 
         logger.info("Filtering to variants in haploinsufficient genes...")
-        if not file_exists(haplo_genes):
+        if not file_exists(haplo_genes_path):
             import_dosage(overwrite)
-        hi_genes = hl.experimental.read_expression(haplo_genes_he)
+        hi_genes = hl.experimental.read_expression(haplo_genes_path)
         haplo_ht = ht.filter(hi_genes.contains(ht.gene))
-        haplo_ht = haplo_ht.checkpoint(clinvar_plp_hi_mis.path, overwrite=overwrite)
+        haplo_ht = haplo_ht.checkpoint(clinvar_plp_mis_haplo.path, overwrite=overwrite)
         logger.info(
             "Number of variants after filtering to HI genes: %i", haplo_ht.count()
         )
 
         logger.info("Filtering to variants in triplosensitive genes...")
-        triplo_genes = hl.experimental.read_expression(triplo_genes_he)
+        triplo_genes = hl.experimental.read_expression(triplo_genes_path)
         triplo_ht = ht.filter(triplo_genes.contains(ht.gene))
-        triplo_ht = triplo_ht.checkpoint(clinvar_plp_trip_mis.path, overwrite=overwrite)
+        triplo_ht = triplo_ht.checkpoint(
+            clinvar_plp_mis_triplo.path, overwrite=overwrite
+        )
         logger.info(
             "Number of variants after filtering to TS genes: %i",
             triplo_ht.count(),
