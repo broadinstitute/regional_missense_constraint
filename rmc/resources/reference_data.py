@@ -115,7 +115,12 @@ ddd_autism_de_novo_tsv = (
     f"{REF_DATA_PREFIX}/fordist_KES_combined_asc_dd_dnms_2020_04_21_annotated.txt"
 )
 """
-De novo variants from 31,058 cases with developmental disorders, 6,430 autistic individuals, and 2,179 controls.
+Path to de novo variants from 39,667 samples.
+
+Sample count breakdown:
+- 31,058 individuals with developmental delay or intellectual disability (DD/ID)
+- 6,430 autistic individuals
+- 2,179 control individuals without NDDs
 
 Controls are the siblings of the autism cases.
 Samples are from:
