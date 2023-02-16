@@ -162,7 +162,7 @@ de_novo = TableResource(
 De novo missense variants from 46,094 cases and 5,492 controls.
 
 Cases:
-- 31,058 neurodevelopmental cases (from `ddd_autism_de_novo_tsv`)
+- 31,058 individuals with DD/ID (from `ndd_de_novo_tsv`)
 - 15,036 autistic individuals (from `autism_de_novo_2022_tsv`)
 
 Controls:
