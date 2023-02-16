@@ -48,7 +48,7 @@ Table containing transcript start and stop positions displayed in the browser.
 ######################################################################
 ## Gene/transcript resources
 ######################################################################
-dosage_tsv = f"{REF_DATA_PREFIX}/Collins_rCNV_2022.dosage_sensitivity_scores.tsv.gz"
+dosage_tsv_path = f"{REF_DATA_PREFIX}/Collins_rCNV_2022.dosage_sensitivity_scores.tsv.gz"
 """
 Path to TSV of genes and dosage sensitivity scores.
 
