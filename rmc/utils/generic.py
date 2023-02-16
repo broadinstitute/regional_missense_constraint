@@ -33,8 +33,8 @@ from rmc.resources.reference_data import (
     clinvar,
     clinvar_plp_hi_mis,
     clinvar_plp_trip_mis,
-    de_novo,
     haplo_genes_he,
+    ndd_de_novo,
     ndd_de_novo_2020_tsv_path,
     triplo_genes_he,
 )
@@ -703,4 +703,4 @@ def import_de_novo_variants(overwrite: bool) -> None:
         kap_ht = hl.read_table(kaplanis_ht_path)
 
     ht = kap_ht.join(fu_ht, how="outer")
-    ht.write(de_novo.path, overwrite=overwrite)
+    ht.write(ndd_de_novo.path, overwrite=overwrite)
