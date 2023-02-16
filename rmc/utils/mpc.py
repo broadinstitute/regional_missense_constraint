@@ -23,7 +23,7 @@ from rmc.resources.reference_data import (
     blosum,
     blosum_txt_path,
     cadd,
-    clinvar_path_mis,
+    clinvar_plp_mis_haplo,
     grantham,
     grantham_txt_path,
 )
@@ -369,7 +369,7 @@ def prepare_pop_path_ht(
     :return: None; function writes Table to resource path.
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
-    clinvar_ht = clinvar_path_mis.ht()
+    clinvar_ht = clinvar_plp_mis_haplo.ht()
     clinvar_ht = clinvar_ht.annotate(pop_v_path=0)
 
     logger.info("Importing gnomAD public data and filtering to common variants...")
