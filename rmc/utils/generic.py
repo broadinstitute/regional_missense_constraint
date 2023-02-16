@@ -572,11 +572,11 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
     ):
         logger.info("Reading in ClinVar HT...")
         ht = clinvar.ht()
+        logger.info("Filtering to P/LP missense variants...")
         ht = filter_to_clinvar_pathogenic(ht)
-
-        logger.info("Filtering to missense variants...")
         ht = ht.annotate(mc=ht.info.MC)
         ht = ht.filter(ht.mc.any(lambda x: x.contains(missense_str)))
+
         logger.info("Getting gene information from ClinVar HT...")
         ht = ht.annotate(gene=ht.info.GENEINFO.split(":")[0])
         ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/clinvar.ht", overwrite=True)
