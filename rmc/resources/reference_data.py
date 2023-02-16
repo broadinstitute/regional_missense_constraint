@@ -157,8 +157,9 @@ Fu et al. Rare coding variation provides insight into the genetic architecture
 and phenotypic context of autism (2022)
 """
 
-de_novo = TableResource(
-    path=f"{RESOURCE_BUILD_PREFIX}/reference_data/ht/ddd_autism_de_novo.ht",
+# TODO: Move HT at `ddd_autism_de_novo.ht` to this path
+ndd_de_novo = TableResource(
+    path=f"{RESOURCE_BUILD_PREFIX}/reference_data/ht/ndd_de_novo.ht",
 )
 """
 De novo missense variants from 46,094 neurodevelopmental disorder (NDD) cases and 5,492 controls.
