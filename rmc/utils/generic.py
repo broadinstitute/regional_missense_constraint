@@ -668,8 +668,8 @@ def import_kaplanis_data(overwrite: bool) -> None:
     """
     Import de novo variants from Kaplanis et al. (2020) paper.
 
-    Function imports variants from TSV into HT, and filters to cases with
-    neurodevelopmental disorders only.
+    Function imports variants from TSV into HT, and filters to cases ascertained for
+    developmental delay/intellectual disability only.
     Input TSV also contains autistic individuals, but these individuals overlap with
     data from Fu et al. paper.
 
