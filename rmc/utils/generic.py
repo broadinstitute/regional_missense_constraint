@@ -539,6 +539,7 @@ def import_dosage(
     )
 
     haplo = ht.filter(ht.pHaplo >= haplo_threshold)
+    haplo = haplo.aggregate(hl.agg.collect_as_set(haplo.gene))
     hl.experimental.write_expression(
         haplo,
         haplo_genes,
