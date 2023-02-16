@@ -521,7 +521,7 @@ def import_dosage(
     and triplosensitive genes.
 
     :param overwrite: Whether to overwrite output data.
-    :param haplo_threshold: Threshold for determining whether a gene is haploinsufficient.
+    :param haplo_threshold: pHaplo score threshold for determining whether a gene is predicted haploinsufficient.
         Default is 0.86 (from Collins et al. paper).
     :param triplo_threshold: Threshold for determining whether a gene is triplosensitive.
         Default is 0.94 (from Collins et al. paper).
