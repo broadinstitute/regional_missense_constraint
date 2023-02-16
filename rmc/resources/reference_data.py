@@ -133,7 +133,7 @@ and Functional Changes in the Neurobiology of Autism. (2020)
 
 autism_de_novo_2022_tsv_path = f"{REF_DATA_PREFIX}/fu_2022_supp20.txt"
 """
-De novo variants from 20,528 samples.
+Path to de novo variants from 20,528 samples.
 
 Sample count* breakdown:
 - 15,036 autistic probands
