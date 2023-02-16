@@ -159,7 +159,7 @@ de_novo = TableResource(
     path=f"{RESOURCE_BUILD_PREFIX}/reference_data/ht/ddd_autism_de_novo.ht",
 )
 """
-De novo missense variants from 46,094 cases and 5,492 controls.
+De novo missense variants from 46,094 neurodevelopmental disorder (NDD) cases and 5,492 controls.
 
 Cases:
 - 31,058 individuals with DD/ID (from `ndd_de_novo_tsv`)
