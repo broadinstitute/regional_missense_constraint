@@ -48,7 +48,9 @@ Table containing transcript start and stop positions displayed in the browser.
 ######################################################################
 ## Gene/transcript resources
 ######################################################################
-dosage_tsv_path = f"{REF_DATA_PREFIX}/Collins_rCNV_2022.dosage_sensitivity_scores.tsv.gz"
+dosage_tsv_path = (
+    f"{REF_DATA_PREFIX}/Collins_rCNV_2022.dosage_sensitivity_scores.tsv.gz"
+)
 """
 Path to TSV of genes and dosage sensitivity scores.
 
@@ -65,7 +67,7 @@ dosage_ht = TableResource(path=f"{REF_DATA_PREFIX}/ht/dosage_sensitivity.ht")
 """
 HT of genes and genes and dosage sensitivity scores.
 
-Imported from `dosage_tsv`.
+Imported from TSV at `dosage_tsv_path`.
 """
 
 haplo_genes_he = f"{REF_DATA_PREFIX}/ht/phaplo_genes.he"
