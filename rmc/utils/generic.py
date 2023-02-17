@@ -593,9 +593,9 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
         hi_genes = hl.experimental.read_expression(haplo_genes_path)
         haplo_ht = ht.filter(hi_genes.contains(ht.gene))
         haplo_ht = haplo_ht.checkpoint(
-                clinvar_plp_mis_haplo.path,
-                _read_if_exists=not overwrite,
-                overwrite=overwrite,
+            clinvar_plp_mis_haplo.path,
+            _read_if_exists=not overwrite,
+            overwrite=overwrite,
         )
         logger.info(
             "Number of variants after filtering to HI genes: %i", haplo_ht.count()
@@ -707,6 +707,7 @@ def import_de_novo_variants(overwrite: bool) -> None:
     :param bool overwrite: Whether to overwrite de novo Table.
     :return: None; writes HT to resource path.
     """
+    # TODO: Re-import this HT with samples collected into lists rather than sets
     fu_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht"
     kaplanis_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/kaplanis_dn.ht"
     if not file_exists(fu_ht_path) or overwrite:
