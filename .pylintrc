@@ -16,4 +16,6 @@ disable=
   redefined-builtin,
   redefined-outer-name,
   unused-variable,
-  unused-wildcard-import
+  unused-wildcard-import,
+  # hail uses unary options
+  invalid-unary-operand-type,
