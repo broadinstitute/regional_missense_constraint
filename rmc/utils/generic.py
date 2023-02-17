@@ -592,7 +592,11 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
             import_dosage(overwrite)
         hi_genes = hl.experimental.read_expression(haplo_genes_path)
         haplo_ht = ht.filter(hi_genes.contains(ht.gene))
-        haplo_ht = haplo_ht.checkpoint(clinvar_plp_mis_haplo.path, overwrite=overwrite)
+        haplo_ht = haplo_ht.checkpoint(
+                clinvar_plp_mis_haplo.path,
+                _read_if_exists=not overwrite,
+                overwrite=overwrite,
+        )
         logger.info(
             "Number of variants after filtering to HI genes: %i", haplo_ht.count()
         )
