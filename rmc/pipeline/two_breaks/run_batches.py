@@ -20,7 +20,7 @@ import argparse
 import logging
 from tqdm import tqdm
 
-from typing import Dict, List, Set, Union
+from typing import Dict, List, Set, Union, Optional
 
 import hail as hl
 import hailtop.batch as hb
@@ -81,7 +81,7 @@ PythonJobs. See `rmc.resources.rmc` for full docstring.
 
 
 def simul_search_bucket_path(
-    search_num: int = None,
+    search_num: Optional[int] = None,
     freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
