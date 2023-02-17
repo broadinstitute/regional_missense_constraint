@@ -28,11 +28,11 @@ from rmc.resources.basics import (
 from rmc.resources.gnomad import constraint_ht, mutation_rate
 from rmc.resources.reference_data import (
     autism_de_novo_2022_tsv_path,
-    dosage_ht,
-    dosage_tsv_path,
     clinvar,
     clinvar_plp_mis_haplo,
     clinvar_plp_mis_triplo,
+    dosage_ht,
+    dosage_tsv_path,
     haplo_genes_path,
     ndd_de_novo,
     ndd_de_novo_2020_tsv_path,
