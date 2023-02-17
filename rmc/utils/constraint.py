@@ -16,7 +16,7 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_FAST_DEL,
 )
 from rmc.resources.gnomad import filtered_exomes
-from rmc.resources.reference_data import clinvar_plp_mis_haplo, de_novo, gene_model
+from rmc.resources.reference_data import clinvar_plp_mis_haplo, gene_model, ndd_de_novo
 from rmc.utils.generic import (
     get_coverage_correction_expr,
     keep_criteria,
@@ -1357,11 +1357,11 @@ def get_oe_bins(ht: hl.Table) -> None:
     logger.info("Reading in ClinVar, de novo missense, and transcript HTs...")
     if not file_exists(clinvar_plp_mis_haplo.path):
         import_clinvar_hi_variants(overwrite=True)
-    if not file_exists(de_novo.path):
+    if not file_exists(ndd_de_novo.path):
         import_de_novo_variants(overwrite=True)
 
     clinvar_ht = clinvar_plp_mis_haplo.ht()
-    dn_ht = de_novo.ht()
+    dn_ht = ndd_de_novo.ht()
     transcript_ht = gene_model.ht()
 
     # Split de novo HT into two HTs -- one for controls and one for cases
