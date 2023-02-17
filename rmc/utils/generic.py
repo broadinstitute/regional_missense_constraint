@@ -659,8 +659,8 @@ def import_fu_data(overwrite: bool) -> None:
     )
     fu_ht = fu_ht.key_by(locus=fu_ht.new_locus.result, alleles=fu_ht.alleles)
     fu_ht = fu_ht.group_by("locus", "alleles").aggregate(
-        role=hl.agg.collect_as_set(fu_ht.Role),
-        samples=hl.agg.collect_as_set(fu_ht.Sample),
+        role=hl.agg.collect(fu_ht.Role),
+        samples=hl.agg.collect(fu_ht.Sample),
     )
     fu_ht.write(f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht", overwrite=overwrite)
 
