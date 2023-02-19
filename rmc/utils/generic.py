@@ -1,5 +1,6 @@
 import logging
 from typing import Dict, Tuple
+from contextlib import contextmanager
 
 import hail as hl
 
@@ -573,3 +574,13 @@ def import_de_novo_variants(
     # (MPC annotation requires input Table to be keyed by locus and alleles)
     dn_ht = dn_ht.key_by("locus", "alleles")
     dn_ht.write(ht_path, overwrite=overwrite)
+
+
+@contextmanager
+def copy_logs_when_finished(logging_path):
+    """Copy log files when completed task, wrap task in try, finally to ensure log copy."""
+    try:
+        yield
+    finally:
+        logger.info("Copying hail log to logging bucket...")
+        hl.copy_log(logging_path)

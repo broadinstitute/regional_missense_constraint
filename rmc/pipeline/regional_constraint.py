@@ -47,6 +47,7 @@ from rmc.utils.generic import (
     keep_criteria,
     process_context_ht,
     process_vep,
+    copy_logs_when_finished,
 )
 
 
@@ -60,7 +61,7 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
-    try:
+    with copy_logs_when_finished(LOGGING_PATH):
         if args.pre_process_data:
             hl.init(log="/RMC_pre_process.log", tmp_dir=TEMP_PATH_WITH_FAST_DEL)
             # TODO: Add code to create annotations necessary for constraint_flag_expr and filter transcripts prior to running constraint
@@ -511,10 +512,6 @@ def main(args):
 
             logger.info("Writing out RMC results...")
             rmc_ht.write(rmc_results.versions[args.freeze].path)
-
-    finally:
-        logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(LOGGING_PATH)
 
 
 if __name__ == "__main__":

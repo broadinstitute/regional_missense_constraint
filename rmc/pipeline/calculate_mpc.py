@@ -20,6 +20,7 @@ from rmc.utils.mpc import (
     prepare_pop_path_ht,
     run_regressions,
 )
+from rmc.utils.generic import copy_logs_when_finished
 
 
 logging.basicConfig(
@@ -33,7 +34,8 @@ logger.setLevel(logging.INFO)
 def main(args):
     """Calculate MPC (Missense badness, Polyphen-2, and Constraint) score."""
     temp_dir = f"{TEMP_PATH_WITH_FAST_DEL}/mpc/"
-    try:
+    with copy_logs_when_finished(LOGGING_PATH):
+
         if args.command == "prepare-ht":
             hl.init(log="/write_pop_path_ht.log", tmp_dir=temp_dir)
             prepare_pop_path_ht(
@@ -100,10 +102,6 @@ def main(args):
                     output_path=args.ht_out_path,
                     overwrite=args.overwrite,
                 )
-
-    finally:
-        logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(LOGGING_PATH)
 
 
 if __name__ == "__main__":

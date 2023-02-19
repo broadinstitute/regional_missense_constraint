@@ -24,7 +24,7 @@ from rmc.utils.simultaneous_breaks import (
     group_no_single_break_found_ht,
     split_sections_by_len,
 )
-
+from rmc.utils.generic import copy_logs_when_finished
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -36,7 +36,7 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Prepare input Table for two simultaneous breaks search."""
-    try:
+    with copy_logs_when_finished(LOGGING_PATH):
         grouped_ht_path = grouped_single_no_break_ht_path(
             args.search_num,
         )
@@ -73,10 +73,6 @@ def main(args):
                 missense_len_threshold=args.missense_len_threshold,
                 overwrite=args.overwrite,
             )
-
-    finally:
-        logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(LOGGING_PATH)
 
 
 if __name__ == "__main__":

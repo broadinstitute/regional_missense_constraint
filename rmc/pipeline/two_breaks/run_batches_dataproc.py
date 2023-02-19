@@ -25,6 +25,7 @@ from rmc.resources.rmc import (
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import process_section_group
+from rmc.utils.generic import copy_logs_when_finished
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -36,7 +37,7 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
-    try:
+    with copy_logs_when_finished(LOGGING_PATH):
         logger.warning("This step should be run on an autoscaling cluster!")
         hl.init(
             log=f"/round{args.search_num}search_for_two_breaks_run_batches_dataproc.log",
@@ -113,10 +114,6 @@ def main(args):
                 read_if_exists=args.read_if_exists,
                 save_chisq_ht=save_chisq_ht,
             )
-
-    finally:
-        logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(LOGGING_PATH)
 
 
 if __name__ == "__main__":

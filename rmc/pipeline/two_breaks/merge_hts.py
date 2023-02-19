@@ -14,7 +14,7 @@ from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import simul_search_round_bucket_path
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import merge_simul_break_temp_hts
-
+from rmc.utils.generic import copy_logs_when_finished
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -26,7 +26,7 @@ logger.setLevel(logging.INFO)
 
 def main(args):
     """Merge all simultaneous breaks intermediate results into single Table."""
-    try:
+    with copy_logs_when_finished(LOGGING_PATH):
         hl.init(
             log=f"/round{args.search_num}_search_for_two_breaks_merge_hts.log",
             tmp_dir=TEMP_PATH_WITH_FAST_DEL,
@@ -70,10 +70,6 @@ def main(args):
             "%i transcript sections had two simultaneous breaks in this round",
             len(simul_break_sections),
         )
-
-    finally:
-        logger.info("Copying hail log to logging bucket...")
-        hl.copy_log(LOGGING_PATH)
 
 
 if __name__ == "__main__":
