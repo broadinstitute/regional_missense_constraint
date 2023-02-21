@@ -9,6 +9,7 @@ from gnomad.utils.file_utils import file_exists, parallel_file_exists
 from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
     CHISQ_THRESHOLDS,
+    MIN_CHISQ_THRESHOLD,
     MIN_EXP_MIS,
     simul_search_round_bucket_path,
     simul_sections_split_by_len_path,
@@ -314,7 +315,7 @@ def search_for_two_breaks(
     count: int,
     chisq_threshold: float = CHISQ_THRESHOLDS["simul"],
     min_num_exp_mis: float = 10,
-    min_chisq_threshold: float = 7.4,
+    min_chisq_threshold: float = MIN_CHISQ_THRESHOLD,
     save_chisq_ht: bool = False,
     freeze: int = CURRENT_FREEZE,
 ) -> hl.Table:
@@ -335,7 +336,8 @@ def search_for_two_breaks(
     :param min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
     :param min_chisq_threshold: Minimum chi square value to emit from search.
-        Default is 7.4, which corresponds to a p-value of 0.025 with 2 degrees of freedom.
+        Default is MIN_CHISQ_THRESHOLD,
+        which corresponds to a p-value of 0.025 with 2 degrees of freedom.
     :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
         (as long as chi square value is >= min_chisq_threshold).
         This saves a lot of extra data and should only occur during the initial search round.

@@ -57,6 +57,15 @@ Look-up table reference:
 https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
 """
 
+MIN_CHISQ_THRESHOLD = hl.eval(hl.qchisqtail(0.025, 2))
+"""
+Minimum chi square significance.
+
+Used only in two simultaneous breaks search.
+Any breakpoint combinations with a chi square value less than this threshold
+will not be emitted.
+"""
+
 MIN_EXP_MIS = 16.0
 """
 Minimum number of expected missense variants within each RMC section.
