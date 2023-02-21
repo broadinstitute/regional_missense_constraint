@@ -57,6 +57,25 @@ Look-up table reference:
 https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
 """
 
+MIN_EXP_MIS = 16
+"""
+Minimum number of expected missense variants within each RMC section.
+
+
+Sections that have fewer than this number of expected missense variants
+will not be computed (chi square will be annotated as a missing value).
+
+Calculated using a power curve with code at
+https://github.com/broadinstitute/gnomad_lof/blob/master/R/efig7_constraint.R.
+
+Default is 16.
+
+For gnomAD v2, this number was calculated with using 18,629 transcripts.
+18,629 transcripts corresponds to an exome wide significance level of 2.7e-6.
+On the power curve, this significance threshold corresponds to a minimum
+number of expected missense equal to 16.
+"""
+
 
 ####################################################################################
 ## Original regional missense constraint resource files
