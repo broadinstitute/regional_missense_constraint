@@ -19,6 +19,8 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
+    CHISQ_THRESHOLDS,
+    CURRENT_FREEZE,
     grouped_single_no_break_ht_path,
     simul_search_round_bucket_path,
     simul_sections_split_by_len_path,

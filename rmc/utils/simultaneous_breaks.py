@@ -9,6 +9,7 @@ from gnomad.utils.file_utils import file_exists, parallel_file_exists
 from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
     CHISQ_THRESHOLDS,
+    CURRENT_FREEZE,
     MIN_CHISQ_THRESHOLD,
     MIN_EXP_MIS,
     simul_search_round_bucket_path,
