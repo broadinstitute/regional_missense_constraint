@@ -32,15 +32,29 @@ CURRENT_FREEZE = 4
 Current RMC/MPC data version.
 """
 
-CHISQ_THRESHOLDS = {"single": 6.6, "simul": 9.2}
+P_VALUE = 0.001
+"""
+Default p-value significance threshold.
+
+Used to determine whether chi square values determining RMC breakpoints
+are significant.
+
+Default is 0.001.
+"""
+
+CHISQ_THRESHOLDS = {
+    "single": hl.eval(hl.qchisqtail(P_VALUE, 1)),
+    "simul": hl.qchisqtail(P_VALUE, 2),
+}
 """
 Default chi square significance thresholds for each search type.
 
 Thresholds are set for break search type ('single' or 'simul').
 
-Defaults correspond to p = 0.01.
-
-Reference: https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
+Hail reference:
+https://hail.is/docs/0.2/functions/stats.html#hail.expr.functions.qchisqtail
+Look-up table reference:
+https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
 """
 
 
