@@ -141,12 +141,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--chisq-threshold",
-        help="""
-        Chi-square significance threshold.
-        Defaut is 9.2 (p = 0.01).
-        """,
+        help="Chi-square significance threshold. Default is `CHISQ_THRESHOLDS['simul']`.",
         type=float,
-        default=9.2,
+        default=CHISQ_THRESHOLDS["simul"],
     )
     parser.add_argument(
         "--output-n-partitions",
