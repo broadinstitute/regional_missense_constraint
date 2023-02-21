@@ -35,6 +35,7 @@ from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
     check_break_search_round_nums,
+    create_no_breaks_he,
     get_max_chisq_per_group,
     GROUPINGS,
     merge_rmc_hts,
@@ -554,6 +555,9 @@ def main(args):
 
             logger.info("Writing out RMC results...")
             rmc_ht.write(rmc_results.versions[args.freeze].path)
+
+            logger.info("Getting transcripts without evidence of RMC...")
+            create_no_breaks_he(overwrrite=args.overwrite)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
