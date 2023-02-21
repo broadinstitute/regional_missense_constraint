@@ -35,8 +35,7 @@ repos:
         - id: isort
           args: ["--profile", "black", "--filter-files"]
           files: rmc
-  # Using system installation of pylint to support checking python module imports
-  - repo: local
+  - repo: local # Using system installation of pylint to support checking python module imports
     hooks:
       - id: pylint
         name: pylint

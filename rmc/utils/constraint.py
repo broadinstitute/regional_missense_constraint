@@ -864,7 +864,7 @@ def get_break_search_round_nums(
     rounds_path: str,
     round_num_regex: str = r"round(\d+)/$",
     google_project: str = "broad-mpg-gnomad",
-) -> List[str]:
+) -> List[int]:
     r"""
     Get round numbers for a particular type of break search, e.g. single break search.
 
@@ -889,7 +889,6 @@ def get_break_search_round_nums(
         .strip()
         .split("\n")
     )
-    round_nums = []
     for path in round_paths:
         m = r.findall(path)
         if len(m) > 0:
