@@ -802,7 +802,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--billing-project",
         help="Billing project to use with hail batch.",
-        default="gnomad-production",
+        default="rmc-production",
     )
     parser.add_argument(
         "--batch-bucket",
