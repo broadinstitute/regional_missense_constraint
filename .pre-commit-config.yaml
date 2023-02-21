@@ -16,8 +16,7 @@ repos:
     rev: 6.0.0
     hooks:
       - id: pydocstyle
-  # Using system installation of pylint to support checking python module imports
-  - repo: local
+  - repo: local # Using system installation of pylint to support checking python module imports
     hooks:
       - id: pylint
         name: pylint
