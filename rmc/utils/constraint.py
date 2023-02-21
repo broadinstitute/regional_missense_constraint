@@ -889,7 +889,6 @@ def get_break_search_round_nums(
         .strip()
         .split("\n")
     )
-    round_nums: list[int] = []
     for path in round_paths:
         m = r.findall(path)
         if len(m) > 0:
