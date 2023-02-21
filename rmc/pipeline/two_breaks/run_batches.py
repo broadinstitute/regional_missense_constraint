@@ -33,6 +33,7 @@ from rmc.resources.rmc import (
     CHISQ_THRESHOLDS,
     CURRENT_FREEZE,
     grouped_single_no_break_ht_path,
+    MIN_EXP_MIS,
     simul_sections_split_by_len_path,
 )
 from rmc.slack_creds import slack_token
@@ -287,8 +288,8 @@ def calculate_window_chisq(
 def search_for_two_breaks(
     group_ht: hl.Table,
     count: int,
-    chisq_threshold: float = 9.2,
-    min_num_exp_mis: float = 10,
+    chisq_threshold: float = CHISQ_THRESHOLDS["simul"],
+    min_num_exp_mis: float = MIN_EXP_MIS,
     min_chisq_threshold: float = 7.4,
     save_chisq_ht: bool = False,
     freeze: int = CURRENT_FREEZE,
@@ -302,10 +303,11 @@ def search_for_two_breaks(
         and expected missense values. HT is filtered to contain only transcript/sections without
         a single significant breakpoint.
     :param count: Which transcript group is being run (based on counter generated in `main`).
-    :param chisq_threshold:  Chi-square significance threshold. Default is 9.2.
-        This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
+    :param chisq_threshold: Chi-square significance threshold. Default is
+        CHISQ_THRESHOLDS['simul'].
+        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001
+        with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
-        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
     :param min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
     :param min_chisq_threshold: Minimum chi square value to emit from search.
@@ -389,8 +391,8 @@ def process_section_group(
     over_threshold: bool,
     output_ht_path: str,
     output_n_partitions: int = 10,
-    chisq_threshold: float = 9.2,
-    min_num_exp_mis: float = 10,
+    chisq_threshold: float = CHISQ_THRESHOLDS["simul"],
+    min_num_exp_mis: float = MIN_EXP_MIS,
     split_list_len: int = 500,
     read_if_exists: bool = False,
     save_chisq_ht: bool = False,
@@ -413,10 +415,11 @@ def process_section_group(
     :param str output_ht_path: Path to output results Table.
     :param output_n_partitions: Desired number of partitions for output Table.
         Default is 10.
-    :param float chisq_threshold: Chi-square significance threshold. Default is 9.2.
-        This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
+    :param chisq_threshold: Chi-square significance threshold. Default is
+        CHISQ_THRESHOLDS['simul'].
+        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001
+        with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
-        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
     :param float min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
     :param int split_list_len: Max length to divide transcript/sections observed or expected missense and position lists into.

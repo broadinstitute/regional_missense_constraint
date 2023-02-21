@@ -28,6 +28,7 @@ from rmc.resources.rmc import (
     CONSTRAINT_ANNOTATIONS,
     CURRENT_FREEZE,
     FINAL_ANNOTATIONS,
+    MIN_EXP_MIS,
     no_breaks,
     oe_bin_counts_tsv,
     simul_search_bucket_path,
@@ -529,9 +530,8 @@ def search_for_break(
     search_num: int,
     chisq_threshold: float = CHISQ_THRESHOLDS["single"],
     group_str: str = "section",
-    min_num_exp_mis: float = 10.0,
+    min_num_exp_mis: float = MIN_EXP_MIS,
     save_chisq_ht: bool = False,
-    min_chisq_threshold: float = 2.7,
 ) -> hl.Table:
     """
     Search for breakpoints in a transcript or within a transcript subsection.
@@ -561,11 +561,14 @@ def search_for_break(
         (e.g., second round of searching for single break would be 2).
     :param chisq_threshold: Chi-square significance threshold.
         Default is CHISQ_THRESHOLDS['single'].
+        Default value used in ExAC was 10.8, which corresponds to a p-value of 0.001
+        with 1 degree of freedom.
+        (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
     :param group_str: Field used to group Table observed and expected values. Default is 'section'.
     :param min_num_exp_mis: Minimum number of expected missense per transcript/transcript section.
         Sections that have fewer than this number of expected missense variants will not
         be computed (chi square will be annotated as a missing value).
-        Default is 10.
+        Default is MIN_EXP_MIS.
     :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus.
         This saves a lot of extra data and should only occur during the initial search round.
         Default is False.
@@ -723,6 +726,9 @@ def process_sections(
         (e.g., second round of searching for single break would be 2).
     :param chisq_threshold: Chi-square significance threshold.
         Default is CHISQ_THRESHOLDS['single'].
+        Default value used in ExAC was 10.8, which corresponds to a p-value of 0.001
+        with 1 degree of freedom.
+        (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
     :param group_str: Field used to group observed and expected values. Default is 'section'.
     :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus.
         This saves a lot of extra data and should only occur during the initial search round.

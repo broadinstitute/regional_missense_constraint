@@ -57,7 +57,7 @@ Look-up table reference:
 https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
 """
 
-MIN_EXP_MIS = 16
+MIN_EXP_MIS = 16.0
 """
 Minimum number of expected missense variants within each RMC section.
 
