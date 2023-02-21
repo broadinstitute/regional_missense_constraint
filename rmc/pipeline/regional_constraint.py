@@ -8,6 +8,7 @@ from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import (
     LOGGING_PATH,
+    SINGLE_BREAK_TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
     TEMP_PATH_WITH_SLOW_DEL,
 )
@@ -34,6 +35,7 @@ from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
     check_break_search_round_nums,
+    get_max_chisq_per_group,
     GROUPINGS,
     merge_rmc_hts,
     process_sections,
@@ -134,7 +136,9 @@ def main(args):
                 plateau_x_models,
                 plateau_y_models,
             ) = generate_models(
-                coverage_ht, coverage_x_ht, coverage_y_ht, trimers=args.trimers
+                coverage_ht,
+                coverage_x_ht,
+                coverage_y_ht,
             )
 
             context_ht = context_ht.annotate_globals(
