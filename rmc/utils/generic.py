@@ -697,7 +697,7 @@ def import_kaplanis_data(overwrite: bool) -> None:
     kap_ht.write(f"{TEMP_PATH_WITH_FAST_DEL}/kaplanis_dn.ht", overwrite=overwrite)
 
 
-def import_de_novo_variants(overwrite: bool) -> None:
+def import_de_novo_variants(overwrite: bool, n_partitions: int = 5000) -> None:
     """
     Import de novo missense variants.
 
@@ -705,6 +705,9 @@ def import_de_novo_variants(overwrite: bool) -> None:
         These files currently only exist for build GRCh37.
 
     :param bool overwrite: Whether to overwrite de novo Table.
+    :paran n_partitions: Number of partitions for input Tables.
+        Used to repartition Tables on read.
+        Will also help determine number of partitions in final Table.
     :return: None; writes HT to resource path.
     """
     # TODO: Re-import this HT with samples collected into lists rather than sets
@@ -712,10 +715,10 @@ def import_de_novo_variants(overwrite: bool) -> None:
     kaplanis_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/kaplanis_dn.ht"
     if not file_exists(fu_ht_path) or overwrite:
         import_fu_data(overwrite=overwrite)
-        fu_ht = hl.read_table(fu_ht_path)
+        fu_ht = hl.read_table(fu_ht_path, _n_partitions=n_partitions)
     if not file_exists(kaplanis_ht_path) or overwrite:
         import_kaplanis_data(overwrite=overwrite)
-        kap_ht = hl.read_table(kaplanis_ht_path)
+        kap_ht = hl.read_table(kaplanis_ht_path, _n_partitions=n_partitions)
 
     ht = kap_ht.join(fu_ht, how="outer")
     ht.write(ndd_de_novo.path, overwrite=overwrite)
