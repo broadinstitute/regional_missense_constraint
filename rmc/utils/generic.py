@@ -666,8 +666,9 @@ def import_fu_data(overwrite: bool) -> None:
     fu_ht = fu_ht.key_by(locus=fu_ht.new_locus.result, alleles=fu_ht.alleles)
     fu_ht = fu_ht.group_by("locus", "alleles").aggregate(
         role=hl.agg.collect(fu_ht.Role),
-        samples=hl.agg.collect(fu_ht.Sample),
     )
+    # Rename 'Proband' > 'ASD' and 'Sibling' > 'control'
+    fu_ht = fu_ht.transmute(role=hl.if_else(ht.role == "Proband", "ASD", "control"))
     fu_ht.write(f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht", overwrite=overwrite)
 
 
@@ -721,4 +722,6 @@ def import_de_novo_variants(overwrite: bool, n_partitions: int = 5000) -> None:
         kap_ht = hl.read_table(kaplanis_ht_path, _n_partitions=n_partitions)
 
     ht = kap_ht.join(fu_ht, how="outer")
+    # Union sample types (DD, ASD, control)
+    ht = ht.transmute(ht.case_control.union(ht.role))
     ht.write(ndd_de_novo.path, overwrite=overwrite)
