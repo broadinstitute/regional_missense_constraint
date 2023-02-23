@@ -723,5 +723,5 @@ def import_de_novo_variants(overwrite: bool, n_partitions: int = 5000) -> None:
 
     ht = kap_ht.join(fu_ht, how="outer")
     # Union sample types (DD, ASD, control)
-    ht = ht.transmute(ht.case_control.union(ht.role))
+    ht = ht.transmute(sample_set=ht.case_control.union(ht.role))
     ht.write(ndd_de_novo.path, overwrite=overwrite)
