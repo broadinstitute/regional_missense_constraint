@@ -74,8 +74,7 @@ Minimum number of expected missense variants within each RMC section.
 Sections that have fewer than this number of expected missense variants
 will not be computed (chi square will be annotated as a missing value).
 
-Calculated using a power curve with code at
-https://github.com/broadinstitute/gnomad_lof/blob/master/R/efig7_constraint.R.
+# TODO: add code description here
 
 Default is 16.
 
