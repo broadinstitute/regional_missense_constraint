@@ -79,10 +79,15 @@ https://github.com/broadinstitute/gnomad_lof/blob/master/R/efig7_constraint.R.
 
 Default is 16.
 
-For gnomAD v2, this number was calculated with using 18,629 transcripts.
-18,629 transcripts corresponds to an exome wide significance level of 2.7e-6.
-On the power curve, this significance threshold corresponds to a minimum
-number of expected missense equal to 16.
+This number was chosen as it corresponds to the minimum number
+of expected missense variants needed on each side of a
+potential breakpoint to reach exome-wide significance,
+in the simple scenario where both sides of a potential breakpoint
+have an equal number of expected missense variants,
+with one side having an O/E value of 0 and the other having an O/E value of 1.
+
+Exome-wide significance here is 2.7e-6,
+calculated based on testing 18,629 transcripts total.
 """
 
 
