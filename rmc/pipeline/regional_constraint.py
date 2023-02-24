@@ -606,6 +606,8 @@ if __name__ == "__main__":
         for all possible loci. Note that chi square values will be missing for
         any loci that would divide a transcript into subsections with fewer than
         `MIN_EXP_MIS` expected missense variants.
+
+        NOTE that this temporary Table should only get saved once.
         """,
         action="store_true",
     )
