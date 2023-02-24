@@ -16,4 +16,9 @@ disable=
   redefined-builtin,
   redefined-outer-name,
   unused-variable,
-  unused-wildcard-import
+  unused-wildcard-import,
+  # Hail uses unary options
+  invalid-unary-operand-type,
+  # Ignore generic import error and slack_cred import error
+  E0401,
+  E0611,

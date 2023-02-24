@@ -38,8 +38,8 @@ def main(args):
     """Prepare input Table for two simultaneous breaks search."""
     try:
         grouped_ht_path = grouped_single_no_break_ht_path(
-            args.is_rescue,
-            args.search_num,
+            search_num=args.search_num,
+            freeze=args.freeze,
         )
 
         if args.command == "create-grouped-ht":
@@ -53,7 +53,6 @@ def main(args):
             )
             group_no_single_break_found_ht(
                 ht_path=single_search_round_ht_path(
-                    is_rescue=args.is_rescue,
                     search_num=args.search_num,
                     is_break_found=False,
                     is_breakpoint_only=False,
@@ -71,7 +70,6 @@ def main(args):
             split_sections_by_len(
                 ht_path=grouped_ht_path,
                 group_str="section",
-                is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 missense_len_threshold=args.missense_len_threshold,
                 overwrite=args.overwrite,
@@ -99,15 +97,6 @@ if __name__ == "__main__":
         help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
         type=int,
     )
-    parser.add_argument(
-        "--is-rescue",
-        help="""
-        Whether search is part of the 'rescue' pathway (pathway
-        with lower chi square significance cutoff).
-        """,
-        action="store_true",
-    )
-
     # Create subparsers for each step
     # Need to specify `dest` to be able to check which subparser is being invoked
     # `dest`: https://docs.python.org/3/library/argparse.html#dest
