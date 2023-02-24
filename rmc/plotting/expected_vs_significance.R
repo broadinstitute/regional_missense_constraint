@@ -10,15 +10,15 @@ get_chisq_single_break = function(obs1, exp1, obs2, exp2) {
     return(
         -2 *
             (
-                log(dpois(obs1, exp1 * (obs1 + obs2) / (exp1 + exp2))) +
-                    log(dpois(obs2, exp2 * (obs1 + obs2) / (exp1 + exp2))) -
-                    log(dpois(obs1, obs1)) -
-                    log(dpois(obs2, obs2))
+                dpois(obs1, exp1 * (obs1 + obs2) / (exp1 + exp2), log = TRUE) +
+                    dpois(obs2, exp2 * (obs1 + obs2) / (exp1 + exp2), log = TRUE) -
+                    dpois(obs1, obs1, log = TRUE) -
+                    dpois(obs2, obs2, log = TRUE)
             )
     )
 }
 
-# Plot p-values of LRT in the above scenario, varying over
+# Plot p-values of likelihood ratio test in the above scenario, varying over
 # expected number of variants in side A (equal to the expected in side B)
 df_lrt = data.frame(exp = seq(1, 50))
 df_lrt$chisq = sapply(df_lrt$exp, function(x) {
