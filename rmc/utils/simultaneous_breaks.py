@@ -395,16 +395,13 @@ def search_for_two_breaks(
             group_ht.positions[group_ht.best_break.j],
         ),
     )
+    group_ht_path = (
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_dataproc_temp_chisq_group{count}.ht"
+    )
     if save_chisq_ht:
-        group_ht = group_ht.checkpoint(
-            f"{SIMUL_BREAK_TEMP_PATH}/freeze{freeze}_dataproc_temp_chisq_group{count}.ht",
-            overwrite=True,
-        )
-    else:
-        group_ht = group_ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_dataproc_temp_chisq_group{count}.ht",
-            overwrite=True,
-        )
+        group_ht_path = f"{SIMUL_BREAK_TEMP_PATH}/freeze{freeze}/dataproc_temp_chisq_group{count}.ht"
+    group_ht = group_ht.checkpoint(group_ht_path, overwrite=True)
+
     # Remove rows with maximum chi square values below the threshold
     group_ht = group_ht.filter(group_ht.max_chisq >= chisq_threshold)
     return group_ht
