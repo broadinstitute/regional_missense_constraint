@@ -932,7 +932,7 @@ def check_break_search_round_nums(freeze: int = CURRENT_FREEZE) -> List[int]:
     """
     # Get sorted round numbers
     single_search_round_nums = get_break_search_round_nums(
-        single_search_bucket_path(freeze)
+        single_search_bucket_path(freeze=freeze)
     )
     simul_search_round_nums = get_break_search_round_nums(
         simul_search_bucket_path(freeze)
