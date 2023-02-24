@@ -398,19 +398,14 @@ def merged_search_ht_path(
 
 def no_breaks_he_path(
     freeze: int = CURRENT_FREEZE,
-    gnomad_ver: str = CURRENT_GNOMAD_VERSION,
-    constraint_prefix: str = CONSTRAINT_PREFIX,
 ) -> str:
     """
     Return path to HailExpression containing transcripts with no evidence of RMC.
 
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
-    :param gnomad_ver: gnomAD version. Default is CURRENT_GNOMAD_VERSION.
-    :param constraint_prefix: Constraint bucket path prefix.
-        Default is CONSTRAINT_PREFIX.
     :return: Path to no break transcripts HailExpression.
     """
-    return f"{constraint_prefix}/{gnomad_ver}/{freeze}/no_breaks.he"
+    return f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/no_breaks.he"
 
 
 rmc_results = VersionedTableResource(
