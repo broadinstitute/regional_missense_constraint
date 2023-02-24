@@ -278,9 +278,7 @@ def main(args):
             )
             if args.search_num == 1:
 
-                all_loci_chisq_ht_path = (
-                    f"{SINGLE_BREAK_TEMP_PATH}/round{args.search_num}_all_loci_chisq.ht"
-                )
+                all_loci_chisq_ht_path = f"{SINGLE_BREAK_TEMP_PATH}/all_loci_chisq.ht"
                 if file_exists(all_loci_chisq_ht_path):
                     ht = hl.read_table(all_loci_chisq_ht_path)
                     ht = get_max_chisq_per_group(ht, "section", "chisq")
