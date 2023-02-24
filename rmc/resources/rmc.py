@@ -389,8 +389,8 @@ def merged_search_ht_path(
     :return: Path to merged break found HT or no break found HailExpression.
     """
     if is_break_found:
-        return f"{TEMP_PATH}/freeze{freeze}_round{search_num}_merged_break_found.ht"
-    return f"{TEMP_PATH}/freeze{freeze}_round{search_num}_no_break_found.he"
+        return f"{TEMP_PATH}/freeze{freeze}/round{search_num}_merged_break_found.ht"
+    return f"{TEMP_PATH}/freeze{freeze}/round{search_num}_no_break_found.he"
 
 
 def no_breaks_he_path(
