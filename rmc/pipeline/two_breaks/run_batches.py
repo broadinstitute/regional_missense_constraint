@@ -316,7 +316,7 @@ def search_for_two_breaks(
         which corresponds to a p-value of 0.025 with 2 degrees of freedom.
     :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
         (as long as chi square value is >= min_chisq_threshold).
-        This saves a lot of extra data and should only occur during the initial search round.
+        This saves a lot of extra data and should only occur once.
         Default is False.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Table filtered to transcript/sections with significant simultaneous breakpoints
@@ -434,7 +434,7 @@ def process_section_group(
         Default is False.
     :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
         (as long as chi square value is >= min_chisq_threshold).
-        This saves a lot of extra data and should only occur during the initial search round.
+        This saves a lot of extra data and should only occur once.
         Default is False.
     :param google_project: Google project used to read and write data to requester-pays bucket.
     :return: None; processes Table and writes to path. Also writes success TSV to path.
@@ -575,10 +575,6 @@ def main(args):
             "Do not specify --use-custom-machine when transcripts/sections are --under-threshold size!"
         )
 
-    save_chisq_ht = False
-    if args.search_num == 1:
-        save_chisq_ht = True
-
     logger.info("Importing SetExpression with transcripts or transcript sections...")
     sections_to_run = get_sections_to_run(
         sections=(
@@ -688,7 +684,7 @@ def main(args):
                 output_n_partitions=args.output_n_partitions,
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.group_size,
-                save_chisq_ht=save_chisq_ht,
+                save_chisq_ht=args.save_chisq_ht,
                 google_project=args.google_project,
                 freeze=args.freeze,
             )
@@ -726,7 +722,7 @@ def main(args):
                 output_n_partitions=args.output_n_partitions,
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.group_size,
-                save_chisq_ht=save_chisq_ht,
+                save_chisq_ht=args.save_chisq_ht,
                 google_project=args.google_project,
                 freeze=args.freeze,
             )
@@ -776,6 +772,16 @@ if __name__ == "__main__":
         "--freeze",
         help="RMC data freeze number",
         default=CURRENT_FREEZE,
+    )
+    parser.add_argument(
+        "--save-chisq-ht",
+        help="""
+        Save temporary Table that contains chi square significance values
+        for all possible loci. Note that chi square values will be missing for
+        any loci that would divide a transcript into subsections with fewer than
+        `MIN_EXP_MIS` expected missense variants.
+        """,
+        action="store_true",
     )
 
     section_size = parser.add_mutually_exclusive_group(required=True)
