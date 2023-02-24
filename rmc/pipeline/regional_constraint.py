@@ -284,7 +284,7 @@ def main(args):
                     ht = ht.annotate(
                         is_break=(
                             (ht.chisq == ht.section_max_chisq)
-                            & (ht.chisq >= args.chisq_threshold)
+                            & (ht.chisq >= chisq_threshold)
                         )
                     )
                     run_single_search = False
