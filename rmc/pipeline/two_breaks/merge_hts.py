@@ -11,7 +11,7 @@ import hail as hl
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
-from rmc.resources.rmc import simul_search_round_bucket_path
+from rmc.resources.rmc import CURRENT_FREEZE, simul_search_round_bucket_path
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import merge_simul_break_temp_hts
 
@@ -34,14 +34,14 @@ def main(args):
 
         logger.info("Merging all temp HTs...")
         raw_path = simul_search_round_bucket_path(
-            is_rescue=args.is_rescue,
             search_num=args.search_num,
             bucket_type="raw_results",
+            freeze=args.freeze,
         )
         results_path = simul_search_round_bucket_path(
-            is_rescue=args.is_rescue,
             search_num=args.search_num,
             bucket_type="final_results",
+            freeze=args.freeze,
         )
         merge_simul_break_temp_hts(
             input_hts_path=raw_path,
@@ -84,6 +84,11 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
+        "--freeze",
+        help="RMC data freeze number",
+        default=CURRENT_FREEZE,
+    )
+    parser.add_argument(
         "--overwrite", help="Overwrite existing data.", action="store_true"
     )
     parser.add_argument(
@@ -94,14 +99,6 @@ if __name__ == "__main__":
         "--search-num",
         help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
         type=int,
-    )
-    parser.add_argument(
-        "--is-rescue",
-        help="""
-        Whether search is part of the 'rescue' pathway (pathway
-        with lower chi square significance cutoff).
-        """,
-        action="store_true",
     )
     parser.add_argument(
         "--google-project",

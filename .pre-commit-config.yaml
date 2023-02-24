@@ -16,3 +16,14 @@ repos:
     rev: 6.0.0
     hooks:
       - id: pydocstyle
+  - repo: local # Using system installation of pylint to support checking python module imports
+    hooks:
+      - id: pylint
+        name: pylint
+        entry: pylint
+        language: system
+        types: [python]
+        args: [
+            "-rn", # Only display messages
+            "-sn", # Don't display the score
+          ]

@@ -1,1 +1,5 @@
 hail
+gnomad
+patsy
+statsmodels
+tqdm

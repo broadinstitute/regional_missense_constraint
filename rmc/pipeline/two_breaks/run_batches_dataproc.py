@@ -19,6 +19,8 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
+    CHISQ_THRESHOLDS,
+    CURRENT_FREEZE,
     grouped_single_no_break_ht_path,
     simul_search_round_bucket_path,
     simul_sections_split_by_len_path,
@@ -42,18 +44,15 @@ def main(args):
             log=f"/round{args.search_num}search_for_two_breaks_run_batches_dataproc.log",
             tmp_dir=TEMP_PATH_WITH_FAST_DEL,
         )
-        save_chisq_ht = False
-        if args.search_num == 1 and not args.is_rescue:
-            save_chisq_ht = True
 
         if args.run_sections_over_threshold:
             sections_to_run = list(
                 hl.eval(
                     hl.experimental.read_expression(
                         simul_sections_split_by_len_path(
-                            is_rescue=args.is_rescue,
                             search_num=args.search_num,
                             is_over_threshold=True,
+                            freeze=args.freeze,
                         )
                     )
                 )
@@ -64,13 +63,18 @@ def main(args):
                 hl.eval(
                     hl.experimental.read_expression(
                         simul_sections_split_by_len_path(
-                            is_rescue=args.is_rescue,
                             search_num=args.search_num,
                             is_over_threshold=False,
+                            freeze=args.freeze,
                         )
                     )
                 )
             )
+
+        logger.info(
+            "Found %i transcripts or transcript sections to search...",
+            len(sections_to_run),
+        )
 
         if args.group_size:
             logger.info(
@@ -86,9 +90,9 @@ def main(args):
             section_groups = [[section] for section in sections_to_run]
 
         raw_path = simul_search_round_bucket_path(
-            is_rescue=args.is_rescue,
             search_num=args.search_num,
             bucket_type="raw_results",
+            freeze=args.freeze,
         )
         for counter, group in enumerate(section_groups):
 
@@ -100,11 +104,11 @@ def main(args):
 
             process_section_group(
                 ht_path=grouped_single_no_break_ht_path(
-                    args.is_rescue, args.search_num
+                    args.search_num,
+                    args.freeze,
                 ),
                 section_group=group,
                 count=counter,
-                is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 over_threshold=True,
                 output_ht_path=output_ht_path,
@@ -112,7 +116,7 @@ def main(args):
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.split_list_len,
                 read_if_exists=args.read_if_exists,
-                save_chisq_ht=save_chisq_ht,
+                save_chisq_ht=args.save_chisq_ht,
             )
 
     finally:
@@ -130,14 +134,15 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
+        "--freeze",
+        help="RMC data freeze number",
+        default=CURRENT_FREEZE,
+    )
+    parser.add_argument(
         "--chisq-threshold",
-        help="""
-        Chi-square significance threshold.
-        Value should be 9.2 (p = 0.01) for initial search
-        and 7.4 (p = 0.025) for rescue search.
-        """,
+        help="Chi-square significance threshold. Default is `CHISQ_THRESHOLDS['simul']`.",
         type=float,
-        default=9.2,
+        default=CHISQ_THRESHOLDS["simul"],
     )
     parser.add_argument(
         "--output-n-partitions",
@@ -153,14 +158,6 @@ if __name__ == "__main__":
         "--search-num",
         help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
         type=int,
-    )
-    parser.add_argument(
-        "--is-rescue",
-        help="""
-        Whether search is part of the 'rescue' pathway (pathway
-        with lower chi square significance cutoff).
-        """,
-        action="store_true",
     )
     parser.add_argument(
         "--group-size",
@@ -189,6 +186,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--read-if-exists",
         help="Use temporary Tables if they already exist.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--save-chisq-ht",
+        help="""
+        Save temporary Table that contains chi square significance values
+        for all possible loci. Note that chi square values will be missing for
+        any loci that would divide a transcript into subsections with fewer than
+        `MIN_EXP_MIS` expected missense variants.
+
+        NOTE that this temporary Table should only get saved once per gnomAD version,
+        (save when running RMC pipeline at strictest p-value threshold).
+        """,
         action="store_true",
     )
 

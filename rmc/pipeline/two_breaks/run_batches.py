@@ -20,7 +20,7 @@ import argparse
 import logging
 from tqdm import tqdm
 
-from typing import Dict, List, Set, Union
+from typing import Dict, List, Set, Union, Optional
 
 import hail as hl
 import hailtop.batch as hb
@@ -30,7 +30,11 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
+    CHISQ_THRESHOLDS,
+    CURRENT_FREEZE,
     grouped_single_no_break_ht_path,
+    MIN_CHISQ_THRESHOLD,
+    MIN_EXP_MIS,
     simul_sections_split_by_len_path,
 )
 from rmc.slack_creds import slack_token
@@ -53,7 +57,7 @@ Adding this constant here to avoid ModuleNotFound errors in the
 PythonJobs. See `rmc.resources.basics` for full docstring.
 """
 
-TEMP_PATH_WITH_FAST_DEL = "gs://gnomad-tmp-4day/rmc/"
+TEMP_PATH_WITH_FAST_DEL = "gs://gnomad-tmp-4day/rmc"
 """
 Path to bucket for temporary files.
 
@@ -80,8 +84,8 @@ PythonJobs. See `rmc.resources.rmc` for full docstring.
 
 
 def simul_search_bucket_path(
-    is_rescue: bool,
-    search_num: int,
+    search_num: Optional[int] = None,
+    freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
     Return path to bucket associated with simultaneous break search inputs and results.
@@ -89,24 +93,24 @@ def simul_search_bucket_path(
     Adding this constant here to avoid ModuleNotFound errors in the
     PythonJobs. See `rmc.resources.rmc` for full docstring.
 
-    :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
-        (e.g., second round of searching for single break would be 2).
+        (e.g., second round of searching for simultaneous break would be 2).
+        Default is None.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Path to simultaneous break search round bucket.
     """
-    rescue = "rescue" if is_rescue else "initial"
     return (
-        f"{SIMUL_BREAK_TEMP_PATH}/{rescue}/round{search_num}"
+        f"{SIMUL_BREAK_TEMP_PATH}/{freeze}/round{search_num}"
         if search_num
-        else f"{SIMUL_BREAK_TEMP_PATH}/{rescue}"
+        else f"{SIMUL_BREAK_TEMP_PATH}/{freeze}"
     )
 
 
 def simul_search_round_bucket_path(
-    is_rescue: bool,
     search_num: int,
     bucket_type: str,
     bucket_names: Set[str] = SIMUL_SEARCH_BUCKET_NAMES,
+    freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
     Return path to bucket with  Tables resulting from a specific round of simultaneous break search.
@@ -114,17 +118,17 @@ def simul_search_round_bucket_path(
     Adding this constant here to avoid ModuleNotFound errors in the
     PythonJobs. See `rmc.resources.rmc` for full docstring.
 
-    :param is_rescue: Whether to return path corresponding to rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param bucket_type: Bucket type.
         Must be in `bucket_names`.
     :param bucket_names: Possible bucket names for simultaneous search bucket type.
         Default is `SIMUL_SEARCH_BUCKET_NAMES`.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Path to a bucket in the simultaneous break search round bucket.
     """
     assert bucket_type in bucket_names, f"Bucket type must be one of {bucket_names}!"
-    return f"{simul_search_bucket_path(is_rescue, search_num)}/{bucket_type}"
+    return f"{simul_search_bucket_path(search_num, freeze)}/{bucket_type}"
 
 
 def get_obs_exp_expr(
@@ -160,7 +164,7 @@ def get_dpois_expr(
     ],
 ) -> hl.expr.StructExpression:
     """
-    Calculate probabilities (in log10 space) of the observed values under a Poisson model.
+    Calculate probabilities (natural log) of the observed values under a Poisson model.
 
     Typically imported from `constraint.py`. See `constraint.py` for full docstring.
 
@@ -168,13 +172,11 @@ def get_dpois_expr(
     :param section_oe_expr: Expression of section observed/expected value.
     :param obs_expr: Expression containing observed variants count.
     :param exp_expr: Expression containing expected variants count.
-    :return: log10 of the probability under Poisson model.
+    :return: natural log of the probability under Poisson model.
     """
     # log_p = True returns the natural logarithm of the probability density
-    # Divide this value by hl.log(10) to convert to log base 10
     return hl.or_missing(
-        cond_expr,
-        hl.dpois(obs_expr, exp_expr * section_oe_expr, log_p=True) / hl.log(10),
+        cond_expr, hl.dpois(obs_expr, exp_expr * section_oe_expr, log_p=True)
     )
 
 
@@ -192,7 +194,7 @@ def calculate_window_chisq(
 
     Used only when calculating simultaneous breaks.
 
-    Chi square formula: 2 * (hl.log10(total_alt) - hl.log10(total_null))
+    Chi square formula: 2 * (hl.log(total_alt) - hl.log(total_null))
 
     :param hl.expr.Int32Expression max_idx: Largest list index value.
     :param hl.expr.Int32Expression i: Smaller list index value corresponding to the smaller position of the two break window.
@@ -287,10 +289,11 @@ def calculate_window_chisq(
 def search_for_two_breaks(
     group_ht: hl.Table,
     count: int,
-    chisq_threshold: float = 9.2,
-    min_num_exp_mis: float = 10,
-    min_chisq_threshold: float = 7.4,
+    chisq_threshold: float = CHISQ_THRESHOLDS["simul"],
+    min_num_exp_mis: float = MIN_EXP_MIS,
+    min_chisq_threshold: float = MIN_CHISQ_THRESHOLD,
     save_chisq_ht: bool = False,
+    freeze: int = CURRENT_FREEZE,
 ) -> hl.Table:
     """
     Search for transcripts/transcript sections with simultaneous breaks.
@@ -301,18 +304,21 @@ def search_for_two_breaks(
         and expected missense values. HT is filtered to contain only transcript/sections without
         a single significant breakpoint.
     :param count: Which transcript group is being run (based on counter generated in `main`).
-    :param chisq_threshold:  Chi-square significance threshold. Default is 9.2.
-        This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
+    :param chisq_threshold: Chi-square significance threshold. Default is
+        CHISQ_THRESHOLDS['simul'].
+        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001
+        with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
-        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
     :param min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
     :param min_chisq_threshold: Minimum chi square value to emit from search.
-        Default is 7.4, which corresponds to a p-value of 0.025 with 2 degrees of freedom.
+        Default is MIN_CHISQ_THRESHOLD,
+        which corresponds to a p-value of 0.025 with 2 degrees of freedom.
     :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
         (as long as chi square value is >= min_chisq_threshold).
-        This saves a lot of extra data and should only occur during the initial search round.
+        This saves a lot of extra data and should only occur once.
         Default is False.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Table filtered to transcript/sections with significant simultaneous breakpoints
         and annotated with breakpoint information.
     """
@@ -364,16 +370,15 @@ def search_for_two_breaks(
             group_ht.positions[group_ht.best_break.j],
         ),
     )
+    group_ht_path = (
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_batch_temp_chisq_group{count}.ht"
+    )
     if save_chisq_ht:
-        group_ht = group_ht.checkpoint(
-            f"{SIMUL_BREAK_TEMP_PATH}/batch_temp_chisq_group{count}.ht",
-            overwrite=True,
+        group_ht_path = (
+            f"{SIMUL_BREAK_TEMP_PATH}/freeze{freeze}/batch_temp_chisq_group{count}.ht"
         )
-    else:
-        group_ht = group_ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/batch_temp_chisq_group{count}.ht",
-            overwrite=True,
-        )
+    group_ht = group_ht.checkpoint(group_ht_path, overwrite=True)
+
     # Remove rows with maximum chi square values below the threshold
     group_ht = group_ht.filter(group_ht.max_chisq >= chisq_threshold)
     return group_ht
@@ -383,18 +388,18 @@ def process_section_group(
     ht_path: str,
     section_group: List[str],
     count: int,
-    is_rescue: bool,
     search_num: int,
     over_threshold: bool,
     output_ht_path: str,
     output_n_partitions: int = 10,
-    chisq_threshold: float = 9.2,
-    min_num_exp_mis: float = 10,
+    chisq_threshold: float = CHISQ_THRESHOLDS["simul"],
+    min_num_exp_mis: float = MIN_EXP_MIS,
     split_list_len: int = 500,
     read_if_exists: bool = False,
     save_chisq_ht: bool = False,
     requester_pays_bucket: str = RMC_PREFIX,
     google_project: str = "broad-mpg-gnomad",
+    freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
     Run two simultaneous breaks search on a group of transcripts or transcript sections.
@@ -404,7 +409,6 @@ def process_section_group(
     :param str ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param List[str] section_group: List of transcripts or transcript sections to process.
     :param count: Which transcript group is being run (based on counter generated in `main`).
-    :param is_rescue: Whether to return path to HT created in rescue pathway.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param bool over_threshold: Whether input transcript/sections have more
@@ -412,10 +416,11 @@ def process_section_group(
     :param str output_ht_path: Path to output results Table.
     :param output_n_partitions: Desired number of partitions for output Table.
         Default is 10.
-    :param float chisq_threshold: Chi-square significance threshold. Default is 9.2.
-        This value corresponds to a p-value of 0.01 with 2 degrees of freedom.
+    :param chisq_threshold: Chi-square significance threshold. Default is
+        CHISQ_THRESHOLDS['simul'].
+        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001
+        with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
-        Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001.
     :param float min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
     :param int split_list_len: Max length to divide transcript/sections observed or expected missense and position lists into.
@@ -428,7 +433,7 @@ def process_section_group(
         Default is False.
     :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
         (as long as chi square value is >= min_chisq_threshold).
-        This saves a lot of extra data and should only occur during the initial search round.
+        This saves a lot of extra data and should only occur once.
         Default is False.
     :param google_project: Google project used to read and write data to requester-pays bucket.
     :return: None; processes Table and writes to path. Also writes success TSV to path.
@@ -497,9 +502,9 @@ def process_section_group(
         # (would sometimes repartition to a lower number of partitions)
         ht = ht.repartition(n_rows)
         prep_path = simul_search_round_bucket_path(
-            is_rescue=is_rescue,
             search_num=search_num,
             bucket_type="prep",
+            freeze=freeze,
         )
         ht = ht.checkpoint(
             f"{prep_path}/{section_group[0]}.ht",
@@ -528,9 +533,9 @@ def process_section_group(
     # If over threshold, checkpoint HT and check if there were any breaks
     if over_threshold:
         raw_path = simul_search_round_bucket_path(
-            is_rescue=is_rescue,
             search_num=search_num,
             bucket_type="raw_results",
+            freeze=freeze,
         )
         ht = ht.checkpoint(f"{raw_path}/{section_group[0]}.ht", overwrite=True)
         # If any rows had a significant breakpoint,
@@ -547,9 +552,9 @@ def process_section_group(
     ht.write(output_ht_path, overwrite=True)
 
     success_tsvs_path = simul_search_round_bucket_path(
-        is_rescue=is_rescue,
         search_num=search_num,
         bucket_type="success_files",
+        freeze=freeze,
     )
     for section in section_group:
         tsv_path = f"{success_tsvs_path}/{section}.tsv"
@@ -569,10 +574,6 @@ def main(args):
             "Do not specify --use-custom-machine when transcripts/sections are --under-threshold size!"
         )
 
-    save_chisq_ht = False
-    if args.search_num == 1 and not args.is_rescue:
-        save_chisq_ht = True
-
     logger.info("Importing SetExpression with transcripts or transcript sections...")
     sections_to_run = get_sections_to_run(
         sections=(
@@ -580,9 +581,9 @@ def main(args):
                 hl.eval(
                     hl.experimental.read_expression(
                         simul_sections_split_by_len_path(
-                            is_rescue=args.is_rescue,
                             search_num=args.search_num,
                             is_over_threshold=False,
+                            freeze=args.freeze,
                         )
                     )
                 )
@@ -592,15 +593,14 @@ def main(args):
                 hl.eval(
                     hl.experimental.read_expression(
                         simul_sections_split_by_len_path(
-                            is_rescue=args.is_rescue,
                             search_num=args.search_num,
                             is_over_threshold=True,
+                            freeze=args.freeze,
                         )
                     )
                 )
             )
         ),
-        is_rescue=args.is_rescue,
         search_num=args.search_num,
     )
 
@@ -609,9 +609,9 @@ def main(args):
     )
 
     raw_path = simul_search_round_bucket_path(
-        is_rescue=args.is_rescue,
         search_num=args.search_num,
         bucket_type="raw_results",
+        freeze=args.freeze,
     )
 
     if not args.docker_image:
@@ -619,9 +619,17 @@ def main(args):
         # Use a docker image that specifies spark memory allocation if --use-custom-machine was specified
         if args.use_custom_machine:
             args.docker_image = "gcr.io/broad-mpg-gnomad/rmc:20220930"
+            logger.warning(
+                "Using %s image; please make sure Hail version in image is up to date",
+                args.docker_image,
+            )
         # Otherwise, use the default docker image
         else:
-            args.docker_image = "gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220930"
+            args.docker_image = "gcr.io/broad-mpg-gnomad/tgg-methods-vm:20230123"
+            logger.warning(
+                "Using %s image; please make sure Hail version in image is up to date",
+                args.docker_image,
+            )
 
     logger.info("Setting up Batch parameters...")
     backend = hb.ServiceBackend(
@@ -666,20 +674,18 @@ def main(args):
             j.storage(args.batch_storage)
             j.call(
                 process_section_group,
-                ht_path=grouped_single_no_break_ht_path(
-                    args.is_rescue, args.search_num
-                ),
+                ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
                 section_group=group,
                 count=group_num,
-                is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 over_threshold=False,
                 output_ht_path=f"{raw_path}/simul_break_{job_name}.ht",
                 output_n_partitions=args.output_n_partitions,
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.group_size,
-                save_chisq_ht=save_chisq_ht,
+                save_chisq_ht=args.save_chisq_ht,
                 google_project=args.google_project,
+                freeze=args.freeze,
             )
             count += 1
 
@@ -706,20 +712,18 @@ def main(args):
                 j.storage(args.batch_storage)
             j.call(
                 process_section_group,
-                ht_path=grouped_single_no_break_ht_path(
-                    args.is_rescue, args.search_num
-                ),
+                ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
                 section_group=group,
                 count=group_num,
-                is_rescue=args.is_rescue,
                 search_num=args.search_num,
                 over_threshold=True,
                 output_ht_path=f"{raw_path}/simul_break_{group[0]}.ht",
                 output_n_partitions=args.output_n_partitions,
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.group_size,
-                save_chisq_ht=save_chisq_ht,
+                save_chisq_ht=args.save_chisq_ht,
                 google_project=args.google_project,
+                freeze=args.freeze,
             )
             count += 1
     b.run(wait=False)
@@ -735,9 +739,9 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--chisq-threshold",
-        help="Chi-square significance threshold. Value should be 9.2 (value adjusted from ExAC code due to discussion with Mark).",
+        help="Chi-square significance threshold. Default is `CHISQ_THRESHOLDS['simul']`.",
         type=float,
-        default=9.2,
+        default=CHISQ_THRESHOLDS["simul"],
     )
     parser.add_argument(
         "--output-n-partitions",
@@ -755,19 +759,29 @@ if __name__ == "__main__":
         type=int,
     )
     parser.add_argument(
-        "--is-rescue",
-        help="""
-        Whether search is part of the 'rescue' pathway (pathway
-        with lower chi square significance cutoff).
-        """,
-        action="store_true",
-    )
-    parser.add_argument(
         "--counter",
         help="""
         Comma separated string of counter numbers, e.g. '31,32,40'.
         These numbers correspond to batch numbers and should only be
         specified for any batches that failed the first submission.
+        """,
+        action="store_true",
+    )
+    parser.add_argument(
+        "--freeze",
+        help="RMC data freeze number",
+        default=CURRENT_FREEZE,
+    )
+    parser.add_argument(
+        "--save-chisq-ht",
+        help="""
+        Save temporary Table that contains chi square significance values
+        for all possible loci. Note that chi square values will be missing for
+        any loci that would divide a transcript into subsections with fewer than
+        `MIN_EXP_MIS` expected missense variants.
+
+        NOTE that this temporary Table should only get saved once per gnomAD version,
+        (save when running RMC pipeline at strictest p-value threshold).
         """,
         action="store_true",
     )
@@ -796,7 +810,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--billing-project",
         help="Billing project to use with hail batch.",
-        default="gnomad-production",
+        default="rmc-production",
     )
     parser.add_argument(
         "--batch-bucket",
@@ -840,12 +854,12 @@ if __name__ == "__main__":
         "--docker-image",
         help="""
         Docker image to provide to hail Batch. Must have dill, hail, and python installed.
-        Suggested image: gcr.io/broad-mpg-gnomad/tgg-methods-vm:20220930.
+        Suggested image: gcr.io/broad-mpg-gnomad/tgg-methods-vm:20230123.
 
         If running with --use-custom-machine, Docker image must also contain this line:
         `ENV PYSPARK_SUBMIT_ARGS="--driver-memory 8g --executor-memory 8g pyspark-shell"`
         to make sure the job allocates memory correctly.
-        Suggested image: gcr.io/broad-mpg-gnomad/rmc:20220930.
+        Example image: gcr.io/broad-mpg-gnomad/rmc:20220930.
 
         Default is None -- script will select default image if not specified on the command line.
         """,
