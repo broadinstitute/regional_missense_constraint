@@ -375,7 +375,7 @@ def search_for_two_breaks(
     )
     if save_chisq_ht:
         group_ht_path = (
-            f"{SIMUL_BREAK_TEMP_PATH}/freeze{freeze}_batch_temp_chisq_group{count}.ht"
+            f"{SIMUL_BREAK_TEMP_PATH}/freeze{freeze}/batch_temp_chisq_group{count}.ht"
         )
     group_ht = group_ht.checkpoint(group_ht_path, overwrite=True)
 
