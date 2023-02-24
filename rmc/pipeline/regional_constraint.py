@@ -262,15 +262,15 @@ def main(args):
             )
 
         if args.search_for_single_break:
-            if args.chisq_threshold:
-                chisq_threshold = args.chisq_threshold
-            else:
-                chisq_threshold = CHISQ_THRESHOLDS["single"]
             hl.init(
                 log=f"/round{args.search_num}_single_break_search.log",
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
+            if args.p_value:
+                chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 1))
+            else:
+                chisq_threshold = CHISQ_THRESHOLDS["single"]
             run_single_search = True
 
             logger.info(
@@ -626,11 +626,13 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--chisq-threshold",
+        "--p-value",
         help="""
-        Chi-square significance threshold for single break search.
+        p-value significance threshold for single break search.
+        Used to determine chi square statistic thershold.
+
         If not specified, script will default to thresholds set
-        in constant `CHISQ_THRESHOLDS`.
+        in constants `P_VALUE` and `CHISQ_THRESHOLDS`.
         """,
         type=float,
     )
