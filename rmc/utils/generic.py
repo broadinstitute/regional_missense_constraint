@@ -668,7 +668,7 @@ def import_fu_data(overwrite: bool) -> None:
         role=hl.agg.collect(fu_ht.Role),
     )
     # Rename 'Proband' > 'ASD' and 'Sibling' > 'control'
-    fu_ht = fu_ht.transmute(role=hl.if_else(ht.role == "Proband", "ASD", "control"))
+    fu_ht = fu_ht.transmute(role=hl.if_else(fu_ht.role == "Proband", "ASD", "control"))
     fu_ht.write(f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht", overwrite=overwrite)
 
 
