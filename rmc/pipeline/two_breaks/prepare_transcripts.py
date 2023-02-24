@@ -16,6 +16,7 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
+    CURRENT_FREEZE,
     grouped_single_no_break_ht_path,
     single_search_round_ht_path,
 )
@@ -56,6 +57,7 @@ def main(args):
                     search_num=args.search_num,
                     is_break_found=False,
                     is_breakpoint_only=False,
+                    freeze=args.freeze,
                 ),
                 out_ht_path=grouped_ht_path,
                 group_str="section",
@@ -73,6 +75,7 @@ def main(args):
                 search_num=args.search_num,
                 missense_len_threshold=args.missense_len_threshold,
                 overwrite=args.overwrite,
+                freeze=args.freeze,
             )
 
     finally:
@@ -96,6 +99,11 @@ if __name__ == "__main__":
         "--search-num",
         help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
         type=int,
+    )
+    parser.add_argument(
+        "--freeze",
+        help="RMC data freeze number",
+        default=CURRENT_FREEZE,
     )
     # Create subparsers for each step
     # Need to specify `dest` to be able to check which subparser is being invoked
