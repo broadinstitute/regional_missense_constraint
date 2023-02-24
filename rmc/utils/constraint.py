@@ -639,12 +639,12 @@ def search_for_break(
             2 * (ht.total_alt - ht.total_null),
         )
     )
-
-    temp_path = SINGLE_BREAK_TEMP_PATH if save_chisq_ht else TEMP_PATH_WITH_FAST_DEL
-    ht = ht.checkpoint(
-        f"{temp_path}/freeze{freeze}_round{search_num}_all_loci_chisq.ht",
-        overwrite=True,
+    all_loci_chisq_ht_path = (
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_round{search_num}_all_loci_chisq.ht"
     )
+    if save_chisq_ht:
+        all_loci_chisq_ht_path = f"{SINGLE_BREAK_TEMP_PATH}/all_loci_chisq.ht"
+    ht = ht.checkpoint(all_loci_chisq_ht_path, overwrite=True)
 
     ht = get_max_chisq_per_group(ht, group_str, "chisq", freeze)
     return ht.annotate(
