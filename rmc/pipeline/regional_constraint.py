@@ -21,9 +21,9 @@ from rmc.resources.gnomad import (
 from rmc.resources.reference_data import filtered_context, gene_model
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
-    CHISQ_THRESHOLDS,
     constraint_prep,
     merged_search_ht_path,
+    P_VALUE,
     rmc_results,
     simul_search_round_bucket_path,
     single_search_round_ht_path,
@@ -270,7 +270,7 @@ def main(args):
             if args.p_value:
                 chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 1))
             else:
-                chisq_threshold = hl.eval(CHISQ_THRESHOLDS["single"])
+                chisq_threshold = hl.eval(hl.qchisqtail(P_VALUE, 1))
             run_single_search = True
 
             logger.info(
@@ -632,24 +632,9 @@ if __name__ == "__main__":
         Used to determine chi square statistic thershold.
 
         If not specified, script will default to thresholds set
-        in constants `P_VALUE` and `CHISQ_THRESHOLDS`.
+        in constants `P_VALUE`.
         """,
         type=float,
-    )
-    parser.add_argument(
-        "--chisq-thresholds-dict",
-        help="""
-        Dictionary of chi-square significance thresholds
-        per significance threshold and break search type.
-
-        Keys should be 'single' or 'simul'.
-
-        If not specified, script will default to using
-        `CHISQ_THRESHOLDS`.
-
-        Example format:
-        '{"single": 6.6, "simul": 9.2}'
-        """,
     )
     parser.add_argument(
         "--freeze",
