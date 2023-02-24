@@ -39,7 +39,6 @@ from rmc.resources.rmc import (
     simul_sections_split_by_len_path,
 )
 from rmc.slack_creds import slack_token
-from rmc.utils.simultaneous_breaks import get_sections_to_run
 
 
 logging.basicConfig(
@@ -580,35 +579,31 @@ def main(args):
         chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 2))
 
     logger.info("Importing SetExpression with transcripts or transcript sections...")
-    sections_to_run = get_sections_to_run(
-        sections=(
-            list(
-                hl.eval(
-                    hl.experimental.read_expression(
-                        simul_sections_split_by_len_path(
-                            search_num=args.search_num,
-                            is_over_threshold=False,
-                            freeze=args.freeze,
-                        )
+    sections_to_run = (
+        list(
+            hl.eval(
+                hl.experimental.read_expression(
+                    simul_sections_split_by_len_path(
+                        search_num=args.search_num,
+                        is_over_threshold=False,
+                        freeze=args.freeze,
                     )
                 )
             )
-            if args.under_threshold
-            else list(
-                hl.eval(
-                    hl.experimental.read_expression(
-                        simul_sections_split_by_len_path(
-                            search_num=args.search_num,
-                            is_over_threshold=True,
-                            freeze=args.freeze,
-                        )
+        )
+        if args.under_threshold
+        else list(
+            hl.eval(
+                hl.experimental.read_expression(
+                    simul_sections_split_by_len_path(
+                        search_num=args.search_num,
+                        is_over_threshold=True,
+                        freeze=args.freeze,
                     )
                 )
             )
-        ),
-        search_num=args.search_num,
+        )
     )
-
     logger.info(
         "Found %i transcripts or transcript sections to search...", len(sections_to_run)
     )
