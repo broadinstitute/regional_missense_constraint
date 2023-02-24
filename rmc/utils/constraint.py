@@ -646,7 +646,7 @@ def search_for_break(
         overwrite=True,
     )
 
-    ht = get_max_chisq_per_group(ht, group_str, "chisq")
+    ht = get_max_chisq_per_group(ht, group_str, "chisq", freeze)
     return ht.annotate(
         is_break=((ht.chisq == ht.section_max_chisq) & (ht.chisq >= chisq_threshold))
     )

@@ -540,7 +540,7 @@ def main(args):
             logger.info("Finalizing section-level RMC table...")
             rmc_ht = merge_rmc_hts(round_nums=round_nums, freeze=args.freeze)
             rmc_ht = rmc_ht.checkpoint(
-                f"{TEMP_PATH_WITH_SLOW_DEL}/freeze{freeze}_rmc_results.ht",
+                f"{TEMP_PATH_WITH_SLOW_DEL}/freeze{args.freeze}_rmc_results.ht",
                 overwrite=args.overwrite,
                 _read_if_exists=not args.overwrite,
             )
