@@ -29,7 +29,7 @@ from rmc.resources.rmc import (
     CURRENT_FREEZE,
     FINAL_ANNOTATIONS,
     MIN_EXP_MIS,
-    no_breaks,
+    no_breaks_he_path,
     oe_bin_counts_tsv,
     simul_search_bucket_path,
     SIMUL_SEARCH_ANNOTATIONS,
@@ -770,10 +770,11 @@ def process_sections(
     return ht
 
 
-def create_no_breaks_he(overwrite: bool) -> None:
+def create_no_breaks_he(freeze: int, overwrite: bool) -> None:
     """
     Write final no breaks HailExpression.
 
+    :param freeze: RMC freeze number.
     :param overwrite: Whether to overwrite output data if it exists.
     :return: None; function writes HailExpression to resource path.
     """
@@ -802,7 +803,7 @@ def create_no_breaks_he(overwrite: bool) -> None:
     )
     no_break_transcripts = hl.map(lambda x: x.split("_")[0], no_break_sections)
     hl.experimental.write_expression(
-        no_break_transcripts, no_breaks, overwrite=overwrite
+        no_break_transcripts, no_breaks_he_path(freeze), overwrite=overwrite
     )
 
 

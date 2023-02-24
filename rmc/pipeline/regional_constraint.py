@@ -555,7 +555,7 @@ def main(args):
             rmc_ht.write(rmc_results.versions[args.freeze].path)
 
             logger.info("Getting transcripts without evidence of RMC...")
-            create_no_breaks_he(overwrite=args.overwrite)
+            create_no_breaks_he(freeze=args.freeze, overwrite=args.overwrite)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
