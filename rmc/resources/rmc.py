@@ -231,7 +231,7 @@ def single_search_round_ht_path(
     """
     break_status = "break_found" if is_break_found else "no_break_found"
     breakpoint_status = "_breakpoint_only" if is_breakpoint_only else ""
-    return f"{SINGLE_BREAK_TEMP_PATH}/{freeze}/round{search_num}/{break_status}{breakpoint_status}.ht"
+    return f"{single_search_bucket_path(search_num, freeze)}/{break_status}{breakpoint_status}.ht"
 
 
 SIMUL_SEARCH_BUCKET_NAMES = {"prep", "raw_results", "final_results", "success_files"}
