@@ -502,6 +502,7 @@ def get_max_chisq_per_group(
     ht: hl.Table,
     group_str: str,
     chisq_str: str,
+    freeze: int,
 ) -> hl.Table:
     """
     Group input Table by given field and return maximum chi square value per group.
@@ -512,6 +513,7 @@ def get_max_chisq_per_group(
     :param group_str: String of field containing transcript or transcript subsection information.
         Used to group observed and expected values.
     :param chisq_str: String of field containing chi square values to be checked.
+    :param freeze: RMC data freeze number.
     :return: Table annotated with maximum chi square value per group
     """
     group_ht = ht.group_by(group_str).aggregate(
@@ -519,7 +521,7 @@ def get_max_chisq_per_group(
         section_max_chisq=hl.agg.max(ht[chisq_str])
     )
     group_ht = group_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/group_max_chisq.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_group_max_chisq.ht", overwrite=True
     )
     ht = ht.annotate(section_max_chisq=group_ht[ht.section].section_max_chisq)
     return ht
@@ -528,6 +530,7 @@ def get_max_chisq_per_group(
 def search_for_break(
     ht: hl.Table,
     search_num: int,
+    freeze: int,
     chisq_threshold: float = CHISQ_THRESHOLDS["single"],
     group_str: str = "section",
     min_num_exp_mis: float = MIN_EXP_MIS,
@@ -559,6 +562,7 @@ def search_for_break(
     :param ht: Input Table.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
+    :param freeze: RMC data freeze number.
     :param chisq_threshold: Chi-square significance threshold.
         Default is CHISQ_THRESHOLDS['single'].
         Default value used in ExAC was 10.8, which corresponds to a p-value of 0.001
@@ -638,7 +642,8 @@ def search_for_break(
 
     temp_path = SINGLE_BREAK_TEMP_PATH if save_chisq_ht else TEMP_PATH_WITH_FAST_DEL
     ht = ht.checkpoint(
-        f"{temp_path}/round{search_num}_all_loci_chisq.ht", overwrite=True
+        f"{temp_path}/freeze{freeze}_round{search_num}_all_loci_chisq.ht",
+        overwrite=True,
     )
 
     ht = get_max_chisq_per_group(ht, group_str, "chisq")
@@ -703,6 +708,7 @@ def get_subsection_exprs(
 def process_sections(
     ht: hl.Table,
     search_num: int,
+    freeze: int,
     chisq_threshold: float = CHISQ_THRESHOLDS["single"],
     group_str: str = "section",
     save_chisq_ht: bool = False,
@@ -724,6 +730,7 @@ def process_sections(
     :param ht: Input Table.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
+    :param freeze: RMC data freeze number.
     :param chisq_threshold: Chi-square significance threshold.
         Default is CHISQ_THRESHOLDS['single'].
         Default value used in ExAC was 10.8, which corresponds to a p-value of 0.001
@@ -764,6 +771,7 @@ def process_sections(
     ht = search_for_break(
         ht,
         search_num,
+        freeze=freeze,
         chisq_threshold=chisq_threshold,
         save_chisq_ht=save_chisq_ht,
     )

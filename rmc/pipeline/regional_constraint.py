@@ -281,7 +281,7 @@ def main(args):
                 all_loci_chisq_ht_path = f"{SINGLE_BREAK_TEMP_PATH}/all_loci_chisq.ht"
                 if file_exists(all_loci_chisq_ht_path) and not args.save_chisq_ht:
                     ht = hl.read_table(all_loci_chisq_ht_path)
-                    ht = get_max_chisq_per_group(ht, "section", "chisq")
+                    ht = get_max_chisq_per_group(ht, "section", "chisq", args.freeze)
                     ht = ht.annotate(
                         is_break=(
                             (ht.chisq == ht.section_max_chisq)
@@ -321,11 +321,12 @@ def main(args):
                 ht = process_sections(
                     ht=ht,
                     search_num=args.search_num,
+                    freeze=args.freeze,
                     chisq_threshold=chisq_threshold,
                     save_chisq_ht=args.save_chisq_ht,
                 )
                 ht = ht.checkpoint(
-                    f"{TEMP_PATH_WITH_FAST_DEL}/round{args.search_num}_temp.ht",
+                    f"{TEMP_PATH_WITH_FAST_DEL}/freeze{args.freeze}_round{args.search_num}_temp.ht",
                     overwrite=True,
                 )
 
@@ -539,7 +540,7 @@ def main(args):
             logger.info("Finalizing section-level RMC table...")
             rmc_ht = merge_rmc_hts(round_nums=round_nums, freeze=args.freeze)
             rmc_ht = rmc_ht.checkpoint(
-                f"{TEMP_PATH_WITH_SLOW_DEL}/rmc_results.ht",
+                f"{TEMP_PATH_WITH_SLOW_DEL}/freeze{freeze}_rmc_results.ht",
                 overwrite=args.overwrite,
                 _read_if_exists=not args.overwrite,
             )
