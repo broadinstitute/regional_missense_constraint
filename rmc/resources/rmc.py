@@ -4,6 +4,7 @@ Script containing RMC and MPC related resources.
 RMC: Regional missense constraint
 MPC: Missense badness, Polyphen-2, and Constraint score
 """
+import scipy
 from typing import Set
 
 import hail as hl
@@ -47,7 +48,7 @@ Look-up table reference:
 https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
 """
 
-MIN_CHISQ_THRESHOLD = hl.eval(hl.qchisqtail(0.025, 2))
+MIN_CHISQ_THRESHOLD = scipy.stats.chi2.ppf(0.975, 1)
 """
 Minimum chi square significance.
 

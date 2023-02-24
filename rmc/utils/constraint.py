@@ -1,5 +1,6 @@
 import logging
 import re
+import scipy
 import subprocess
 from typing import Dict, List, Set, Union
 
@@ -24,13 +25,13 @@ from rmc.utils.generic import (
     import_de_novo_variants,
 )
 from rmc.resources.rmc import (
-    CHISQ_THRESHOLDS,
     CONSTRAINT_ANNOTATIONS,
     CURRENT_FREEZE,
     FINAL_ANNOTATIONS,
     MIN_EXP_MIS,
     no_breaks_he_path,
     oe_bin_counts_tsv,
+    P_VALUE,
     simul_search_bucket_path,
     SIMUL_SEARCH_ANNOTATIONS,
     simul_search_round_bucket_path,
@@ -531,7 +532,7 @@ def search_for_break(
     ht: hl.Table,
     search_num: int,
     freeze: int,
-    chisq_threshold: float = CHISQ_THRESHOLDS["single"],
+    chisq_threshold: float = scipy.stats.chi2.ppf(1 - P_VALUE, 1),
     group_str: str = "section",
     min_num_exp_mis: float = MIN_EXP_MIS,
     save_chisq_ht: bool = False,
@@ -564,7 +565,7 @@ def search_for_break(
         (e.g., second round of searching for single break would be 2).
     :param freeze: RMC data freeze number.
     :param chisq_threshold: Chi-square significance threshold.
-        Default is CHISQ_THRESHOLDS['single'].
+        Default is scipy.stats.chi2.ppf(1 - P_VALUE, 1).
         Default value used in ExAC was 10.8, which corresponds to a p-value of 0.001
         with 1 degree of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
@@ -709,7 +710,7 @@ def process_sections(
     ht: hl.Table,
     search_num: int,
     freeze: int,
-    chisq_threshold: float = CHISQ_THRESHOLDS["single"],
+    chisq_threshold: float = scipy.stats.chi2.ppf(1 - P_VALUE, 1),
     group_str: str = "section",
     save_chisq_ht: bool = False,
 ):
@@ -732,7 +733,7 @@ def process_sections(
         (e.g., second round of searching for single break would be 2).
     :param freeze: RMC data freeze number.
     :param chisq_threshold: Chi-square significance threshold.
-        Default is CHISQ_THRESHOLDS['single'].
+        Default is scipy.stats.chi2.ppf(1 - P_VALUE, 1).
         Default value used in ExAC was 10.8, which corresponds to a p-value of 0.001
         with 1 degree of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
