@@ -43,8 +43,8 @@ Default is 0.001.
 """
 
 CHISQ_THRESHOLDS = {
-    "single": hl.eval(hl.qchisqtail(P_VALUE, 1)),
-    "simul": hl.eval(hl.qchisqtail(P_VALUE, 2)),
+    "single": hl.qchisqtail(P_VALUE, 1),
+    "simul": hl.qchisqtail(P_VALUE, 2),
 }
 """
 Default chi square significance thresholds for each search type.

@@ -270,7 +270,7 @@ def main(args):
             if args.p_value:
                 chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 1))
             else:
-                chisq_threshold = CHISQ_THRESHOLDS["single"]
+                chisq_threshold = hl.eval(CHISQ_THRESHOLDS["single"])
             run_single_search = True
 
             logger.info(
