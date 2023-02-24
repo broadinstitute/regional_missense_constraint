@@ -968,6 +968,7 @@ def check_break_search_round_nums(freeze: int = CURRENT_FREEZE) -> List[int]:
 
 def merge_round_no_break_ht(
     search_num: int,
+    freeze: int,
     keep_annotations: Set[str] = CONSTRAINT_ANNOTATIONS,
 ) -> hl.Table:
     """
@@ -978,6 +979,7 @@ def merge_round_no_break_ht(
 
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
+    :param freeze: RMC data freeze number.
     :param keep_annotations: Fields to keep in the table. Default is `CONSTRAINT_ANNOTATIONS`.
     :return: Table of loci in sections where no breaks were found in the break search round. Schema:
         ----------------------------------------
@@ -994,6 +996,7 @@ def merge_round_no_break_ht(
         search_num=search_num,
         is_break_found=False,
         is_breakpoint_only=False,
+        freeze=freeze,
     )
     if not file_exists(single_no_break_path):
         raise DataException(
@@ -1012,6 +1015,7 @@ def merge_round_no_break_ht(
     simul_results_path = simul_search_round_bucket_path(
         search_num=search_num,
         bucket_type="final_results",
+        freeze=freeze,
     )
     simul_break_path = f"{simul_results_path}/merged.ht"
     if file_exists(simul_break_path):
@@ -1046,11 +1050,12 @@ def calculate_section_chisq(
     return ((obs_expr - exp_expr) ** 2) / exp_expr
 
 
-def merge_rmc_hts(round_nums: List[int]) -> hl.Table:
+def merge_rmc_hts(round_nums: List[int], freeze: int) -> hl.Table:
     """
     Get table of final RMC sections after all break searches are complete.
 
     :param round_nums: List of round numbers to merge results across.
+    :param freeze: RMC data freeze number.
     :return: Table of final RMC sections. Schema:
         ----------------------------------------
         Row fields:
@@ -1081,6 +1086,7 @@ def merge_rmc_hts(round_nums: List[int]) -> hl.Table:
         # Get locus-level merged no-break table (no breaks in both single and simultaneous searches)
         ht = merge_round_no_break_ht(
             search_num=search_num,
+            freeze=freeze,
             keep_annotations=FINAL_ANNOTATIONS,
         )
         # Group to section-level and retain section obs- and exp-related annotations
@@ -1093,7 +1099,8 @@ def merge_rmc_hts(round_nums: List[int]) -> hl.Table:
         hts.append(ht)
     rmc_ht = hts[0].union(*hts[1:])
     rmc_ht = rmc_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/search_union.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_search_union.ht",
+        overwrite=True,
     )
     # Calculate chi-square value for each section
     rmc_ht = rmc_ht.annotate(
