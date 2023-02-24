@@ -68,9 +68,9 @@ def main(args):
                 )
 
             if args.dd:
-                from rmc.resources.reference_data import de_novo
+                from rmc.resources.reference_data import ndd_de_novo
 
-                dd_ht = de_novo.ht()
+                dd_ht = ndd_de_novo.ht()
                 case_ht = dd_ht.filter(dd_ht.case_control != "control")
                 annotate_mpc(
                     ht=case_ht,

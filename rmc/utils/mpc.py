@@ -15,15 +15,18 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import (
-    blosum,
-    blosum_txt_path,
-    grantham,
-    grantham_txt_path,
     TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
     TEMP_PATH_WITH_SLOW_DEL,
 )
-from rmc.resources.reference_data import cadd, clinvar_path_mis
+from rmc.resources.reference_data import (
+    blosum,
+    blosum_txt_path,
+    cadd,
+    clinvar_plp_mis_haplo,
+    grantham,
+    grantham_txt_path,
+)
 from rmc.resources.rmc import (
     context_with_oe,
     context_with_oe_dedup,
@@ -322,7 +325,7 @@ def prepare_pop_path_ht(
     :return: None; function writes Table to resource path.
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
-    clinvar_ht = clinvar_path_mis.ht()
+    clinvar_ht = clinvar_plp_mis_haplo.ht()
     clinvar_ht = clinvar_ht.annotate(pop_v_path=0)
 
     logger.info("Importing gnomAD public data and filtering to common variants...")
