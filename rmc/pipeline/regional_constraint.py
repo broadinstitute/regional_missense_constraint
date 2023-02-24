@@ -363,6 +363,7 @@ def main(args):
                     search_num=args.search_num,
                     is_break_found=True,
                     is_breakpoint_only=False,
+                    freeze=args.freeze,
                 ),
                 overwrite=args.overwrite,
             )
@@ -377,6 +378,7 @@ def main(args):
                     search_num=args.search_num,
                     is_break_found=False,
                     is_breakpoint_only=False,
+                    freeze=args.freeze,
                 ),
                 overwrite=args.overwrite,
             )
