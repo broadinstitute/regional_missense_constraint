@@ -19,9 +19,9 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
-    CHISQ_THRESHOLDS,
     CURRENT_FREEZE,
     grouped_single_no_break_ht_path,
+    P_VALUE,
     simul_search_round_bucket_path,
     simul_sections_split_by_len_path,
 )
@@ -44,6 +44,10 @@ def main(args):
             log=f"/round{args.search_num}search_for_two_breaks_run_batches_dataproc.log",
             tmp_dir=TEMP_PATH_WITH_FAST_DEL,
         )
+
+        chisq_threshold = hl.eval(hl.qchisqtail(P_VALUE, 2))
+        if args.p_value:
+            chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 2))
 
         if args.run_sections_over_threshold:
             sections_to_run = list(
@@ -113,7 +117,7 @@ def main(args):
                 over_threshold=True,
                 output_ht_path=output_ht_path,
                 output_n_partitions=args.output_n_partitions,
-                chisq_threshold=args.chisq_threshold,
+                chisq_threshold=chisq_threshold,
                 split_list_len=args.split_list_len,
                 read_if_exists=args.read_if_exists,
                 save_chisq_ht=args.save_chisq_ht,
@@ -139,10 +143,15 @@ if __name__ == "__main__":
         default=CURRENT_FREEZE,
     )
     parser.add_argument(
-        "--chisq-threshold",
-        help="Chi-square significance threshold. Default is `CHISQ_THRESHOLDS['simul']`.",
+        "--p-value",
+        help="""
+        p-value significance threshold for single break search.
+        Used to determine chi square statistic thershold.
+
+        If not specified, script will default to thresholds set
+        in constants `P_VALUE`.
+        """,
         type=float,
-        default=CHISQ_THRESHOLDS["simul"],
     )
     parser.add_argument(
         "--output-n-partitions",

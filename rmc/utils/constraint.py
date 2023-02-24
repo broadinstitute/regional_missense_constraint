@@ -565,7 +565,7 @@ def search_for_break(
         (e.g., second round of searching for single break would be 2).
     :param freeze: RMC data freeze number.
     :param chisq_threshold: Chi-square significance threshold.
-        Default is scipy.stats.chi2.ppf(1 - P_VALUE, 1).
+        Default is `scipy`.stats.chi2.ppf(1 - P_VALUE, 1)`.
         Default value used in ExAC was 10.8, which corresponds to a p-value of 0.001
         with 1 degree of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
@@ -733,7 +733,7 @@ def process_sections(
         (e.g., second round of searching for single break would be 2).
     :param freeze: RMC data freeze number.
     :param chisq_threshold: Chi-square significance threshold.
-        Default is scipy.stats.chi2.ppf(1 - P_VALUE, 1).
+        Default is `scipy.stats.chi2.ppf(1 - P_VALUE, 1)`.
         Default value used in ExAC was 10.8, which corresponds to a p-value of 0.001
         with 1 degree of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)

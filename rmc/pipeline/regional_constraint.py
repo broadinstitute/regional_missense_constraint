@@ -267,10 +267,9 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
+            chisq_threshold = hl.eval(hl.qchisqtail(P_VALUE, 1))
             if args.p_value:
                 chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 1))
-            else:
-                chisq_threshold = hl.eval(hl.qchisqtail(P_VALUE, 1))
             run_single_search = True
 
             logger.info(
@@ -631,8 +630,8 @@ if __name__ == "__main__":
         p-value significance threshold for single break search.
         Used to determine chi square statistic thershold.
 
-        If not specified, script will default to thresholds set
-        in constants `P_VALUE`.
+        If not specified, script will default to threshold set
+        in `P_VALUE`.
         """,
         type=float,
     )
