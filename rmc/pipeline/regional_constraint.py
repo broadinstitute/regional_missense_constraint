@@ -279,7 +279,7 @@ def main(args):
             if args.search_num == 1:
 
                 all_loci_chisq_ht_path = f"{SINGLE_BREAK_TEMP_PATH}/all_loci_chisq.ht"
-                if file_exists(all_loci_chisq_ht_path):
+                if file_exists(all_loci_chisq_ht_path) and not args.save_chisq_ht:
                     ht = hl.read_table(all_loci_chisq_ht_path)
                     ht = get_max_chisq_per_group(ht, "section", "chisq")
                     ht = ht.annotate(
@@ -305,8 +305,6 @@ def main(args):
                     ).drop("start", "stop")
                     ht = ht.key_by("locus", "section").drop("transcript")
 
-                    # Save temporary HT with all chi square values
-                    save_chisq_ht = True
             else:
                 # Read in merged single and simultaneous breaks results HT
                 ht = hl.read_table(
@@ -315,7 +313,6 @@ def main(args):
                         freeze=args.freeze,
                     ),
                 )
-                save_chisq_ht = False
 
             if run_single_search:
                 logger.info(
@@ -325,7 +322,7 @@ def main(args):
                     ht=ht,
                     search_num=args.search_num,
                     chisq_threshold=chisq_threshold,
-                    save_chisq_ht=save_chisq_ht,
+                    save_chisq_ht=args.save_chisq_ht,
                 )
                 ht = ht.checkpoint(
                     f"{TEMP_PATH_WITH_FAST_DEL}/round{args.search_num}_temp.ht",
@@ -600,6 +597,16 @@ if __name__ == "__main__":
         "--search-num",
         help="Search iteration number (e.g., second round of searching for single break would be 2).",
         type=int,
+    )
+    parser.add_argument(
+        "--save-chisq-ht",
+        help="""
+        Save temporary Table that contains chi square significance values
+        for all possible loci. Note that chi square values will be missing for
+        any loci that would divide a transcript into subsections with fewer than
+        `MIN_EXP_MIS` expected missense variants.
+        """,
+        action="store_true",
     )
     parser.add_argument(
         "--merge-single-simul",
