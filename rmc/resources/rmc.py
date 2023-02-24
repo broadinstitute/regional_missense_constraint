@@ -74,8 +74,6 @@ Minimum number of expected missense variants within each RMC section.
 Sections that have fewer than this number of expected missense variants
 will not be computed (chi square will be annotated as a missing value).
 
-# TODO: add code description here
-
 Default is 16.
 
 This number was chosen as it corresponds to the minimum number
@@ -87,6 +85,11 @@ with one side having an O/E value of 0 and the other having an O/E value of 1.
 
 Exome-wide significance here is 2.7e-6,
 calculated based on testing 18,629 transcripts total.
+
+Calculated using a power curve with code at `plotting/expected_vs_significance.R`.
+
+The same minimum expected value is used in both the single breaks and
+simultaneous breaks searches.
 """
 
 
