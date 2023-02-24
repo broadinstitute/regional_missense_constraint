@@ -935,7 +935,7 @@ def check_break_search_round_nums(freeze: int = CURRENT_FREEZE) -> List[int]:
         single_search_bucket_path(freeze=freeze)
     )
     simul_search_round_nums = get_break_search_round_nums(
-        simul_search_bucket_path(freeze)
+        simul_search_bucket_path(freeze=freeze)
     )
     logger.info(
         "Single search round numbers: %s\nSimultaneous search round numbers: %s",
