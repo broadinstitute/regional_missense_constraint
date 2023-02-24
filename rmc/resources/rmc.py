@@ -32,15 +32,64 @@ CURRENT_FREEZE = 4
 Current RMC/MPC data version.
 """
 
-CHISQ_THRESHOLDS = {"single": 6.6, "simul": 9.2}
+P_VALUE = 0.001
+"""
+Default p-value significance threshold.
+
+Used to determine whether chi square values determining RMC breakpoints
+are significant.
+
+Default is 0.001.
+"""
+
+CHISQ_THRESHOLDS = {
+    "single": hl.eval(hl.qchisqtail(P_VALUE, 1)),
+    "simul": hl.eval(hl.qchisqtail(P_VALUE, 2)),
+}
 """
 Default chi square significance thresholds for each search type.
 
 Thresholds are set for break search type ('single' or 'simul').
 
-Defaults correspond to p = 0.01.
+Hail reference:
+https://hail.is/docs/0.2/functions/stats.html#hail.expr.functions.qchisqtail
+Look-up table reference:
+https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
+"""
 
-Reference: https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
+MIN_CHISQ_THRESHOLD = hl.eval(hl.qchisqtail(0.025, 2))
+"""
+Minimum chi square significance.
+
+Used only in two simultaneous breaks search.
+Any breakpoint combinations with a chi square value less than this threshold
+will not be emitted for storage.
+"""
+
+MIN_EXP_MIS = 16.0
+"""
+Minimum number of expected missense variants within each RMC section.
+
+
+Sections that have fewer than this number of expected missense variants
+will not be computed (chi square will be annotated as a missing value).
+
+Default is 16.
+
+This number was chosen as it corresponds to the minimum number
+of expected missense variants needed on each side of a
+potential breakpoint to reach exome-wide significance,
+in the simple scenario where both sides of a potential breakpoint
+have an equal number of expected missense variants,
+with one side having an O/E value of 0 and the other having an O/E value of 1.
+
+Exome-wide significance here is 2.7e-6,
+calculated based on testing 18,629 transcripts total.
+
+Calculated using a power curve with code at `plotting/expected_vs_significance.R`.
+
+The same minimum expected value is used in both the single breaks and
+simultaneous breaks searches.
 """
 
 
@@ -185,7 +234,7 @@ def single_search_round_ht_path(
     """
     break_status = "break_found" if is_break_found else "no_break_found"
     breakpoint_status = "_breakpoint_only" if is_breakpoint_only else ""
-    return f"{SINGLE_BREAK_TEMP_PATH}/{freeze}/round{search_num}/{break_status}{breakpoint_status}.ht"
+    return f"{single_search_bucket_path(search_num, freeze)}/{break_status}{breakpoint_status}.ht"
 
 
 SIMUL_SEARCH_BUCKET_NAMES = {"prep", "raw_results", "final_results", "success_files"}
@@ -343,16 +392,21 @@ def merged_search_ht_path(
     :return: Path to merged break found HT or no break found HailExpression.
     """
     if is_break_found:
-        return f"{TEMP_PATH}/freeze{freeze}_round{search_num}_merged_break_found.ht"
-    return f"{TEMP_PATH}/freeze{freeze}_round{search_num}_no_break_found.he"
+        return f"{TEMP_PATH}/freeze{freeze}/round{search_num}_merged_break_found.ht"
+    return f"{TEMP_PATH}/freeze{freeze}/round{search_num}_no_break_found.he"
 
 
-no_breaks = (
-    f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/no_breaks.he"
-)
-"""
-SetExpression containing transcripts with no significant breaks.
-"""
+def no_breaks_he_path(
+    freeze: int = CURRENT_FREEZE,
+) -> str:
+    """
+    Return path to HailExpression containing transcripts with no evidence of RMC.
+
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
+    :return: Path to no break transcripts HailExpression.
+    """
+    return f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/no_breaks.he"
+
 
 rmc_results = VersionedTableResource(
     default_version=CURRENT_FREEZE,

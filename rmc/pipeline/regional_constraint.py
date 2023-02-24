@@ -8,6 +8,7 @@ from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import (
     LOGGING_PATH,
+    SINGLE_BREAK_TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
     TEMP_PATH_WITH_SLOW_DEL,
 )
@@ -34,6 +35,8 @@ from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
     check_break_search_round_nums,
+    create_no_breaks_he,
+    get_max_chisq_per_group,
     GROUPINGS,
     merge_rmc_hts,
     process_sections,
@@ -62,7 +65,11 @@ def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
     try:
         if args.pre_process_data:
-            hl.init(log="/RMC_pre_process.log", tmp_dir=TEMP_PATH_WITH_FAST_DEL)
+            hl.init(
+                log="/RMC_pre_process.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
+            )
             # TODO: Add code to create annotations necessary for constraint_flag_expr and filter transcripts prior to running constraint
             logger.warning("Code currently only processes b37 data!")
 
@@ -104,7 +111,11 @@ def main(args):
             logger.info("Done preprocessing files")
 
         if args.prep_for_constraint:
-            hl.init(log="/RMC_prep_for_constraint.log", tmp_dir=TEMP_PATH_WITH_FAST_DEL)
+            hl.init(
+                log="/RMC_prep_for_constraint.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
+            )
             logger.info("Reading in exome HT...")
             exome_ht = filtered_exomes.ht()
 
@@ -126,7 +137,9 @@ def main(args):
                 plateau_x_models,
                 plateau_y_models,
             ) = generate_models(
-                coverage_ht, coverage_x_ht, coverage_y_ht, trimers=args.trimers
+                coverage_ht,
+                coverage_x_ht,
+                coverage_y_ht,
             )
 
             context_ht = context_ht.annotate_globals(
@@ -256,25 +269,42 @@ def main(args):
             hl.init(
                 log=f"/round{args.search_num}_single_break_search.log",
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
             )
+            run_single_search = True
 
             logger.info(
                 "Searching for transcripts or transcript subsections with a single significant break..."
             )
             if args.search_num == 1:
-                # Read constraint_prep resource HT if this is the first search
-                ht = constraint_prep.ht()
 
-                logger.info(
-                    "Adding section annotation before searching for first break..."
-                )
-                # Add transcript start and stop positions from browser HT
-                transcript_ht = gene_model.ht().select("start", "stop")
-                ht = ht.annotate(**transcript_ht[ht.transcript])
-                ht = ht.annotate(
-                    section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop)
-                ).drop("start", "stop")
-                ht = ht.key_by("locus", "section").drop("transcript")
+                all_loci_chisq_ht_path = f"{SINGLE_BREAK_TEMP_PATH}/all_loci_chisq.ht"
+                if file_exists(all_loci_chisq_ht_path) and not args.save_chisq_ht:
+                    ht = hl.read_table(all_loci_chisq_ht_path)
+                    ht = get_max_chisq_per_group(ht, "section", "chisq", args.freeze)
+                    ht = ht.annotate(
+                        is_break=(
+                            (ht.chisq == ht.section_max_chisq)
+                            & (ht.chisq >= args.chisq_threshold)
+                        )
+                    )
+                    run_single_search = False
+
+                else:
+                    # Read constraint_prep resource HT if this is the first search
+                    ht = constraint_prep.ht()
+
+                    logger.info(
+                        "Adding section annotation before searching for first break..."
+                    )
+                    # Add transcript start and stop positions from browser HT
+                    transcript_ht = gene_model.ht().select("start", "stop")
+                    ht = ht.annotate(**transcript_ht[ht.transcript])
+                    ht = ht.annotate(
+                        section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop)
+                    ).drop("start", "stop")
+                    ht = ht.key_by("locus", "section").drop("transcript")
+
             else:
                 # Read in merged single and simultaneous breaks results HT
                 ht = hl.read_table(
@@ -284,18 +314,21 @@ def main(args):
                     ),
                 )
 
-            logger.info(
-                "Calculating nulls, alts, and chi square values and checkpointing..."
-            )
-            ht = process_sections(
-                ht=ht,
-                search_num=args.search_num,
-                chisq_threshold=chisq_threshold,
-            )
-            ht = ht.checkpoint(
-                f"{TEMP_PATH_WITH_FAST_DEL}/round{args.search_num}_temp.ht",
-                overwrite=True,
-            )
+            if run_single_search:
+                logger.info(
+                    "Calculating nulls, alts, and chi square values and checkpointing..."
+                )
+                ht = process_sections(
+                    ht=ht,
+                    search_num=args.search_num,
+                    freeze=args.freeze,
+                    chisq_threshold=chisq_threshold,
+                    save_chisq_ht=args.save_chisq_ht,
+                )
+                ht = ht.checkpoint(
+                    f"{TEMP_PATH_WITH_FAST_DEL}/freeze{args.freeze}_round{args.search_num}_temp.ht",
+                    overwrite=True,
+                )
 
             logger.info(
                 "Extracting breakpoints found in round %i...",
@@ -353,6 +386,7 @@ def main(args):
             hl.init(
                 log=f"/round{args.search_num}_merge_single_simul.log",
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
             )
             # Get locus input to this simultaneous break search round from single search no-break HT
             single_no_break_ht = hl.read_table(
@@ -360,6 +394,7 @@ def main(args):
                     search_num=args.search_num,
                     is_break_found=False,
                     is_breakpoint_only=False,
+                    freeze=args.freeze,
                 )
             )
 
@@ -430,6 +465,7 @@ def main(args):
                 search_num=args.search_num,
                 is_break_found=True,
                 is_breakpoint_only=False,
+                freeze=args.freeze,
             )
 
             if file_exists(single_break_path):
@@ -492,15 +528,19 @@ def main(args):
             # DONE: 4. Create and write final no break found ht for this round number
 
         if args.finalize:
-            hl.init(log="/RMC_finalize.log", tmp_dir=TEMP_PATH_WITH_FAST_DEL)
+            hl.init(
+                log="/RMC_finalize.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
+            )
 
             logger.info("Checking round paths...")
-            round_nums = check_break_search_round_nums()
+            round_nums = check_break_search_round_nums(args.freeze)
 
             logger.info("Finalizing section-level RMC table...")
-            rmc_ht = merge_rmc_hts(round_nums=round_nums)
+            rmc_ht = merge_rmc_hts(round_nums=round_nums, freeze=args.freeze)
             rmc_ht = rmc_ht.checkpoint(
-                f"{TEMP_PATH_WITH_SLOW_DEL}/rmc_results.ht",
+                f"{TEMP_PATH_WITH_SLOW_DEL}/freeze{args.freeze}_rmc_results.ht",
                 overwrite=args.overwrite,
                 _read_if_exists=not args.overwrite,
             )
@@ -511,6 +551,9 @@ def main(args):
 
             logger.info("Writing out RMC results...")
             rmc_ht.write(rmc_results.versions[args.freeze].path)
+
+            logger.info("Getting transcripts without evidence of RMC...")
+            create_no_breaks_he(freeze=args.freeze, overwrite=args.overwrite)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -555,6 +598,18 @@ if __name__ == "__main__":
         "--search-num",
         help="Search iteration number (e.g., second round of searching for single break would be 2).",
         type=int,
+    )
+    parser.add_argument(
+        "--save-chisq-ht",
+        help="""
+        Save temporary Table that contains chi square significance values
+        for all possible loci. Note that chi square values will be missing for
+        any loci that would divide a transcript into subsections with fewer than
+        `MIN_EXP_MIS` expected missense variants.
+
+        NOTE that this temporary Table should only get saved once.
+        """,
+        action="store_true",
     )
     parser.add_argument(
         "--merge-single-simul",
@@ -605,6 +660,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
+    )
+    parser.add_argument(
+        "--quiet",
+        help="Initialize Hail with `quiet=True` to print fewer log messages",
+        action="store_true",
     )
     args = parser.parse_args()
 

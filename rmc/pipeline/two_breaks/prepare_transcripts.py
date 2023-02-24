@@ -38,7 +38,8 @@ def main(args):
     """Prepare input Table for two simultaneous breaks search."""
     try:
         grouped_ht_path = grouped_single_no_break_ht_path(
-            args.search_num,
+            search_num=args.search_num,
+            freeze=args.freeze,
         )
 
         if args.command == "create-grouped-ht":

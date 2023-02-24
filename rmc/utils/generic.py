@@ -123,10 +123,6 @@ def process_context_ht(
     Filter to missense variants in canonical protein coding transcripts.
     Also annotate with probability of mutation for each variant, CpG status, and methylation level.
 
-    .. note::
-        `trimers` needs to be True for gnomAD v2.
-
-    :param bool trimers: Whether to filter to trimers (if set to True) or heptamers. Default is True.
     :param bool filter_to_missense: Whether to filter Table to missense variants only. Default is True.
     :param bool add_annotations: Whether to add ref, alt, methylation_level, exome_coverage, cpg, transition,
         and mutation_type annotations. Default is True.
@@ -357,7 +353,6 @@ def generate_models(
     coverage_ht: hl.Table,
     coverage_x_ht: hl.Table,
     coverage_y_ht: hl.Table,
-    trimers: bool,
     weighted: bool = True,
 ) -> Tuple[
     Tuple[float, float],
@@ -371,7 +366,6 @@ def generate_models(
     :param hl.Table coverage_ht: Table with proportion of variants observed by coverage (autosomes/PAR only).
     :param hl.Table coverage_x_ht: Table with proportion of variants observed by coverage (chrX only).
     :param hl.Table coverage_y_ht: Table with proportion of variants observed by coverage (chrY only).
-    :param bool trimers: Whether to use trimers instead of heptamers.
     :param bool weighted: Whether to use weighted least squares when building models. Default is True.
     :return: Coverage model, plateau models for autosomes, plateau models for chrX, plateau models for chrY.
     :rtype: Tuple[Tuple[float, float], hl.expr.DictExpression, hl.expr.DictExpression, hl.expr.DictExpression]
@@ -385,12 +379,8 @@ def generate_models(
     logger.info("Building plateau models for chrX and chrY...")
     # TODO: make half_cutoff (for coverage cutoff) True for X/Y?
     # This would also mean saving new coverage model for allosomes
-    _, plateau_x_models = build_models(
-        coverage_x_ht, trimers=trimers, weighted=weighted
-    )
-    _, plateau_y_models = build_models(
-        coverage_y_ht, trimers=trimers, weighted=weighted
-    )
+    _, plateau_x_models = build_models(coverage_x_ht, weighted=weighted)
+    _, plateau_y_models = build_models(coverage_y_ht, weighted=weighted)
     return (coverage_model, plateau_models, plateau_x_models, plateau_y_models)
 
 

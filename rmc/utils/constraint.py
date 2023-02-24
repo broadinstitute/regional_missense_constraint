@@ -11,6 +11,7 @@ from gnomad.utils.constraint import annotate_mutation_type
 from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import (
+    SINGLE_BREAK_TEMP_PATH,
     TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
 )
@@ -25,8 +26,10 @@ from rmc.utils.generic import (
 from rmc.resources.rmc import (
     CHISQ_THRESHOLDS,
     CONSTRAINT_ANNOTATIONS,
+    CURRENT_FREEZE,
     FINAL_ANNOTATIONS,
-    no_breaks,
+    MIN_EXP_MIS,
+    no_breaks_he_path,
     oe_bin_counts_tsv,
     simul_search_bucket_path,
     SIMUL_SEARCH_ANNOTATIONS,
@@ -499,6 +502,7 @@ def get_max_chisq_per_group(
     ht: hl.Table,
     group_str: str,
     chisq_str: str,
+    freeze: int,
 ) -> hl.Table:
     """
     Group input Table by given field and return maximum chi square value per group.
@@ -509,6 +513,7 @@ def get_max_chisq_per_group(
     :param group_str: String of field containing transcript or transcript subsection information.
         Used to group observed and expected values.
     :param chisq_str: String of field containing chi square values to be checked.
+    :param freeze: RMC data freeze number.
     :return: Table annotated with maximum chi square value per group
     """
     group_ht = ht.group_by(group_str).aggregate(
@@ -516,7 +521,7 @@ def get_max_chisq_per_group(
         section_max_chisq=hl.agg.max(ht[chisq_str])
     )
     group_ht = group_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/group_max_chisq.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_group_max_chisq.ht", overwrite=True
     )
     ht = ht.annotate(section_max_chisq=group_ht[ht.section].section_max_chisq)
     return ht
@@ -525,9 +530,11 @@ def get_max_chisq_per_group(
 def search_for_break(
     ht: hl.Table,
     search_num: int,
+    freeze: int,
     chisq_threshold: float = CHISQ_THRESHOLDS["single"],
     group_str: str = "section",
-    min_num_exp_mis: float = 10.0,
+    min_num_exp_mis: float = MIN_EXP_MIS,
+    save_chisq_ht: bool = False,
 ) -> hl.Table:
     """
     Search for breakpoints in a transcript or within a transcript subsection.
@@ -555,13 +562,20 @@ def search_for_break(
     :param ht: Input Table.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
+    :param freeze: RMC data freeze number.
     :param chisq_threshold: Chi-square significance threshold.
         Default is CHISQ_THRESHOLDS['single'].
+        Default value used in ExAC was 10.8, which corresponds to a p-value of 0.001
+        with 1 degree of freedom.
+        (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
     :param group_str: Field used to group Table observed and expected values. Default is 'section'.
     :param min_num_exp_mis: Minimum number of expected missense per transcript/transcript section.
         Sections that have fewer than this number of expected missense variants will not
         be computed (chi square will be annotated as a missing value).
-        Default is 10.
+        Default is MIN_EXP_MIS.
+    :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus.
+        This saves a lot of extra data and should only occur once.
+        Default is False.
     :return: Table annotated with whether position is a breakpoint (`is_break`).
     """
     logger.info(
@@ -625,12 +639,14 @@ def search_for_break(
             2 * (ht.total_alt - ht.total_null),
         )
     )
-
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/round{search_num}_all_loci_chisq.ht", overwrite=True
+    all_loci_chisq_ht_path = (
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_round{search_num}_all_loci_chisq.ht"
     )
+    if save_chisq_ht:
+        all_loci_chisq_ht_path = f"{SINGLE_BREAK_TEMP_PATH}/all_loci_chisq.ht"
+    ht = ht.checkpoint(all_loci_chisq_ht_path, overwrite=True)
 
-    ht = get_max_chisq_per_group(ht, group_str, "chisq")
+    ht = get_max_chisq_per_group(ht, group_str, "chisq", freeze)
     return ht.annotate(
         is_break=((ht.chisq == ht.section_max_chisq) & (ht.chisq >= chisq_threshold))
     )
@@ -692,8 +708,10 @@ def get_subsection_exprs(
 def process_sections(
     ht: hl.Table,
     search_num: int,
+    freeze: int,
     chisq_threshold: float = CHISQ_THRESHOLDS["single"],
     group_str: str = "section",
+    save_chisq_ht: bool = False,
 ):
     """
     Search for breaks within given sections of a transcript.
@@ -712,9 +730,16 @@ def process_sections(
     :param ht: Input Table.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
+    :param freeze: RMC data freeze number.
     :param chisq_threshold: Chi-square significance threshold.
         Default is CHISQ_THRESHOLDS['single'].
+        Default value used in ExAC was 10.8, which corresponds to a p-value of 0.001
+        with 1 degree of freedom.
+        (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
     :param group_str: Field used to group observed and expected values. Default is 'section'.
+    :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus.
+        This saves a lot of extra data and should only occur during the initial search round.
+        Default is False.
     :return: Table annotated with whether position is a breakpoint.
     """
     # TODO: When re-running, make sure `get_subsection_exprs`,
@@ -746,15 +771,18 @@ def process_sections(
     ht = search_for_break(
         ht,
         search_num,
+        freeze=freeze,
         chisq_threshold=chisq_threshold,
+        save_chisq_ht=save_chisq_ht,
     )
     return ht
 
 
-def create_no_breaks_he(overwrite: bool) -> None:
+def create_no_breaks_he(freeze: int, overwrite: bool) -> None:
     """
     Write final no breaks HailExpression.
 
+    :param freeze: RMC freeze number.
     :param overwrite: Whether to overwrite output data if it exists.
     :return: None; function writes HailExpression to resource path.
     """
@@ -783,7 +811,7 @@ def create_no_breaks_he(overwrite: bool) -> None:
     )
     no_break_transcripts = hl.map(lambda x: x.split("_")[0], no_break_sections)
     hl.experimental.write_expression(
-        no_break_transcripts, no_breaks, overwrite=overwrite
+        no_break_transcripts, no_breaks_he_path(freeze), overwrite=overwrite
     )
 
 
@@ -898,7 +926,7 @@ def get_break_search_round_nums(
     return sorted(round_nums)
 
 
-def check_break_search_round_nums() -> List[int]:
+def check_break_search_round_nums(freeze: int = CURRENT_FREEZE) -> List[int]:
     """
     Check for valid single and simultaneous break search round number outputs.
 
@@ -908,11 +936,16 @@ def check_break_search_round_nums() -> List[int]:
     .. note::
         Assumes there is a folder for each search round run, regardless of whether there were breaks discovered
 
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Sorted list of round numbers.
     """
     # Get sorted round numbers
-    single_search_round_nums = get_break_search_round_nums(single_search_bucket_path())
-    simul_search_round_nums = get_break_search_round_nums(simul_search_bucket_path())
+    single_search_round_nums = get_break_search_round_nums(
+        single_search_bucket_path(freeze=freeze)
+    )
+    simul_search_round_nums = get_break_search_round_nums(
+        simul_search_bucket_path(freeze=freeze)
+    )
     logger.info(
         "Single search round numbers: %s\nSimultaneous search round numbers: %s",
         ",".join(map(str, single_search_round_nums)),
@@ -943,6 +976,7 @@ def check_break_search_round_nums() -> List[int]:
 
 def merge_round_no_break_ht(
     search_num: int,
+    freeze: int,
     keep_annotations: Set[str] = CONSTRAINT_ANNOTATIONS,
 ) -> hl.Table:
     """
@@ -953,6 +987,7 @@ def merge_round_no_break_ht(
 
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
+    :param freeze: RMC data freeze number.
     :param keep_annotations: Fields to keep in the table. Default is `CONSTRAINT_ANNOTATIONS`.
     :return: Table of loci in sections where no breaks were found in the break search round. Schema:
         ----------------------------------------
@@ -969,6 +1004,7 @@ def merge_round_no_break_ht(
         search_num=search_num,
         is_break_found=False,
         is_breakpoint_only=False,
+        freeze=freeze,
     )
     if not file_exists(single_no_break_path):
         raise DataException(
@@ -987,6 +1023,7 @@ def merge_round_no_break_ht(
     simul_results_path = simul_search_round_bucket_path(
         search_num=search_num,
         bucket_type="final_results",
+        freeze=freeze,
     )
     simul_break_path = f"{simul_results_path}/merged.ht"
     if file_exists(simul_break_path):
@@ -1021,11 +1058,12 @@ def calculate_section_chisq(
     return ((obs_expr - exp_expr) ** 2) / exp_expr
 
 
-def merge_rmc_hts(round_nums: List[int]) -> hl.Table:
+def merge_rmc_hts(round_nums: List[int], freeze: int) -> hl.Table:
     """
     Get table of final RMC sections after all break searches are complete.
 
     :param round_nums: List of round numbers to merge results across.
+    :param freeze: RMC data freeze number.
     :return: Table of final RMC sections. Schema:
         ----------------------------------------
         Row fields:
@@ -1056,6 +1094,7 @@ def merge_rmc_hts(round_nums: List[int]) -> hl.Table:
         # Get locus-level merged no-break table (no breaks in both single and simultaneous searches)
         ht = merge_round_no_break_ht(
             search_num=search_num,
+            freeze=freeze,
             keep_annotations=FINAL_ANNOTATIONS,
         )
         # Group to section-level and retain section obs- and exp-related annotations
@@ -1068,7 +1107,8 @@ def merge_rmc_hts(round_nums: List[int]) -> hl.Table:
         hts.append(ht)
     rmc_ht = hts[0].union(*hts[1:])
     rmc_ht = rmc_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/search_union.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_search_union.ht",
+        overwrite=True,
     )
     # Calculate chi-square value for each section
     rmc_ht = rmc_ht.annotate(
