@@ -40,16 +40,6 @@ Used to determine whether chi square values determining RMC breakpoints
 are significant.
 
 Default is 0.001.
-"""
-
-CHISQ_THRESHOLDS = {
-    "single": hl.qchisqtail(P_VALUE, 1),
-    "simul": hl.qchisqtail(P_VALUE, 2),
-}
-"""
-Default chi square significance thresholds for each search type.
-
-Thresholds are set for break search type ('single' or 'simul').
 
 Hail reference:
 https://hail.is/docs/0.2/functions/stats.html#hail.expr.functions.qchisqtail
