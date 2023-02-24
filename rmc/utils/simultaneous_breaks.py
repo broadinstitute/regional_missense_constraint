@@ -458,7 +458,7 @@ def process_section_group(
         Default is False.
     :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
         (as long as chi square value is >= min_chisq_threshold).
-        This saves a lot of extra data and should only occur during the initial search round.
+        This saves a lot of extra data and should only occur once.
         Default is False.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: None; processes Table and writes to path. Also writes success TSV to path.

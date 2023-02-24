@@ -570,7 +570,7 @@ def search_for_break(
         be computed (chi square will be annotated as a missing value).
         Default is MIN_EXP_MIS.
     :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus.
-        This saves a lot of extra data and should only occur during the initial search round.
+        This saves a lot of extra data and should only occur once.
         Default is False.
     :return: Table annotated with whether position is a breakpoint (`is_break`).
     """

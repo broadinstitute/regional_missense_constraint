@@ -44,9 +44,6 @@ def main(args):
             log=f"/round{args.search_num}search_for_two_breaks_run_batches_dataproc.log",
             tmp_dir=TEMP_PATH_WITH_FAST_DEL,
         )
-        save_chisq_ht = False
-        if args.search_num == 1:
-            save_chisq_ht = True
 
         if args.run_sections_over_threshold:
             sections_to_run = list(
@@ -119,7 +116,7 @@ def main(args):
                 chisq_threshold=args.chisq_threshold,
                 split_list_len=args.split_list_len,
                 read_if_exists=args.read_if_exists,
-                save_chisq_ht=save_chisq_ht,
+                save_chisq_ht=args.save_chisq_ht,
             )
 
     finally:
@@ -189,6 +186,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "--read-if-exists",
         help="Use temporary Tables if they already exist.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--save-chisq-ht",
+        help="""
+        Save temporary Table that contains chi square significance values
+        for all possible loci. Note that chi square values will be missing for
+        any loci that would divide a transcript into subsections with fewer than
+        `MIN_EXP_MIS` expected missense variants.
+        """,
         action="store_true",
     )
 
