@@ -63,7 +63,7 @@ Minimum chi square significance.
 
 Used only in two simultaneous breaks search.
 Any breakpoint combinations with a chi square value less than this threshold
-will not be emitted.
+will not be emitted for storage.
 """
 
 MIN_EXP_MIS = 16.0
