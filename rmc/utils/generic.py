@@ -684,7 +684,7 @@ def import_kaplanis_data(overwrite: bool) -> None:
     kap_ht = kap_ht.filter(hl.is_snp(kap_ht.alleles[0], kap_ht.alleles[1]))
     kap_ht = kap_ht.filter(kap_ht.case_control == "DD")
     kap_ht = kap_ht.group_by("locus", "alleles").aggregate(
-case_control=hl.agg.collect(kap_ht.case_control)
+        case_control=hl.agg.collect(kap_ht.case_control)
     )
     kap_ht.write(f"{TEMP_PATH_WITH_FAST_DEL}/kaplanis_dn.ht", overwrite=overwrite)
 
