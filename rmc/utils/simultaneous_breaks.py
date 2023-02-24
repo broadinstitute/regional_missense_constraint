@@ -315,7 +315,7 @@ def search_for_two_breaks(
     group_ht: hl.Table,
     count: int,
     chisq_threshold: float = CHISQ_THRESHOLDS["simul"],
-    min_num_exp_mis: float = 10,
+    min_num_exp_mis: float = MIN_EXP_MIS,
     min_chisq_threshold: float = MIN_CHISQ_THRESHOLD,
     save_chisq_ht: bool = False,
     freeze: int = CURRENT_FREEZE,
