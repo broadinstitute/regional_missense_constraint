@@ -48,7 +48,7 @@ Look-up table reference:
 https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
 """
 
-MIN_CHISQ_THRESHOLD = scipy.stats.chi2.ppf(0.975, 1)
+MIN_CHISQ_THRESHOLD = scipy.stats.chi2.ppf(0.975, 2)
 """
 Minimum chi square significance.
 
