@@ -148,8 +148,8 @@ if __name__ == "__main__":
         p-value significance threshold for single break search.
         Used to determine chi square statistic thershold.
 
-        If not specified, script will default to thresholds set
-        in constants `P_VALUE`.
+        If not specified, script will default to threshold set
+        in `P_VALUE`.
         """,
         type=float,
     )
