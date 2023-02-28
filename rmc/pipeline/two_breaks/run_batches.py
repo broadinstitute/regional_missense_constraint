@@ -18,6 +18,7 @@ This script should be run locally because it submits jobs to the Hail Batch serv
 """
 import argparse
 import logging
+import scipy
 from tqdm import tqdm
 
 from typing import Dict, List, Set, Union, Optional
@@ -30,15 +31,14 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
-    CHISQ_THRESHOLDS,
     CURRENT_FREEZE,
     grouped_single_no_break_ht_path,
     MIN_CHISQ_THRESHOLD,
     MIN_EXP_MIS,
+    P_VALUE,
     simul_sections_split_by_len_path,
 )
 from rmc.slack_creds import slack_token
-from rmc.utils.simultaneous_breaks import get_sections_to_run
 
 
 logging.basicConfig(
@@ -289,7 +289,7 @@ def calculate_window_chisq(
 def search_for_two_breaks(
     group_ht: hl.Table,
     count: int,
-    chisq_threshold: float = CHISQ_THRESHOLDS["simul"],
+    chisq_threshold: float = scipy.stats.chi2.ppf(1 - P_VALUE, 2),
     min_num_exp_mis: float = MIN_EXP_MIS,
     min_chisq_threshold: float = MIN_CHISQ_THRESHOLD,
     save_chisq_ht: bool = False,
@@ -305,7 +305,7 @@ def search_for_two_breaks(
         a single significant breakpoint.
     :param count: Which transcript group is being run (based on counter generated in `main`).
     :param chisq_threshold: Chi-square significance threshold. Default is
-        CHISQ_THRESHOLDS['simul'].
+        scipy.stats.chi2.ppf(1 - P_VALUE, 2).
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001
         with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
@@ -392,7 +392,7 @@ def process_section_group(
     over_threshold: bool,
     output_ht_path: str,
     output_n_partitions: int = 10,
-    chisq_threshold: float = CHISQ_THRESHOLDS["simul"],
+    chisq_threshold: float = scipy.stats.chi2.ppf(1 - P_VALUE, 2),
     min_num_exp_mis: float = MIN_EXP_MIS,
     split_list_len: int = 500,
     read_if_exists: bool = False,
@@ -417,7 +417,7 @@ def process_section_group(
     :param output_n_partitions: Desired number of partitions for output Table.
         Default is 10.
     :param chisq_threshold: Chi-square significance threshold. Default is
-        CHISQ_THRESHOLDS['simul'].
+        scipy.stats.chi2.ppf(1 - P_VALUE, 2).
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001
         with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
@@ -528,6 +528,7 @@ def process_section_group(
         chisq_threshold=chisq_threshold,
         min_num_exp_mis=min_num_exp_mis,
         save_chisq_ht=save_chisq_ht,
+        freeze=freeze,
     )
 
     # If over threshold, checkpoint HT and check if there were any breaks
@@ -574,36 +575,36 @@ def main(args):
             "Do not specify --use-custom-machine when transcripts/sections are --under-threshold size!"
         )
 
-    logger.info("Importing SetExpression with transcripts or transcript sections...")
-    sections_to_run = get_sections_to_run(
-        sections=(
-            list(
-                hl.eval(
-                    hl.experimental.read_expression(
-                        simul_sections_split_by_len_path(
-                            search_num=args.search_num,
-                            is_over_threshold=False,
-                            freeze=args.freeze,
-                        )
-                    )
-                )
-            )
-            if args.under_threshold
-            else list(
-                hl.eval(
-                    hl.experimental.read_expression(
-                        simul_sections_split_by_len_path(
-                            search_num=args.search_num,
-                            is_over_threshold=True,
-                            freeze=args.freeze,
-                        )
-                    )
-                )
-            )
-        ),
-        search_num=args.search_num,
-    )
+    chisq_threshold = hl.eval(hl.qchisqtail(P_VALUE, 2))
+    if args.p_value:
+        chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 2))
 
+    logger.info("Importing SetExpression with transcripts or transcript sections...")
+    sections_to_run = (
+        list(
+            hl.eval(
+                hl.experimental.read_expression(
+                    simul_sections_split_by_len_path(
+                        search_num=args.search_num,
+                        is_over_threshold=False,
+                        freeze=args.freeze,
+                    )
+                )
+            )
+        )
+        if args.under_threshold
+        else list(
+            hl.eval(
+                hl.experimental.read_expression(
+                    simul_sections_split_by_len_path(
+                        search_num=args.search_num,
+                        is_over_threshold=True,
+                        freeze=args.freeze,
+                    )
+                )
+            )
+        )
+    )
     logger.info(
         "Found %i transcripts or transcript sections to search...", len(sections_to_run)
     )
@@ -681,7 +682,7 @@ def main(args):
                 over_threshold=False,
                 output_ht_path=f"{raw_path}/simul_break_{job_name}.ht",
                 output_n_partitions=args.output_n_partitions,
-                chisq_threshold=args.chisq_threshold,
+                chisq_threshold=chisq_threshold,
                 split_list_len=args.group_size,
                 save_chisq_ht=args.save_chisq_ht,
                 google_project=args.google_project,
@@ -719,7 +720,7 @@ def main(args):
                 over_threshold=True,
                 output_ht_path=f"{raw_path}/simul_break_{group[0]}.ht",
                 output_n_partitions=args.output_n_partitions,
-                chisq_threshold=args.chisq_threshold,
+                chisq_threshold=chisq_threshold,
                 split_list_len=args.group_size,
                 save_chisq_ht=args.save_chisq_ht,
                 google_project=args.google_project,
@@ -738,10 +739,15 @@ if __name__ == "__main__":
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
-        "--chisq-threshold",
-        help="Chi-square significance threshold. Default is `CHISQ_THRESHOLDS['simul']`.",
+        "--p-value",
+        help="""
+        p-value significance threshold for single break search.
+        Used to determine chi square threshold for likelihood ratio test.
+
+        If not specified, script will default to threshold set
+        in `P_VALUE`.
+        """,
         type=float,
-        default=CHISQ_THRESHOLDS["simul"],
     )
     parser.add_argument(
         "--output-n-partitions",

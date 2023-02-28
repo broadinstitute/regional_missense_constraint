@@ -4,6 +4,7 @@ Script containing RMC and MPC related resources.
 RMC: Regional missense constraint
 MPC: Missense badness, Polyphen-2, and Constraint score
 """
+import scipy
 from typing import Set
 
 import hail as hl
@@ -40,16 +41,6 @@ Used to determine whether chi square values determining RMC breakpoints
 are significant.
 
 Default is 0.001.
-"""
-
-CHISQ_THRESHOLDS = {
-    "single": hl.eval(hl.qchisqtail(P_VALUE, 1)),
-    "simul": hl.eval(hl.qchisqtail(P_VALUE, 2)),
-}
-"""
-Default chi square significance thresholds for each search type.
-
-Thresholds are set for break search type ('single' or 'simul').
 
 Hail reference:
 https://hail.is/docs/0.2/functions/stats.html#hail.expr.functions.qchisqtail
@@ -57,7 +48,7 @@ Look-up table reference:
 https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm
 """
 
-MIN_CHISQ_THRESHOLD = hl.eval(hl.qchisqtail(0.025, 2))
+MIN_CHISQ_THRESHOLD = scipy.stats.chi2.ppf(0.975, 2)
 """
 Minimum chi square significance.
 

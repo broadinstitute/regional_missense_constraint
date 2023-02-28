@@ -1,5 +1,6 @@
 """This script contains functions used to search for two simultaneous breaks."""
 import logging
+import scipy
 from typing import List
 
 import hail as hl
@@ -8,10 +9,10 @@ from gnomad.utils.file_utils import file_exists, parallel_file_exists
 
 from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
-    CHISQ_THRESHOLDS,
     CURRENT_FREEZE,
     MIN_CHISQ_THRESHOLD,
     MIN_EXP_MIS,
+    P_VALUE,
     simul_search_round_bucket_path,
     simul_sections_split_by_len_path,
 )
@@ -314,7 +315,7 @@ def calculate_window_chisq(
 def search_for_two_breaks(
     group_ht: hl.Table,
     count: int,
-    chisq_threshold: float = CHISQ_THRESHOLDS["simul"],
+    chisq_threshold: float = scipy.stats.chi2.ppf(1 - P_VALUE, 2),
     min_num_exp_mis: float = MIN_EXP_MIS,
     min_chisq_threshold: float = MIN_CHISQ_THRESHOLD,
     save_chisq_ht: bool = False,
@@ -330,7 +331,7 @@ def search_for_two_breaks(
         a single significant breakpoint.
     :param count: Which transcript or transcript section group is being run (based on counter generated in `main`).
     :param chisq_threshold: Chi-square significance threshold. Default is
-        CHISQ_THRESHOLDS['simul'].
+        `scipy.stats.chi2.ppf(1 - P_VALUE, 2)`.
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001
         with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
@@ -415,7 +416,7 @@ def process_section_group(
     over_threshold: bool,
     output_ht_path: str,
     output_n_partitions: int = 10,
-    chisq_threshold: float = CHISQ_THRESHOLDS["simul"],
+    chisq_threshold: float = scipy.stats.chi2.ppf(1 - P_VALUE, 2),
     min_num_exp_mis: float = MIN_EXP_MIS,
     split_list_len: int = 500,
     read_if_exists: bool = False,
@@ -438,7 +439,7 @@ def process_section_group(
     :param output_n_partitions: Desired number of partitions for output Table.
         Default is 10.
     :param chisq_threshold: Chi-square significance threshold. Default is
-        CHISQ_THRESHOLDS['simul'].
+        `scipy.stats.chi2.ppf(1 - P_VALUE, 2)`.
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001
         with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)

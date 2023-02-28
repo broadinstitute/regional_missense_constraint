@@ -21,9 +21,9 @@ from rmc.resources.gnomad import (
 from rmc.resources.reference_data import filtered_context, gene_model
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
-    CHISQ_THRESHOLDS,
     constraint_prep,
     merged_search_ht_path,
+    P_VALUE,
     rmc_results,
     simul_search_round_bucket_path,
     single_search_round_ht_path,
@@ -262,15 +262,14 @@ def main(args):
             )
 
         if args.search_for_single_break:
-            if args.chisq_threshold:
-                chisq_threshold = args.chisq_threshold
-            else:
-                chisq_threshold = CHISQ_THRESHOLDS["single"]
             hl.init(
                 log=f"/round{args.search_num}_single_break_search.log",
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
+            chisq_threshold = hl.eval(hl.qchisqtail(P_VALUE, 1))
+            if args.p_value:
+                chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 1))
             run_single_search = True
 
             logger.info(
@@ -285,7 +284,7 @@ def main(args):
                     ht = ht.annotate(
                         is_break=(
                             (ht.chisq == ht.section_max_chisq)
-                            & (ht.chisq >= args.chisq_threshold)
+                            & (ht.chisq >= chisq_threshold)
                         )
                     )
                     run_single_search = False
@@ -364,6 +363,7 @@ def main(args):
                     search_num=args.search_num,
                     is_break_found=True,
                     is_breakpoint_only=False,
+                    freeze=args.freeze,
                 ),
                 overwrite=args.overwrite,
             )
@@ -378,6 +378,7 @@ def main(args):
                     search_num=args.search_num,
                     is_break_found=False,
                     is_breakpoint_only=False,
+                    freeze=args.freeze,
                 ),
                 overwrite=args.overwrite,
             )
@@ -626,28 +627,15 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--chisq-threshold",
+        "--p-value",
         help="""
-        Chi-square significance threshold for single break search.
-        If not specified, script will default to thresholds set
-        in constant `CHISQ_THRESHOLDS`.
+        p-value significance threshold for single break search.
+        Used to determine chi square threshold for likelihood ratio test.
+
+        If not specified, script will default to threshold set
+        in `P_VALUE`.
         """,
         type=float,
-    )
-    parser.add_argument(
-        "--chisq-thresholds-dict",
-        help="""
-        Dictionary of chi-square significance thresholds
-        per significance threshold and break search type.
-
-        Keys should be 'single' or 'simul'.
-
-        If not specified, script will default to using
-        `CHISQ_THRESHOLDS`.
-
-        Example format:
-        '{"single": 6.6, "simul": 9.2}'
-        """,
     )
     parser.add_argument(
         "--freeze",
