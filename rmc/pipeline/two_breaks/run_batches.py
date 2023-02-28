@@ -566,7 +566,13 @@ def process_section_group(
 def main(args):
     """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
     hl.init(
-        log="search_for_two_breaks_run_batches.log", tmp_dir=TEMP_PATH_WITH_FAST_DEL
+        spark_conf={
+            "spark.hadoop.fs.gs.requester.pays.mode": "CUSTOM",
+            "spark.hadoop.fs.gs.requester.pays.buckets": f"{RMC_PREFIX.lstrip('gs://')}",
+            "spark.hadoop.fs.gs.requester.pays.project.id": f"{args.google_project}",
+        },
+        log="search_for_two_breaks_run_batches.log",
+        tmp_dir=TEMP_PATH_WITH_FAST_DEL,
     )
 
     # Make sure custom machine wasn't specified with under threshold
