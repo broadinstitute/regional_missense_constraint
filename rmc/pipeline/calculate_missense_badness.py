@@ -64,7 +64,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
-        default="@kc (she/her)",
     )
 
     # Create subparsers for each step
