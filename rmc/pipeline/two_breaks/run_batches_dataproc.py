@@ -121,6 +121,7 @@ def main(args):
                 split_list_len=args.split_list_len,
                 read_if_exists=args.read_if_exists,
                 save_chisq_ht=args.save_chisq_ht,
+                freeze=args.freeze,
             )
 
     finally:

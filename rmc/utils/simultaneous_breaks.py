@@ -542,6 +542,7 @@ def process_section_group(
         chisq_threshold=chisq_threshold,
         min_num_exp_mis=min_num_exp_mis,
         save_chisq_ht=save_chisq_ht,
+        freeze=freeze,
     )
 
     # If over threshold, checkpoint HT and check if there were any breaks

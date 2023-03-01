@@ -791,6 +791,7 @@ def create_no_breaks_he(freeze: int, overwrite: bool) -> None:
     simul_results_path = simul_search_round_bucket_path(
         search_num=1,
         bucket_type="final_results",
+        freeze=freeze,
     )
     simul_ht = hl.read_table(
         f"{simul_results_path}/merged.ht",
@@ -803,6 +804,7 @@ def create_no_breaks_he(freeze: int, overwrite: bool) -> None:
             search_num=1,
             is_break_found=False,
             is_breakpoint_only=False,
+            freeze=freeze,
         )
     )
     ht = ht.filter(~hl.literal(simul_sections).contains(ht.section))
