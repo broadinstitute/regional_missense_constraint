@@ -827,7 +827,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--batch-bucket",
         help="Bucket provided to hail batch for temporary storage.",
-        default=TEMP_PATH_WITH_FAST_DEL,
+        default=f"{TEMP_PATH_WITH_FAST_DEL}/rmc/",
     )
     parser.add_argument(
         "--google-project",
