@@ -551,7 +551,7 @@ def main(args):
             rmc_ht = rmc_ht.filter(constraint_transcripts.contains(rmc_ht.transcript))
 
             logger.info("Writing out RMC results...")
-            rmc_ht.write(rmc_results.versions[args.freeze].path)
+            rmc_ht.write(rmc_results.versions[int(args.freeze)].path)
 
             logger.info("Getting transcripts without evidence of RMC...")
             create_no_breaks_he(freeze=args.freeze, overwrite=args.overwrite)
