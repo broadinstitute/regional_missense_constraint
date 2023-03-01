@@ -442,7 +442,7 @@ def process_section_group(
     hl.init(
         spark_conf={
             "spark.hadoop.fs.gs.requester.pays.mode": "CUSTOM",
-            "spark.hadoop.fs.gs.requester.pays.buckets": f"{requester_pays_bucket.lstrip('gs://')}",
+            "spark.hadoop.fs.gs.requester.pays.buckets": f"{requester_pays_bucket.lstrip('gs:/')}",
             "spark.hadoop.fs.gs.requester.pays.project.id": f"{google_project}",
         },
         tmp_dir=TEMP_PATH_WITH_FAST_DEL,
@@ -568,7 +568,7 @@ def main(args):
     hl.init(
         spark_conf={
             "spark.hadoop.fs.gs.requester.pays.mode": "CUSTOM",
-            "spark.hadoop.fs.gs.requester.pays.buckets": f"{RMC_PREFIX.lstrip('gs://')}",
+            "spark.hadoop.fs.gs.requester.pays.buckets": f"{RMC_PREFIX.lstrip('gs:/')}",
             "spark.hadoop.fs.gs.requester.pays.project.id": f"{args.google_project}",
         },
         log="search_for_two_breaks_run_batches.log",
