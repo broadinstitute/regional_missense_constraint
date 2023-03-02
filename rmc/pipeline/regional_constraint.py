@@ -2,9 +2,8 @@ import argparse
 import logging
 
 import hail as hl
-
-from gnomad.utils.slack import slack_notifications
 from gnomad.utils.file_utils import file_exists
+from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
     LOGGING_PATH,
@@ -19,25 +18,25 @@ from rmc.resources.gnomad import (
     prop_obs_coverage,
 )
 from rmc.resources.reference_data import filtered_context, gene_model
+from rmc.resources.resource_utils import MISSENSE
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
+    P_VALUE,
     constraint_prep,
     merged_search_ht_path,
-    P_VALUE,
     rmc_results,
     simul_search_round_bucket_path,
     single_search_round_ht_path,
 )
-from rmc.resources.resource_utils import MISSENSE
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
+    GROUPINGS,
     add_obs_annotation,
     calculate_exp_per_transcript,
     calculate_observed,
     check_break_search_round_nums,
     create_no_breaks_he,
     get_max_chisq_per_group,
-    GROUPINGS,
     merge_rmc_hts,
     process_sections,
 )
@@ -51,7 +50,6 @@ from rmc.utils.generic import (
     process_context_ht,
     process_vep,
 )
-
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",

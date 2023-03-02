@@ -1,2 +1,2 @@
-from .generic import *
 from .constraint import *
+from .generic import *

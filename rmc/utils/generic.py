@@ -2,7 +2,6 @@ import logging
 from typing import Dict, Tuple
 
 import hail as hl
-
 from gnomad.resources.grch37.gnomad import coverage, public_release
 from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
@@ -17,7 +16,6 @@ from gnomad.utils.vep import (
     add_most_severe_csq_to_tc_within_vep_root,
     filter_vep_to_canonical_transcripts,
 )
-
 from gnomad_constraint.utils.constraint import prepare_ht_for_constraint_calculations
 
 from rmc.resources.basics import (
@@ -38,12 +36,8 @@ from rmc.resources.reference_data import (
     ndd_de_novo_2020_tsv_path,
     triplo_genes_path,
 )
-from rmc.resources.rmc import (
-    DIVERGENCE_SCORES_TSV_PATH,
-    MUTATION_RATE_TABLE_PATH,
-)
 from rmc.resources.resource_utils import MISSENSE
-
+from rmc.resources.rmc import DIVERGENCE_SCORES_TSV_PATH, MUTATION_RATE_TABLE_PATH
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",

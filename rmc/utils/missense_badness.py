@@ -1,15 +1,11 @@
 import logging
 
 import hail as hl
-
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.vep import CSQ_NON_CODING
 
-from rmc.resources.basics import (
-    TEMP_PATH,
-    TEMP_PATH_WITH_FAST_DEL,
-)
+from rmc.resources.basics import TEMP_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.gnomad import constraint_ht
 from rmc.resources.rmc import amino_acids_oe, constraint_prep, misbad, rmc_results
 from rmc.utils.constraint import add_obs_annotation

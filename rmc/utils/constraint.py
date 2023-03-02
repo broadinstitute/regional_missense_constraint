@@ -1,11 +1,10 @@
 import logging
 import re
-import scipy
 import subprocess
 from typing import Dict, List, Set, Union
 
 import hail as hl
-
+import scipy
 from gnomad.resources.grch37.gnomad import coverage, public_release
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.constraint import annotate_mutation_type
@@ -18,27 +17,26 @@ from rmc.resources.basics import (
 )
 from rmc.resources.gnomad import filtered_exomes
 from rmc.resources.reference_data import clinvar_plp_mis_haplo, gene_model, ndd_de_novo
-from rmc.utils.generic import (
-    get_coverage_correction_expr,
-    keep_criteria,
-    import_clinvar,
-    import_de_novo_variants,
-)
 from rmc.resources.rmc import (
     CONSTRAINT_ANNOTATIONS,
     CURRENT_FREEZE,
     FINAL_ANNOTATIONS,
     MIN_EXP_MIS,
+    P_VALUE,
+    SIMUL_SEARCH_ANNOTATIONS,
     no_breaks_he_path,
     oe_bin_counts_tsv,
-    P_VALUE,
     simul_search_bucket_path,
-    SIMUL_SEARCH_ANNOTATIONS,
     simul_search_round_bucket_path,
     single_search_bucket_path,
     single_search_round_ht_path,
 )
-
+from rmc.utils.generic import (
+    get_coverage_correction_expr,
+    import_clinvar,
+    import_de_novo_variants,
+    keep_criteria,
+)
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",

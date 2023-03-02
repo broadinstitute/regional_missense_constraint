@@ -1,18 +1,17 @@
 import logging
-import numpy as np
-import pandas as pd
-from patsy import dmatrices
 import pickle
-import statsmodels
-import statsmodels.api as sm
 from typing import Dict, List, Tuple, Union
 
 import hail as hl
-
+import numpy as np
+import pandas as pd
+import statsmodels
+import statsmodels.api as sm
 from gnomad.resources.grch37.gnomad import public_release
 from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
+from patsy import dmatrices
 
 from rmc.resources.basics import (
     TEMP_PATH,
@@ -27,6 +26,7 @@ from rmc.resources.reference_data import (
     grantham,
     grantham_txt_path,
 )
+from rmc.resources.resource_utils import MISSENSE
 from rmc.resources.rmc import (
     context_with_oe,
     context_with_oe_dedup,
@@ -37,10 +37,8 @@ from rmc.resources.rmc import (
     mpc_release,
     mpc_release_dedup,
 )
-from rmc.resources.resource_utils import MISSENSE
 from rmc.utils.generic import get_aa_map, get_constraint_transcripts, process_vep
 from rmc.utils.missense_badness import annotate_and_filter_codons, get_oe_annotation
-
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",

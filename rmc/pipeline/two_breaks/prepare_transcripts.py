@@ -11,7 +11,6 @@ import argparse
 import logging
 
 import hail as hl
-
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
@@ -25,7 +24,6 @@ from rmc.utils.simultaneous_breaks import (
     group_no_single_break_found_ht,
     split_sections_by_len,
 )
-
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",

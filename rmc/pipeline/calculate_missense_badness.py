@@ -7,13 +7,11 @@ import argparse
 import logging
 
 import hail as hl
-
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.slack_creds import slack_token
 from rmc.utils.missense_badness import calculate_misbad, prepare_amino_acid_ht
-
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
