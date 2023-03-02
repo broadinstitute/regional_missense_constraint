@@ -18,28 +18,25 @@ This script should be run locally because it submits jobs to the Hail Batch serv
 """
 import argparse
 import logging
-import scipy
-from tqdm import tqdm
-
-from typing import Dict, List, Set, Union, Optional
+from typing import Dict, List, Optional, Set, Union
 
 import hail as hl
 import hailtop.batch as hb
-
+import scipy
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
+from tqdm import tqdm
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
-    grouped_single_no_break_ht_path,
     MIN_CHISQ_THRESHOLD,
     MIN_EXP_MIS,
     P_VALUE,
+    grouped_single_no_break_ht_path,
     simul_sections_split_by_len_path,
 )
 from rmc.slack_creds import slack_token
-
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
