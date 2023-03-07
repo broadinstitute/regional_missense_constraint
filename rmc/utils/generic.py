@@ -718,12 +718,13 @@ def import_de_novo_variants(overwrite: bool, n_partitions: int = 5000) -> None:
     kaplanis_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/kaplanis_dn.ht"
     if not file_exists(fu_ht_path) or overwrite:
         import_fu_data(overwrite=overwrite)
-        fu_ht = hl.read_table(fu_ht_path, _n_partitions=n_partitions)
     if not file_exists(kaplanis_ht_path) or overwrite:
         import_kaplanis_data(overwrite=overwrite)
-        kap_ht = hl.read_table(kaplanis_ht_path, _n_partitions=n_partitions)
 
+    fu_ht = hl.read_table(fu_ht_path, _n_partitions=n_partitions)
+    kap_ht = hl.read_table(kaplanis_ht_path, _n_partitions=n_partitions)
     ht = kap_ht.join(fu_ht, how="outer")
+
     # Union sample types (DD, ASD, control)
-    ht = ht.transmute(sample_set=ht.case_control.union(ht.role))
+    ht = ht.transmute(sample_set=ht.case_control.extend(ht.role))
     ht.write(ndd_de_novo.path, overwrite=overwrite)
