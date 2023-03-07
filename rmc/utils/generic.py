@@ -628,7 +628,7 @@ def import_fu_data(overwrite: bool) -> None:
     # These lines contain metadata about the TSV, e.g.:
     # "Supplementary Table 20. The de novo SNV/indel variants used in TADA
     # association analyses from assembled ASD cohorts"
-    fu_ht = fu_ht.filter(hl.is_missing(fu_ht.Role))
+    fu_ht = fu_ht.filter(~hl.is_missing(fu_ht.Role))
 
     # Prepare to lift dataset back to GRCh37
     rg37 = hl.get_reference("GRCh37")
@@ -637,6 +637,17 @@ def import_fu_data(overwrite: bool) -> None:
         "gs://hail-common/references/grch38_to_grch37.over.chain.gz", rg37
     )
 
+    fu_ht = fu_ht.annotate(
+        locus=hl.parse_locus(
+            hl.format(
+                "chr%s:%s",
+                fu_ht.Variant.split(":")[0],
+                fu_ht.Variant.split(":")[1],
+            ),
+            reference_genome="GRCh38",
+        ),
+        alleles=[fu_ht.Variant.split(":")[2], fu_ht.Variant.split(":")[3]],
+    )
     fu_ht = fu_ht.annotate(
         new_locus=hl.liftover(fu_ht.locus, "GRCh37", include_strand=True),
         old_locus=fu_ht.locus,
@@ -656,11 +667,12 @@ def import_fu_data(overwrite: bool) -> None:
         hl.is_defined(fu_ht.new_locus) & ~fu_ht.new_locus.is_negative_strand
     )
     fu_ht = fu_ht.key_by(locus=fu_ht.new_locus.result, alleles=fu_ht.alleles)
+
+    # Rename 'Proband' > 'ASD' and 'Sibling' > 'control'
+    fu_ht = fu_ht.transmute(role=hl.if_else(fu_ht.Role == "Proband", "ASD", "control"))
     fu_ht = fu_ht.group_by("locus", "alleles").aggregate(
         role=hl.agg.collect(fu_ht.Role),
     )
-    # Rename 'Proband' > 'ASD' and 'Sibling' > 'control'
-    fu_ht = fu_ht.transmute(role=hl.if_else(fu_ht.role == "Proband", "ASD", "control"))
     fu_ht.write(f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht", overwrite=overwrite)
 
 
