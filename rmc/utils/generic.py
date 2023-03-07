@@ -671,7 +671,7 @@ def import_fu_data(overwrite: bool) -> None:
     # Rename 'Proband' > 'ASD' and 'Sibling' > 'control'
     fu_ht = fu_ht.transmute(role=hl.if_else(fu_ht.Role == "Proband", "ASD", "control"))
     fu_ht = fu_ht.group_by("locus", "alleles").aggregate(
-        role=hl.agg.collect(fu_ht.Role),
+        role=hl.agg.collect(fu_ht.role),
     )
     fu_ht.write(f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht", overwrite=overwrite)
 
