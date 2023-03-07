@@ -714,7 +714,6 @@ def import_de_novo_variants(overwrite: bool, n_partitions: int = 5000) -> None:
         Will also help determine number of partitions in final Table.
     :return: None; writes HT to resource path.
     """
-    # TODO: Re-import this HT with samples collected into lists rather than sets
     fu_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht"
     kaplanis_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/kaplanis_dn.ht"
     if not file_exists(fu_ht_path) or overwrite:
