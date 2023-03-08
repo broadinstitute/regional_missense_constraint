@@ -98,7 +98,6 @@ Table of ClinVar variants maintained by the seqr team.
 Last version of this HT accessed by RMC team corresponds to 20230121 ClinVar release.
 """
 
-# TODO: Move HT at `clinvar_pathogenic_missense.ht` to this path
 clinvar_plp_mis_haplo = TableResource(
     path=f"{REF_DATA_PREFIX}/ht/clinvar_pathogenic_missense_haplo.ht",
 )
