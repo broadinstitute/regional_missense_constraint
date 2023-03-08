@@ -628,7 +628,7 @@ def import_fu_data(overwrite: bool) -> None:
     # These lines contain metadata about the TSV, e.g.:
     # "Supplementary Table 20. The de novo SNV/indel variants used in TADA
     # association analyses from assembled ASD cohorts"
-    fu_ht = fu_ht.filter(hl.is_missing(fu_ht.Role))
+    fu_ht = fu_ht.filter(~hl.is_missing(fu_ht.Role))
 
     # Prepare to lift dataset back to GRCh37
     rg37 = hl.get_reference("GRCh37")
@@ -637,6 +637,17 @@ def import_fu_data(overwrite: bool) -> None:
         "gs://hail-common/references/grch38_to_grch37.over.chain.gz", rg37
     )
 
+    fu_ht = fu_ht.annotate(
+        locus=hl.parse_locus(
+            hl.format(
+                "chr%s:%s",
+                fu_ht.Variant.split(":")[0],
+                fu_ht.Variant.split(":")[1],
+            ),
+            reference_genome="GRCh38",
+        ),
+        alleles=[fu_ht.Variant.split(":")[2], fu_ht.Variant.split(":")[3]],
+    )
     fu_ht = fu_ht.annotate(
         new_locus=hl.liftover(fu_ht.locus, "GRCh37", include_strand=True),
         old_locus=fu_ht.locus,
@@ -656,11 +667,12 @@ def import_fu_data(overwrite: bool) -> None:
         hl.is_defined(fu_ht.new_locus) & ~fu_ht.new_locus.is_negative_strand
     )
     fu_ht = fu_ht.key_by(locus=fu_ht.new_locus.result, alleles=fu_ht.alleles)
-    fu_ht = fu_ht.group_by("locus", "alleles").aggregate(
-        role=hl.agg.collect(fu_ht.Role),
-    )
+
     # Rename 'Proband' > 'ASD' and 'Sibling' > 'control'
-    fu_ht = fu_ht.transmute(role=hl.if_else(fu_ht.role == "Proband", "ASD", "control"))
+    fu_ht = fu_ht.transmute(role=hl.if_else(fu_ht.Role == "Proband", "ASD", "control"))
+    fu_ht = fu_ht.group_by("locus", "alleles").aggregate(
+        role=hl.agg.collect(fu_ht.role),
+    )
     fu_ht.write(f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht", overwrite=overwrite)
 
 
@@ -702,17 +714,26 @@ def import_de_novo_variants(overwrite: bool, n_partitions: int = 5000) -> None:
         Will also help determine number of partitions in final Table.
     :return: None; writes HT to resource path.
     """
-    # TODO: Re-import this HT with samples collected into lists rather than sets
     fu_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht"
     kaplanis_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/kaplanis_dn.ht"
     if not file_exists(fu_ht_path) or overwrite:
         import_fu_data(overwrite=overwrite)
-        fu_ht = hl.read_table(fu_ht_path, _n_partitions=n_partitions)
     if not file_exists(kaplanis_ht_path) or overwrite:
         import_kaplanis_data(overwrite=overwrite)
-        kap_ht = hl.read_table(kaplanis_ht_path, _n_partitions=n_partitions)
 
+    fu_ht = hl.read_table(fu_ht_path, _n_partitions=n_partitions)
+    kap_ht = hl.read_table(kaplanis_ht_path, _n_partitions=n_partitions)
     ht = kap_ht.join(fu_ht, how="outer")
+
     # Union sample types (DD, ASD, control)
-    ht = ht.transmute(sample_set=ht.case_control.union(ht.role))
+    ht = ht.transmute(
+        sample_set=hl.case()
+        .when(
+            hl.is_defined(ht.case_control) & hl.is_defined(ht.role),
+            ht.case_control.extend(ht.role),
+        )
+        .when(hl.is_defined(ht.case_control), ht.case_control)
+        .when(hl.is_defined(ht.role), ht.role)
+        .or_missing()
+    )
     ht.write(ndd_de_novo.path, overwrite=overwrite)
