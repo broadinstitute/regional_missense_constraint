@@ -157,7 +157,6 @@ Fu et al. Rare coding variation provides insight into the genetic architecture
 and phenotypic context of autism (2022)
 """
 
-# TODO: Move HT at `ddd_autism_de_novo.ht` to this path
 ndd_de_novo = TableResource(
     path=f"{RESOURCE_BUILD_PREFIX}/reference_data/ht/ndd_de_novo.ht",
 )
