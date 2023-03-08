@@ -727,20 +727,13 @@ def import_de_novo_variants(overwrite: bool, n_partitions: int = 5000) -> None:
 
     # Union sample types (DD, ASD, control)
     ht = ht.transmute(
-        role_str=hl.str(",").join(ht.role),
-        case_control_str=hl.str(",").join(ht.case_control),
-    )
-    ht = ht.transmute(
         sample_set=hl.case()
         .when(
-            hl.is_defined(ht.case_control_str) & hl.is_defined(ht.role_str),
-            ht.case_control_str + ht.role_str,
+            hl.is_defined(ht.case_control) & hl.is_defined(ht.role),
+            ht.case_control.extend(ht.role),
         )
-        .when(
-            hl.is_defined(ht.case_control_str) & hl.is_missing(ht.role_str),
-            ht.case_control_str,
-        )
-        .default(ht.role_str)
+        .when(hl.is_defined(ht.case_control), ht.case_control)
+        .when(hl.is_defined(ht.role), ht.role)
+        .or_missing()
     )
-    ht = ht.transmute(sample_set=ht.sample_set.split(","))
     ht.write(ndd_de_novo.path, overwrite=overwrite)
