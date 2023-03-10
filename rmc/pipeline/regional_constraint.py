@@ -557,7 +557,7 @@ def main(args):
             logger.info("Getting transcripts without evidence of RMC...")
             create_no_breaks_he(freeze=args.freeze, overwrite=args.overwrite)
 
-            logger.info("Creating OE-annotated context table")
+            logger.info("Creating OE-annotated context table...")
             create_context_with_oe(freeze=args.freeze, overwrite_output=args.overwrite)
 
     finally:
