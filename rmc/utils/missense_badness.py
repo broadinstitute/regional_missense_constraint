@@ -9,7 +9,7 @@ from rmc.resources.basics import (
     TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
 )
-from rmc.resources.rmc import amino_acids_oe, misbad
+from rmc.resources.rmc import amino_acids_oe, CURRENT_FREEZE, misbad
 from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
     annotate_and_filter_codons,
@@ -30,6 +30,7 @@ def prepare_amino_acid_ht(
     overwrite_temp: bool,
     overwrite_output: bool,
     gnomad_data_type: str = "exomes",
+    freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
     Prepare Table with all possible amino acid substitutions and their missense observed to expected (OE) ratio.
@@ -41,6 +42,7 @@ def prepare_amino_acid_ht(
         - Add observed and OE annotation
         - Write to `amino_acids_oe` resource path
 
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :param bool overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
     :param bool overwrite_output: Whether to entirely overwrite final output (OE-dependent) data if it already exists.
@@ -105,7 +107,7 @@ def prepare_amino_acid_ht(
         "Getting observed to expected ratio, rekeying Table, and writing to output path..."
     )
     # Note that `get_oe_annotation` is pulling the missense OE ratio
-    context_ht = get_oe_annotation(context_ht)
+    context_ht = get_oe_annotation(context_ht, freeze)
     context_ht = context_ht.key_by("locus", "alleles", "transcript")
     context_ht = context_ht.select(
         "ref",
