@@ -1156,7 +1156,7 @@ def merge_rmc_hts(round_nums: List[int], freeze: int) -> hl.Table:
     return rmc_ht
 
 
-def get_oe_annotation(ht: hl.Table) -> hl.Table:
+def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     """
     Annotate input Table with observed to expected missense (OE) ratio per transcript.
 
@@ -1171,6 +1171,7 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
             - `interval`: Transcript section start position to end position
 
     :param hl.Table ht: Input Table.
+    :param freeze: RMC data freeze number.
     :return: Table with `oe` annotation.
     """
     overall_oe_ht = (
@@ -1199,9 +1200,9 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
         transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe)
     )
 
-    if not file_exists(rmc_results.path):
+    if not file_exists(rmc_results.versions[freeze].path):
         raise DataException("Merged RMC results table does not exist!")
-    rmc_ht = rmc_results.ht().key_by("interval")
+    rmc_ht = rmc_results.versions[freeze].ht().key_by("interval")
     ht = ht.annotate(
         section_oe=rmc_ht.index(ht.locus, all_matches=True)
         .filter(lambda x: x.transcript == ht.transcript)
@@ -1217,6 +1218,7 @@ def get_oe_annotation(ht: hl.Table) -> hl.Table:
 
 
 def create_context_with_oe(
+    freeze: int,
     missense_str: str = MISSENSE,
     n_partitions: int = 30000,
     overwrite_temp: bool = False,
@@ -1232,6 +1234,7 @@ def create_context_with_oe(
             Polyphen-2, and SIFT.
         - `context_with_oe_dedup`: Deduplicated version of `context_with_oe` that only contains missense o/e and transcript annotations.
 
+    :param freeze: RMC data freeze number.
     :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
     :param int n_partitions: Number of desired partitions for the VEP context Table.
         Repartition VEP context Table to this number on read.
@@ -1276,10 +1279,10 @@ def create_context_with_oe(
     logger.info(
         "Adding regional missense constraint missense o/e annotation and writing to resource path..."
     )
-    ht = get_oe_annotation(ht)
+    ht = get_oe_annotation(ht, freeze)
     ht = ht.key_by("locus", "alleles", "transcript")
     ht = ht.checkpoint(
-        context_with_oe.path,
+        context_with_oe.versions[freeze].path,
         overwrite=overwrite_output,
         _read_if_exists=not overwrite_output,
     )
@@ -1296,7 +1299,7 @@ def create_context_with_oe(
     )
     ht = ht.drop("values")
     ht.write(
-        context_with_oe_dedup.path,
+        context_with_oe_dedup.versions[freeze].path,
         overwrite=overwrite_output,
     )
     logger.info("Output OE-annotated dedup context HT fields: %s", set(ht.row))

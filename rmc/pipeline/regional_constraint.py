@@ -558,9 +558,7 @@ def main(args):
             create_no_breaks_he(freeze=args.freeze, overwrite=args.overwrite)
 
             logger.info("Creating OE-annotated context table")
-            create_context_with_oe(
-                overwrite_temp=args.overwrite, overwrite_output=args.overwrite
-            )
+            create_context_with_oe(freeze=args.freeze, overwrite_output=args.overwrite)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
