@@ -35,6 +35,7 @@ from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
     check_break_search_round_nums,
+    create_context_with_oe,
     create_no_breaks_he,
     get_max_chisq_per_group,
     GROUPINGS,
@@ -555,6 +556,11 @@ def main(args):
 
             logger.info("Getting transcripts without evidence of RMC...")
             create_no_breaks_he(freeze=args.freeze, overwrite=args.overwrite)
+
+            logger.info("Creating OE-annotated context table")
+            create_context_with_oe(
+                overwrite_temp=args.overwrite, overwrite_output=args.overwrite
+            )
 
     finally:
         logger.info("Copying hail log to logging bucket...")
