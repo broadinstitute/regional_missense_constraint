@@ -7,6 +7,7 @@ from typing import Dict, List, Set, Union
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import coverage, public_release
+from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.constraint import annotate_mutation_type
 from gnomad.utils.file_utils import file_exists
@@ -15,23 +16,32 @@ from rmc.resources.basics import (
     SINGLE_BREAK_TEMP_PATH,
     TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
+    TEMP_PATH_WITH_SLOW_DEL,
 )
-from rmc.resources.gnomad import filtered_exomes
+from rmc.resources.gnomad import constraint_ht, filtered_exomes
 from rmc.resources.reference_data import clinvar_plp_mis_haplo, gene_model, ndd_de_novo
+from rmc.resources.resource_utils import MISSENSE
 from rmc.utils.generic import (
+    get_annotations_from_context_ht_vep,
+    get_constraint_transcripts,
     get_coverage_correction_expr,
     keep_criteria,
     import_clinvar,
     import_de_novo_variants,
+    process_vep,
 )
 from rmc.resources.rmc import (
     CONSTRAINT_ANNOTATIONS,
+    constraint_prep,
+    context_with_oe,
+    context_with_oe_dedup,
     CURRENT_FREEZE,
     FINAL_ANNOTATIONS,
     MIN_EXP_MIS,
     no_breaks_he_path,
     oe_bin_counts_tsv,
     P_VALUE,
+    rmc_results,
     simul_search_bucket_path,
     SIMUL_SEARCH_ANNOTATIONS,
     simul_search_round_bucket_path,
@@ -1144,6 +1154,152 @@ def merge_rmc_hts(round_nums: List[int], freeze: int) -> hl.Table:
     )
     rmc_ht = rmc_ht.key_by("interval", "transcript")
     return rmc_ht
+
+
+def get_oe_annotation(ht: hl.Table) -> hl.Table:
+    """
+    Annotate input Table with observed to expected missense (OE) ratio per transcript.
+
+    Use regional OE value if available, otherwise use transcript OE value.
+
+    .. note::
+        - Assumes input Table has `locus` and `trancript` annotations
+        - OE values are transcript specific
+        - Assumes merged RMC results HT exists
+        - Assumes merged RMC results HT is annotated per transcript section with:
+            - `section_oe`: Missense observed/expected ratio
+            - `interval`: Transcript section start position to end position
+
+    :param hl.Table ht: Input Table.
+    :return: Table with `oe` annotation.
+    """
+    overall_oe_ht = (
+        constraint_prep.ht().select_globals().select("total_obs", "total_exp")
+    )
+    group_ht = overall_oe_ht.group_by("transcript").aggregate(
+        obs=hl.agg.take(overall_oe_ht.total_obs, 1)[0],
+        exp=hl.agg.take(overall_oe_ht.total_exp, 1)[0],
+    )
+    # Recalculating transcript level OE ratio because previous OE ratio (`overall_oe`)
+    # is capped at 1 for regional missense constraint calculation purposes
+    group_ht = group_ht.annotate(transcript_oe=group_ht.obs / group_ht.exp)
+
+    # Read in LoF constraint HT to get OE ratio for five transcripts missing in v2 RMC results
+    # # 'ENST00000304270', 'ENST00000344415', 'ENST00000373521', 'ENST00000381708', 'ENST00000596936'
+    # All 5 of these transcripts have extremely low coverage in gnomAD
+    # Will keep for consistency with v2 LoF results but they look terrible
+    # NOTE: LoF HT is keyed by gene and transcript, but `_key_by_assert_sorted` doesn't work here for v2 version
+    # Throws this error: hail.utils.java.FatalError: IllegalArgumentException
+    lof_ht = constraint_ht.ht().select("oe_mis").key_by("transcript")
+    ht = ht.annotate(
+        gnomad_transcript_oe=lof_ht[ht.transcript].oe_mis,
+        rmc_transcript_oe=group_ht[ht.transcript].transcript_oe,
+    )
+    ht = ht.transmute(
+        transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe)
+    )
+
+    if not file_exists(rmc_results.path):
+        raise DataException("Merged RMC results table does not exist!")
+    rmc_ht = rmc_results.ht().key_by("interval")
+    ht = ht.annotate(
+        section_oe=rmc_ht.index(ht.locus, all_matches=True)
+        .filter(lambda x: x.transcript == ht.transcript)
+        .section_oe
+    )
+    ht = ht.annotate(
+        section_oe=hl.or_missing(
+            hl.len(ht.section_oe) > 0,
+            ht.section_oe[0],
+        ),
+    )
+    return ht.transmute(oe=hl.coalesce(ht.section_oe, ht.transcript_oe))
+
+
+def create_context_with_oe(
+    missense_str: str = MISSENSE,
+    n_partitions: int = 30000,
+    overwrite_temp: bool = False,
+    overwrite_output: bool = True,
+) -> None:
+    """
+    Filter VEP context Table to missense variants in canonical transcripts, and add missense observed/expected.
+
+    Function writes two Tables:
+        - `context_with_oe`: Table of all missense variants in canonical transcripts + all annotations
+            (includes duplicate variants, i.e. those in multiple transcripts).
+            Annotations are: transcript, most severe consequence, codons, reference and alternate amino acids,
+            Polyphen-2, and SIFT.
+        - `context_with_oe_dedup`: Deduplicated version of `context_with_oe` that only contains missense o/e and transcript annotations.
+
+    :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
+    :param int n_partitions: Number of desired partitions for the VEP context Table.
+        Repartition VEP context Table to this number on read.
+        Default is 30000.
+    :param bool overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
+        If False, will read existing intermediate temporary data rather than overwriting.
+        Default is False.
+    :param bool overwrite_output: Whether to entirely overwrite final output (OE-dependent) data if it already exists.
+        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
+        If True, will clear existing output data and write new output data.
+        The output Tables are the OE-annotated context Tables with duplicated or deduplicated sections.
+        Default is True.
+    :return: None; function writes Table to resource path.
+    """
+    logger.info("Importing set of transcripts to keep...")
+    transcripts = get_constraint_transcripts(outlier=False)
+
+    logger.info(
+        "Reading in VEP context HT and filtering to missense variants in canonical transcripts..."
+    )
+    # Using vep_context.path to read in table with fewer partitions
+    # VEP context resource has 62164 partitions
+    ht = (
+        hl.read_table(vep_context.path, _n_partitions=n_partitions)
+        .select_globals()
+        .select("vep", "was_split")
+    )
+    ht = process_vep(ht, filter_csq=True, csq=missense_str)
+    ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
+    ht = get_annotations_from_context_ht_vep(ht)
+    # Save context Table to temporary path with specified deletion policy because this is a very large file
+    # and relevant information will be saved at `context_with_oe` (written below)
+    # Checkpointing here to force this expensive computation to compute
+    # before joining with RMC tables in `get_oe_annotation`
+    # This computation is expensive, so overwrite only if specified (otherwise, read existing file)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_SLOW_DEL}/vep_context_mis_only_annot.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+
+    logger.info(
+        "Adding regional missense constraint missense o/e annotation and writing to resource path..."
+    )
+    ht = get_oe_annotation(ht)
+    ht = ht.key_by("locus", "alleles", "transcript")
+    ht = ht.checkpoint(
+        context_with_oe.path,
+        overwrite=overwrite_output,
+        _read_if_exists=not overwrite_output,
+    )
+    logger.info("Output OE-annotated context HT fields: %s", set(ht.row))
+
+    logger.info(
+        "Creating dedup context with oe (with oe and transcript annotations only)..."
+    )
+    ht = ht.select("oe").key_by("locus", "alleles")
+    ht = ht.collect_by_key()
+    ht = ht.annotate(**{"oe": hl.nanmin(ht.values.oe)})
+    ht = ht.annotate(
+        **{"transcript": ht.values.find(lambda x: x.oe == ht.oe).transcript}
+    )
+    ht = ht.drop("values")
+    ht.write(
+        context_with_oe_dedup.path,
+        overwrite=overwrite_output,
+    )
+    logger.info("Output OE-annotated dedup context HT fields: %s", set(ht.row))
 
 
 def reformat_annotations_for_release(ht: hl.Table) -> hl.Table:

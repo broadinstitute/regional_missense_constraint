@@ -10,14 +10,12 @@ from typing import Dict, List, Tuple, Union
 import hail as hl
 
 from gnomad.resources.grch37.gnomad import public_release
-from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import (
     TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
-    TEMP_PATH_WITH_SLOW_DEL,
 )
 from rmc.resources.reference_data import (
     blosum,
@@ -37,9 +35,7 @@ from rmc.resources.rmc import (
     mpc_release,
     mpc_release_dedup,
 )
-from rmc.resources.resource_utils import MISSENSE
-from rmc.utils.generic import get_aa_map, get_constraint_transcripts, process_vep
-from rmc.utils.missense_badness import annotate_and_filter_codons, get_oe_annotation
+from rmc.utils.generic import get_aa_map
 
 
 logging.basicConfig(
@@ -173,127 +169,6 @@ def import_grantham():
     ht.write(grantham.path)
 
 
-def get_annotations_from_context_ht_vep(
-    ht: hl.Table, annotations: List[str] = ["polyphen", "sift"]
-) -> hl.Table:
-    """
-    Get desired annotations from context Table's VEP annotation and annotate/filter to informative amino acids.
-
-    Function will get 'codons', 'most_severe_consequence', and 'transcript' annotations by default.
-    Additional annotations should be specified using `annotations`.
-
-    :param hl.Table ht: Input VEP context Table.
-    :param List[str] annotations: Additional annotations to extract from context HT's VEP field.
-    :return: VEP context Table with rows filtered to remove loci that are non-coding and retain only those with informative amino acids
-        and columns filtered to keep only specified annotations.
-    """
-    annot_expr = {
-        "codons": ht.transcript_consequences.codons,
-        "most_severe_consequence": ht.transcript_consequences.most_severe_consequence,
-        "transcript": ht.transcript_consequences.transcript_id,
-    }
-    if "polyphen" in annotations:
-        annot_expr["polyphen"] = hl.struct(
-            prediction=ht.transcript_consequences.polyphen_prediction,
-            score=ht.transcript_consequences.polyphen_score,
-        )
-    if "sift" in annotations:
-        annot_expr["sift"] = hl.struct(
-            prediction=ht.transcript_consequences.sift_prediction,
-            score=ht.transcript_consequences.sift_score,
-        )
-    ht = ht.annotate(**annot_expr)
-    annotations.extend(["codons", "most_severe_consequence", "transcript"])
-    ht = ht.select(*annotations)
-    return annotate_and_filter_codons(ht)
-
-
-def create_context_with_oe(
-    missense_str: str = MISSENSE,
-    n_partitions: int = 30000,
-    overwrite_temp: bool = False,
-    overwrite_output: bool = True,
-) -> None:
-    """
-    Filter VEP context Table to missense variants in canonical transcripts, and add missense observed/expected.
-
-    Function writes two Tables:
-        - `context_with_oe`: Table of all missense variants in canonical transcripts + all annotations
-            (includes duplicate variants, i.e. those in multiple transcripts).
-            Annotations are: transcript, most severe consequence, codons, reference and alternate amino acids,
-            Polyphen-2, and SIFT.
-        - `context_with_oe_dedup`: Deduplicated version of `context_with_oe` that only contains missense o/e and transcript annotations.
-
-    :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
-    :param int n_partitions: Number of desired partitions for the VEP context Table.
-        Repartition VEP context Table to this number on read.
-        Default is 30000.
-    :param bool overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
-        If False, will read existing intermediate temporary data rather than overwriting.
-        Default is False.
-    :param bool overwrite_output: Whether to entirely overwrite final output (OE-dependent) data if it already exists.
-        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
-        If True, will clear existing output data and write new output data.
-        The output Tables are the OE-annotated context Tables with duplicated or deduplicated sections.
-        Default is True.
-    :return: None; function writes Table to resource path.
-    """
-    logger.info("Importing set of transcripts to keep...")
-    transcripts = get_constraint_transcripts(outlier=False)
-
-    logger.info(
-        "Reading in VEP context HT and filtering to missense variants in canonical transcripts..."
-    )
-    # Using vep_context.path to read in table with fewer partitions
-    # VEP context resource has 62164 partitions
-    ht = (
-        hl.read_table(vep_context.path, _n_partitions=n_partitions)
-        .select_globals()
-        .select("vep", "was_split")
-    )
-    ht = process_vep(ht, filter_csq=True, csq=missense_str)
-    ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
-    ht = get_annotations_from_context_ht_vep(ht)
-    # Save context Table to temporary path with specified deletion policy because this is a very large file
-    # and relevant information will be saved at `context_with_oe` (written below)
-    # Checkpointing here to force this expensive computation to compute
-    # before joining with RMC tables in `get_oe_annotation`
-    # This computation is expensive, so overwrite only if specified (otherwise, read existing file)
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_SLOW_DEL}/vep_context_mis_only_annot.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
-
-    logger.info(
-        "Adding regional missense constraint missense o/e annotation and writing to resource path..."
-    )
-    ht = get_oe_annotation(ht)
-    ht = ht.key_by("locus", "alleles", "transcript")
-    ht = ht.checkpoint(
-        context_with_oe.path,
-        overwrite=overwrite_output,
-        _read_if_exists=not overwrite_output,
-    )
-    logger.info("Output OE-annotated context HT fields: %s", set(ht.row))
-
-    logger.info(
-        "Creating dedup context with oe (with oe and transcript annotations only)..."
-    )
-    ht = ht.select("oe").key_by("locus", "alleles")
-    ht = ht.collect_by_key()
-    ht = ht.annotate(**{"oe": hl.nanmin(ht.values.oe)})
-    ht = ht.annotate(
-        **{"transcript": ht.values.find(lambda x: x.oe == ht.oe).transcript}
-    )
-    ht = ht.drop("values")
-    ht.write(
-        context_with_oe_dedup.path,
-        overwrite=overwrite_output,
-    )
-    logger.info("Output OE-annotated dedup context HT fields: %s", set(ht.row))
-
-
 def prepare_pop_path_ht(
     gnomad_data_type: str = "exomes",
     af_threshold: float = 0.001,
@@ -363,11 +238,10 @@ def prepare_pop_path_ht(
     logger.info("Getting transcript annotations...")
     # If OE-annotated VEP context HT filtered to missense variants
     # in canonical transcripts does not exist, create it
-    if not file_exists(context_with_oe_dedup.path):
-        create_context_with_oe(
-            overwrite_temp=overwrite_temp,
-            overwrite_output=overwrite_output,
-        )
+    if not file_exists(context_with_oe_dedup.path) or not file_exists(
+        context_with_oe.path
+    ):
+        raise DataException("OE-annotated context table does not exist!")
 
     # Get transcript annotation from deduplicated context HT resource
     context_ht = context_with_oe_dedup.ht()

@@ -4,18 +4,16 @@ import hail as hl
 
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
-from gnomad.utils.vep import CSQ_NON_CODING
 
 from rmc.resources.basics import (
     TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
 )
-from rmc.resources.gnomad import constraint_ht
-from rmc.resources.rmc import amino_acids_oe, constraint_prep, misbad, rmc_results
-from rmc.utils.constraint import add_obs_annotation
+from rmc.resources.rmc import amino_acids_oe, misbad
+from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
+    annotate_and_filter_codons,
     filter_context_using_gnomad,
-    get_codon_lookup,
     get_constraint_transcripts,
     process_context_ht,
 )
@@ -26,103 +24,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("calculate_missense_badness")
 logger.setLevel(logging.INFO)
-
-
-def annotate_and_filter_codons(ht: hl.Table) -> hl.Table:
-    """
-    Remove non-coding loci and keep informative codons only.
-
-    Split codon annotation to annotate reference and alternate amino acids, then
-    remove rows with unknown amino acids.
-
-    Additionally remove rows that are annotated as 'coding_sequence_variant',
-    as these variants have either undefined or uninformative codon annotations
-    (NA or codon with Ns, e.g. nnG/nnT).
-
-    'coding_sequence_variant' defined as: 'A sequence variant that changes the coding sequence'
-    https://m.ensembl.org/info/genome/variation/prediction/predicted_data.html
-
-    :param hl.Table ht: Input Table.
-    :return: Table with informative codons only.
-    """
-    logger.info("Removing non-coding loci from HT...")
-    non_coding_csq = hl.literal(CSQ_NON_CODING)
-    ht = ht.filter(~non_coding_csq.contains(ht.most_severe_consequence))
-
-    logger.info("Filtering to lines with expected codon annotations...")
-    # Codons are in this format: NNN/NNN, so expected length is 7
-    ht = ht.filter((hl.is_defined(ht.codons)) & (hl.len(ht.codons) == 7))
-    codon_map = get_codon_lookup()
-    ht = ht.annotate(
-        ref=ht.codons.split("/")[0].upper(),
-        alt=ht.codons.split("/")[1].upper(),
-    )
-    ht = ht.annotate(
-        ref=codon_map.get(ht.ref, "Unk"),
-        alt=codon_map.get(ht.alt, "Unk"),
-    )
-    # Remove any lines with "Unk" (unknown amino acids)
-    return ht.filter((ht.ref != "Unk") & (ht.alt != "Unk"))
-
-
-def get_oe_annotation(ht: hl.Table) -> hl.Table:
-    """
-    Annotate input Table with observed to expected missense (OE) ratio per transcript.
-
-    Use regional OE value if available, otherwise use transcript OE value.
-
-    .. note::
-        - Assumes input Table has `locus` and `trancript` annotations
-        - OE values are transcript specific
-        - Assumes merged RMC results HT exists
-        - Assumes merged RMC results HT is annotated per transcript section with:
-            - `section_oe`: Missense observed/expected ratio
-            - `interval`: Transcript section start position to end position
-
-    :param hl.Table ht: Input Table.
-    :return: Table with `oe` annotation.
-    """
-    overall_oe_ht = (
-        constraint_prep.ht().select_globals().select("total_obs", "total_exp")
-    )
-    group_ht = overall_oe_ht.group_by("transcript").aggregate(
-        obs=hl.agg.take(overall_oe_ht.total_obs, 1)[0],
-        exp=hl.agg.take(overall_oe_ht.total_exp, 1)[0],
-    )
-    # Recalculating transcript level OE ratio because previous OE ratio (`overall_oe`)
-    # is capped at 1 for regional missense constraint calculation purposes
-    group_ht = group_ht.annotate(transcript_oe=group_ht.obs / group_ht.exp)
-
-    # Read in LoF constraint HT to get OE ratio for five transcripts missing in v2 RMC results
-    # # 'ENST00000304270', 'ENST00000344415', 'ENST00000373521', 'ENST00000381708', 'ENST00000596936'
-    # All 5 of these transcripts have extremely low coverage in gnomAD
-    # Will keep for consistency with v2 LoF results but they look terrible
-    # NOTE: LoF HT is keyed by gene and transcript, but `_key_by_assert_sorted` doesn't work here for v2 version
-    # Throws this error: hail.utils.java.FatalError: IllegalArgumentException
-    lof_ht = constraint_ht.ht().select("oe_mis").key_by("transcript")
-    ht = ht.annotate(
-        gnomad_transcript_oe=lof_ht[ht.transcript].oe_mis,
-        rmc_transcript_oe=group_ht[ht.transcript].transcript_oe,
-    )
-    ht = ht.transmute(
-        transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe)
-    )
-
-    if not file_exists(rmc_results.path):
-        raise DataException("Merged RMC results table does not exist!")
-    rmc_ht = rmc_results.ht().key_by("interval")
-    ht = ht.annotate(
-        section_oe=rmc_ht.index(ht.locus, all_matches=True)
-        .filter(lambda x: x.transcript == ht.transcript)
-        .section_oe
-    )
-    ht = ht.annotate(
-        section_oe=hl.or_missing(
-            hl.len(ht.section_oe) > 0,
-            ht.section_oe[0],
-        ),
-    )
-    return ht.transmute(oe=hl.coalesce(ht.section_oe, ht.transcript_oe))
 
 
 def prepare_amino_acid_ht(
