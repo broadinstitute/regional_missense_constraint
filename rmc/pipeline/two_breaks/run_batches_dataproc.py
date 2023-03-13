@@ -141,6 +141,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--freeze",
         help="RMC data freeze number",
+        type=int,
         default=CURRENT_FREEZE,
     )
     parser.add_argument(
