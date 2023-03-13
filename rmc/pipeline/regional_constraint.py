@@ -552,13 +552,13 @@ def main(args):
             rmc_ht = rmc_ht.filter(constraint_transcripts.contains(rmc_ht.transcript))
 
             logger.info("Writing out RMC results...")
-            rmc_ht.write(rmc_results.versions[int(args.freeze)].path)
+            rmc_ht.write(rmc_results.versions[args.freeze].path)
 
             logger.info("Getting transcripts without evidence of RMC...")
             create_no_breaks_he(freeze=args.freeze, overwrite=args.overwrite)
 
             logger.info("Creating OE-annotated context table...")
-            create_context_with_oe(freeze=int(args.freeze), overwrite_output=args.overwrite)
+            create_context_with_oe(freeze=args.freeze, overwrite_output=args.overwrite)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -644,6 +644,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--freeze",
         help="RMC data freeze number",
+        type=int,
         default=CURRENT_FREEZE,
     )
     parser.add_argument(
