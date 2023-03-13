@@ -29,8 +29,8 @@ logger.setLevel(logging.INFO)
 def prepare_amino_acid_ht(
     overwrite_temp: bool,
     overwrite_output: bool,
-    gnomad_data_type: str = "exomes",
     freeze: int = CURRENT_FREEZE,
+    gnomad_data_type: str = "exomes",
 ) -> None:
     """
     Prepare Table with all possible amino acid substitutions and their missense observed to expected (OE) ratio.
@@ -42,13 +42,13 @@ def prepare_amino_acid_ht(
         - Add observed and OE annotation
         - Write to `amino_acids_oe` resource path
 
-    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :param bool overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
     :param bool overwrite_output: Whether to entirely overwrite final output (OE-dependent) data if it already exists.
         If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
         If True, will clear existing output data and write new output data.
         The output Table is the amino acid Table.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
