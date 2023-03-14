@@ -28,8 +28,9 @@ from rmc.resources.reference_data import (
 from rmc.resources.rmc import (
     context_with_oe,
     context_with_oe_dedup,
+    CURRENT_FREEZE,
     gnomad_fitted_score_path,
-    joint_clinvar_gnomad_path,
+    joint_clinvar_gnomad,
     misbad,
     mpc_model_pkl_path,
     mpc_release,
@@ -174,6 +175,7 @@ def prepare_pop_path_ht(
     af_threshold: float = 0.001,
     overwrite_temp: bool = False,
     overwrite_output: bool = True,
+    freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
     Prepare Table with 'population' (common gnomAD missense) and 'pathogenic' (ClinVar pathogenic/likely pathogenic missense) variants.
@@ -197,6 +199,7 @@ def prepare_pop_path_ht(
         The output Tables are the OE-annotated context Tables with duplicated or deduplicated sections
         and the population/pathogenic variant Table.
         Default is True.
+    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: None; function writes Table to resource path.
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
@@ -238,13 +241,13 @@ def prepare_pop_path_ht(
     logger.info("Getting transcript annotations...")
     # If OE-annotated VEP context HT filtered to missense variants
     # in canonical transcripts does not exist, create it
-    if not file_exists(context_with_oe_dedup.path) or not file_exists(
-        context_with_oe.path
+    if not file_exists(context_with_oe_dedup.versions[freeze].path) or not file_exists(
+        context_with_oe.versions[freeze].path
     ):
         raise DataException("OE-annotated context table does not exist!")
 
     # Get transcript annotation from deduplicated context HT resource
-    context_ht = context_with_oe_dedup.ht()
+    context_ht = context_with_oe_dedup.versions[freeze].ht()
     ht = ht.annotate(transcript=context_ht[ht.key].transcript)
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad_transcript.ht",
@@ -255,7 +258,7 @@ def prepare_pop_path_ht(
     logger.info(
         "Getting PolyPhen-2, codon, and regional missense constraint missense o/e annotations..."
     )
-    context_ht = context_with_oe.ht()
+    context_ht = context_with_oe.versions[freeze].ht()
     ht = ht.annotate(**context_ht[ht.locus, ht.alleles, ht.transcript])
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad_transcript_aa.ht",
@@ -264,7 +267,7 @@ def prepare_pop_path_ht(
     )
 
     logger.info("Getting missense badness annotation...")
-    mb_ht = misbad.ht()
+    mb_ht = misbad.versions[freeze].ht()
     ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
 
     logger.info("Adding BLOSUM and Grantham annotations...")
@@ -293,13 +296,14 @@ def prepare_pop_path_ht(
         & hl.is_defined(ht.polyphen.score)
         & hl.is_defined(ht.misbad)
     )
-    ht.write(joint_clinvar_gnomad_path(), overwrite=overwrite_output)
+    ht.write(joint_clinvar_gnomad.versions[freeze].path, overwrite=overwrite_output)
 
 
 def run_regressions(
     variables: List[str] = ["oe", "misbad", "polyphen"],
     additional_variables: List[str] = ["blosum", "grantham"],
     overwrite: bool = True,
+    freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
     Run single variable and joint regressions and pick best model.
@@ -323,11 +327,12 @@ def run_regressions(
     :param List[str] additional_variables: Additional variables to include in single variable regressions only.
         Default is ["blosum", "grantham"].
     :param bool overwrite: Whether to overwrite gnomAD fitted score table if it already exists. Default is True.
+    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: None; function writes Table with gnomAD fitted scores
         and model coefficients as pickle to resource paths.
     """
     # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
-    ht = hl.read_table(joint_clinvar_gnomad_path())
+    ht = joint_clinvar_gnomad.versions[freeze].ht()
     ht = ht.transmute(polyphen=ht.polyphen.score)
     df = ht.to_pandas()
 
@@ -464,7 +469,7 @@ def run_regressions(
         X = spec_X
 
     logger.info("Saving model as pickle...")
-    model_path = mpc_model_pkl_path()
+    model_path = mpc_model_pkl_path(freeze)
     with hl.hadoop_open(model_path, "wb") as p:
         pickle.dump(model, p, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -472,13 +477,13 @@ def run_regressions(
         "Annotating gnomAD variants with fitted score and writing to gnomad_fitted_score path..."
     )
     ht = ht.filter(ht.pop_v_path == 1)
-    ht = calculate_fitted_scores(ht, model_path)
-    ht.write(gnomad_fitted_score_path(), overwrite=overwrite)
+    ht = calculate_fitted_scores(ht=ht, freeze=freeze)
+    ht.write(gnomad_fitted_score_path(freeze=freeze), overwrite=overwrite)
 
 
 def calculate_fitted_scores(
     ht: hl.Table,
-    model_path: str,
+    freeze: int = CURRENT_FREEZE,
     interaction_char: str = ":",
     intercept_str: str = "Intercept",
 ) -> hl.Table:
@@ -490,7 +495,7 @@ def calculate_fitted_scores(
         - Function will remove any rows with undefined annotations from input Table.
 
     :param hl.Table ht: Input Table with variants to be annotated.
-    :param str model_path: Path to (pickled) MPC model.
+    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
         Default is ":".
     :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
@@ -499,6 +504,7 @@ def calculate_fitted_scores(
     assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
 
     logger.info("Extracting MPC model relationships from pickle...")
+    model_path = mpc_model_pkl_path(freeze)
     with hl.hadoop_open(model_path, "rb") as p:
         model = pickle.load(p)
     mpc_rel_vars = model.params.to_dict()
@@ -514,7 +520,7 @@ def calculate_fitted_scores(
     annotations = []
     if "misbad" in variables:
         logger.info("Getting missense badness annotation...")
-        mb_ht = misbad.ht()
+        mb_ht = misbad.versions[freeze].ht()
         ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
         annotations.append("misbad")
 
@@ -568,7 +574,9 @@ def calculate_fitted_scores(
     return ht.annotate(fitted_score=intercept + combined_annot_expr)
 
 
-def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
+def aggregate_gnomad_fitted_scores(
+    n_less_eq0_float: float = 0.83, freeze: int = CURRENT_FREEZE
+) -> None:
     """
     Aggregate gnomAD fitted scores to count number of variants with a score less than a given score.
 
@@ -576,10 +584,11 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
         This avoids errors in the `hl.log10` call and ensures that MPC for variants with a fitted score
         more severe than any common gnomAD variant score (`n_less` = 0) is more severe (by a controlled amount)
         compared to MPC for variants with a fitted score more severe than one common gnomAD variant (`n_less` = 1).
+    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: None; function writes Table to resource path.
     """
     logger.info("Aggregating gnomAD fitted scores...")
-    gnomad_ht = hl.read_table(gnomad_fitted_score_path())
+    gnomad_ht = hl.read_table(gnomad_fitted_score_path(freeze=freeze))
     gnomad_ht = gnomad_ht.group_by("fitted_score").aggregate(n_var=hl.agg.count())
     gnomad_ht = gnomad_ht.order_by("fitted_score")
     gnomad_ht = gnomad_ht.key_by("fitted_score")
@@ -601,7 +610,7 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
     gnomad_ht = gnomad_ht.annotate(idx=hl.int(gnomad_ht.idx))
     gnomad_ht = gnomad_ht.key_by("idx")
     gnomad_ht.write(
-        gnomad_fitted_score_path(is_grouped=True),
+        gnomad_fitted_score_path(is_grouped=True, freeze=freeze),
         overwrite=True,
     )
 
@@ -609,6 +618,7 @@ def aggregate_gnomad_fitted_scores(n_less_eq0_float: float = 0.83) -> None:
 def create_mpc_release_ht(
     overwrite_temp: bool = True,
     overwrite_output: bool = True,
+    freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
     Annotate VEP context Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
@@ -628,23 +638,24 @@ def create_mpc_release_ht(
         If True, will clear existing output data and write new output data.
         The output Tables are the MPC score Tables with duplicated or deduplicated loci.
         Default is True.
+    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: None; function writes Table to resource path.
     """
     logger.info("Calculating fitted scores...")
-    ht = context_with_oe.ht()
+    ht = context_with_oe.versions[freeze].ht()
     ht = ht.transmute(polyphen=ht.polyphen.score)
-    ht = calculate_fitted_scores(ht, mpc_model_pkl_path())
+    ht = calculate_fitted_scores(ht=ht, freeze=freeze)
 
     logger.info("Aggregating gnomAD fitted scores...")
-    fitted_group_path = gnomad_fitted_score_path(is_grouped=True)
+    fitted_group_path = gnomad_fitted_score_path(is_grouped=True, freeze=freeze)
     if not file_exists(fitted_group_path):
-        aggregate_gnomad_fitted_scores()
+        aggregate_gnomad_fitted_scores(freeze=freeze)
     gnomad_ht = hl.read_table(fitted_group_path)
     scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
     scores_len = len(scores)
 
     # Get total number of gnomAD common variants
-    gnomad_var_count = hl.read_table(gnomad_fitted_score_path()).count()
+    gnomad_var_count = hl.read_table(gnomad_fitted_score_path(freeze=freeze)).count()
 
     logger.info("Getting n_less annotation...")
     # Annotate HT with sorted array of gnomAD fitted scores
@@ -686,7 +697,7 @@ def create_mpc_release_ht(
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
 
     ht = ht.checkpoint(
-        mpc_release.path,
+        mpc_release.versions[freeze].path,
         overwrite=overwrite_output,
         _read_if_exists=not overwrite_output,
     )
@@ -700,7 +711,7 @@ def create_mpc_release_ht(
         **{"transcript": ht.values.find(lambda x: x["mpc"] == ht["mpc"]).transcript}
     )
     ht = ht.drop("values")
-    ht.write(mpc_release_dedup.path, overwrite=overwrite_output)
+    ht.write(mpc_release_dedup.versions[freeze].path, overwrite=overwrite_output)
     logger.info("Output MPC dedup HT fields: %s", set(ht.row))
 
 
@@ -709,6 +720,7 @@ def annotate_mpc(
     output_path: str,
     overwrite: bool = True,
     add_transcript_annotation: bool = True,
+    freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
     Annotate Table with MPC score using MPC release Table (`mpc_release`).
@@ -724,6 +736,7 @@ def annotate_mpc(
         Default is True.
     :param bool add_transcript_annotation: Whether to add transcript annotation to input Table
         (even if it already exists). Default is True.
+    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: None; function writes Table to specified output path.
     """
     assert (
@@ -745,10 +758,10 @@ def annotate_mpc(
             will only get one transcript annotation (and therefore one MPC annotation)!
             """
         )
-        mpc_ht = mpc_release_dedup.ht()
+        mpc_ht = mpc_release_dedup.versions[freeze].ht()
         ht = ht.annotate(transcript=mpc_ht[ht.key].transcript)
 
-    mpc_ht = mpc_release.ht()
+    mpc_ht = mpc_release.versions[freeze].ht()
     mpc_ht = mpc_ht.key_by("locus", "alleles", "transcript")
     ht = ht.annotate(mpc=mpc_ht[ht.locus, ht.alleles, ht.transcript].mpc)
     ht.write(output_path, overwrite=overwrite)

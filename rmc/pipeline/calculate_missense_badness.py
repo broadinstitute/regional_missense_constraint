@@ -11,6 +11,7 @@ import hail as hl
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
+from rmc.resources.rmc import CURRENT_FREEZE
 from rmc.slack_creds import slack_token
 from rmc.utils.missense_badness import calculate_misbad, prepare_amino_acid_ht
 
@@ -32,6 +33,7 @@ def main(args):
             prepare_amino_acid_ht(
                 overwrite_temp=args.overwrite_temp,
                 overwrite_output=args.overwrite_output,
+                freeze=args.freeze,
             )
 
         if args.command == "create-misbad":
@@ -40,6 +42,7 @@ def main(args):
                 use_exac_oe_cutoffs=args.use_exac_oe_cutoffs,
                 overwrite_temp=args.overwrite_temp,
                 overwrite_output=args.overwrite_output,
+                freeze=args.freeze,
             )
 
     finally:
@@ -60,6 +63,12 @@ if __name__ == "__main__":
         "--overwrite-output",
         help="Completely overwrite existing final output data, for use in functions with option to modify existing final output data.",
         action="store_true",
+    )
+    parser.add_argument(
+        "--freeze",
+        help="RMC data freeze number",
+        type=int,
+        default=CURRENT_FREEZE,
     )
     parser.add_argument(
         "--slack-channel",

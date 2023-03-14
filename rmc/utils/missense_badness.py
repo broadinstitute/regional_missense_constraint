@@ -48,7 +48,7 @@ def prepare_amino_acid_ht(
         If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
         If True, will clear existing output data and write new output data.
         The output Table is the amino acid Table.
-    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
+    :param int freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
@@ -117,7 +117,7 @@ def prepare_amino_acid_ht(
         "amino_acids",
         "oe",
     )
-    context_ht.write(amino_acids_oe.path, overwrite=overwrite_output)
+    context_ht.write(amino_acids_oe.versions[freeze].path, overwrite=overwrite_output)
     logger.info("Output amino acid OE HT fields: %s", set(context_ht.row))
 
 
@@ -203,6 +203,7 @@ def calculate_misbad(
     overwrite_temp: bool,
     overwrite_output: bool,
     oe_threshold: float = 0.6,
+    freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
     Calculate missense badness score using Table with all amino acid substitutions and their missense observed/expected (OE) ratio.
@@ -220,14 +221,15 @@ def calculate_misbad(
         Rows with OE less or equal to this threshold will be considered "low" OE, and
         rows with OE greater than this threshold will considered "high" OE.
         Default is 0.6.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: None; writes Table with missense badness score to resource path.
     """
-    if not file_exists(amino_acids_oe.path):
+    if not file_exists(amino_acids_oe.versions[freeze].path):
         raise DataException(
             "Table with all amino acid substitutions and missense OE doesn't exist!"
         )
 
-    ht = amino_acids_oe.ht()
+    ht = amino_acids_oe.versions[freeze].ht()
 
     if use_exac_oe_cutoffs:
         logger.info("Removing rows with OE greater than 0.6 and less than 0.8...")
@@ -296,5 +298,5 @@ def calculate_misbad(
         ),
     )
 
-    mb_ht.write(misbad.path, overwrite=overwrite_output)
+    mb_ht.write(misbad.versions[freeze].path, overwrite=overwrite_output)
     logger.info("Output missense badness HT fields: %s", set(mb_ht.row))
