@@ -178,8 +178,7 @@ def prepare_pop_path_ht(
     Prepare Table with 'population' (common gnomAD missense) and 'pathogenic' (ClinVar pathogenic/likely pathogenic missense) variants.
 
     .. note::
-        is not enabled on the cluster.
-        - Assumes tables containing all variants in canonical transcripts and their
+        Assumes tables containing all variants in canonical transcripts and their
         missense O/E exist (both duplicated and dedup versions).
 
     :param str gnomad_data_type: gnomAD data type. Used to retrieve public release Table.
