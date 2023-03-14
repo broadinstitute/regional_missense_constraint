@@ -13,10 +13,7 @@ from gnomad.resources.grch37.gnomad import public_release
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 
-from rmc.resources.basics import (
-    TEMP_PATH,
-    TEMP_PATH_WITH_FAST_DEL,
-)
+from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.reference_data import (
     blosum,
     blosum_txt_path,
@@ -536,7 +533,9 @@ def calculate_fitted_scores(
         filter_expr &= hl.is_defined(ht[field])
     ht = ht.filter(filter_expr)
     # Checkpoint here to force missense badness join and filter to complete
-    ht = ht.checkpoint(f"{TEMP_PATH}/fitted_score_temp_join.ht", overwrite=True)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_score_temp_join.ht", overwrite=True
+    )
 
     logger.info("Annotating fitted scores...")
     variable_dict = {
@@ -662,7 +661,7 @@ def create_mpc_release_ht(
     ht = ht.annotate_globals(gnomad_scores=scores)
     # Checkpoint here to force the gnomAD join to complete
     ht = ht.checkpoint(
-        f"{TEMP_PATH}/mpc_temp_gnomad.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/mpc_temp_gnomad.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -688,7 +687,7 @@ def create_mpc_release_ht(
     )
     # Checkpoint here to force the binary search to compute
     ht = ht.checkpoint(
-        f"{TEMP_PATH}/mpc_temp_binary.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/mpc_temp_binary.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )

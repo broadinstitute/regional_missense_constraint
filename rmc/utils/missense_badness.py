@@ -5,10 +5,7 @@ import hail as hl
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 
-from rmc.resources.basics import (
-    TEMP_PATH,
-    TEMP_PATH_WITH_FAST_DEL,
-)
+from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import amino_acids_oe, CURRENT_FREEZE, misbad
 from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
@@ -241,7 +238,7 @@ def calculate_misbad(
     logger.info("Creating high missense OE (OE > %s) HT...", oe_threshold)
     high_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=True)
     high_ht = high_ht.checkpoint(
-        f"{TEMP_PATH}/amino_acids_high_oe.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_high_oe.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -249,7 +246,7 @@ def calculate_misbad(
     logger.info("Creating low missense OE (OE <= %s) HT...", oe_threshold)
     low_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=False)
     low_ht = low_ht.checkpoint(
-        f"{TEMP_PATH}/amino_acids_low_oe.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_low_oe.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
