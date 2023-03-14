@@ -4,18 +4,13 @@ import hail as hl
 
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
-from gnomad.utils.vep import CSQ_NON_CODING
 
-from rmc.resources.basics import (
-    TEMP_PATH,
-    TEMP_PATH_WITH_FAST_DEL,
-)
-from rmc.resources.gnomad import constraint_ht
-from rmc.resources.rmc import amino_acids_oe, constraint_prep, misbad, rmc_results
-from rmc.utils.constraint import add_obs_annotation
+from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
+from rmc.resources.rmc import amino_acids_oe, CURRENT_FREEZE, misbad
+from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
+    annotate_and_filter_codons,
     filter_context_using_gnomad,
-    get_codon_lookup,
     get_constraint_transcripts,
     process_context_ht,
 )
@@ -28,106 +23,10 @@ logger = logging.getLogger("calculate_missense_badness")
 logger.setLevel(logging.INFO)
 
 
-def annotate_and_filter_codons(ht: hl.Table) -> hl.Table:
-    """
-    Remove non-coding loci and keep informative codons only.
-
-    Split codon annotation to annotate reference and alternate amino acids, then
-    remove rows with unknown amino acids.
-
-    Additionally remove rows that are annotated as 'coding_sequence_variant',
-    as these variants have either undefined or uninformative codon annotations
-    (NA or codon with Ns, e.g. nnG/nnT).
-
-    'coding_sequence_variant' defined as: 'A sequence variant that changes the coding sequence'
-    https://m.ensembl.org/info/genome/variation/prediction/predicted_data.html
-
-    :param hl.Table ht: Input Table.
-    :return: Table with informative codons only.
-    """
-    logger.info("Removing non-coding loci from HT...")
-    non_coding_csq = hl.literal(CSQ_NON_CODING)
-    ht = ht.filter(~non_coding_csq.contains(ht.most_severe_consequence))
-
-    logger.info("Filtering to lines with expected codon annotations...")
-    # Codons are in this format: NNN/NNN, so expected length is 7
-    ht = ht.filter((hl.is_defined(ht.codons)) & (hl.len(ht.codons) == 7))
-    codon_map = get_codon_lookup()
-    ht = ht.annotate(
-        ref=ht.codons.split("/")[0].upper(),
-        alt=ht.codons.split("/")[1].upper(),
-    )
-    ht = ht.annotate(
-        ref=codon_map.get(ht.ref, "Unk"),
-        alt=codon_map.get(ht.alt, "Unk"),
-    )
-    # Remove any lines with "Unk" (unknown amino acids)
-    return ht.filter((ht.ref != "Unk") & (ht.alt != "Unk"))
-
-
-def get_oe_annotation(ht: hl.Table) -> hl.Table:
-    """
-    Annotate input Table with observed to expected missense (OE) ratio per transcript.
-
-    Use regional OE value if available, otherwise use transcript OE value.
-
-    .. note::
-        - Assumes input Table has `locus` and `trancript` annotations
-        - OE values are transcript specific
-        - Assumes merged RMC results HT exists
-        - Assumes merged RMC results HT is annotated per transcript section with:
-            - `section_oe`: Missense observed/expected ratio
-            - `interval`: Transcript section start position to end position
-
-    :param hl.Table ht: Input Table.
-    :return: Table with `oe` annotation.
-    """
-    overall_oe_ht = (
-        constraint_prep.ht().select_globals().select("total_obs", "total_exp")
-    )
-    group_ht = overall_oe_ht.group_by("transcript").aggregate(
-        obs=hl.agg.take(overall_oe_ht.total_obs, 1)[0],
-        exp=hl.agg.take(overall_oe_ht.total_exp, 1)[0],
-    )
-    # Recalculating transcript level OE ratio because previous OE ratio (`overall_oe`)
-    # is capped at 1 for regional missense constraint calculation purposes
-    group_ht = group_ht.annotate(transcript_oe=group_ht.obs / group_ht.exp)
-
-    # Read in LoF constraint HT to get OE ratio for five transcripts missing in v2 RMC results
-    # # 'ENST00000304270', 'ENST00000344415', 'ENST00000373521', 'ENST00000381708', 'ENST00000596936'
-    # All 5 of these transcripts have extremely low coverage in gnomAD
-    # Will keep for consistency with v2 LoF results but they look terrible
-    # NOTE: LoF HT is keyed by gene and transcript, but `_key_by_assert_sorted` doesn't work here for v2 version
-    # Throws this error: hail.utils.java.FatalError: IllegalArgumentException
-    lof_ht = constraint_ht.ht().select("oe_mis").key_by("transcript")
-    ht = ht.annotate(
-        gnomad_transcript_oe=lof_ht[ht.transcript].oe_mis,
-        rmc_transcript_oe=group_ht[ht.transcript].transcript_oe,
-    )
-    ht = ht.transmute(
-        transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe)
-    )
-
-    if not file_exists(rmc_results.path):
-        raise DataException("Merged RMC results table does not exist!")
-    rmc_ht = rmc_results.ht().key_by("interval")
-    ht = ht.annotate(
-        section_oe=rmc_ht.index(ht.locus, all_matches=True)
-        .filter(lambda x: x.transcript == ht.transcript)
-        .section_oe
-    )
-    ht = ht.annotate(
-        section_oe=hl.or_missing(
-            hl.len(ht.section_oe) > 0,
-            ht.section_oe[0],
-        ),
-    )
-    return ht.transmute(oe=hl.coalesce(ht.section_oe, ht.transcript_oe))
-
-
 def prepare_amino_acid_ht(
     overwrite_temp: bool,
     overwrite_output: bool,
+    freeze: int = CURRENT_FREEZE,
     gnomad_data_type: str = "exomes",
 ) -> None:
     """
@@ -146,6 +45,7 @@ def prepare_amino_acid_ht(
         If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
         If True, will clear existing output data and write new output data.
         The output Table is the amino acid Table.
+    :param int freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
@@ -204,7 +104,7 @@ def prepare_amino_acid_ht(
         "Getting observed to expected ratio, rekeying Table, and writing to output path..."
     )
     # Note that `get_oe_annotation` is pulling the missense OE ratio
-    context_ht = get_oe_annotation(context_ht)
+    context_ht = get_oe_annotation(context_ht, freeze)
     context_ht = context_ht.key_by("locus", "alleles", "transcript")
     context_ht = context_ht.select(
         "ref",
@@ -214,7 +114,7 @@ def prepare_amino_acid_ht(
         "amino_acids",
         "oe",
     )
-    context_ht.write(amino_acids_oe.path, overwrite=overwrite_output)
+    context_ht.write(amino_acids_oe.versions[freeze].path, overwrite=overwrite_output)
     logger.info("Output amino acid OE HT fields: %s", set(context_ht.row))
 
 
@@ -300,11 +200,15 @@ def calculate_misbad(
     overwrite_temp: bool,
     overwrite_output: bool,
     oe_threshold: float = 0.6,
+    freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
     Calculate missense badness score using Table with all amino acid substitutions and their missense observed/expected (OE) ratio.
 
     If `use_exac_oe_cutoffs` is set, will remove all rows with 0.6 < OE <= 0.8.
+
+    .. note::
+        Assumes table containing all possible amino acid substitutions and their missense OE ratio exists.
 
     :param bool use_exac_oe_cutoffs: Whether to use the same missense OE cutoffs as in ExAC missense badness calculation.
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
@@ -317,14 +221,15 @@ def calculate_misbad(
         Rows with OE less or equal to this threshold will be considered "low" OE, and
         rows with OE greater than this threshold will considered "high" OE.
         Default is 0.6.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: None; writes Table with missense badness score to resource path.
     """
-    if not file_exists(amino_acids_oe.path):
+    if not file_exists(amino_acids_oe.versions[freeze].path):
         raise DataException(
             "Table with all amino acid substitutions and missense OE doesn't exist!"
         )
 
-    ht = amino_acids_oe.ht()
+    ht = amino_acids_oe.versions[freeze].ht()
 
     if use_exac_oe_cutoffs:
         logger.info("Removing rows with OE greater than 0.6 and less than 0.8...")
@@ -336,7 +241,7 @@ def calculate_misbad(
     logger.info("Creating high missense OE (OE > %s) HT...", oe_threshold)
     high_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=True)
     high_ht = high_ht.checkpoint(
-        f"{TEMP_PATH}/amino_acids_high_oe.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_high_oe.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -344,7 +249,7 @@ def calculate_misbad(
     logger.info("Creating low missense OE (OE <= %s) HT...", oe_threshold)
     low_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=False)
     low_ht = low_ht.checkpoint(
-        f"{TEMP_PATH}/amino_acids_low_oe.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_low_oe.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -393,5 +298,5 @@ def calculate_misbad(
         ),
     )
 
-    mb_ht.write(misbad.path, overwrite=overwrite_output)
+    mb_ht.write(misbad.versions[freeze].path, overwrite=overwrite_output)
     logger.info("Output missense badness HT fields: %s", set(mb_ht.row))

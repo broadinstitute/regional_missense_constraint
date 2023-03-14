@@ -497,48 +497,55 @@ Table containing all possible amino acid substitutions and their missense badnes
 ####################################################################################
 ## MPC related resources
 ####################################################################################
-CURRENT_MPC_PREFIX = f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}"
+joint_clinvar_gnomad = VersionedTableResource(
+    default_version=CURRENT_FREEZE,
+    versions={
+        freeze: TableResource(
+            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/joint_clinvar_gnomad.ht"
+        )
+        for freeze in FREEZES
+    },
+)
+"""
+Table containing 'population' and 'pathogenic' variants.
+
+Table contains common (AF > 0.001) gnomAD variants ('population') and
+ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes
+that cause severe disease ('pathogenic') with defined CADD, BLOSUM, Grantham, missense observed/expected ratios,
+missense badness, and PolyPhen-2 scores.
+
+Table is input to MPC (missense badness, polyphen-2, and constraint) calculations.
+"""
 
 
-def joint_clinvar_gnomad_path() -> str:
-    """
-    Return path to Table containing "population" and "pathogenic" variants.
-
-    Table contains common (AF > 0.001) gnomAD variants ("population") and
-    ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes
-    that cause severe disease ("pathogenic") with defined CADD, BLOSUM, Grantham, missense observed/expected ratios,
-    missense badness, and PolyPhen-2 scores.
-
-    Table is input to MPC (missense badness, polyphen-2, and constraint) calculations.
-
-    :return: Path to Table.
-    """
-    # TODO: convert back into TableResource
-    return f"{CURRENT_MPC_PREFIX}/joint_clinvar_gnomad.ht"
-
-
-def mpc_model_pkl_path() -> str:
+def mpc_model_pkl_path(freeze: int = CURRENT_FREEZE) -> str:
     """
     Return path to model (stored as pickle) that contains relationship of MPC variables.
 
     Model created using logistic regression.
 
+    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to model.
     """
-    return f"{CURRENT_MPC_PREFIX}/mpc_model.pkl"
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/mpc_model.pkl"
 
 
-def gnomad_fitted_score_path(is_grouped: bool = False) -> str:
+def gnomad_fitted_score_path(
+    is_grouped: bool = False, freeze: int = CURRENT_FREEZE
+) -> str:
     """
     Return path to fitted scores (from MPC model regression) of common (AF > 0.001) gnomAD variants.
 
     Table is input to MPC (missense badness, polyphen-2, and constraint) calculations on other datasets.
 
     :param bool is_grouped: Whether the Table is grouped by score. Default is False.
+    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to Table.
     """
     group = "_group" if is_grouped else ""
-    return f"{CURRENT_MPC_PREFIX}/gnomad_fitted_scores{group}.ht"
+    return (
+        f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/gnomad_fitted_scores{group}.ht"
+    )
 
 
 mpc_release = VersionedTableResource(

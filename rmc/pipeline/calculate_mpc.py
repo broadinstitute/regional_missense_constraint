@@ -13,6 +13,7 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
+from rmc.resources.rmc import CURRENT_FREEZE
 from rmc.slack_creds import slack_token
 from rmc.utils.mpc import (
     annotate_mpc,
@@ -39,6 +40,7 @@ def main(args):
             prepare_pop_path_ht(
                 overwrite_temp=args.overwrite_temp,
                 overwrite_output=args.overwrite_output,
+                freeze=args.freeze,
             )
 
         if args.command == "run-glm":
@@ -47,6 +49,7 @@ def main(args):
                 variables=args.variables.split(","),
                 additional_variables=args.extra_variables.split(","),
                 overwrite=args.overwrite,
+                freeze=args.freeze,
             )
 
         if args.command == "calculate-mpc":
@@ -54,17 +57,20 @@ def main(args):
             create_mpc_release_ht(
                 overwrite_temp=args.overwrite_temp,
                 overwrite_output=args.overwrite_output,
+                freeze=args.freeze,
             )
 
         if args.command == "annotate-hts":
             hl.init(log="/annotate_hts.log", tmp_dir=temp_dir)
+            mpc_bucket_path = f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{args.freeze}"
             if args.clinvar:
                 from rmc.resources.reference_data import clinvar_path_mis
 
                 annotate_mpc(
                     ht=clinvar_path_mis.ht(),
-                    output_path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/clinvar_mpc_annot.ht",
+                    output_path=f"{mpc_bucket_path}/clinvar_mpc_annot.ht",
                     overwrite=args.overwrite,
+                    freeze=args.freeze,
                 )
 
             if args.dd:
@@ -74,14 +80,16 @@ def main(args):
                 case_ht = dd_ht.filter(dd_ht.case_control != "control")
                 annotate_mpc(
                     ht=case_ht,
-                    output_path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/dd_case_mpc_annot.ht",
+                    output_path=f"{mpc_bucket_path}/dd_case_mpc_annot.ht",
                     overwrite=args.overwrite,
+                    freeze=args.freeze,
                 )
                 control_ht = dd_ht.filter(dd_ht.case_control == "control")
                 annotate_mpc(
                     ht=control_ht,
-                    output_path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/dd_control_mpc_annot.ht",
+                    output_path=f"{mpc_bucket_path}/dd_control_mpc_annot.ht",
                     overwrite=args.overwrite,
+                    freeze=args.freeze,
                 )
 
             if args.gnomad_exomes:
@@ -90,8 +98,9 @@ def main(args):
                 ht = public_release("exomes").ht()
                 annotate_mpc(
                     ht=ht,
-                    output_path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/gnomAD_mpc_annot.ht",
+                    output_path=f"{mpc_bucket_path}/gnomAD_mpc_annot.ht",
                     overwrite=args.overwrite,
+                    freeze=args.freeze,
                 )
 
             if args.specify_ht:
@@ -99,6 +108,7 @@ def main(args):
                     ht=hl.read_table(args.ht_in_path),
                     output_path=args.ht_out_path,
                     overwrite=args.overwrite,
+                    freeze=args.freeze,
                 )
 
     finally:
@@ -122,6 +132,12 @@ if __name__ == "__main__":
         "--overwrite-output",
         help="Completely overwrite existing final output data, for use in functions with option to modify existing final output data.",
         action="store_true",
+    )
+    parser.add_argument(
+        "--freeze",
+        help="RMC data freeze number",
+        type=int,
+        default=CURRENT_FREEZE,
     )
     parser.add_argument(
         "--slack-channel",
