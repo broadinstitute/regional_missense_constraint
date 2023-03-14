@@ -178,7 +178,6 @@ def prepare_pop_path_ht(
     Prepare Table with 'population' (common gnomAD missense) and 'pathogenic' (ClinVar pathogenic/likely pathogenic missense) variants.
 
     .. note::
-        - This function reads in data from a requester-pays bucket and will fail if requester-pays
         is not enabled on the cluster.
         - Assumes tables containing all variants in canonical transcripts and their
         missense O/E exist (both duplicated and dedup versions).
