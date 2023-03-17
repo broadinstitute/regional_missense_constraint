@@ -541,6 +541,8 @@ def main(args):
 
             logger.info("Finalizing section-level RMC table...")
             rmc_ht = merge_rmc_hts(round_nums=round_nums, freeze=args.freeze)
+            # Drop any unnecessary global fields
+            rmc_ht = rmc_ht.select_globals()
             rmc_ht = rmc_ht.checkpoint(
                 f"{TEMP_PATH_WITH_SLOW_DEL}/freeze{args.freeze}_rmc_results.ht",
                 overwrite=args.overwrite,
@@ -550,6 +552,16 @@ def main(args):
             logger.info("Removing outlier transcripts...")
             constraint_transcripts = get_constraint_transcripts(outlier=False)
             rmc_ht = rmc_ht.filter(constraint_transcripts.contains(rmc_ht.transcript))
+
+            # Add p-value threshold to globals
+            if not args.p_value:
+                logger.warning(
+                    "p-value threshold not specified! Defaulting to value stored in `P_VALUE` constant..."
+                )
+                p_value = P_VALUE
+            else:
+                p_value = args.p_value
+            rmc_ht = rmc_ht.annotate_globals(p_value=p_value)
 
             logger.info("Writing out RMC results...")
             rmc_ht.write(rmc_results.versions[args.freeze].path)
@@ -635,6 +647,9 @@ if __name__ == "__main__":
         help="""
         p-value significance threshold for single break search.
         Used to determine chi square threshold for likelihood ratio test.
+
+        Also used to annotate globals of final RMC HT with p-value associated
+        with RMC results.
 
         If not specified, script will default to threshold set
         in `P_VALUE`.
