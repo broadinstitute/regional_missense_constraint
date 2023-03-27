@@ -94,7 +94,7 @@ if __name__ == "__main__":
         """,
     )
     create_misbad.add_argument(
-        "--use-exac-oe-cutoffs",
+        "use-exac-oe-cutoffs",
         help="""
         Use the same missense OE cutoffs as in ExAC missense badness calculation.
         This removes rows with 0.6 < missense OE <= 0.8.
