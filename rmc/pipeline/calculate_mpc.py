@@ -77,14 +77,14 @@ def main(args):
                 from rmc.resources.reference_data import ndd_de_novo
 
                 dd_ht = ndd_de_novo.ht()
-                case_ht = dd_ht.filter(dd_ht.case_control != "control")
+                case_ht = dd_ht.filter(dd_ht.sample_set != "control")
                 annotate_mpc(
                     ht=case_ht,
                     output_path=f"{mpc_bucket_path}/dd_case_mpc_annot.ht",
                     overwrite=args.overwrite,
                     freeze=args.freeze,
                 )
-                control_ht = dd_ht.filter(dd_ht.case_control == "control")
+                control_ht = dd_ht.filter(dd_ht.sample_set == "control")
                 annotate_mpc(
                     ht=control_ht,
                     output_path=f"{mpc_bucket_path}/dd_control_mpc_annot.ht",
