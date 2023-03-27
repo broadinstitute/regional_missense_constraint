@@ -74,6 +74,15 @@ if __name__ == "__main__":
         "--slack-channel",
         help="Send message to Slack channel/user.",
     )
+    parser.add_argument(
+        "use-exac-oe-cutoffs",
+        help="""
+        Use the same missense OE cutoffs as in ExAC missense badness calculation.
+        This removes rows with 0.6 < missense OE <= 0.8.
+        Only relevant for `create-misbad` step.
+        """,
+        action="store_true",
+    )
 
     # Create subparsers for each step
     # Need to specify `dest` to be able to check which subparser is being invoked
@@ -92,14 +101,6 @@ if __name__ == "__main__":
         help="""
         Calculate missense badness score for each possible amino acid substitution.
         """,
-    )
-    create_misbad.add_argument(
-        "use-exac-oe-cutoffs",
-        help="""
-        Use the same missense OE cutoffs as in ExAC missense badness calculation.
-        This removes rows with 0.6 < missense OE <= 0.8.
-        """,
-        action="store_true",
     )
 
     args = parser.parse_args()
