@@ -77,7 +77,7 @@ def main(args):
                 from rmc.resources.reference_data import ndd_de_novo
 
                 dd_ht = ndd_de_novo.ht()
-                dd_ht = dd_ht.explode("sample_set'")
+                dd_ht = dd_ht.explode("sample_set")
                 case_ht = dd_ht.filter(dd_ht.sample_set != "control")
                 annotate_mpc(
                     ht=case_ht,
@@ -86,6 +86,11 @@ def main(args):
                     freeze=args.freeze,
                 )
                 control_ht = dd_ht.filter(dd_ht.sample_set == "control")
+                shared_variants = case_ht.join(control_ht, how="inner")
+                logger.info(
+                    "%i variants overlapped between cases and controls",
+                    shared_variants.count(),
+                )
                 annotate_mpc(
                     ht=control_ht,
                     output_path=f"{mpc_bucket_path}/dd_control_mpc_annot.ht",
