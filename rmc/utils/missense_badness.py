@@ -233,7 +233,8 @@ def calculate_misbad(
 
     if use_exac_oe_cutoffs:
         logger.info("Removing rows with OE greater than 0.6 and less than 0.8...")
-        ht = ht.filter((ht.oe <= 0.6) | (ht.oe > 0.8))
+        # ht = ht.filter((ht.oe <= 0.6) | (ht.oe > 0.8))
+        ht = ht.filter((ht.oe <= 0.4) | (ht.oe > 0.8))
 
     logger.info(
         "Splitting input Table by OE to get synonymous and nonsense rates for high and low OE groups..."
