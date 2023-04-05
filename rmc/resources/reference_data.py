@@ -89,13 +89,13 @@ List of triplosensitive genes was determined by filtering to genes with pTriplo 
 ## Assessment related resources
 ####################################################################################
 clinvar = TableResource(
-    path="gs://seqr-reference-data/GRCh37/clinvar/clinvar.GRCh37.ht",
+    path="gs://regional_missense_constraint/resources/GRCh37/reference_data/ht/clinvar.GRCh37.ht",
 )
 """
 
-Table of ClinVar variants maintained by the seqr team.
+Table of ClinVar variants.
 
-Last version of this HT accessed by RMC team corresponds to 20230121 ClinVar release.
+HT corresponds to 20230305 ClinVar release.
 """
 
 clinvar_plp_mis_haplo = TableResource(

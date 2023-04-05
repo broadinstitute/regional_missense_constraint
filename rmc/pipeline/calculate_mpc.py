@@ -64,10 +64,10 @@ def main(args):
             hl.init(log="/annotate_hts.log", tmp_dir=temp_dir)
             mpc_bucket_path = f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{args.freeze}"
             if args.clinvar:
-                from rmc.resources.reference_data import clinvar_path_mis
+                from rmc.resources.reference_data import clinvar_plp_mis_haplo
 
                 annotate_mpc(
-                    ht=clinvar_path_mis.ht(),
+                    ht=clinvar_plp_mis_haplo.ht(),
                     output_path=f"{mpc_bucket_path}/clinvar_mpc_annot.ht",
                     overwrite=args.overwrite,
                     freeze=args.freeze,
@@ -77,14 +77,20 @@ def main(args):
                 from rmc.resources.reference_data import ndd_de_novo
 
                 dd_ht = ndd_de_novo.ht()
-                case_ht = dd_ht.filter(dd_ht.case_control != "control")
+                dd_ht = dd_ht.explode("sample_set")
+                case_ht = dd_ht.filter(dd_ht.sample_set != "control")
                 annotate_mpc(
                     ht=case_ht,
                     output_path=f"{mpc_bucket_path}/dd_case_mpc_annot.ht",
                     overwrite=args.overwrite,
                     freeze=args.freeze,
                 )
-                control_ht = dd_ht.filter(dd_ht.case_control == "control")
+                control_ht = dd_ht.filter(dd_ht.sample_set == "control")
+                shared_variants = case_ht.join(control_ht, how="inner")
+                logger.info(
+                    "%i variants overlapped between cases and controls",
+                    shared_variants.count(),
+                )
                 annotate_mpc(
                     ht=control_ht,
                     output_path=f"{mpc_bucket_path}/dd_control_mpc_annot.ht",

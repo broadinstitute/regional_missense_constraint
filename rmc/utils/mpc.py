@@ -548,24 +548,28 @@ def calculate_fitted_scores(
         for variable in variables
         if interaction_char in variable
     }
-    for variable in interactions_dict.keys():
-        if len(variable.split(interaction_char)) > 2:
-            raise DataException(
-                "Code currently doesn't handle interactions between more than two variables!"
-            )
     annot_expr = [
         (ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()
     ]
-    # NOTE: This assumes that variable is in the format of x:y or x*y
-    # and won't handle cases where variable is x:y:z or x*y*z correctly
-    interaction_annot_expr = [
-        (
-            ht[variable.split(interaction_char)[0]]
-            * ht[variable.split(interaction_char)[1]]
-            * mpc_rel_vars[variable]
-        )
-        for variable in interactions_dict.keys()
-    ]
+    interaction_annot_expr = []
+    for variable in interactions_dict.keys():
+        if len(variable.split(interaction_char)) > 2:
+            # NOTE: This assumes that variable is in the format of x:y:z or x*y*z
+            # (Assumes the number of variables is maximum 3)
+            if len(variable.split(interaction_char)) > 2:
+                interaction_annot_expr.append(
+                    ht[variable.split(interaction_char)[0]]
+                    * ht[variable.split(interaction_char)[1]]
+                    * ht[variable.split(interaction_char)[2]]
+                    * mpc_rel_vars[variable]
+                )
+            else:
+                interaction_annot_expr.append(
+                    ht[variable.split(interaction_char)[0]]
+                    * ht[variable.split(interaction_char)[1]]
+                    * mpc_rel_vars[variable]
+                )
+
     annot_expr.extend(interaction_annot_expr)
     combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
 
