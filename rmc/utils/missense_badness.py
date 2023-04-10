@@ -2,11 +2,8 @@ import logging
 
 import hail as hl
 
-from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
-
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
-from rmc.resources.rmc import amino_acids_oe, CURRENT_FREEZE, misbad
+from rmc.resources.rmc import amino_acids_oe, CURRENT_FREEZE
 from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
     annotate_and_filter_codons,
@@ -224,12 +221,11 @@ def calculate_misbad(
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: None; writes Table with missense badness score to resource path.
     """
-    if not file_exists(amino_acids_oe.versions[freeze].path):
-        raise DataException(
-            "Table with all amino acid substitutions and missense OE doesn't exist!"
-        )
-
-    ht = amino_acids_oe.versions[freeze].ht()
+    amino_acids_ht_path = (
+        "gs://regional_missense_constraint/temp/amino_acid_oe_hc_lof_only.ht"
+    )
+    print(f"freeze: {freeze}; amino acid HT path: {amino_acids_ht_path}")
+    ht = hl.read_table(amino_acids_ht_path)
 
     if use_exac_oe_cutoffs:
         logger.info("Removing rows with OE greater than 0.6 and less than 0.8...")
@@ -298,5 +294,7 @@ def calculate_misbad(
         ),
     )
 
-    mb_ht.write(misbad.versions[freeze].path, overwrite=overwrite_output)
+    output_path = "gs://regional_missense_constraint/temp/misbad_hc_lof_only.ht"
+    print(f"Writing to {output_path}")
+    mb_ht.write(output_path, overwrite=overwrite_output)
     logger.info("Output missense badness HT fields: %s", set(mb_ht.row))
