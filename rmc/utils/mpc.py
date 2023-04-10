@@ -18,7 +18,6 @@ from rmc.resources.reference_data import (
     blosum,
     blosum_txt_path,
     cadd,
-    clinvar_plp_mis_haplo,
     grantham,
     grantham_txt_path,
 )
@@ -200,7 +199,11 @@ def prepare_pop_path_ht(
     :return: None; function writes Table to resource path.
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
-    clinvar_ht = clinvar_plp_mis_haplo.ht()
+    clinvar_2018_path = (
+        "gs://regional_missense_constraint/temp/clinvar_hi_plp_mis_20181028.ht"
+    )
+    print("Reading ClinVar HT from from path: %s", clinvar_2018_path)
+    clinvar_ht = hl.read_table(clinvar_2018_path)
     clinvar_ht = clinvar_ht.annotate(pop_v_path=0)
 
     logger.info("Importing gnomAD public data and filtering to common variants...")
@@ -293,7 +296,11 @@ def prepare_pop_path_ht(
         & hl.is_defined(ht.polyphen.score)
         & hl.is_defined(ht.misbad)
     )
-    ht.write(joint_clinvar_gnomad.versions[freeze].path, overwrite=overwrite_output)
+    output_path = (
+        "gs://regional_missense_constraint/temp/joint_clinvar_20181028_gnomad.ht"
+    )
+    print("Writing to path: %s", output_path)
+    ht.write(output_path, overwrite=overwrite_output)
 
 
 def run_regressions(
