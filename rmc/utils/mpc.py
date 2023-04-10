@@ -26,7 +26,6 @@ from rmc.resources.rmc import (
     context_with_oe_dedup,
     CURRENT_FREEZE,
     misbad,
-    mpc_model_pkl_path,
 )
 from rmc.utils.generic import get_aa_map
 
@@ -512,7 +511,8 @@ def calculate_fitted_scores(
     assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
 
     logger.info("Extracting MPC model relationships from pickle...")
-    model_path = mpc_model_pkl_path(freeze)
+    model_path = "gs://regional_missense_constraint/temp/mpc_model_20181028.pkl"
+    print(f"Path: {model_path}")
     with hl.hadoop_open(model_path, "rb") as p:
         model = pickle.load(p)
     mpc_rel_vars = model.params.to_dict()
