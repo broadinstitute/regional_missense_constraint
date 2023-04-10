@@ -749,7 +749,7 @@ def annotate_mpc(
     output_path: str,
     overwrite: bool = True,
     add_transcript_annotation: bool = True,
-    # freeze: int = CURRENT_FREEZE,
+    freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
     Annotate Table with MPC score using MPC release Table (`mpc_release`).
@@ -781,7 +781,7 @@ def annotate_mpc(
 
     mpc_path = "gs://regional_missense_constraint/temp/mpc_20181028.ht"
     mpc_dedup = "gs://regional_missense_constraint/temp/mpc_20181028_dedup.ht"
-    print(f"MPC HT paths: {mpc_path}, {mpc_dedup}")
+    print(f"Freeze {freeze} MPC HT paths: {mpc_path}, {mpc_dedup}")
 
     if "transcript" not in ht.row or add_transcript_annotation:
         logger.info(
