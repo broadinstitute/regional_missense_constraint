@@ -26,7 +26,6 @@ from rmc.resources.rmc import (
     context_with_oe_dedup,
     CURRENT_FREEZE,
     gnomad_fitted_score_path,
-    joint_clinvar_gnomad,
     misbad,
     mpc_model_pkl_path,
     mpc_release,
@@ -336,7 +335,11 @@ def run_regressions(
         and model coefficients as pickle to resource paths.
     """
     # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
-    ht = joint_clinvar_gnomad.versions[freeze].ht()
+    joint_path = (
+        "gs://regional_missense_constraint/temp/joint_clinvar_20181028_gnomad.ht"
+    )
+    print(f"Reading from path: {joint_path}")
+    ht = hl.read_table(joint_path)
     ht = ht.transmute(polyphen=ht.polyphen.score)
     df = ht.to_pandas()
 
@@ -473,7 +476,8 @@ def run_regressions(
         X = spec_X
 
     logger.info("Saving model as pickle...")
-    model_path = mpc_model_pkl_path(freeze)
+    model_path = "gs://regional_missense_constraint/temp/mpc_model_20181028.pkl"
+    print(f"MPC model path: {model_path}")
     with hl.hadoop_open(model_path, "wb") as p:
         pickle.dump(model, p, protocol=pickle.HIGHEST_PROTOCOL)
 
@@ -482,7 +486,10 @@ def run_regressions(
     )
     ht = ht.filter(ht.pop_v_path == 1)
     ht = calculate_fitted_scores(ht=ht, freeze=freeze)
-    ht.write(gnomad_fitted_score_path(freeze=freeze), overwrite=overwrite)
+    fitted_path = (
+        "gs://regional_missense_constraint/temp/gnomad_fitted_scores_20181028.ht"
+    )
+    ht.write(fitted_path, overwrite=overwrite)
 
 
 def calculate_fitted_scores(
