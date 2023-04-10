@@ -25,11 +25,8 @@ from rmc.resources.rmc import (
     context_with_oe,
     context_with_oe_dedup,
     CURRENT_FREEZE,
-    gnomad_fitted_score_path,
     misbad,
     mpc_model_pkl_path,
-    mpc_release,
-    mpc_release_dedup,
 )
 from rmc.utils.generic import get_aa_map
 
@@ -605,7 +602,12 @@ def aggregate_gnomad_fitted_scores(
     :return: None; function writes Table to resource path.
     """
     logger.info("Aggregating gnomAD fitted scores...")
-    gnomad_ht = hl.read_table(gnomad_fitted_score_path(freeze=freeze))
+    fitted_path = (
+        "gs://regional_missense_constraint/temp/gnomad_fitted_scores_20181028.ht"
+    )
+    print(f"freeze {freeze}")
+    print(f"Reading from {fitted_path}...")
+    gnomad_ht = hl.read_table(fitted_path)
     gnomad_ht = gnomad_ht.group_by("fitted_score").aggregate(n_var=hl.agg.count())
     gnomad_ht = gnomad_ht.order_by("fitted_score")
     gnomad_ht = gnomad_ht.key_by("fitted_score")
@@ -626,8 +628,12 @@ def aggregate_gnomad_fitted_scores(
     gnomad_ht = gnomad_ht.add_index()
     gnomad_ht = gnomad_ht.annotate(idx=hl.int(gnomad_ht.idx))
     gnomad_ht = gnomad_ht.key_by("idx")
+    fitted_group = (
+        "gs://regional_missense_constraint/temp/gnomad_fitted_scores_20181028_group.ht"
+    )
+    print(f"Writing to {fitted_group}...")
     gnomad_ht.write(
-        gnomad_fitted_score_path(is_grouped=True, freeze=freeze),
+        fitted_group,
         overwrite=True,
     )
 
@@ -664,15 +670,17 @@ def create_mpc_release_ht(
     ht = calculate_fitted_scores(ht=ht, freeze=freeze)
 
     logger.info("Aggregating gnomAD fitted scores...")
-    fitted_group_path = gnomad_fitted_score_path(is_grouped=True, freeze=freeze)
-    if not file_exists(fitted_group_path):
+    fitted_group = (
+        "gs://regional_missense_constraint/temp/gnomad_fitted_scores_20181028_group.ht"
+    )
+    if not file_exists(fitted_group):
         aggregate_gnomad_fitted_scores(freeze=freeze)
-    gnomad_ht = hl.read_table(fitted_group_path)
+    gnomad_ht = hl.read_table(fitted_group)
     scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
     scores_len = len(scores)
 
     # Get total number of gnomAD common variants
-    gnomad_var_count = hl.read_table(gnomad_fitted_score_path(freeze=freeze)).count()
+    gnomad_var_count = hl.read_table(fitted_group).count()
 
     logger.info("Getting n_less annotation...")
     # Annotate HT with sorted array of gnomAD fitted scores
@@ -713,8 +721,10 @@ def create_mpc_release_ht(
     logger.info("Creating MPC release and writing out...")
     ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
 
+    mpc_path = "gs://regional_missense_constraint/temp/mpc_20181028.ht"
+    print(f"MPC path: {mpc_path}")
     ht = ht.checkpoint(
-        mpc_release.versions[freeze].path,
+        mpc_path,
         overwrite=overwrite_output,
         _read_if_exists=not overwrite_output,
     )
@@ -728,7 +738,9 @@ def create_mpc_release_ht(
         **{"transcript": ht.values.find(lambda x: x["mpc"] == ht["mpc"]).transcript}
     )
     ht = ht.drop("values")
-    ht.write(mpc_release_dedup.versions[freeze].path, overwrite=overwrite_output)
+    mpc_dedup = "gs://regional_missense_constraint/temp/mpc_20181028_dedup.ht"
+    print(f"MPC dedup path: {mpc_dedup}")
+    ht.write(mpc_dedup, overwrite=overwrite_output)
     logger.info("Output MPC dedup HT fields: %s", set(ht.row))
 
 
@@ -737,7 +749,7 @@ def annotate_mpc(
     output_path: str,
     overwrite: bool = True,
     add_transcript_annotation: bool = True,
-    freeze: int = CURRENT_FREEZE,
+    # freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
     Annotate Table with MPC score using MPC release Table (`mpc_release`).
@@ -767,6 +779,10 @@ def annotate_mpc(
         hl.tstr
     ), "'locus' must be a LocusExpression, and 'alleles' must be an array of strings!"
 
+    mpc_path = "gs://regional_missense_constraint/temp/mpc_20181028.ht"
+    mpc_dedup = "gs://regional_missense_constraint/temp/mpc_20181028_dedup.ht"
+    print(f"MPC HT paths: {mpc_path}, {mpc_dedup}")
+
     if "transcript" not in ht.row or add_transcript_annotation:
         logger.info(
             """
@@ -775,10 +791,10 @@ def annotate_mpc(
             will only get one transcript annotation (and therefore one MPC annotation)!
             """
         )
-        mpc_ht = mpc_release_dedup.versions[freeze].ht()
+        mpc_ht = hl.read_table(mpc_dedup)
         ht = ht.annotate(transcript=mpc_ht[ht.key].transcript)
 
-    mpc_ht = mpc_release.versions[freeze].ht()
+    mpc_ht = hl.read_table(mpc_path)
     mpc_ht = mpc_ht.key_by("locus", "alleles", "transcript")
     ht = ht.annotate(mpc=mpc_ht[ht.locus, ht.alleles, ht.transcript].mpc)
     ht.write(output_path, overwrite=overwrite)
