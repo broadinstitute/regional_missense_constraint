@@ -82,16 +82,15 @@ List of triplosensitive genes was determined by filtering to genes with pTriplo 
 ## Assessment related resources
 ####################################################################################
 clinvar = TableResource(
-    path="gs://seqr-reference-data/GRCh37/clinvar/clinvar.GRCh37.ht",
+    path="gs://regional_missense_constraint/resources/GRCh37/reference_data/ht/clinvar.GRCh37.ht",
 )
 """
 
-Table of ClinVar variants maintained by the seqr team.
+Table of ClinVar variants.
 
-Last version of this HT accessed by RMC team corresponds to 20230121 ClinVar release.
+HT corresponds to 20230305 ClinVar release.
 """
 
-# TODO: Move HT at `clinvar_pathogenic_missense.ht` to this path
 clinvar_plp_mis_haplo = TableResource(
     path=f"{REF_DATA_PREFIX}/ht/clinvar_pathogenic_missense_haplo.ht",
 )
@@ -150,7 +149,6 @@ Fu et al. Rare coding variation provides insight into the genetic architecture
 and phenotypic context of autism (2022)
 """
 
-# TODO: Move HT at `ddd_autism_de_novo.ht` to this path
 ndd_de_novo = TableResource(
     path=f"{RESOURCE_BUILD_PREFIX}/reference_data/ht/ndd_de_novo.ht",
 )

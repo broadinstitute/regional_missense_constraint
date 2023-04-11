@@ -10,6 +10,7 @@ import hail as hl
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
+from rmc.resources.rmc import CURRENT_FREEZE
 from rmc.slack_creds import slack_token
 from rmc.utils.missense_badness import calculate_misbad, prepare_amino_acid_ht
 
@@ -30,6 +31,7 @@ def main(args):
             prepare_amino_acid_ht(
                 overwrite_temp=args.overwrite_temp,
                 overwrite_output=args.overwrite_output,
+                freeze=args.freeze,
             )
 
         if args.command == "create-misbad":
@@ -38,6 +40,7 @@ def main(args):
                 use_exac_oe_cutoffs=args.use_exac_oe_cutoffs,
                 overwrite_temp=args.overwrite_temp,
                 overwrite_output=args.overwrite_output,
+                freeze=args.freeze,
             )
 
     finally:
@@ -60,8 +63,23 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
+        "--freeze",
+        help="RMC data freeze number",
+        type=int,
+        default=CURRENT_FREEZE,
+    )
+    parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
+    )
+    parser.add_argument(
+        "--use-exac-oe-cutoffs",
+        help="""
+        Use the same missense OE cutoffs as in ExAC missense badness calculation.
+        This removes rows with 0.6 < missense OE <= 0.8.
+        Only relevant for `create-misbad` step.
+        """,
+        action="store_true",
     )
 
     # Create subparsers for each step
@@ -81,14 +99,6 @@ if __name__ == "__main__":
         help="""
         Calculate missense badness score for each possible amino acid substitution.
         """,
-    )
-    create_misbad.add_argument(
-        "--use-exac-oe-cutoffs",
-        help="""
-        Use the same missense OE cutoffs as in ExAC missense badness calculation.
-        This removes rows with 0.6 < missense OE <= 0.8.
-        """,
-        action="store_true",
     )
 
     args = parser.parse_args()

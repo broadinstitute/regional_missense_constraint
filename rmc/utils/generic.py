@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, Tuple
+from typing import Dict, List, Tuple
 
 import hail as hl
 from gnomad.resources.grch37.gnomad import coverage, public_release
@@ -14,6 +14,7 @@ from gnomad.utils.file_utils import file_exists
 from gnomad.utils.filtering import filter_to_clinvar_pathogenic
 from gnomad.utils.vep import (
     add_most_severe_csq_to_tc_within_vep_root,
+    CSQ_NON_CODING,
     filter_vep_to_canonical_transcripts,
 )
 from gnomad_constraint.utils.constraint import prepare_ht_for_constraint_calculations
@@ -47,40 +48,7 @@ logger = logging.getLogger("regional_missense_constraint_generic")
 logger.setLevel(logging.INFO)
 
 
-## Resources from Kaitlin
-def get_codon_lookup() -> hl.expr.DictExpression:
-    """
-    Read in codon lookup table and return as dictionary (key: codon, value: amino acid).
-
-    .. note::
-        This is only necessary for testing on ExAC and should be replaced with VEP annotations.
-
-    :return: DictExpression of codon translation.
-    """
-    codon_lookup = {}
-    with hl.hadoop_open(CODON_TABLE_PATH) as c:
-        c.readline()
-        for line in c:
-            line = line.strip().split()
-            codon_lookup[line[0]] = line[1]
-    return hl.literal(codon_lookup)
-
-
-def get_aa_map() -> Dict[str, str]:
-    """
-    Create dictionary mapping amino acid 1 letter name to 3 letter name.
-
-    :return: Dictionary mapping amino acid 1 letter name (key) to 3 letter name (value).
-    """
-    aa_map = {}
-    with hl.hadoop_open(ACID_NAMES_PATH) as a:
-        a.readline()
-        for line in a:
-            line = line.strip().split("\t")
-            aa_map[line[2]] = line[1]
-    return aa_map
-
-
+## ExAC mutational model-related utils
 def get_mutation_rate() -> Dict[str, Tuple[str, float]]:
     """
     Read in mutation rate table and store as dict.
@@ -114,6 +82,77 @@ def get_divergence_scores() -> Dict[str, float]:
             except ValueError:
                 continue
     return div_scores
+
+
+## Codon and amino acid utils
+def get_codon_lookup() -> hl.expr.DictExpression:
+    """
+    Read in codon lookup table and return as dictionary (key: codon, value: amino acid).
+
+    .. note::
+        This is only necessary for testing on ExAC and should be replaced with VEP annotations.
+
+    :return: DictExpression of codon translation.
+    """
+    codon_lookup = {}
+    with hl.hadoop_open(CODON_TABLE_PATH) as c:
+        c.readline()
+        for line in c:
+            line = line.strip().split()
+            codon_lookup[line[0]] = line[1]
+    return hl.literal(codon_lookup)
+
+
+def get_aa_map() -> Dict[str, str]:
+    """
+    Create dictionary mapping amino acid 1 letter name to 3 letter name.
+
+    :return: Dictionary mapping amino acid 1 letter name (key) to 3 letter name (value).
+    """
+    aa_map = {}
+    with hl.hadoop_open(ACID_NAMES_PATH) as a:
+        a.readline()
+        for line in a:
+            line = line.strip().split("\t")
+            aa_map[line[2]] = line[1]
+    return aa_map
+
+
+def annotate_and_filter_codons(ht: hl.Table) -> hl.Table:
+    """
+    Remove non-coding loci and keep informative codons only.
+
+    Split codon annotation to annotate reference and alternate amino acids, then
+    remove rows with unknown amino acids.
+
+    Additionally remove rows that are annotated as 'coding_sequence_variant',
+    as these variants have either undefined or uninformative codon annotations
+    (NA or codon with Ns, e.g. nnG/nnT).
+
+    'coding_sequence_variant' defined as: 'A sequence variant that changes the coding sequence'
+    https://m.ensembl.org/info/genome/variation/prediction/predicted_data.html
+
+    :param hl.Table ht: Input Table.
+    :return: Table with informative codons only.
+    """
+    logger.info("Removing non-coding loci from HT...")
+    non_coding_csq = hl.literal(CSQ_NON_CODING)
+    ht = ht.filter(~non_coding_csq.contains(ht.most_severe_consequence))
+
+    logger.info("Filtering to lines with expected codon annotations...")
+    # Codons are in this format: NNN/NNN, so expected length is 7
+    ht = ht.filter((hl.is_defined(ht.codons)) & (hl.len(ht.codons) == 7))
+    codon_map = get_codon_lookup()
+    ht = ht.annotate(
+        ref=ht.codons.split("/")[0].upper(),
+        alt=ht.codons.split("/")[1].upper(),
+    )
+    ht = ht.annotate(
+        ref=codon_map.get(ht.ref, "Unk"),
+        alt=codon_map.get(ht.alt, "Unk"),
+    )
+    # Remove any lines with "Unk" (unknown amino acids)
+    return ht.filter((ht.ref != "Unk") & (ht.alt != "Unk"))
 
 
 ## Functions to process reference genome related resources
@@ -229,6 +268,42 @@ def filter_context_using_gnomad(
         context_ht = context_ht.drop("gnomad_coverage")
 
     return context_ht
+
+
+def get_annotations_from_context_ht_vep(
+    ht: hl.Table, annotations: List[str] = ["polyphen", "sift"]
+) -> hl.Table:
+    """
+    Get desired annotations from context Table's VEP annotation and annotate/filter to informative amino acids.
+
+    Function will get 'codons', 'most_severe_consequence', and 'transcript' annotations by default.
+    Additional annotations should be specified using `annotations`.
+
+    :param hl.Table ht: Input VEP context Table.
+    :param List[str] annotations: Additional annotations to extract from context HT's VEP field.
+        Default is ["polyphen", "sift"].
+    :return: VEP context Table with rows filtered to remove loci that are non-coding and retain only those with informative amino acids
+        and columns filtered to keep only specified annotations.
+    """
+    annot_expr = {
+        "codons": ht.transcript_consequences.codons,
+        "most_severe_consequence": ht.transcript_consequences.most_severe_consequence,
+        "transcript": ht.transcript_consequences.transcript_id,
+    }
+    if "polyphen" in annotations:
+        annot_expr["polyphen"] = hl.struct(
+            prediction=ht.transcript_consequences.polyphen_prediction,
+            score=ht.transcript_consequences.polyphen_score,
+        )
+    if "sift" in annotations:
+        annot_expr["sift"] = hl.struct(
+            prediction=ht.transcript_consequences.sift_prediction,
+            score=ht.transcript_consequences.sift_score,
+        )
+    ht = ht.annotate(**annot_expr)
+    annotations.extend(["codons", "most_severe_consequence", "transcript"])
+    ht = ht.select(*annotations)
+    return annotate_and_filter_codons(ht)
 
 
 ## Functions for obs/exp related resources
@@ -622,7 +697,7 @@ def import_fu_data(overwrite: bool) -> None:
     # These lines contain metadata about the TSV, e.g.:
     # "Supplementary Table 20. The de novo SNV/indel variants used in TADA
     # association analyses from assembled ASD cohorts"
-    fu_ht = fu_ht.filter(hl.is_missing(fu_ht.Role))
+    fu_ht = fu_ht.filter(~hl.is_missing(fu_ht.Role))
 
     # Prepare to lift dataset back to GRCh37
     rg37 = hl.get_reference("GRCh37")
@@ -631,6 +706,17 @@ def import_fu_data(overwrite: bool) -> None:
         "gs://hail-common/references/grch38_to_grch37.over.chain.gz", rg37
     )
 
+    fu_ht = fu_ht.annotate(
+        locus=hl.parse_locus(
+            hl.format(
+                "chr%s:%s",
+                fu_ht.Variant.split(":")[0],
+                fu_ht.Variant.split(":")[1],
+            ),
+            reference_genome="GRCh38",
+        ),
+        alleles=[fu_ht.Variant.split(":")[2], fu_ht.Variant.split(":")[3]],
+    )
     fu_ht = fu_ht.annotate(
         new_locus=hl.liftover(fu_ht.locus, "GRCh37", include_strand=True),
         old_locus=fu_ht.locus,
@@ -650,11 +736,12 @@ def import_fu_data(overwrite: bool) -> None:
         hl.is_defined(fu_ht.new_locus) & ~fu_ht.new_locus.is_negative_strand
     )
     fu_ht = fu_ht.key_by(locus=fu_ht.new_locus.result, alleles=fu_ht.alleles)
-    fu_ht = fu_ht.group_by("locus", "alleles").aggregate(
-        role=hl.agg.collect(fu_ht.Role),
-    )
+
     # Rename 'Proband' > 'ASD' and 'Sibling' > 'control'
-    fu_ht = fu_ht.transmute(role=hl.if_else(fu_ht.role == "Proband", "ASD", "control"))
+    fu_ht = fu_ht.transmute(role=hl.if_else(fu_ht.Role == "Proband", "ASD", "control"))
+    fu_ht = fu_ht.group_by("locus", "alleles").aggregate(
+        role=hl.agg.collect(fu_ht.role),
+    )
     fu_ht.write(f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht", overwrite=overwrite)
 
 
@@ -696,17 +783,26 @@ def import_de_novo_variants(overwrite: bool, n_partitions: int = 5000) -> None:
         Will also help determine number of partitions in final Table.
     :return: None; writes HT to resource path.
     """
-    # TODO: Re-import this HT with samples collected into lists rather than sets
     fu_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht"
     kaplanis_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/kaplanis_dn.ht"
     if not file_exists(fu_ht_path) or overwrite:
         import_fu_data(overwrite=overwrite)
-        fu_ht = hl.read_table(fu_ht_path, _n_partitions=n_partitions)
     if not file_exists(kaplanis_ht_path) or overwrite:
         import_kaplanis_data(overwrite=overwrite)
-        kap_ht = hl.read_table(kaplanis_ht_path, _n_partitions=n_partitions)
 
+    fu_ht = hl.read_table(fu_ht_path, _n_partitions=n_partitions)
+    kap_ht = hl.read_table(kaplanis_ht_path, _n_partitions=n_partitions)
     ht = kap_ht.join(fu_ht, how="outer")
+
     # Union sample types (DD, ASD, control)
-    ht = ht.transmute(sample_set=ht.case_control.union(ht.role))
+    ht = ht.transmute(
+        sample_set=hl.case()
+        .when(
+            hl.is_defined(ht.case_control) & hl.is_defined(ht.role),
+            ht.case_control.extend(ht.role),
+        )
+        .when(hl.is_defined(ht.case_control), ht.case_control)
+        .when(hl.is_defined(ht.role), ht.role)
+        .or_missing()
+    )
     ht.write(ndd_de_novo.path, overwrite=overwrite)

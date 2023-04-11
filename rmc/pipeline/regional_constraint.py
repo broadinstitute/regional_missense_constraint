@@ -35,6 +35,7 @@ from rmc.utils.constraint import (
     calculate_exp_per_transcript,
     calculate_observed,
     check_break_search_round_nums,
+    create_context_with_oe,
     create_no_breaks_he,
     get_max_chisq_per_group,
     merge_rmc_hts,
@@ -538,6 +539,8 @@ def main(args):
 
             logger.info("Finalizing section-level RMC table...")
             rmc_ht = merge_rmc_hts(round_nums=round_nums, freeze=args.freeze)
+            # Drop any unnecessary global fields
+            rmc_ht = rmc_ht.select_globals()
             rmc_ht = rmc_ht.checkpoint(
                 f"{TEMP_PATH_WITH_SLOW_DEL}/freeze{args.freeze}_rmc_results.ht",
                 overwrite=args.overwrite,
@@ -548,11 +551,24 @@ def main(args):
             constraint_transcripts = get_constraint_transcripts(outlier=False)
             rmc_ht = rmc_ht.filter(constraint_transcripts.contains(rmc_ht.transcript))
 
+            # Add p-value threshold to globals
+            if not args.p_value:
+                logger.warning(
+                    "p-value threshold not specified! Defaulting to value stored in `P_VALUE` constant..."
+                )
+                p_value = P_VALUE
+            else:
+                p_value = args.p_value
+            rmc_ht = rmc_ht.annotate_globals(p_value=p_value)
+
             logger.info("Writing out RMC results...")
             rmc_ht.write(rmc_results.versions[args.freeze].path)
 
             logger.info("Getting transcripts without evidence of RMC...")
             create_no_breaks_he(freeze=args.freeze, overwrite=args.overwrite)
+
+            logger.info("Creating OE-annotated context table...")
+            create_context_with_oe(freeze=args.freeze, overwrite_output=args.overwrite)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -630,6 +646,9 @@ if __name__ == "__main__":
         p-value significance threshold for single break search.
         Used to determine chi square threshold for likelihood ratio test.
 
+        Also used to annotate globals of final RMC HT with p-value associated
+        with RMC results.
+
         If not specified, script will default to threshold set
         in `P_VALUE`.
         """,
@@ -638,6 +657,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--freeze",
         help="RMC data freeze number",
+        type=int,
         default=CURRENT_FREEZE,
     )
     parser.add_argument(
