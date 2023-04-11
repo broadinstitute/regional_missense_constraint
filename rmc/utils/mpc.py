@@ -21,7 +21,6 @@ from rmc.resources.reference_data import (
     grantham,
     grantham_txt_path,
 )
-from rmc.resources.resource_utils import MISSENSE
 from rmc.resources.rmc import (
     context_with_oe,
     context_with_oe_dedup,
