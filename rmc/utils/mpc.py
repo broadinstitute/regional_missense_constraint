@@ -13,14 +13,25 @@ from gnomad.utils.file_utils import file_exists
 from patsy import dmatrices
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
-from rmc.resources.reference_data import (blosum, blosum_txt_path, cadd,
-                                          clinvar_plp_mis_haplo, grantham,
-                                          grantham_txt_path)
-from rmc.resources.rmc import (CURRENT_FREEZE, context_with_oe,
-                               context_with_oe_dedup, gnomad_fitted_score_path,
-                               joint_clinvar_gnomad, misbad,
-                               mpc_model_pkl_path, mpc_release,
-                               mpc_release_dedup)
+from rmc.resources.reference_data import (
+    blosum,
+    blosum_txt_path,
+    cadd,
+    clinvar_plp_mis_haplo,
+    grantham,
+    grantham_txt_path,
+)
+from rmc.resources.rmc import (
+    CURRENT_FREEZE,
+    context_with_oe,
+    context_with_oe_dedup,
+    gnomad_fitted_score_path,
+    joint_clinvar_gnomad,
+    misbad,
+    mpc_model_pkl_path,
+    mpc_release,
+    mpc_release_dedup,
+)
 from rmc.utils.generic import get_aa_map
 
 logging.basicConfig(

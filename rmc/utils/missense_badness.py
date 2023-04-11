@@ -7,9 +7,12 @@ from gnomad.utils.file_utils import file_exists
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import CURRENT_FREEZE, amino_acids_oe, misbad
 from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
-from rmc.utils.generic import (annotate_and_filter_codons,
-                               filter_context_using_gnomad,
-                               get_constraint_transcripts, process_context_ht)
+from rmc.utils.generic import (
+    annotate_and_filter_codons,
+    filter_context_using_gnomad,
+    get_constraint_transcripts,
+    process_context_ht,
+)
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",

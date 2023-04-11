@@ -11,27 +11,42 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.constraint import annotate_mutation_type
 from gnomad.utils.file_utils import file_exists
 
-from rmc.resources.basics import (SINGLE_BREAK_TEMP_PATH, TEMP_PATH,
-                                  TEMP_PATH_WITH_FAST_DEL,
-                                  TEMP_PATH_WITH_SLOW_DEL)
+from rmc.resources.basics import (
+    SINGLE_BREAK_TEMP_PATH,
+    TEMP_PATH,
+    TEMP_PATH_WITH_FAST_DEL,
+    TEMP_PATH_WITH_SLOW_DEL,
+)
 from rmc.resources.gnomad import constraint_ht, filtered_exomes
-from rmc.resources.reference_data import (clinvar_plp_mis_haplo, gene_model,
-                                          ndd_de_novo)
+from rmc.resources.reference_data import clinvar_plp_mis_haplo, gene_model, ndd_de_novo
 from rmc.resources.resource_utils import MISSENSE
-from rmc.resources.rmc import (CONSTRAINT_ANNOTATIONS, CURRENT_FREEZE,
-                               FINAL_ANNOTATIONS, MIN_EXP_MIS, P_VALUE,
-                               SIMUL_SEARCH_ANNOTATIONS, constraint_prep,
-                               context_with_oe, context_with_oe_dedup,
-                               no_breaks_he_path, oe_bin_counts_tsv,
-                               rmc_results, simul_search_bucket_path,
-                               simul_search_round_bucket_path,
-                               single_search_bucket_path,
-                               single_search_round_ht_path)
-from rmc.utils.generic import (get_annotations_from_context_ht_vep,
-                               get_constraint_transcripts,
-                               get_coverage_correction_expr, import_clinvar,
-                               import_de_novo_variants, keep_criteria,
-                               process_vep)
+from rmc.resources.rmc import (
+    CONSTRAINT_ANNOTATIONS,
+    CURRENT_FREEZE,
+    FINAL_ANNOTATIONS,
+    MIN_EXP_MIS,
+    P_VALUE,
+    SIMUL_SEARCH_ANNOTATIONS,
+    constraint_prep,
+    context_with_oe,
+    context_with_oe_dedup,
+    no_breaks_he_path,
+    oe_bin_counts_tsv,
+    rmc_results,
+    simul_search_bucket_path,
+    simul_search_round_bucket_path,
+    single_search_bucket_path,
+    single_search_round_ht_path,
+)
+from rmc.utils.generic import (
+    get_annotations_from_context_ht_vep,
+    get_constraint_transcripts,
+    get_coverage_correction_expr,
+    import_clinvar,
+    import_de_novo_variants,
+    keep_criteria,
+    process_vep,
+)
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
