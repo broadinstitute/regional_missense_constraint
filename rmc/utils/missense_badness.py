@@ -11,7 +11,6 @@ from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
     annotate_and_filter_codons,
     filter_context_using_gnomad,
-    get_constraint_transcripts,
     process_context_ht,
 )
 
@@ -51,19 +50,11 @@ def prepare_amino_acid_ht(
         Default is "exomes".
     :return: None; writes amino acid Table to resource path.
     """
-    logger.info("Importing set of transcripts to keep...")
-    transcripts = get_constraint_transcripts(outlier=False)
-
     logger.info("Reading in VEP context HT...")
     # NOTE: Keeping all variant types here because need synonymous and nonsense variants to calculate missense badness
     context_ht = process_context_ht(filter_to_missense=False, add_annotations=False)
 
-    logger.info(
-        "Filtering to transcripts to keep and selecting relevant annotations..."
-    )
-    context_ht = context_ht.filter(
-        transcripts.contains(context_ht.transcript_consequences.transcript_id)
-    )
+    logger.info("Selecting relevant annotations...")
     context_ht = context_ht.select(
         transcript=context_ht.transcript_consequences.transcript_id,
         consequence_terms=context_ht.transcript_consequences.consequence_terms,
