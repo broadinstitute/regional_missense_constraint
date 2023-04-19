@@ -12,7 +12,6 @@ import argparse
 import logging
 
 import hail as hl
-
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
@@ -20,8 +19,8 @@ from gnomad.utils.slack import slack_notifications
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
-    grouped_single_no_break_ht_path,
     P_VALUE,
+    grouped_single_no_break_ht_path,
     simul_search_round_bucket_path,
     simul_sections_split_by_len_path,
 )

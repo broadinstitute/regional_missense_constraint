@@ -4,7 +4,6 @@ from gnomad.resources.resource_utils import TableResource, VersionedTableResourc
 from rmc.resources.basics import RESOURCE_BUILD_PREFIX
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
-
 FLAGSHIP_LOF = "gs://gnomad-public-requester-pays/papers/2019-flagship-lof/v1.0"
 """
 Path to bucket with gnomAD v2 loss-of-function (LoF) constraint results.

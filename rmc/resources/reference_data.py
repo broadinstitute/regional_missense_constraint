@@ -1,15 +1,8 @@
 """Script containing reference resources."""
-from gnomad.resources.resource_utils import (
-    TableResource,
-    VersionedTableResource,
-)
+from gnomad.resources.resource_utils import TableResource, VersionedTableResource
 
-from rmc.resources.basics import (
-    AMINO_ACIDS_PREFIX,
-    RESOURCE_BUILD_PREFIX,
-)
+from rmc.resources.basics import AMINO_ACIDS_PREFIX, RESOURCE_BUILD_PREFIX
 from rmc.resources.resource_utils import CURRENT_BUILD
-
 
 REF_DATA_PREFIX = f"{RESOURCE_BUILD_PREFIX}/reference_data"
 """

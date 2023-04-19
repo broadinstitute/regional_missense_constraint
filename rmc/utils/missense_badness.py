@@ -1,12 +1,11 @@
 import logging
 
 import hail as hl
-
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
-from rmc.resources.rmc import amino_acids_oe, CURRENT_FREEZE, misbad
+from rmc.resources.rmc import CURRENT_FREEZE, amino_acids_oe, misbad
 from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
     annotate_and_filter_codons,

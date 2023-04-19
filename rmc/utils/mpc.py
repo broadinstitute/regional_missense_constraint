@@ -1,17 +1,16 @@
 import logging
-import numpy as np
-import pandas as pd
-from patsy import dmatrices
 import pickle
-import statsmodels
-import statsmodels.api as sm
 from typing import Dict, List, Tuple, Union
 
 import hail as hl
-
+import numpy as np
+import pandas as pd
+import statsmodels
+import statsmodels.api as sm
 from gnomad.resources.grch37.gnomad import public_release
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
+from patsy import dmatrices
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.reference_data import (
@@ -23,9 +22,9 @@ from rmc.resources.reference_data import (
     grantham_txt_path,
 )
 from rmc.resources.rmc import (
+    CURRENT_FREEZE,
     context_with_oe,
     context_with_oe_dedup,
-    CURRENT_FREEZE,
     gnomad_fitted_score_path,
     joint_clinvar_gnomad,
     misbad,
@@ -34,7 +33,6 @@ from rmc.resources.rmc import (
     mpc_release_dedup,
 )
 from rmc.utils.generic import get_aa_map
-
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",

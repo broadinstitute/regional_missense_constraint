@@ -8,7 +8,6 @@ import argparse
 import logging
 
 import hail as hl
-
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX, TEMP_PATH_WITH_FAST_DEL
@@ -21,7 +20,6 @@ from rmc.utils.mpc import (
     prepare_pop_path_ht,
     run_regressions,
 )
-
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",

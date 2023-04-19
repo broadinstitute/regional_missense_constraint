@@ -1,10 +1,9 @@
 """This script contains functions used to search for two simultaneous breaks."""
 import logging
-import scipy
 from typing import List
 
 import hail as hl
-
+import scipy
 from gnomad.utils.file_utils import file_exists, parallel_file_exists
 
 from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_FAST_DEL
@@ -18,10 +17,9 @@ from rmc.resources.rmc import (
 )
 from rmc.utils.constraint import (
     get_dpois_expr,
-    get_obs_exp_expr,
     get_max_chisq_per_group,
+    get_obs_exp_expr,
 )
-
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",

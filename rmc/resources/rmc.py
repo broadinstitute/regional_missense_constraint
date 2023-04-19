@@ -4,11 +4,10 @@ Script containing RMC and MPC related resources.
 RMC: Regional missense constraint
 MPC: Missense badness, Polyphen-2, and Constraint score
 """
-import scipy
 from typing import Set
 
 import hail as hl
-
+import scipy
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
 
 from rmc.resources.basics import (
@@ -21,7 +20,6 @@ from rmc.resources.basics import (
     TEMP_PATH,
 )
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
-
 
 FREEZES = [1, 2, 3, 4, 5, 6, 7]
 """
