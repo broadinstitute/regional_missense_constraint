@@ -10,7 +10,6 @@ from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
     annotate_and_filter_codons,
     filter_context_using_gnomad,
-    get_constraint_transcripts,
     process_context_ht,
 )
 
@@ -27,6 +26,7 @@ def prepare_amino_acid_ht(
     overwrite_output: bool,
     freeze: int = CURRENT_FREEZE,
     gnomad_data_type: str = "exomes",
+    loftee_hc_str: str = "HC",
 ) -> None:
     """
     Prepare Table with all possible amino acid substitutions and their missense observed to expected (OE) ratio.
@@ -38,37 +38,32 @@ def prepare_amino_acid_ht(
         - Add observed and OE annotation
         - Write to `amino_acids_oe` resource path
 
-    :param bool overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
+    :param overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
-    :param bool overwrite_output: Whether to entirely overwrite final output (OE-dependent) data if it already exists.
+    :param overwrite_output: Whether to entirely overwrite final output (OE-dependent) data if it already exists.
         If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
         If True, will clear existing output data and write new output data.
         The output Table is the amino acid Table.
-    :param int freeze: RMC freeze number. Default is CURRENT_FREEZE.
-    :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
+    :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
+    :param loftee_hc_str: String indicating that LOFTEE a loss-of-function variant is predcited to cause
     :return: None; writes amino acid Table to resource path.
     """
-    logger.info("Importing set of transcripts to keep...")
-    transcripts = get_constraint_transcripts(outlier=False)
-
     logger.info("Reading in VEP context HT...")
     # NOTE: Keeping all variant types here because need synonymous and nonsense variants to calculate missense badness
     context_ht = process_context_ht(filter_to_missense=False, add_annotations=False)
 
-    logger.info(
-        "Filtering to transcripts to keep and selecting relevant annotations..."
-    )
-    context_ht = context_ht.filter(
-        transcripts.contains(context_ht.transcript_consequences.transcript_id)
-    )
+    logger.info("Selecting relevant annotations...")
     context_ht = context_ht.select(
         transcript=context_ht.transcript_consequences.transcript_id,
         consequence_terms=context_ht.transcript_consequences.consequence_terms,
         most_severe_consequence=context_ht.transcript_consequences.most_severe_consequence,
         amino_acids=context_ht.transcript_consequences.amino_acids,
         codons=context_ht.transcript_consequences.codons,
+        lof=context_ht.transcript_consequences.lof,
+        lof_flags=context_ht.transcript_consequences.lof_flags,
     )
 
     logger.info(
@@ -76,9 +71,28 @@ def prepare_amino_acid_ht(
     )
     context_ht = annotate_and_filter_codons(context_ht)
 
-    logger.info("Checkpointing HT before joining with gnomAD data...")
+    logger.info("Checkpointing HT before checking LoF information...")
     context_ht = context_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/codons.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+
+    logger.info("Checking LOFTEE LoF information...")
+    loftee_lof_agg = context_ht.aggregate(hl.agg.counter(context_ht.lof))
+    logger.info("LOFTEE aggregation: %s", loftee_lof_agg)
+
+    logger.info("Filtering to LOFTEE HC pLoF without flags...")
+    context_ht = context_ht.filter(
+        hl.is_missing(context_ht.lof) | (context_ht.lof == loftee_hc_str)
+    )
+    hc_lof_flag_agg = context_ht.aggregate(hl.agg.counter(context_ht.lof_flags))
+    logger.info("Flag counter for LOFTEE HC pLoF: %s", hc_lof_flag_agg)
+    context_ht = context_ht.filter(hl.is_missing(context_ht.lof_flags))
+
+    logger.info("Checkpointing HT before joining with gnomAD data...")
+    context_ht = context_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/codons_filt.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
