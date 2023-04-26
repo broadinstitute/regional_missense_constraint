@@ -92,7 +92,7 @@ List of triplosensitive genes was determined by filtering to genes with pTriplo 
 ## Assessment related resources
 ####################################################################################
 clinvar = TableResource(
-    path="gs://regional_missense_constraint/resources/GRCh37/reference_data/ht/clinvar.GRCh37.ht",
+    path=f"{REF_DATA_PREFIX}/ht/clinvar.GRCh37.ht",
 )
 """
 
@@ -160,7 +160,7 @@ and phenotypic context of autism (2022)
 """
 
 ndd_de_novo = TableResource(
-    path=f"{RESOURCE_BUILD_PREFIX}/reference_data/ht/ndd_de_novo.ht",
+    path=f"{REF_DATA_PREFIX}/ht/ndd_de_novo.ht",
 )
 """
 De novo missense variants from 46,094 neurodevelopmental disorder (NDD) cases and 5,492 controls.
