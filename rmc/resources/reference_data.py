@@ -41,6 +41,16 @@ Table containing transcript start and stop positions displayed in the browser.
 ######################################################################
 ## Gene/transcript resources
 ######################################################################
+training_transcripts_path = f"{RESOURCE_BUILD_PREFIX}/train_transcripts.he"
+"""
+Path to HailExpression of transcripts used for model training.
+"""
+
+test_transcripts_path = f"{RESOURCE_BUILD_PREFIX}/test_transcripts.he"
+"""
+Path to HailExpression of transcripts used for model testing.
+"""
+
 dosage_tsv_path = (
     f"{REF_DATA_PREFIX}/Collins_rCNV_2022.dosage_sensitivity_scores.tsv.gz"
 )
