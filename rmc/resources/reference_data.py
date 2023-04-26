@@ -37,6 +37,21 @@ gene_model = TableResource(path=f"{RESOURCE_BUILD_PREFIX}/browser/b37_transcript
 Table containing transcript start and stop positions displayed in the browser.
 """
 
+transcript_ref = TableResource(
+    path=f"{REF_DATA_PREFIX}/ht/canonical_transcripts_genes_coordinates.ht"
+)
+"""
+Table containing canonical transcripts with key reference info:
+gene name from gnomAD annotations, gene name from GENCODE v19,
+Ensembl gene ID in GENCODE v19, and overall CDS start and end
+coordinates from gnomAD annotations.
+"""
+
+transcript_cds = TableResource(path=f"{REF_DATA_PREFIX}/ht/b37_cds_coords.ht")
+"""
+Table containing coordinates for coding parts of transcripts excluding introns and UTRs.
+"""
+
 
 ######################################################################
 ## Gene/transcript resources
