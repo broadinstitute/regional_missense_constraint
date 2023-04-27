@@ -43,7 +43,7 @@ transcript_ref = TableResource(
 """
 Table containing canonical transcripts with key reference info:
 gene name from gnomAD annotations, gene name from GENCODE v19,
-Ensembl gene ID in GENCODE v19, and overall CDS start and end
+Ensembl gene ID in GENCODE v19, and overall and CDS start and end
 coordinates from gnomAD annotations.
 """
 
