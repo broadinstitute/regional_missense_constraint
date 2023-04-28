@@ -113,8 +113,7 @@ def prepare_amino_acid_ht(
 
     logger.info("Checkpointing HT before joining with gnomAD data...")
     context_ht = context_ht.checkpoint(
-        # TODO: Change the name of this table as it is a duplicate
-        f"{TEMP_PATH_WITH_FAST_DEL}/codons_filt.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/codons_hc.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
