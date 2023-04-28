@@ -10,7 +10,7 @@ from rmc.resources.reference_data import (
     test_transcripts_path,
     training_transcripts_path,
 )
-from rmc.resources.rmc import CURRENT_FREEZE, amino_acids_oe_path, misbad
+from rmc.resources.rmc import CURRENT_FREEZE, amino_acids_oe_path, misbad_path
 from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
     annotate_and_filter_codons,
@@ -37,7 +37,7 @@ def prepare_amino_acid_ht(
     loftee_hc_str: str = "HC",
 ) -> None:
     """
-    Prepare Table with all possible amino acid substitutions and their missense observed to expected (OE) ratio.
+    Prepare Table(s) with all possible amino acid substitutions and their missense observed to expected (OE) ratio.
 
     Steps:
         - Import VEP context Table and filter to keep every possible amino acid substitution
@@ -67,7 +67,7 @@ def prepare_amino_acid_ht(
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
     :param loftee_hc_str: String indicating that LOFTEE a loss-of-function variant is predcited to cause
-    :return: None; writes amino acid Table to resource path.
+    :return: None; writes amino acid Table(s) to resource path(s).
     """
     if use_test_transcripts and do_k_fold_training:
         raise DataException("Cannot generate k-fold models with test transcripts!")
