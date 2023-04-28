@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Set, Tuple
 
 import hail as hl
 from gnomad.resources.grch37.gnomad import coverage, public_release
@@ -35,6 +35,7 @@ from rmc.resources.reference_data import (
     haplo_genes_path,
     ndd_de_novo,
     ndd_de_novo_2020_tsv_path,
+    transcript_cds,
     triplo_genes_path,
 )
 from rmc.resources.resource_utils import MISSENSE
@@ -310,6 +311,29 @@ def get_annotations_from_context_ht_vep(
     annotations.extend(["codons", "most_severe_consequence", "transcript"])
     ht = ht.select(*annotations)
     return annotate_and_filter_codons(ht)
+
+
+def filter_context_to_transcript_cds(
+    context_ht: hl.Table, transcripts: Set[str]
+) -> hl.Table:
+    """
+    Filter VEP context Table to coding sites in the input transcripts.
+
+    :param hl.Table context_ht: VEP context Table.
+    :param Set[str] transcripts: Transcripts to filter to.
+    :return: VEP context Table with rows filtered to only coding sites in the input transcripts.
+    """
+    # Get coordinate intervals of coding sequences of transcripts
+    cds_ht = transcript_cds.ht()
+    filter_intervals = cds_ht.aggregate(
+        hl.agg.filter(
+            transcripts.contains(cds_ht.transcript),
+            hl.agg.collect(cds_ht.interval),
+        ),
+        _localize=False,
+    )
+    # Filter context HT to sites in these intervals
+    return hl.filter_intervals(context_ht, filter_intervals)
 
 
 ####################################################################################
