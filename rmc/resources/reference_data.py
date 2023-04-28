@@ -86,7 +86,7 @@ def training_transcripts_path(fold: int = None, is_val: bool = False) -> str:
         )
 
     train_type = "val" if is_val else "train"
-    fold_name = f"_fold{fold}" if fold is not None
+    fold_name = f"_fold{fold}" if fold is not None else ""
     return f"{RESOURCE_BUILD_PREFIX}/{train_type}_transcripts{fold_name}.he"
 
 
