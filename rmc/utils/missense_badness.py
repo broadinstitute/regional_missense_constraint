@@ -5,10 +5,16 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
-from rmc.resources.rmc import CURRENT_FREEZE, amino_acids_oe, misbad
+from rmc.resources.reference_data import (
+    fold_k,
+    test_transcripts_path,
+    training_transcripts_path,
+)
+from rmc.resources.rmc import CURRENT_FREEZE, amino_acids_oe_path, misbad
 from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
     annotate_and_filter_codons,
+    filter_context_to_transcript_cds,
     filter_context_using_gnomad,
     process_context_ht,
 )
@@ -24,6 +30,8 @@ logger.setLevel(logging.INFO)
 def prepare_amino_acid_ht(
     overwrite_temp: bool,
     overwrite_output: bool,
+    use_test_transcripts: bool = False,
+    do_k_fold_training: bool = False,
     freeze: int = CURRENT_FREEZE,
     gnomad_data_type: str = "exomes",
     loftee_hc_str: str = "HC",
@@ -36,7 +44,7 @@ def prepare_amino_acid_ht(
         (every codon > codon change).
         - Filter Table to rows that aren't present in gnomAD or are rare in gnomAD (using `keep_criteria`).
         - Add observed and OE annotation
-        - Write to `amino_acids_oe` resource path
+        - Write to `amino_acids_oe_path` resource path
 
     :param overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
@@ -44,6 +52,15 @@ def prepare_amino_acid_ht(
         If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
         If True, will clear existing output data and write new output data.
         The output Table is the amino acid Table.
+    :param use_test_transcripts: Whether to use test transcripts in calculations.
+        If False, will use training transcripts only.
+        If True, will use test transcripts only.
+        Default is False.
+    :param do_k_fold_training: Whether to generate k-fold models with the training transcripts.
+        If False, will use all training transcripts in calculation of a single model.
+        If True, will calculate k models corresponding to the k-folds of the training transcripts.
+        Default is False.
+        NOTE that `use_test_transcripts` must be False if `do_k_fold_training` is True.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
@@ -51,6 +68,10 @@ def prepare_amino_acid_ht(
     :param loftee_hc_str: String indicating that LOFTEE a loss-of-function variant is predcited to cause
     :return: None; writes amino acid Table to resource path.
     """
+    # Check for valid arguments
+    if use_test_transcripts and do_k_fold_training:
+        raise DataException("Cannot generate k-fold models with test transcripts!")
+
     logger.info("Reading in VEP context HT...")
     # NOTE: Keeping all variant types here because need synonymous and nonsense variants to calculate missense badness
     context_ht = process_context_ht(filter_to_missense=False, add_annotations=False)
@@ -92,6 +113,7 @@ def prepare_amino_acid_ht(
 
     logger.info("Checkpointing HT before joining with gnomAD data...")
     context_ht = context_ht.checkpoint(
+        # TODO: Change the name of this table as it is a duplicate
         f"{TEMP_PATH_WITH_FAST_DEL}/codons_filt.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
@@ -127,8 +149,54 @@ def prepare_amino_acid_ht(
         "amino_acids",
         "oe",
     )
-    context_ht.write(amino_acids_oe.versions[freeze].path, overwrite=overwrite_output)
-    logger.info("Output amino acid OE HT fields: %s", set(context_ht.row))
+
+    logger.info("Checkpointing HT before filtering by transcript...")
+    context_ht = context_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/codons_oe.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+
+    if use_test_transcripts or not do_k_fold_training:
+        logger.info(
+            "Filtering to %s transcripts only...",
+            "test" if use_test_transcripts else "training",
+        )
+        filter_transcripts = hl.experimental.read_expression(
+            test_transcripts_path
+            if use_test_transcripts
+            else training_transcripts_path()
+        )
+        context_ht = filter_context_to_transcript_cds(context_ht, filter_transcripts)
+        context_ht.write(
+            amino_acids_oe_path(is_test=use_test_transcripts, freeze=freeze),
+            overwrite=overwrite_output,
+        )
+        # TODO: Remove these output lines — was added for freeze 2 and can now be removed
+        logger.info("Output amino acid OE HT fields: %s", set(context_ht.row))
+    else:
+        logger.info(
+            "Creating an amino acid OE HT for each of the %i-fold training and validation sets...",
+            fold_k,
+        )
+        for i in range(1, fold_k + 1):
+            for is_val in [True, False]:
+                filter_transcripts = hl.experimental.read_expression(
+                    training_transcripts_path(fold=i, is_val=is_val)
+                )
+                context_ht = filter_context_to_transcript_cds(
+                    context_ht, filter_transcripts
+                )
+                context_ht.write(
+                    amino_acids_oe_path(
+                        is_test=use_test_transcripts,
+                        fold=i,
+                        is_val=is_val,
+                        freeze=freeze,
+                    ),
+                    overwrite=overwrite_output,
+                )
+                logger.info("Output amino acid OE HT fields: %s", set(context_ht.row))
 
 
 def variant_csq_expr(
