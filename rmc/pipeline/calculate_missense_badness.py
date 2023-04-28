@@ -42,6 +42,8 @@ def main(args):
                 use_exac_oe_cutoffs=args.use_exac_oe_cutoffs,
                 overwrite_temp=args.overwrite_temp,
                 overwrite_output=args.overwrite_output,
+                use_test_transcripts=args.use_test_transcripts,
+                do_k_fold_training=args.do_k_fold_training,
                 freeze=args.freeze,
             )
 

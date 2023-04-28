@@ -515,18 +515,48 @@ def amino_acids_oe_path(
     return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/amino_acid_oe_{transcript_type}{fold_name}.ht"
 
 
-misbad = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/missense_badness.ht"
+def misbad_path(
+    is_test: bool = False,
+    fold: int = None,
+    is_val: bool = False,
+    freeze: int = CURRENT_FREEZE,
+) -> str:
+    """
+    Table containing all possible amino acid substitutions and their missense badness scores.
+
+    :param bool is_test: Whether the Table is generated from variants in test transcripts.
+        If False, the Table is generated from variants in training transcripts only.
+        If True, the Table is generated from variants in test transcripts only.
+        Default is False.
+    :param int fold: Fold number in training set to select training transcripts from.
+        If not None, the Table is generated from variants in only validation or training transcripts
+            from the specified fold.
+        If None, the Table is generated from variants in test transcripts or from variants in all
+            training transcripts.
+        Default is None.
+        NOTE that `is_test` must be False if `fold` is not None.
+    :param bool is_val: Whether the Table is generated from variants in validation transcripts.
+        If True, the Table is generated from variants in the validation transcripts
+            from the specified fold of the training set.
+        If False, the Table is generated from variants in test transcripts,
+            from variants in all training transcripts, or from variants in
+            training transcripts from the specified fold of the training set.
+        Default is False.
+        NOTE that `fold` must not be None if `is_val` is True.
+    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
+    :return: Path to Table.
+    """
+    if is_test and fold is not None:
+        raise DataException("Fold number cannot be specified for test set!")
+    if is_val and fold is None:
+        raise DataException("Fold number must be specified for validation set!")
+    if fold not in range(1, fold_k + 1):
+        raise DataException(
+            f"Fold number must be an integer between 1 and {fold_k} inclusive!"
         )
-        for freeze in FREEZES
-    },
-)
-"""
-Table containing all possible amino acid substitutions and their missense badness scores.
-"""
+    transcript_type = "test" if is_test else ("val" if is_val else "train")
+    fold_name = f"_fold{fold}" if fold is not None else ""
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/missense_badness_{transcript_type}{fold_name}.ht"
 
 
 ####################################################################################
