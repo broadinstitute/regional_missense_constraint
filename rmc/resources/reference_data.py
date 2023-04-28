@@ -74,13 +74,14 @@ def training_transcripts_path(fold: int = None, is_val: bool = False) -> str:
         If None, all training transcripts will be returned.
         If not None, only validation or training transcripts from the specified fold
             will be returned.
+        Default is None.
     :param is_val: Whether to return validation transcripts.
         If False, training transcripts from the specified fold of the training set
             will be returned.
         If True, validation transcripts from the specified fold of the training set
             will be returned.
         Default is False.
-        NOTE that `fold` must not be None in order to use this parameter.
+        NOTE that `fold` must not be None if `is_val` is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to Table.
     """
