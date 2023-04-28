@@ -422,8 +422,6 @@ def calculate_misbad(
         )
 
         mb_ht.write(mb_path, overwrite=overwrite_output)
-        # TODO: Remove this line
-        logger.info("Output missense badness HT fields: %s", set(mb_ht.row))
 
     if use_test_transcripts or not do_k_fold_training:
         _create_misbad_model(
