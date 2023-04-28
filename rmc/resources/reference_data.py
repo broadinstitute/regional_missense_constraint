@@ -1,5 +1,9 @@
 """Script containing reference resources."""
-from gnomad.resources.resource_utils import TableResource, VersionedTableResource
+from gnomad.resources.resource_utils import (
+    DataException,
+    TableResource,
+    VersionedTableResource,
+)
 
 from rmc.resources.basics import AMINO_ACIDS_PREFIX, RESOURCE_BUILD_PREFIX
 from rmc.resources.resource_utils import CURRENT_BUILD
@@ -56,10 +60,35 @@ Table containing coordinates for coding parts of transcripts excluding introns a
 ######################################################################
 ## Gene/transcript resources
 ######################################################################
-training_transcripts_path = f"{RESOURCE_BUILD_PREFIX}/train_transcripts.he"
+fold_k = 5
 """
-Path to HailExpression of transcripts used for model training.
+Number of folds in the training set.
 """
+
+
+def training_transcripts_path(fold: int = None, is_val: bool = False) -> str:
+    """
+    Return path to HailExpression of transcripts used for model training.
+
+    :param fold:
+    :param is_val: Whether to return the validation transcripts if fold is true.
+        If False, is generated from variants in training transcripts only.
+        If True, is generated from variants in test transcripts only.
+        Default is False.
+    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
+    :return: Path to Table.
+    """
+    if is_val and fold is None:
+        raise DataException("Fold number must be specified for validation transcripts!")
+    if fold not in range(1, fold_k + 1):
+        raise DataException(
+            f"Fold number must be an integer between 1 and {fold_k} inclusive!"
+        )
+
+    train_type = "val" if is_val else "train"
+    fold_name = f"_fold{fold}" if fold is not None
+    return f"{RESOURCE_BUILD_PREFIX}/{train_type}_transcripts{fold_name}.he"
+
 
 test_transcripts_path = f"{RESOURCE_BUILD_PREFIX}/test_transcripts.he"
 """
