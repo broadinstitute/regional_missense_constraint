@@ -171,8 +171,6 @@ def prepare_amino_acid_ht(
             amino_acids_oe_path(is_test=use_test_transcripts, freeze=freeze),
             overwrite=overwrite_output,
         )
-        # TODO: Remove these output lines — was added for freeze 2 and can now be removed
-        logger.info("Output amino acid OE HT fields: %s", set(context_ht.row))
     else:
         logger.info(
             "Creating an amino acid OE HT for each of the %i-fold training and validation sets...",
@@ -195,7 +193,6 @@ def prepare_amino_acid_ht(
                     ),
                     overwrite=overwrite_output,
                 )
-                logger.info("Output amino acid OE HT fields: %s", set(context_ht.row))
 
 
 def variant_csq_expr(
