@@ -43,8 +43,9 @@ def prepare_amino_acid_ht(
         - Import VEP context Table and filter to keep every possible amino acid substitution
         (every codon > codon change).
         - Filter Table to rows that aren't present in gnomAD or are rare in gnomAD (using `keep_criteria`).
-        - Add observed and OE annotation
-        - Write to `amino_acids_oe_path` resource path
+        - Add observed and OE annotation.
+        - Filter to specified transcript set(s).
+        - Write to `amino_acids_oe_path` resource path(s).
 
     :param overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
@@ -68,7 +69,6 @@ def prepare_amino_acid_ht(
     :param loftee_hc_str: String indicating that LOFTEE a loss-of-function variant is predcited to cause
     :return: None; writes amino acid Table to resource path.
     """
-    # Check for valid arguments
     if use_test_transcripts and do_k_fold_training:
         raise DataException("Cannot generate k-fold models with test transcripts!")
 
@@ -158,7 +158,7 @@ def prepare_amino_acid_ht(
 
     if use_test_transcripts or not do_k_fold_training:
         logger.info(
-            "Filtering to %s transcripts only...",
+            "Writing out HT for %s transcripts only...",
             "test" if use_test_transcripts else "training",
         )
         filter_transcripts = hl.experimental.read_expression(
@@ -173,11 +173,12 @@ def prepare_amino_acid_ht(
         )
     else:
         logger.info(
-            "Creating an amino acid OE HT for each of the %i-fold training and validation sets...",
+            "Writing out amino acid OE HT for each of the %i-fold training and validation sets...",
             fold_k,
         )
         for i in range(1, fold_k + 1):
             for is_val in [True, False]:
+                logger.info("Writing out amino acid OE HT for fold %i...", i)
                 filter_transcripts = hl.experimental.read_expression(
                     training_transcripts_path(fold=i, is_val=is_val)
                 )
