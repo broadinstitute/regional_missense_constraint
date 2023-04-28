@@ -345,12 +345,14 @@ def calculate_misbad(
                 "and missense OE exist!"
             )
 
-    def _create_misbad_model(ht: hl.Table, mb_path: str) -> None:
+    def _create_misbad_model(ht: hl.Table, mb_path: str, temp_label: str) -> None:
         """
         Calculate missense badness scores from a Table of amino acid substitutions and their missense OE ratios.
 
         :param hl.Table ht: Table containing all possible amino acid substitutions and their missense OE ratio.
         :param str mb_path: Output path for missense badness scores.
+        :param str temp_label: Model-specific suffix to add to temporary table paths
+            to avoid conflicting writes for different models.
         :return: None; writes Table with missense badness scores to resource path.
         """
         if use_exac_oe_cutoffs:
@@ -362,9 +364,8 @@ def calculate_misbad(
         )
         logger.info("Creating high missense OE (OE > %s) HT...", oe_threshold)
         high_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=True)
-        # TODO: Adjust checkpoints
         high_ht = high_ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_high_oe.ht",
+            f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_high_oe{temp_label}.ht",
             _read_if_exists=not overwrite_temp,
             overwrite=overwrite_temp,
         )
@@ -372,7 +373,7 @@ def calculate_misbad(
         logger.info("Creating low missense OE (OE <= %s) HT...", oe_threshold)
         low_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=False)
         low_ht = low_ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_low_oe.ht",
+            f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_low_oe{temp_label}.ht",
             _read_if_exists=not overwrite_temp,
             overwrite=overwrite_temp,
         )
@@ -425,16 +426,19 @@ def calculate_misbad(
 
     if use_test_transcripts or not do_k_fold_training:
         _create_misbad_model(
-            hl.read_table(
+            ht=hl.read_table(
                 amino_acids_oe_path(is_test=use_test_transcripts, freeze=freeze)
             ),
-            misbad_path(is_test=use_test_transcripts, freeze=freeze),
+            mb_path=misbad_path(is_test=use_test_transcripts, freeze=freeze),
+            temp_label=f"_{transcript_type}",
         )
     else:
         for i in range(1, fold_k + 1):
             for is_val in [True, False]:
+                transcript_type = "val" if is_val else "train"
+                fold_name = f"_fold{i}" if i is not None else ""
                 _create_misbad_model(
-                    hl.read_table(
+                    ht=hl.read_table(
                         amino_acids_oe_path(
                             is_test=use_test_transcripts,
                             fold=i,
@@ -442,10 +446,11 @@ def calculate_misbad(
                             freeze=freeze,
                         )
                     ),
-                    misbad_path(
+                    mb_path=misbad_path(
                         is_test=use_test_transcripts,
                         fold=i,
                         is_val=is_val,
                         freeze=freeze,
                     ),
+                    temp_label=f"_{transcript_type}{fold_name}",
                 )
