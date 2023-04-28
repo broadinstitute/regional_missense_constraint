@@ -31,7 +31,7 @@ FREEZES = [1, 2, 3, 4, 5, 6, 7]
 RMC/MPC data versions computed with current gnomAD version.
 """
 
-CURRENT_FREEZE = 4
+CURRENT_FREEZE = 5
 """
 Current RMC/MPC data version.
 """
