@@ -314,13 +314,13 @@ def get_annotations_from_context_ht_vep(
 
 
 def filter_context_to_transcript_cds(
-    context_ht: hl.Table, transcripts: Set[str]
+    context_ht: hl.Table, transcripts: hl.expr.SetExpression
 ) -> hl.Table:
     """
     Filter VEP context Table to coding sites in the input transcripts.
 
     :param hl.Table context_ht: VEP context Table.
-    :param Set[str] transcripts: Transcripts to filter to.
+    :param hl.expr.SetExpression transcripts: Transcripts to filter to.
     :return: VEP context Table with rows filtered to only coding sites in the input transcripts.
     """
     # Get coordinate intervals of coding sequences of transcripts
