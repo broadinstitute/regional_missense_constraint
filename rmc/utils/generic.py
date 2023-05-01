@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Set, Tuple
+from typing import Dict, List, Tuple
 
 import hail as hl
 from gnomad.resources.grch37.gnomad import coverage, public_release
