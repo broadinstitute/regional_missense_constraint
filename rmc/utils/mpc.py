@@ -31,7 +31,12 @@ from rmc.resources.rmc import (
     mpc_release,
     mpc_release_dedup,
 )
-from rmc.utils.generic import get_aa_map, get_gnomad_public_release, keep_criteria
+from rmc.utils.generic import (
+    get_aa_map,
+    get_constraint_transcripts,
+    get_gnomad_public_release,
+    keep_criteria,
+)
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -299,7 +304,10 @@ def prepare_pop_path_ht(
         overwrite=overwrite_temp,
     )
 
-    logger.info("Filtering to rows with defined annotations and writing out...")
+    logger.info(
+        "Filtering to rows with defined annotations in transcripts to keep and writing out..."
+    )
+    transcripts = get_constraint_transcripts(outlier=False)
     ht = ht.filter(
         hl.is_defined(ht.cadd.phred)
         & hl.is_defined(ht.blosum)
@@ -307,6 +315,7 @@ def prepare_pop_path_ht(
         & hl.is_defined(ht.oe)
         & hl.is_defined(ht.polyphen.score)
         & hl.is_defined(ht.misbad)
+        & transcripts.contains(ht.transcript)
     )
     ht.write(joint_clinvar_gnomad.versions[freeze].path, overwrite=overwrite_output)
 
