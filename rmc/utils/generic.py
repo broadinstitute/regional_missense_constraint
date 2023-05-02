@@ -349,23 +349,28 @@ def keep_criteria(
     cov_expr: hl.expr.Int32Expression,
     af_threshold: float = 0.001,
     cov_threshold: int = 0,
+    filter_to_rare: bool = True,
 ) -> hl.expr.BooleanExpression:
     """
     Return Boolean expression to filter variants in input Table.
 
     Default values will filter to rare variants (AC > 0, AF < 0.001) that pass filters and have median coverage greater than 0.
 
-    :param hl.expr.Int32Expression ac_expr: Allele count Int32Expression.
-    :param hl.expr.Float64Expression af_expr: Allele frequency (AF) Float64Expression.
-    :param hl.expr.SetExpression filters_expr: Filters SetExpression.
-    :param hl.expr.Int32Expression cov_expr: gnomAD median coverage Int32Expression.
-    :param float af_threshold: Remove rows above this AF threshold. Default is 0.001.
-    :param int cov_threshold: Remove rows below this median coverage threshold. Default is 0.
+    :param ac_expr: Allele count Int32Expression.
+    :param af_expr: Allele frequency (AF) Float64Expression.
+    :param filters_expr: Filters SetExpression.
+    :param cov_expr: gnomAD median coverage Int32Expression.
+    :param af_threshold: Remove rows above this AF threshold. Default is 0.001.
+    :param cov_threshold: Remove rows below this median coverage threshold. Default is 0.
+    :param filter_to_rare: Whether to filter to keep rare variants only. Default is True.
     :return: Boolean expression used to filter variants.
     """
+    af_filter_expr = (
+        (af_expr < af_threshold) if filter_to_rare else (af_expr > af_threshold)
+    )
     return (
         (ac_expr > 0)
-        & (af_expr < af_threshold)
+        & (af_filter_expr)
         & (hl.len(filters_expr) == 0)
         & (cov_expr > cov_threshold)
     )
