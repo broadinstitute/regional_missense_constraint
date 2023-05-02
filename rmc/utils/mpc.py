@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import statsmodels
 import statsmodels.api as sm
-from gnomad.resources.grch37.gnomad import public_release
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from patsy import dmatrices
@@ -32,7 +31,7 @@ from rmc.resources.rmc import (
     mpc_release,
     mpc_release_dedup,
 )
-from rmc.utils.generic import get_aa_map
+from rmc.utils.generic import get_aa_map, get_gnomad_public_release, keep_criteria
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -171,6 +170,8 @@ def prepare_pop_path_ht(
     overwrite_temp: bool = False,
     overwrite_output: bool = True,
     freeze: int = CURRENT_FREEZE,
+    adj_freq_index: int = 0,
+    cov_threshold: int = 0,
 ) -> None:
     """
     Prepare Table with 'population' (common gnomAD missense) and 'pathogenic' (ClinVar pathogenic/likely pathogenic missense) variants.
@@ -195,15 +196,31 @@ def prepare_pop_path_ht(
         and the population/pathogenic variant Table.
         Default is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
+    :param adj_freq_index: Index of frequency array that contains global population filtered calculated on
+        high quality (adj) genotypes. Default is 0.
+    :param cov_threshold: Coverage threshold used to filter context Table if `filter_context_using_cov` is True.
+        Default is 0.
     :return: None; function writes Table to resource path.
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
     clinvar_ht = clinvar_plp_mis_haplo.ht()
     clinvar_ht = clinvar_ht.annotate(pop_v_path=0)
 
-    logger.info("Importing gnomAD public data and filtering to common variants...")
-    gnomad_ht = public_release(gnomad_data_type).ht()
-    gnomad_ht = gnomad_ht.filter(gnomad_ht.freq[0].AF > af_threshold)
+    logger.info(
+        "Importing gnomAD public data and filtering to high quality, common variants..."
+    )
+    gnomad_ht = get_gnomad_public_release(gnomad_data_type, adj_freq_index)
+    gnomad_ht = gnomad_ht.filter(
+        keep_criteria(
+            ac_expr=gnomad_ht.ac,
+            af_expr=gnomad_ht.af,
+            filters_expr=gnomad_ht.filters,
+            cov_expr=gnomad_ht.coverage,
+            af_threshold=af_threshold,
+            cov_threshold=cov_threshold,
+            filter_to_rare=False,
+        )
+    )
     gnomad_ht = gnomad_ht.annotate(pop_v_path=1)
 
     logger.info("Joining ClinVar and gnomAD HTs and filtering out overlaps...")
