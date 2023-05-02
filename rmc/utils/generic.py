@@ -213,6 +213,33 @@ def process_context_ht(
     return ht
 
 
+def get_gnomad_public_release(
+    gnomad_data_type: str = "exomes", adj_freq_index: int = 0
+) -> hl.Table:
+    """
+    Return gnomAD public sites Table annotated with coverage.
+
+    Also filters HT to fields required by `keep_criteria`:
+        - ac
+        - af
+        - filters
+        - coverage
+
+    :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
+        Must be one of "exomes" or "genomes" (check is done within `public_release`).
+        Default is "exomes".
+    :return: gnomAD public sites HT annotated with coverage and filtered to select fields.
+    """
+    gnomad = public_release(gnomad_data_type).ht().select_globals()
+    gnomad_cov = coverage(gnomad_data_type).ht()
+    return gnomad.select(
+        "filters",
+        ac=gnomad.freq[adj_freq_index].AC,
+        af=gnomad.freq[adj_freq_index].AF,
+        gnomad_coverage=gnomad_cov[gnomad.locus].median,
+    )
+
+
 def filter_context_using_gnomad(
     context_ht: hl.Table,
     gnomad_data_type: str = "exomes",
@@ -223,26 +250,19 @@ def filter_context_using_gnomad(
     """
     Filter VEP context Table to sites that aren't seen in gnomAD or are rare in gnomAD.
 
-    :param hl.Table context_ht: VEP context Table.
-    :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
+    :param context_ht: VEP context Table.
+    :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
     :param adj_freq_index: Index of frequency array that contains global population filtered calculated on
         high quality (adj) genotypes. Default is 0.
-    :param bool filter_context_using_cov: Whether to also filter sites in context Table using gnomAD coverage.
+    :param filter_context_using_cov: Whether to also filter sites in context Table using gnomAD coverage.
         Default is True.
-    :param int cov_threshold: Coverage threshold used to filter context Table if `filter_context_using_cov` is True.
+    :param cov_threshold: Coverage threshold used to filter context Table if `filter_context_using_cov` is True.
         Default is 0.
     :return: Filtered VEP context Table.
     """
-    gnomad = public_release(gnomad_data_type).ht().select_globals()
-    gnomad_cov = coverage(gnomad_data_type).ht()
-    gnomad = gnomad.select(
-        "filters",
-        ac=gnomad.freq[adj_freq_index].AC,
-        af=gnomad.freq[adj_freq_index].AF,
-        gnomad_coverage=gnomad_cov[gnomad.locus].median,
-    )
+    gnomad = get_gnomad_public_release(gnomad_data_type, adj_freq_index)
 
     # Filter to sites not seen in gnomAD or to rare sites in gnomAD
     gnomad_join = gnomad[context_ht.key]
@@ -259,6 +279,7 @@ def filter_context_using_gnomad(
 
     # Optionally also filter context HT using gnomAD coverage
     if filter_context_using_cov:
+        gnomad_cov = coverage(gnomad_data_type).ht()
         context_ht = context_ht.annotate(
             gnomad_coverage=gnomad_cov[context_ht.locus].median
         )
