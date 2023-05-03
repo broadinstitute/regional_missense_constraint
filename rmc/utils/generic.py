@@ -371,12 +371,12 @@ def keep_criteria(
     :param cov_threshold: Remove rows at or below this median coverage threshold. Default is 0.
     :param filter_to_rare: Whether to filter to keep rare variants only.
         If True, only variants with AF < `af_threshold` will be kept.
-        If False, only variants with AF > `af_threshold` will be kept.
+        If False, only variants with AF >= `af_threshold` will be kept.
         Default is True.
     :return: Boolean expression used to filter variants.
     """
     af_filter_expr = (
-        (af_expr < af_threshold) if filter_to_rare else (af_expr > af_threshold)
+        (af_expr < af_threshold) if filter_to_rare else (af_expr >= af_threshold)
     )
     return (
         (ac_expr > 0)
