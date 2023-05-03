@@ -228,6 +228,8 @@ def get_gnomad_public_release(
     :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
+    :param adj_freq_index: Index of frequency array that contains global population filtered calculated on
+        high quality (adj) genotypes. Default is 0.
     :return: gnomAD public sites HT annotated with coverage and filtered to select fields.
     """
     gnomad = public_release(gnomad_data_type).ht().select_globals()
