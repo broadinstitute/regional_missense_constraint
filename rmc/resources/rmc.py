@@ -23,7 +23,7 @@ from rmc.resources.basics import (
     SINGLE_BREAK_TEMP_PATH,
     TEMP_PATH,
 )
-from rmc.resources.reference_data import fold_k
+from rmc.resources.reference_data import FOLD_K
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
 FREEZES = [1, 2, 3, 4, 5, 6, 7]
@@ -506,9 +506,9 @@ def amino_acids_oe_path(
         raise DataException("Fold number cannot be specified for test set!")
     if is_val and fold is None:
         raise DataException("Fold number must be specified for validation set!")
-    if fold not in range(1, fold_k + 1):
+    if fold not in range(1, FOLD_K + 1):
         raise DataException(
-            f"Fold number must be an integer between 1 and {fold_k} inclusive!"
+            f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
         )
     transcript_type = "test" if is_test else ("val" if is_val else "train")
     fold_name = f"_fold{fold}" if fold is not None else ""
@@ -550,9 +550,9 @@ def misbad_path(
         raise DataException("Fold number cannot be specified for test set!")
     if is_val and fold is None:
         raise DataException("Fold number must be specified for validation set!")
-    if fold not in range(1, fold_k + 1):
+    if fold not in range(1, FOLD_K + 1):
         raise DataException(
-            f"Fold number must be an integer between 1 and {fold_k} inclusive!"
+            f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
         )
     transcript_type = "test" if is_test else ("val" if is_val else "train")
     fold_name = f"_fold{fold}" if fold is not None else ""

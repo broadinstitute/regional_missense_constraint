@@ -6,7 +6,7 @@ from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.reference_data import (
-    fold_k,
+    FOLD_K,
     test_transcripts_path,
     training_transcripts_path,
 )
@@ -174,9 +174,9 @@ def prepare_amino_acid_ht(
     else:
         logger.info(
             "Writing out amino acid OE HT for each of the %i-fold training and validation sets...",
-            fold_k,
+            FOLD_K,
         )
-        for i in range(1, fold_k + 1):
+        for i in range(1, FOLD_K + 1):
             for is_val in [True, False]:
                 logger.info("Writing out amino acid OE HT for fold %i...", i)
                 filter_transcripts = hl.experimental.read_expression(
@@ -336,7 +336,7 @@ def calculate_misbad(
                         freeze=freeze,
                     )
                 )
-                for i in range(1, fold_k + 1)
+                for i in range(1, FOLD_K + 1)
                 for is_val in [True, False]
             ]
         ):
@@ -433,7 +433,7 @@ def calculate_misbad(
             temp_label=f"_{transcript_type}",
         )
     else:
-        for i in range(1, fold_k + 1):
+        for i in range(1, FOLD_K + 1):
             for is_val in [True, False]:
                 transcript_type = "val" if is_val else "train"
                 fold_name = f"_fold{i}" if i is not None else ""
