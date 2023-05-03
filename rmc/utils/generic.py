@@ -246,7 +246,6 @@ def filter_context_using_gnomad(
     context_ht: hl.Table,
     gnomad_data_type: str = "exomes",
     adj_freq_index: int = 0,
-    filter_context_using_cov: bool = True,
     cov_threshold: int = 0,
 ) -> hl.Table:
     """
@@ -258,10 +257,7 @@ def filter_context_using_gnomad(
         Default is "exomes".
     :param adj_freq_index: Index of frequency array that contains global population filtered calculated on
         high quality (adj) genotypes. Default is 0.
-    :param filter_context_using_cov: Whether to also filter sites in context Table using gnomAD coverage.
-        Default is True.
-    :param cov_threshold: Coverage threshold used to filter context Table if `filter_context_using_cov` is True.
-        Default is 0.
+    :param cov_threshold: Coverage threshold used to filter context Table. Default is 0.
     :return: Filtered VEP context Table.
     """
     gnomad = get_gnomad_public_release(gnomad_data_type, adj_freq_index)
@@ -278,18 +274,6 @@ def filter_context_using_gnomad(
             cov_threshold=cov_threshold,
         )
     )
-
-    # Optionally also filter context HT using gnomAD coverage
-    if filter_context_using_cov:
-        gnomad_cov = coverage(gnomad_data_type).ht()
-        context_ht = context_ht.annotate(
-            gnomad_coverage=gnomad_cov[context_ht.locus].median
-        )
-        context_ht = context_ht.filter(context_ht.gnomad_coverage > cov_threshold)
-        # Drop coverage annotation here for consistency
-        # (This annotation is only added if `filter_context_using_cov` is True)
-        context_ht = context_ht.drop("gnomad_coverage")
-
     return context_ht
 
 

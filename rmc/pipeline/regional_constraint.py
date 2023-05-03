@@ -79,7 +79,8 @@ def main(args):
                 "Filtering context HT to all covered sites not found or rare in gnomAD exomes"
             )
             context_ht = filter_context_using_gnomad(
-                context_ht, "exomes", filter_context_using_cov=True
+                context_ht,
+                "exomes",
             )
             context_ht.write(filtered_context.path, overwrite=args.overwrite)
 

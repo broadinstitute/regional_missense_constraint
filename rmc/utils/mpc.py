@@ -203,8 +203,7 @@ def prepare_pop_path_ht(
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :param adj_freq_index: Index of frequency array that contains global population filtered calculated on
         high quality (adj) genotypes. Default is 0.
-    :param cov_threshold: Coverage threshold used to filter context Table if `filter_context_using_cov` is True.
-        Default is 0.
+    :param cov_threshold: Coverage threshold used to filter context Table. Default is 0.
     :return: None; function writes Table to resource path.
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
