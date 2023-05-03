@@ -363,13 +363,16 @@ def keep_criteria(
 
     Default values will filter to rare variants (AC > 0, AF < 0.001) that pass filters and have median coverage greater than 0.
 
-    :param ac_expr: Allele count Int32Expression.
+    :param ac_expr: Allele count (AC) Int32Expression.
     :param af_expr: Allele frequency (AF) Float64Expression.
     :param filters_expr: Filters SetExpression.
     :param cov_expr: gnomAD median coverage Int32Expression.
-    :param af_threshold: Remove variants above this AF threshold. Default is 0.001.
-    :param cov_threshold: Remove variants below this median coverage threshold. Default is 0.
-    :param filter_to_rare: Whether to filter to keep rare variants only. Default is True.
+    :param af_threshold: AF threshold used for filtering variants in combination with `filter_to_rare`. Default is 0.001.
+    :param cov_threshold: Remove rows at or below this median coverage threshold. Default is 0.
+    :param filter_to_rare: Whether to filter to keep rare variants only.
+        If True, only variants with AF < `af_threshold` will be kept.
+        If False, only variants with AF > `af_threshold` will be kept.
+        Default is True.
     :return: Boolean expression used to filter variants.
     """
     af_filter_expr = (
