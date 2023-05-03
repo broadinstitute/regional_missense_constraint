@@ -82,7 +82,6 @@ def training_transcripts_path(fold: int = None, is_val: bool = False) -> str:
             will be returned.
         Default is False.
         NOTE that `fold` must not be None if `is_val` is True.
-    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to Table.
     """
     if is_val and fold is None:
