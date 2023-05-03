@@ -257,7 +257,7 @@ def filter_context_using_gnomad(
         Default is "exomes".
     :param adj_freq_index: Index of frequency array that contains global population calculated on
         high quality (adj) genotypes. Default is 0.
-    :param cov_threshold: Median coverage threshold below which variants are removed. Default is 0.
+    :param cov_threshold: Remove variants below this median coverage threshold. Default is 0.
     :return: Filtered VEP context Table.
     """
     gnomad = get_gnomad_public_release(gnomad_data_type, adj_freq_index)
@@ -367,8 +367,8 @@ def keep_criteria(
     :param af_expr: Allele frequency (AF) Float64Expression.
     :param filters_expr: Filters SetExpression.
     :param cov_expr: gnomAD median coverage Int32Expression.
-    :param af_threshold: Remove rows above this AF threshold. Default is 0.001.
-    :param cov_threshold: Remove rows below this median coverage threshold. Default is 0.
+    :param af_threshold: Remove variants above this AF threshold. Default is 0.001.
+    :param cov_threshold: Remove variants below this median coverage threshold. Default is 0.
     :param filter_to_rare: Whether to filter to keep rare variants only. Default is True.
     :return: Boolean expression used to filter variants.
     """
