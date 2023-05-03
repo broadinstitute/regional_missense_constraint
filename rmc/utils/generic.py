@@ -257,7 +257,7 @@ def filter_context_using_gnomad(
         Default is "exomes".
     :param adj_freq_index: Index of frequency array that contains global population calculated on
         high quality (adj) genotypes. Default is 0.
-    :param cov_threshold: Coverage threshold used to filter context Table. Default is 0.
+    :param cov_threshold: Median coverage threshold below which variants are removed. Default is 0.
     :return: Filtered VEP context Table.
     """
     gnomad = get_gnomad_public_release(gnomad_data_type, adj_freq_index)
