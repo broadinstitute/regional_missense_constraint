@@ -305,7 +305,7 @@ def prepare_pop_path_ht(
     )
 
     logger.info(
-        "Filtering to rows with defined annotations in transcripts to keep and writing out..."
+        "Filtering to rows with defined annotations in non-outlier transcripts and writing out..."
     )
     transcripts = get_constraint_transcripts(outlier=False)
     ht = ht.filter(
