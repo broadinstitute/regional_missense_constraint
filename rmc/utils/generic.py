@@ -223,7 +223,7 @@ def get_gnomad_public_release(
         - ac
         - af
         - filters
-        - coverage
+        - gnomad_coverage
 
     :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).

@@ -220,7 +220,7 @@ def prepare_pop_path_ht(
             ac_expr=gnomad_ht.ac,
             af_expr=gnomad_ht.af,
             filters_expr=gnomad_ht.filters,
-            cov_expr=gnomad_ht.coverage,
+            cov_expr=gnomad_ht.gnomad_coverage,
             af_threshold=af_threshold,
             cov_threshold=cov_threshold,
             filter_to_rare=False,
