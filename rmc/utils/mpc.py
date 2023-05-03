@@ -189,7 +189,7 @@ def prepare_pop_path_ht(
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
     :param float af_threshold: Allele frequency cutoff to filter gnomAD public dataset.
-        Variants greater than or equal to this threshold will be kept.
+        Variants at frequencies greater than or equal to this threshold will be kept.
         Default is 0.001.
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
