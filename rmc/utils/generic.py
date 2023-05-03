@@ -377,7 +377,7 @@ def keep_criteria(
 
     Default values will filter to rare variants (AC > 0, AF < 0.001) that pass filters and have median coverage greater than 0.
 
-    :param ac_expr: Allele count Int32Expression.
+    :param ac_expr: Allele count (AC) Int32Expression.
     :param af_expr: Allele frequency (AF) Float64Expression.
     :param filters_expr: Filters SetExpression.
     :param cov_expr: gnomAD median coverage Int32Expression.
