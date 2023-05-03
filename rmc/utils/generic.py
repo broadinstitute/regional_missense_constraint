@@ -382,7 +382,7 @@ def keep_criteria(
     :param filters_expr: Filters SetExpression.
     :param cov_expr: gnomAD median coverage Int32Expression.
     :param af_threshold: AF threshold used for filtering variants in combination with `filter_to_rare`. Default is 0.001.
-    :param cov_threshold: Remove rows below this median coverage threshold. Default is 0.
+    :param cov_threshold: Remove rows at or below this median coverage threshold. Default is 0.
     :param filter_to_rare: Whether to filter to keep rare variants only. Default is True.
     :return: Boolean expression used to filter variants.
     """
