@@ -396,9 +396,14 @@ def calculate_misbad(
         ht = high_ht.join(low_ht, how="outer")
         ht = ht.transmute(mut_type=hl.coalesce(ht.mut_type, ht.mut_type_1))
         mb_ht = ht.group_by("ref", "alt").aggregate(
+            high_obs=hl.agg.sum(ht.high_obs),
+            high_pos=hl.agg.sum(ht.high_pos),
+            low_obs=hl.agg.sum(ht.low_obs),
+            low_pos=hl.agg.sum(ht.low_pos),
+        )
+        mb_ht = mb_ht.annotate(
             high_low=(
-                (hl.agg.sum(ht.high_obs) / hl.agg.sum(ht.high_pos))
-                / (hl.agg.sum(ht.low_obs) / hl.agg.sum(ht.low_pos))
+                (mb_ht.high_obs / mb_ht.high_pos) / (mb_ht.low_obs / mb_ht.low_pos)
             )
         )
         mb_ht = mb_ht.annotate(mut_type=variant_csq_expr(mb_ht.ref, mb_ht.alt))
