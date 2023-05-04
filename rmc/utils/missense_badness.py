@@ -5,10 +5,16 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
-from rmc.resources.rmc import CURRENT_FREEZE, amino_acids_oe, misbad
+from rmc.resources.reference_data import (
+    FOLD_K,
+    test_transcripts_path,
+    training_transcripts_path,
+)
+from rmc.resources.rmc import CURRENT_FREEZE, amino_acids_oe_path, misbad_path
 from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
     annotate_and_filter_codons,
+    filter_context_to_transcript_cds,
     filter_context_using_gnomad,
     process_context_ht,
 )
@@ -24,19 +30,22 @@ logger.setLevel(logging.INFO)
 def prepare_amino_acid_ht(
     overwrite_temp: bool,
     overwrite_output: bool,
+    use_test_transcripts: bool = False,
+    do_k_fold_training: bool = False,
     freeze: int = CURRENT_FREEZE,
     gnomad_data_type: str = "exomes",
     loftee_hc_str: str = "HC",
 ) -> None:
     """
-    Prepare Table with all possible amino acid substitutions and their missense observed to expected (OE) ratio.
+    Prepare Table(s) with all possible amino acid substitutions and their missense observed to expected (OE) ratio.
 
     Steps:
         - Import VEP context Table and filter to keep every possible amino acid substitution
         (every codon > codon change).
         - Filter Table to rows that aren't present in gnomAD or are rare in gnomAD (using `keep_criteria`).
-        - Add observed and OE annotation
-        - Write to `amino_acids_oe` resource path
+        - Add observed and OE annotation.
+        - Filter to specified transcript set(s).
+        - Write to `amino_acids_oe_path` resource path(s).
 
     :param overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
@@ -44,13 +53,25 @@ def prepare_amino_acid_ht(
         If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
         If True, will clear existing output data and write new output data.
         The output Table is the amino acid Table.
+    :param use_test_transcripts: Whether to use test transcripts in calculations.
+        If False, will use training transcripts only.
+        If True, will use test transcripts only.
+        Default is False.
+    :param do_k_fold_training: Whether to generate k-fold models with the training transcripts.
+        If False, will use all training transcripts in calculation of a single model.
+        If True, will calculate k models corresponding to the k-folds of the training transcripts.
+        Default is False.
+        NOTE that `use_test_transcripts` must be False if `do_k_fold_training` is True.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
     :param loftee_hc_str: String indicating that LOFTEE a loss-of-function variant is predcited to cause
-    :return: None; writes amino acid Table to resource path.
+    :return: None; writes amino acid Table(s) to resource path(s).
     """
+    if use_test_transcripts and do_k_fold_training:
+        raise DataException("Cannot generate k-fold models with test transcripts!")
+
     logger.info("Reading in VEP context HT...")
     # NOTE: Keeping all variant types here because need synonymous and nonsense variants to calculate missense badness
     context_ht = process_context_ht(filter_to_missense=False, add_annotations=False)
@@ -92,7 +113,7 @@ def prepare_amino_acid_ht(
 
     logger.info("Checkpointing HT before joining with gnomAD data...")
     context_ht = context_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/codons_filt.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/codons_hc.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -127,8 +148,52 @@ def prepare_amino_acid_ht(
         "amino_acids",
         "oe",
     )
-    context_ht.write(amino_acids_oe.versions[freeze].path, overwrite=overwrite_output)
-    logger.info("Output amino acid OE HT fields: %s", set(context_ht.row))
+
+    logger.info("Checkpointing HT before filtering by transcript...")
+    context_ht = context_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/codons_oe.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+
+    if use_test_transcripts or not do_k_fold_training:
+        logger.info(
+            "Writing out HT for %s transcripts only...",
+            "test" if use_test_transcripts else "training",
+        )
+        filter_transcripts = hl.experimental.read_expression(
+            test_transcripts_path
+            if use_test_transcripts
+            else training_transcripts_path()
+        )
+        context_ht = filter_context_to_transcript_cds(context_ht, filter_transcripts)
+        context_ht.write(
+            amino_acids_oe_path(is_test=use_test_transcripts, freeze=freeze),
+            overwrite=overwrite_output,
+        )
+    else:
+        logger.info(
+            "Writing out amino acid OE HT for each of the %i-fold training and validation sets...",
+            FOLD_K,
+        )
+        for i in range(1, FOLD_K + 1):
+            for is_val in [True, False]:
+                logger.info("Writing out amino acid OE HT for fold %i...", i)
+                filter_transcripts = hl.experimental.read_expression(
+                    training_transcripts_path(fold=i, is_val=is_val)
+                )
+                context_ht = filter_context_to_transcript_cds(
+                    context_ht, filter_transcripts
+                )
+                context_ht.write(
+                    amino_acids_oe_path(
+                        is_test=use_test_transcripts,
+                        fold=i,
+                        is_val=is_val,
+                        freeze=freeze,
+                    ),
+                    overwrite=overwrite_output,
+                )
 
 
 def variant_csq_expr(
@@ -212,16 +277,18 @@ def calculate_misbad(
     use_exac_oe_cutoffs: bool,
     overwrite_temp: bool,
     overwrite_output: bool,
+    use_test_transcripts: bool = False,
+    do_k_fold_training: bool = False,
     oe_threshold: float = 0.6,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
-    Calculate missense badness score using Table with all amino acid substitutions and their missense observed/expected (OE) ratio.
+    Calculate missense badness scores using Table with all amino acid substitutions and their missense observed/expected (OE) ratio.
 
     If `use_exac_oe_cutoffs` is set, will remove all rows with 0.6 < OE <= 0.8.
 
     .. note::
-        Assumes table containing all possible amino acid substitutions and their missense OE ratio exists.
+        Assumes table(s) containing all possible amino acid substitutions and their missense OE ratio exists.
 
     :param bool use_exac_oe_cutoffs: Whether to use the same missense OE cutoffs as in ExAC missense badness calculation.
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
@@ -230,86 +297,160 @@ def calculate_misbad(
         If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
         If True, will clear existing output data and write new output data.
         The output Table is the missense badness score Table.
+    :param bool use_test_transcripts: Whether to use test transcripts in calculations.
+        If False, will use training transcripts only.
+        If True, will use test transcripts only.
+        Default is False.
+    :param bool do_k_fold_training: Whether to generate k-fold models with the training transcripts.
+        If False, will use all training transcripts in calculation of a single model.
+        If True, will calculate k models corresponding to the k-folds of the training transcripts.
+        Default is False.
+        NOTE that `use_test_transcripts` must be False if `do_k_fold_training` is True.
     :param float oe_threshold: OE Threshold used to split Table.
         Rows with OE less or equal to this threshold will be considered "low" OE, and
         rows with OE greater than this threshold will considered "high" OE.
         Default is 0.6.
-    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
-    :return: None; writes Table with missense badness score to resource path.
+    :param int freeze: RMC freeze number. Default is CURRENT_FREEZE.
+    :return: None; writes Table(s) with missense badness scores to resource path(s).
     """
-    if not file_exists(amino_acids_oe.versions[freeze].path):
-        raise DataException(
-            "Table with all amino acid substitutions and missense OE doesn't exist!"
+    if use_test_transcripts and do_k_fold_training:
+        raise DataException("Cannot generate k-fold models with test transcripts!")
+
+    if use_test_transcripts or not do_k_fold_training:
+        if not file_exists(
+            amino_acids_oe_path(is_test=use_test_transcripts, freeze=freeze)
+        ):
+            transcript_type = "test" if use_test_transcripts else "training"
+            raise DataException(
+                "Table with all amino acid substitutions and missense OE "
+                f"in {transcript_type} transcripts doesn't exist!"
+            )
+    else:
+        if not all(
+            [
+                file_exists(
+                    amino_acids_oe_path(
+                        is_test=use_test_transcripts,
+                        fold=i,
+                        is_val=is_val,
+                        freeze=freeze,
+                    )
+                )
+                for i in range(1, FOLD_K + 1)
+                for is_val in [True, False]
+            ]
+        ):
+            raise DataException(
+                "Not all k-fold training and validation tables with all amino acid substitutions "
+                "and missense OE exist!"
+            )
+
+    def _create_misbad_model(ht: hl.Table, mb_path: str, temp_label: str) -> None:
+        """
+        Calculate missense badness scores from a Table of amino acid substitutions and their missense OE ratios.
+
+        :param hl.Table ht: Table containing all possible amino acid substitutions and their missense OE ratio.
+        :param str mb_path: Output path for missense badness scores.
+        :param str temp_label: Model-specific suffix to add to temporary table paths
+            to avoid conflicting writes for different models.
+        :return: None; writes Table with missense badness scores to resource path.
+        """
+        if use_exac_oe_cutoffs:
+            logger.info("Removing rows with OE greater than 0.6 and less than 0.8...")
+            ht = ht.filter((ht.oe <= 0.6) | (ht.oe > 0.8))
+
+        logger.info(
+            "Splitting input Table by OE to get synonymous and nonsense rates for high and low OE groups..."
+        )
+        logger.info("Creating high missense OE (OE > %s) HT...", oe_threshold)
+        high_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=True)
+        high_ht = high_ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_high_oe{temp_label}.ht",
+            _read_if_exists=not overwrite_temp,
+            overwrite=overwrite_temp,
         )
 
-    ht = amino_acids_oe.versions[freeze].ht()
-
-    if use_exac_oe_cutoffs:
-        logger.info("Removing rows with OE greater than 0.6 and less than 0.8...")
-        ht = ht.filter((ht.oe <= 0.6) | (ht.oe > 0.8))
-
-    logger.info(
-        "Splitting input Table by OE to get synonymous and nonsense rates for high and low OE groups..."
-    )
-    logger.info("Creating high missense OE (OE > %s) HT...", oe_threshold)
-    high_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=True)
-    high_ht = high_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_high_oe.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
-
-    logger.info("Creating low missense OE (OE <= %s) HT...", oe_threshold)
-    low_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=False)
-    low_ht = low_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_low_oe.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
-
-    logger.info("Re-joining split HTs to calculate missense badness...")
-    high_ht = high_ht.transmute(
-        high_obs=high_ht.obs,
-        high_pos=high_ht.possible,
-    )
-    low_ht = low_ht.transmute(
-        low_obs=low_ht.obs,
-        low_pos=low_ht.possible,
-    )
-    ht = high_ht.join(low_ht, how="outer")
-    ht = ht.transmute(mut_type=hl.coalesce(ht.mut_type, ht.mut_type_1))
-    mb_ht = ht.group_by("ref", "alt").aggregate(
-        high_low=(
-            (hl.agg.sum(ht.high_obs) / hl.agg.sum(ht.high_pos))
-            / (hl.agg.sum(ht.low_obs) / hl.agg.sum(ht.low_pos))
+        logger.info("Creating low missense OE (OE <= %s) HT...", oe_threshold)
+        low_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=False)
+        low_ht = low_ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_low_oe{temp_label}.ht",
+            _read_if_exists=not overwrite_temp,
+            overwrite=overwrite_temp,
         )
-    )
-    mb_ht = mb_ht.annotate(mut_type=variant_csq_expr(mb_ht.ref, mb_ht.alt))
 
-    logger.info("Calculating synonymous rates...")
-    syn_obs_high = get_total_csq_count(high_ht, csq="syn", count_field="high_obs")
-    syn_pos_high = get_total_csq_count(high_ht, csq="syn", count_field="high_pos")
-    syn_obs_low = get_total_csq_count(low_ht, csq="syn", count_field="low_obs")
-    syn_pos_low = get_total_csq_count(low_ht, csq="syn", count_field="low_pos")
-    syn_rate = (syn_obs_high / syn_pos_high) / (syn_obs_low / syn_pos_low)
-    logger.info("Synonymous rate: %f", syn_rate)
+        logger.info("Re-joining split HTs to calculate missense badness...")
+        high_ht = high_ht.transmute(
+            high_obs=high_ht.obs,
+            high_pos=high_ht.possible,
+        )
+        low_ht = low_ht.transmute(
+            low_obs=low_ht.obs,
+            low_pos=low_ht.possible,
+        )
+        ht = high_ht.join(low_ht, how="outer")
+        ht = ht.transmute(mut_type=hl.coalesce(ht.mut_type, ht.mut_type_1))
+        mb_ht = ht.group_by("ref", "alt").aggregate(
+            high_low=(
+                (hl.agg.sum(ht.high_obs) / hl.agg.sum(ht.high_pos))
+                / (hl.agg.sum(ht.low_obs) / hl.agg.sum(ht.low_pos))
+            )
+        )
+        mb_ht = mb_ht.annotate(mut_type=variant_csq_expr(mb_ht.ref, mb_ht.alt))
 
-    logger.info("Calculating nonsense rates...")
-    non_obs_high = get_total_csq_count(high_ht, csq="non", count_field="high_obs")
-    non_pos_high = get_total_csq_count(high_ht, csq="non", count_field="high_pos")
-    non_obs_low = get_total_csq_count(low_ht, csq="non", count_field="low_obs")
-    non_pos_low = get_total_csq_count(low_ht, csq="non", count_field="low_pos")
-    non_rate = (non_obs_high / non_pos_high) / (non_obs_low / non_pos_low)
-    logger.info("Nonsense rate: %f", non_rate)
+        logger.info("Calculating synonymous rates...")
+        syn_obs_high = get_total_csq_count(high_ht, csq="syn", count_field="high_obs")
+        syn_pos_high = get_total_csq_count(high_ht, csq="syn", count_field="high_pos")
+        syn_obs_low = get_total_csq_count(low_ht, csq="syn", count_field="low_obs")
+        syn_pos_low = get_total_csq_count(low_ht, csq="syn", count_field="low_pos")
+        syn_rate = (syn_obs_high / syn_pos_high) / (syn_obs_low / syn_pos_low)
+        logger.info("Synonymous rate: %f", syn_rate)
 
-    logger.info("Calculating missense badness...")
-    mb_ht = mb_ht.annotate(
-        misbad=hl.or_missing(
-            mb_ht.mut_type == "mis",
-            # Cap missense badness at 1
-            hl.min((mb_ht.high_low - syn_rate) / (non_rate - syn_rate), 1),
-        ),
-    )
+        logger.info("Calculating nonsense rates...")
+        non_obs_high = get_total_csq_count(high_ht, csq="non", count_field="high_obs")
+        non_pos_high = get_total_csq_count(high_ht, csq="non", count_field="high_pos")
+        non_obs_low = get_total_csq_count(low_ht, csq="non", count_field="low_obs")
+        non_pos_low = get_total_csq_count(low_ht, csq="non", count_field="low_pos")
+        non_rate = (non_obs_high / non_pos_high) / (non_obs_low / non_pos_low)
+        logger.info("Nonsense rate: %f", non_rate)
 
-    mb_ht.write(misbad.versions[freeze].path, overwrite=overwrite_output)
-    logger.info("Output missense badness HT fields: %s", set(mb_ht.row))
+        logger.info("Calculating missense badness...")
+        mb_ht = mb_ht.annotate(
+            misbad=hl.or_missing(
+                mb_ht.mut_type == "mis",
+                # Cap missense badness at 1
+                hl.min((mb_ht.high_low - syn_rate) / (non_rate - syn_rate), 1),
+            ),
+        )
+
+        mb_ht.write(mb_path, overwrite=overwrite_output)
+
+    if use_test_transcripts or not do_k_fold_training:
+        _create_misbad_model(
+            ht=hl.read_table(
+                amino_acids_oe_path(is_test=use_test_transcripts, freeze=freeze)
+            ),
+            mb_path=misbad_path(is_test=use_test_transcripts, freeze=freeze),
+            temp_label=f"_{transcript_type}",
+        )
+    else:
+        for i in range(1, FOLD_K + 1):
+            for is_val in [True, False]:
+                transcript_type = "val" if is_val else "train"
+                fold_name = f"_fold{i}" if i is not None else ""
+                _create_misbad_model(
+                    ht=hl.read_table(
+                        amino_acids_oe_path(
+                            is_test=use_test_transcripts,
+                            fold=i,
+                            is_val=is_val,
+                            freeze=freeze,
+                        )
+                    ),
+                    mb_path=misbad_path(
+                        is_test=use_test_transcripts,
+                        fold=i,
+                        is_val=is_val,
+                        freeze=freeze,
+                    ),
+                    temp_label=f"_{transcript_type}{fold_name}",
+                )

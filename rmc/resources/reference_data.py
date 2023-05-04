@@ -1,5 +1,9 @@
 """Script containing reference resources."""
-from gnomad.resources.resource_utils import TableResource, VersionedTableResource
+from gnomad.resources.resource_utils import (
+    DataException,
+    TableResource,
+    VersionedTableResource,
+)
 
 from rmc.resources.basics import AMINO_ACIDS_PREFIX, RESOURCE_BUILD_PREFIX
 from rmc.resources.resource_utils import CURRENT_BUILD
@@ -37,10 +41,66 @@ gene_model = TableResource(path=f"{RESOURCE_BUILD_PREFIX}/browser/b37_transcript
 Table containing transcript start and stop positions displayed in the browser.
 """
 
+transcript_ref = TableResource(
+    path=f"{REF_DATA_PREFIX}/ht/canonical_transcripts_genes_coordinates.ht"
+)
+"""
+Table containing canonical transcripts with key reference info:
+gene name from gnomAD annotations, gene name from GENCODE v19,
+Ensembl gene ID in GENCODE v19, and overall and CDS start and end
+coordinates from gnomAD annotations.
+"""
+
+transcript_cds = TableResource(path=f"{REF_DATA_PREFIX}/ht/b37_cds_coords.ht")
+"""
+Table containing coordinates for coding parts of transcripts excluding introns and UTRs.
+"""
+
 
 ######################################################################
 ## Gene/transcript resources
 ######################################################################
+FOLD_K = 5
+"""
+Number of folds in the training set.
+"""
+
+
+def training_transcripts_path(fold: int = None, is_val: bool = False) -> str:
+    """
+    Return path to HailExpression of transcripts used for model training.
+
+    :param fold: Fold number in training set to select transcripts from.
+        If None, all training transcripts will be returned.
+        If not None, only validation or training transcripts from the specified fold
+            will be returned.
+        Default is None.
+    :param is_val: Whether to return validation transcripts.
+        If False, training transcripts from the specified fold of the training set
+            will be returned.
+        If True, validation transcripts from the specified fold of the training set
+            will be returned.
+        Default is False.
+        NOTE that `fold` must not be None if `is_val` is True.
+    :return: Path to Table.
+    """
+    if is_val and fold is None:
+        raise DataException("Fold number must be specified for validation transcripts!")
+    if fold not in range(1, FOLD_K + 1):
+        raise DataException(
+            f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
+        )
+
+    train_type = "val" if is_val else "train"
+    fold_name = f"_fold{fold}" if fold is not None else ""
+    return f"{RESOURCE_BUILD_PREFIX}/{train_type}_transcripts{fold_name}.he"
+
+
+test_transcripts_path = f"{RESOURCE_BUILD_PREFIX}/test_transcripts.he"
+"""
+Path to HailExpression of transcripts used for model testing.
+"""
+
 dosage_tsv_path = (
     f"{REF_DATA_PREFIX}/Collins_rCNV_2022.dosage_sensitivity_scores.tsv.gz"
 )
@@ -82,7 +142,7 @@ List of triplosensitive genes was determined by filtering to genes with pTriplo 
 ## Assessment related resources
 ####################################################################################
 clinvar = TableResource(
-    path="gs://regional_missense_constraint/resources/GRCh37/reference_data/ht/clinvar.GRCh37.ht",
+    path=f"{REF_DATA_PREFIX}/ht/clinvar.GRCh37.ht",
 )
 """
 
@@ -150,7 +210,7 @@ and phenotypic context of autism (2022)
 """
 
 ndd_de_novo = TableResource(
-    path=f"{RESOURCE_BUILD_PREFIX}/reference_data/ht/ndd_de_novo.ht",
+    path=f"{REF_DATA_PREFIX}/ht/ndd_de_novo.ht",
 )
 """
 De novo missense variants from 46,094 neurodevelopmental disorder (NDD) cases and 5,492 controls.

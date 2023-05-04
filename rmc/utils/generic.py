@@ -35,6 +35,7 @@ from rmc.resources.reference_data import (
     haplo_genes_path,
     ndd_de_novo,
     ndd_de_novo_2020_tsv_path,
+    transcript_cds,
     triplo_genes_path,
 )
 from rmc.resources.resource_utils import MISSENSE
@@ -48,7 +49,9 @@ logger = logging.getLogger("regional_missense_constraint_generic")
 logger.setLevel(logging.INFO)
 
 
+####################################################################################
 ## ExAC mutational model-related utils
+####################################################################################
 def get_mutation_rate() -> Dict[str, Tuple[str, float]]:
     """
     Read in mutation rate table and store as dict.
@@ -84,7 +87,9 @@ def get_divergence_scores() -> Dict[str, float]:
     return div_scores
 
 
+####################################################################################
 ## Codon and amino acid utils
+####################################################################################
 def get_codon_lookup() -> hl.expr.DictExpression:
     """
     Read in codon lookup table and return as dictionary (key: codon, value: amino acid).
@@ -155,7 +160,9 @@ def annotate_and_filter_codons(ht: hl.Table) -> hl.Table:
     return ht.filter((ht.ref != "Unk") & (ht.alt != "Unk"))
 
 
-## Functions to process reference genome related resources
+####################################################################################
+## Reference genome processing-related utils
+####################################################################################
 def process_context_ht(
     filter_to_missense: bool = True,
     missense_str: str = MISSENSE,
@@ -313,7 +320,32 @@ def get_annotations_from_context_ht_vep(
     return annotate_and_filter_codons(ht)
 
 
-## Functions for obs/exp related resources
+def filter_context_to_transcript_cds(
+    context_ht: hl.Table, transcripts: hl.expr.SetExpression
+) -> hl.Table:
+    """
+    Filter VEP context Table to coding sites in the input transcripts.
+
+    :param hl.Table context_ht: VEP context Table.
+    :param hl.expr.SetExpression transcripts: Transcripts to filter to.
+    :return: VEP context Table with rows filtered to only coding sites in the input transcripts.
+    """
+    # Get coordinate intervals of coding sequences of transcripts
+    cds_ht = transcript_cds.ht()
+    filter_intervals = cds_ht.aggregate(
+        hl.agg.filter(
+            transcripts.contains(cds_ht.transcript),
+            hl.agg.collect(cds_ht.interval),
+        ),
+        _localize=False,
+    )
+    # Filter context HT to sites in these intervals
+    return hl.filter_intervals(context_ht, filter_intervals)
+
+
+####################################################################################
+## Observed and expected-related utils
+####################################################################################
 def get_exome_bases() -> int:
     """
     Get number of bases in the exome.
@@ -542,7 +574,9 @@ def get_plateau_model(
     )
 
 
-## Outlier transcript util
+####################################################################################
+## Outlier transcript utils
+####################################################################################
 def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
     """
     Read in LoF constraint HT results to get set of transcripts.
@@ -583,7 +617,9 @@ def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
     )
 
 
+####################################################################################
 ## Assessment utils
+####################################################################################
 def import_dosage(
     overwrite: bool,
     haplo_threshold: float = 0.86,

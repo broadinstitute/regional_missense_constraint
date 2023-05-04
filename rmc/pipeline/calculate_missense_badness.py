@@ -31,6 +31,8 @@ def main(args):
             prepare_amino_acid_ht(
                 overwrite_temp=args.overwrite_temp,
                 overwrite_output=args.overwrite_output,
+                use_test_transcripts=args.use_test_transcripts,
+                do_k_fold_training=args.do_k_fold_training,
                 freeze=args.freeze,
             )
 
@@ -40,6 +42,8 @@ def main(args):
                 use_exac_oe_cutoffs=args.use_exac_oe_cutoffs,
                 overwrite_temp=args.overwrite_temp,
                 overwrite_output=args.overwrite_output,
+                use_test_transcripts=args.use_test_transcripts,
+                do_k_fold_training=args.do_k_fold_training,
                 freeze=args.freeze,
             )
 
@@ -71,6 +75,19 @@ if __name__ == "__main__":
     parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
+    )
+    parser.add_argument(
+        "--use-test-transcripts",
+        help="Use test transcripts instead of training transcripts in creation of missense badness.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--do-k-fold-training",
+        help="""
+        Generate k-fold missense badness models (one each for training and validation transcripts in each fold)
+        instead of one model for all training transcripts.
+        """,
+        action="store_true",
     )
     parser.add_argument(
         "--use-exac-oe-cutoffs",
