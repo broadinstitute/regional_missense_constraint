@@ -321,11 +321,12 @@ def calculate_misbad(
     if use_test_transcripts and do_k_fold_training:
         raise DataException("Cannot generate k-fold models with test transcripts!")
 
+    transcript_type = "test" if use_test_transcripts else "train"
+
     if use_test_transcripts or not do_k_fold_training:
         if not file_exists(
             amino_acids_oe_path(is_test=use_test_transcripts, freeze=freeze)
         ):
-            transcript_type = "test" if use_test_transcripts else "training"
             raise DataException(
                 "Table with all amino acid substitutions and missense OE "
                 f"in {transcript_type} transcripts doesn't exist!"
