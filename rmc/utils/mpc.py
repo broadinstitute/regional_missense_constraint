@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import statsmodels
 import statsmodels.api as sm
-from gnomad.resources.grch37.gnomad import public_release
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from patsy import dmatrices
@@ -32,7 +31,12 @@ from rmc.resources.rmc import (
     mpc_release,
     mpc_release_dedup,
 )
-from rmc.utils.generic import get_aa_map
+from rmc.utils.generic import (
+    get_aa_map,
+    get_constraint_transcripts,
+    get_gnomad_public_release,
+    keep_criteria,
+)
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -171,6 +175,8 @@ def prepare_pop_path_ht(
     overwrite_temp: bool = False,
     overwrite_output: bool = True,
     freeze: int = CURRENT_FREEZE,
+    adj_freq_index: int = 0,
+    cov_threshold: int = 0,
 ) -> None:
     """
     Prepare Table with 'population' (common gnomAD missense) and 'pathogenic' (ClinVar pathogenic/likely pathogenic missense) variants.
@@ -183,7 +189,7 @@ def prepare_pop_path_ht(
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
     :param float af_threshold: Allele frequency cutoff to filter gnomAD public dataset.
-        Variants *above* this threshold will be kept.
+        Variants at frequencies greater than or equal to this threshold will be kept.
         Default is 0.001.
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
@@ -195,15 +201,30 @@ def prepare_pop_path_ht(
         and the population/pathogenic variant Table.
         Default is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
+    :param adj_freq_index: Index of array that contains allele frequency information calculated on
+        high quality (adj) genotypes across all genetic ancestry groups. Default is 0.
+    :param cov_threshold: Coverage threshold used to filter context Table. Default is 0.
     :return: None; function writes Table to resource path.
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
     clinvar_ht = clinvar_plp_mis_haplo.ht()
     clinvar_ht = clinvar_ht.annotate(pop_v_path=0)
 
-    logger.info("Importing gnomAD public data and filtering to common variants...")
-    gnomad_ht = public_release(gnomad_data_type).ht()
-    gnomad_ht = gnomad_ht.filter(gnomad_ht.freq[0].AF > af_threshold)
+    logger.info(
+        "Importing gnomAD public data and filtering to high quality, common variants..."
+    )
+    gnomad_ht = get_gnomad_public_release(gnomad_data_type, adj_freq_index)
+    gnomad_ht = gnomad_ht.filter(
+        keep_criteria(
+            ac_expr=gnomad_ht.ac,
+            af_expr=gnomad_ht.af,
+            filters_expr=gnomad_ht.filters,
+            cov_expr=gnomad_ht.gnomad_coverage,
+            af_threshold=af_threshold,
+            cov_threshold=cov_threshold,
+            filter_to_rare=False,
+        )
+    )
     gnomad_ht = gnomad_ht.annotate(pop_v_path=1)
 
     logger.info("Joining ClinVar and gnomAD HTs and filtering out overlaps...")
@@ -282,7 +303,10 @@ def prepare_pop_path_ht(
         overwrite=overwrite_temp,
     )
 
-    logger.info("Filtering to rows with defined annotations and writing out...")
+    logger.info(
+        "Filtering to rows with defined annotations in non-outlier transcripts and writing out..."
+    )
+    transcripts = get_constraint_transcripts(outlier=False)
     ht = ht.filter(
         hl.is_defined(ht.cadd.phred)
         & hl.is_defined(ht.blosum)
@@ -290,6 +314,7 @@ def prepare_pop_path_ht(
         & hl.is_defined(ht.oe)
         & hl.is_defined(ht.polyphen.score)
         & hl.is_defined(ht.misbad)
+        & transcripts.contains(ht.transcript)
     )
     ht.write(joint_clinvar_gnomad.versions[freeze].path, overwrite=overwrite_output)
 

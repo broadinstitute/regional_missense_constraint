@@ -213,36 +213,54 @@ def process_context_ht(
     return ht
 
 
-def filter_context_using_gnomad(
-    context_ht: hl.Table,
-    gnomad_data_type: str = "exomes",
-    adj_freq_index: int = 0,
-    filter_context_using_cov: bool = True,
-    cov_threshold: int = 0,
+def get_gnomad_public_release(
+    gnomad_data_type: str = "exomes", adj_freq_index: int = 0
 ) -> hl.Table:
     """
-    Filter VEP context Table to sites that aren't seen in gnomAD or are rare in gnomAD.
+    Return gnomAD public sites Table annotated with coverage.
 
-    :param hl.Table context_ht: VEP context Table.
-    :param str gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
+    Also filters HT to fields required by `keep_criteria`:
+        - ac
+        - af
+        - filters
+        - gnomad_coverage
+
+    :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
-    :param adj_freq_index: Index of frequency array that contains global population filtered calculated on
-        high quality (adj) genotypes. Default is 0.
-    :param bool filter_context_using_cov: Whether to also filter sites in context Table using gnomAD coverage.
-        Default is True.
-    :param int cov_threshold: Coverage threshold used to filter context Table if `filter_context_using_cov` is True.
-        Default is 0.
-    :return: Filtered VEP context Table.
+    :param adj_freq_index: Index of array that contains allele frequency information calculated on
+        high quality (adj) genotypes across genetic ancestry groups. Default is 0.
+    :return: gnomAD public sites HT annotated with coverage and filtered to select fields.
     """
     gnomad = public_release(gnomad_data_type).ht().select_globals()
     gnomad_cov = coverage(gnomad_data_type).ht()
-    gnomad = gnomad.select(
+    return gnomad.select(
         "filters",
         ac=gnomad.freq[adj_freq_index].AC,
         af=gnomad.freq[adj_freq_index].AF,
         gnomad_coverage=gnomad_cov[gnomad.locus].median,
     )
+
+
+def filter_context_using_gnomad(
+    context_ht: hl.Table,
+    gnomad_data_type: str = "exomes",
+    adj_freq_index: int = 0,
+    cov_threshold: int = 0,
+) -> hl.Table:
+    """
+    Filter VEP context Table to sites that aren't seen in gnomAD or are rare in gnomAD.
+
+    :param context_ht: VEP context Table.
+    :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
+        Must be one of "exomes" or "genomes" (check is done within `public_release`).
+        Default is "exomes".
+    :param adj_freq_index: Index of frequency array that contains frequency information calculated on
+        high quality (adj) genotypes across all genetic ancestry groups. Default is 0.
+    :param cov_threshold: Remove variants at or below this median coverage threshold. Default is 0.
+    :return: Filtered VEP context Table.
+    """
+    gnomad = get_gnomad_public_release(gnomad_data_type, adj_freq_index)
 
     # Filter to sites not seen in gnomAD or to rare sites in gnomAD
     gnomad_join = gnomad[context_ht.key]
@@ -256,17 +274,6 @@ def filter_context_using_gnomad(
             cov_threshold=cov_threshold,
         )
     )
-
-    # Optionally also filter context HT using gnomAD coverage
-    if filter_context_using_cov:
-        context_ht = context_ht.annotate(
-            gnomad_coverage=gnomad_cov[context_ht.locus].median
-        )
-        context_ht = context_ht.filter(context_ht.gnomad_coverage > cov_threshold)
-        # Drop coverage annotation here for consistency
-        # (This annotation is only added if `filter_context_using_cov` is True)
-        context_ht = context_ht.drop("gnomad_coverage")
-
     return context_ht
 
 
@@ -349,23 +356,31 @@ def keep_criteria(
     cov_expr: hl.expr.Int32Expression,
     af_threshold: float = 0.001,
     cov_threshold: int = 0,
+    filter_to_rare: bool = True,
 ) -> hl.expr.BooleanExpression:
     """
     Return Boolean expression to filter variants in input Table.
 
     Default values will filter to rare variants (AC > 0, AF < 0.001) that pass filters and have median coverage greater than 0.
 
-    :param hl.expr.Int32Expression ac_expr: Allele count Int32Expression.
-    :param hl.expr.Float64Expression af_expr: Allele frequency (AF) Float64Expression.
-    :param hl.expr.SetExpression filters_expr: Filters SetExpression.
-    :param hl.expr.Int32Expression cov_expr: gnomAD median coverage Int32Expression.
-    :param float af_threshold: Remove rows above this AF threshold. Default is 0.001.
-    :param int cov_threshold: Remove rows below this median coverage threshold. Default is 0.
+    :param ac_expr: Allele count (AC) Int32Expression.
+    :param af_expr: Allele frequency (AF) Float64Expression.
+    :param filters_expr: Filters SetExpression.
+    :param cov_expr: gnomAD median coverage Int32Expression.
+    :param af_threshold: AF threshold used for filtering variants in combination with `filter_to_rare`. Default is 0.001.
+    :param cov_threshold: Remove rows at or below this median coverage threshold. Default is 0.
+    :param filter_to_rare: Whether to filter to keep rare variants only.
+        If True, only variants with AF < `af_threshold` will be kept.
+        If False, only variants with AF >= `af_threshold` will be kept.
+        Default is True.
     :return: Boolean expression used to filter variants.
     """
+    af_filter_expr = (
+        (af_expr < af_threshold) if filter_to_rare else (af_expr >= af_threshold)
+    )
     return (
         (ac_expr > 0)
-        & (af_expr < af_threshold)
+        & (af_filter_expr)
         & (hl.len(filters_expr) == 0)
         & (cov_expr > cov_threshold)
     )
