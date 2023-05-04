@@ -100,7 +100,14 @@ def prepare_amino_acid_ht(
     )
 
     logger.info("Checking LOFTEE LoF information...")
-    loftee_lof_agg = context_ht.aggregate(hl.agg.counter(context_ht.lof))
+    loftee_lof_agg_path = f"{TEMP_PATH_WITH_FAST_DEL}/lof_agg.he"
+    if not overwrite_temp and file_exists(loftee_lof_agg_path):
+        loftee_lof_agg = hl.eval(hl.experimental.read_expression(loftee_lof_agg_path))
+    else:
+        loftee_lof_agg = context_ht.aggregate(hl.agg.counter(context_ht.lof))
+        hl.experimental.write_expression(
+            hl.literal(loftee_lof_agg), loftee_lof_agg_path
+        )
     logger.info("LOFTEE aggregation: %s", loftee_lof_agg)
 
     logger.info("Filtering to LOFTEE HC pLoF without flags...")
