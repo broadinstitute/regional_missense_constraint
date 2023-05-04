@@ -201,7 +201,7 @@ def prepare_pop_path_ht(
         and the population/pathogenic variant Table.
         Default is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
-    :param adj_freq_index: Index of frequency array that contains frequency information calculated on
+    :param adj_freq_index: Index of array that contains allele frequency information calculated on
         high quality (adj) genotypes across all genetic ancestry groups. Default is 0.
     :param cov_threshold: Coverage threshold used to filter context Table. Default is 0.
     :return: None; function writes Table to resource path.
