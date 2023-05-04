@@ -141,9 +141,7 @@ def prepare_amino_acid_ht(
         overwrite=overwrite_temp,
     )
 
-    logger.info(
-        "Getting observed to expected ratio, rekeying Table, and writing to output path..."
-    )
+    logger.info("Getting observed to expected ratio and rekeying Table...")
     # Note that `get_oe_annotation` is pulling the missense OE ratio
     context_ht = get_oe_annotation(context_ht, freeze)
     context_ht = context_ht.key_by("locus", "alleles", "transcript")
