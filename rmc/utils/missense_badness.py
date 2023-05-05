@@ -66,7 +66,7 @@ def prepare_amino_acid_ht(
     :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
-    :param loftee_hc_str: String indicating that LOFTEE a loss-of-function variant is predcited to cause
+    :param loftee_hc_str: String indicating that a variant is predicted to cause loss-of-function with high confidence by LOFTEE.
     :return: None; writes amino acid Table(s) to resource path(s).
     """
     if use_test_transcripts and do_k_fold_training:
