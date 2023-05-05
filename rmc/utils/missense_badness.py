@@ -14,7 +14,6 @@ from rmc.resources.rmc import CURRENT_FREEZE, amino_acids_oe_path, misbad_path
 from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
     annotate_and_filter_codons,
-    filter_context_to_transcript_cds,
     filter_context_using_gnomad,
     process_context_ht,
 )
