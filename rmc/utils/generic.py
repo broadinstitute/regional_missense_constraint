@@ -35,7 +35,6 @@ from rmc.resources.reference_data import (
     haplo_genes_path,
     ndd_de_novo,
     ndd_de_novo_2020_tsv_path,
-    transcript_cds,
     triplo_genes_path,
 )
 from rmc.resources.resource_utils import MISSENSE
