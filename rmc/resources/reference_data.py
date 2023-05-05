@@ -86,7 +86,7 @@ def training_transcripts_path(fold: int = None, is_val: bool = False) -> str:
     """
     if is_val and fold is None:
         raise DataException("Fold number must be specified for validation transcripts!")
-    if fold not in range(1, FOLD_K + 1):
+    if fold is not None and fold not in range(1, FOLD_K + 1):
         raise DataException(
             f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
         )

@@ -14,7 +14,6 @@ from rmc.resources.rmc import CURRENT_FREEZE, amino_acids_oe_path, misbad_path
 from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
     annotate_and_filter_codons,
-    filter_context_to_transcript_cds,
     filter_context_using_gnomad,
     process_context_ht,
 )
@@ -66,7 +65,7 @@ def prepare_amino_acid_ht(
     :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
-    :param loftee_hc_str: String indicating that LOFTEE a loss-of-function variant is predcited to cause
+    :param loftee_hc_str: String indicating that a variant is predicted to cause loss-of-function with high confidence by LOFTEE.
     :return: None; writes amino acid Table(s) to resource path(s).
     """
     if use_test_transcripts and do_k_fold_training:
@@ -100,7 +99,14 @@ def prepare_amino_acid_ht(
     )
 
     logger.info("Checking LOFTEE LoF information...")
-    loftee_lof_agg = context_ht.aggregate(hl.agg.counter(context_ht.lof))
+    loftee_lof_agg_path = f"{TEMP_PATH_WITH_FAST_DEL}/lof_agg.he"
+    if not overwrite_temp and file_exists(loftee_lof_agg_path):
+        loftee_lof_agg = hl.eval(hl.experimental.read_expression(loftee_lof_agg_path))
+    else:
+        loftee_lof_agg = context_ht.aggregate(hl.agg.counter(context_ht.lof))
+        hl.experimental.write_expression(
+            hl.literal(loftee_lof_agg), loftee_lof_agg_path
+        )
     logger.info("LOFTEE aggregation: %s", loftee_lof_agg)
 
     logger.info("Filtering to LOFTEE HC pLoF without flags...")
@@ -134,9 +140,7 @@ def prepare_amino_acid_ht(
         overwrite=overwrite_temp,
     )
 
-    logger.info(
-        "Getting observed to expected ratio, rekeying Table, and writing to output path..."
-    )
+    logger.info("Getting observed to expected ratio and rekeying Table...")
     # Note that `get_oe_annotation` is pulling the missense OE ratio
     context_ht = get_oe_annotation(context_ht, freeze)
     context_ht = context_ht.key_by("locus", "alleles", "transcript")
@@ -166,7 +170,9 @@ def prepare_amino_acid_ht(
             if use_test_transcripts
             else training_transcripts_path()
         )
-        context_ht = filter_context_to_transcript_cds(context_ht, filter_transcripts)
+        context_ht = context_ht.filter(
+            filter_transcripts.contains(context_ht.transcript)
+        )
         context_ht.write(
             amino_acids_oe_path(is_test=use_test_transcripts, freeze=freeze),
             overwrite=overwrite_output,
@@ -182,8 +188,8 @@ def prepare_amino_acid_ht(
                 filter_transcripts = hl.experimental.read_expression(
                     training_transcripts_path(fold=i, is_val=is_val)
                 )
-                context_ht = filter_context_to_transcript_cds(
-                    context_ht, filter_transcripts
+                context_ht = context_ht.filter(
+                    filter_transcripts.contains(context_ht.transcript)
                 )
                 context_ht.write(
                     amino_acids_oe_path(
@@ -316,11 +322,12 @@ def calculate_misbad(
     if use_test_transcripts and do_k_fold_training:
         raise DataException("Cannot generate k-fold models with test transcripts!")
 
+    transcript_type = "test" if use_test_transcripts else "train"
+
     if use_test_transcripts or not do_k_fold_training:
         if not file_exists(
             amino_acids_oe_path(is_test=use_test_transcripts, freeze=freeze)
         ):
-            transcript_type = "test" if use_test_transcripts else "training"
             raise DataException(
                 "Table with all amino acid substitutions and missense OE "
                 f"in {transcript_type} transcripts doesn't exist!"
@@ -390,9 +397,14 @@ def calculate_misbad(
         ht = high_ht.join(low_ht, how="outer")
         ht = ht.transmute(mut_type=hl.coalesce(ht.mut_type, ht.mut_type_1))
         mb_ht = ht.group_by("ref", "alt").aggregate(
+            high_obs=hl.agg.sum(ht.high_obs),
+            high_pos=hl.agg.sum(ht.high_pos),
+            low_obs=hl.agg.sum(ht.low_obs),
+            low_pos=hl.agg.sum(ht.low_pos),
+        )
+        mb_ht = mb_ht.annotate(
             high_low=(
-                (hl.agg.sum(ht.high_obs) / hl.agg.sum(ht.high_pos))
-                / (hl.agg.sum(ht.low_obs) / hl.agg.sum(ht.low_pos))
+                (mb_ht.high_obs / mb_ht.high_pos) / (mb_ht.low_obs / mb_ht.low_pos)
             )
         )
         mb_ht = mb_ht.annotate(mut_type=variant_csq_expr(mb_ht.ref, mb_ht.alt))
