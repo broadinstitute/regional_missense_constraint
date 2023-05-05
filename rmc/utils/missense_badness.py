@@ -171,7 +171,9 @@ def prepare_amino_acid_ht(
             if use_test_transcripts
             else training_transcripts_path()
         )
-        context_ht = filter_context_to_transcript_cds(context_ht, filter_transcripts)
+        context_ht = context_ht.filter(
+            filter_transcripts.contains(context_ht.transcript)
+        )
         context_ht.write(
             amino_acids_oe_path(is_test=use_test_transcripts, freeze=freeze),
             overwrite=overwrite_output,
@@ -187,8 +189,8 @@ def prepare_amino_acid_ht(
                 filter_transcripts = hl.experimental.read_expression(
                     training_transcripts_path(fold=i, is_val=is_val)
                 )
-                context_ht = filter_context_to_transcript_cds(
-                    context_ht, filter_transcripts
+                context_ht = context_ht.filter(
+                    filter_transcripts.contains(context_ht.transcript)
                 )
                 context_ht.write(
                     amino_acids_oe_path(
