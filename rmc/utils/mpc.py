@@ -10,6 +10,7 @@ import statsmodels.api as sm
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from patsy import dmatrices
+from itertools import combinations
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.reference_data import (
@@ -320,8 +321,7 @@ def prepare_pop_path_ht(
 
 
 def run_regressions(
-    variables: List[str] = ["oe", "misbad", "polyphen"],
-    additional_variables: List[str] = ["blosum", "grantham"],
+    variables: List[str] = ["oe", "misbad", "polyphen", "blosum", "grantham"],
     overwrite: bool = True,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
@@ -343,9 +343,7 @@ def run_regressions(
     smaller n_less values and fitted scores will lead to higher MPC scores.
 
     :param List[str] variables: Variables to include in all regressions (single, joint).
-        Default is ["oe", "misbad", "polyphen"].
-    :param List[str] additional_variables: Additional variables to include in single variable regressions only.
-        Default is ["blosum", "grantham"].
+        Default is ["oe", "misbad", "polyphen", "blosum", "grantham"].
     :param bool overwrite: Whether to overwrite gnomAD fitted score table if it already exists. Default is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: None; function writes Table with gnomAD fitted scores
@@ -405,8 +403,7 @@ def run_regressions(
     single_var_res = {}
     single_var_aic = []
     single_var_X = []
-    all_var = variables + additional_variables
-    for var in all_var:
+    for var in variables:
         logger.info("Running %s regression...", var)
         # Create design matrices
         formula = f"pop_v_path ~ {var}"
@@ -418,7 +415,7 @@ def run_regressions(
     # Find lowest AIC for single variable regressions and corresponding model
     min_single_aic = min(single_var_aic)
     single_var_idx = single_var_aic.index(min_single_aic)
-    min_single_aic_var = all_var[single_var_idx]
+    min_single_aic_var = variables[single_var_idx]
     min_single_X = single_var_X[single_var_idx]
     if single_var_aic.count(min_single_aic) > 1:
         logger.warning(
