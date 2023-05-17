@@ -410,7 +410,7 @@ def run_regressions(
         X, model = _run_glm(formula)
         single_var_X.append(X)
         single_var_aic.append(model.aic)
-        single_var_res[var] = model.params
+        single_var_res[var] = model
 
     # Find lowest AIC for single variable regressions and corresponding model
     min_single_aic = min(single_var_aic)
@@ -458,7 +458,7 @@ def run_regressions(
             "Single variable regression using %s had the lowest AIC", min_single_aic_var
         )
         logger.info("Coefficients: %s", single_var_res[min_single_aic_var])
-        model = single_var_res
+        model = single_var_res[min_single_aic_var]
         X = min_single_X
     elif min_aic == add_model.aic:
         logger.info(
