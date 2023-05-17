@@ -429,20 +429,57 @@ def run_regressions(
         min_single_aic_var,
     )
 
+    # List possible variable combinations for Joint Regression
+    comb_var = []
+    for k in range(2,6):
+    	comb_var += [x for x in combinations(variables,k)]
+
     logger.info("Running joint (additive interactions only) regression...")
-    add_formula = f"pop_v_path ~ {' + '.join(variables)}"
-    add_X, add_model = _run_glm(add_formula)
+    add_model_res = {}
+	add_model_aic = []
+	add_X = []
+	for var in comb_var:
+		logger.info("Running joint (additive interactions) regression for %s...", var)
+		formula = f"pop_v_path ~ {' + '.join(var)}"
+		X, model = _run_glm(formula)
+		add_X.append(X)
+		add_model_aic.append(model.aic)
+		add_model_res[var] = model
+
+	# Find lowest AIC for multiple variable (additive interactions only) regression and
+	# corresponding model
+	min_add_aic = min(add_model_aic)
+	min_add_idx = add_model_aic.index(min_add_aic)
+	min_add_aic_var = comb_var[min_add_idx]
+	min_add_X = add_X[min_add_idx]
+	min_add_formula = f"pop_v_path ~ {' + '.join(min_add_aic_var)}"
 
     logger.info("Running joint regression with all interactions...")
-    mult_formula = f"pop_v_path ~ {' * '.join(variables)}"
-    mult_X, mult_model = _run_glm(mult_formula)
+    mult_model_res = {}
+    mult_model_aic = []
+    mult_X = []
+    for var in comb_var:
+    	logger.info("Running joint (multiplicative interactions) regression for %s...", var)
+    	formula = f"pop_v_path ~ {' * '.join(var)}"
+    	X, model = _run_glm(formula)
+    	mult_X.append(X)
+    	mult_model_aic.append(model.aic)
+    	mult_model_res[var] = model
+
+    # Find lowest AIC for multiple variable (multiplicative interactions) regression and
+	# corresponding model
+	min_mult_aic = min(mult_model_aic)
+	min_mult_idx = mult_model_aic.index(min_mult_aic)
+	min_mult_aic_var = comb_var[min_mult_idx]
+	min_mult_X = mult_X[min_mult_idx]
+	min_mult_formula = f"pop_v_path ~ {' * '.join(min_mult_aic_var)}"
 
     logger.info("Running joint regression with specific interactions...")
     # Currently hardcoded to be formula from ExAC
     spec_formula = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
     spec_X, spec_model = _run_glm(spec_formula)
 
-    all_model_aic = single_var_aic + [add_model.aic, mult_model.aic, spec_model.aic]
+    all_model_aic = [min_single_aic, min_add_aic, min_mult_aic, spec_model.aic]
     min_aic = min(all_model_aic)
     logger.info("Lowest model AIC: %f", min_aic)
     if all_model_aic.count(min_aic) > 1:
@@ -460,22 +497,22 @@ def run_regressions(
         logger.info("Coefficients: %s", single_var_res[min_single_aic_var])
         model = single_var_res[min_single_aic_var]
         X = min_single_X
-    elif min_aic == add_model.aic:
+    elif min_aic == min_add_aic:
         logger.info(
             "Joint regression using additive interactions (%s) had the lowest AIC",
-            add_formula,
+            min_add_formula,
         )
-        logger.info("Coefficients: %s", add_model.params)
-        model = add_model
-        X = add_X
-    elif min_aic == mult_model.aic:
+        logger.info("Coefficients: %s", add_model_res[min_add_aic_var].params)
+        model = add_model_res[min_add_aic_var]
+        X = min_add_X
+    elif min_aic == min_mult_aic:
         logger.info(
-            "Joint regression using all interactions (%s) had the lowest AIC",
-            mult_formula,
+            "Joint regression using multiplicative interactions (%s) had the lowest AIC",
+            min_mult_formula,
         )
-        logger.info("Coefficients: %s", mult_model.params)
-        model = mult_model
-        X = mult_X
+        logger.info("Coefficients: %s", mult_model_res[min_mult_aic_var].params)
+        model = mult_model_res[min_mult_aic_var]
+        X = min_mult_X
     else:
         logger.info(
             "Joint regression using specific interactions (%s) had the lowest AIC",
