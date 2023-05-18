@@ -442,13 +442,13 @@ def run_regressions(
     add_model_res = {}
     add_model_aic = []
     add_X = []
-    for var in comb_var:
-        logger.info("Running joint (additive interactions) regression for %s...", var)
-        formula = f"pop_v_path ~ {' + '.join(var)}"
+    for var_a in comb_var:
+        logger.info("Running joint (additive interactions) regression for %s...", var_a)
+        formula = f"pop_v_path ~ {' + '.join(var_a)}"
         X, model = _run_glm(formula)
         add_X.append(X)
         add_model_aic.append(model.aic)
-        add_model_res[var] = model
+        add_model_res[var_a] = model
 
     # Find lowest AIC for multiple variable (additive interactions only) regression and
     # corresponding model
@@ -462,13 +462,13 @@ def run_regressions(
     mult_model_res = {}
     mult_model_aic = []
     mult_X = []
-    for var in comb_var:
-        logger.info("Running joint (multiplicative interactions) regression for %s...", var)
-        formula = f"pop_v_path ~ {' * '.join(var)}"
+    for var_m in comb_var:
+        logger.info("Running joint (multiplicative interactions) regression for %s...", var_m)
+        formula = f"pop_v_path ~ {' * '.join(var_m)}"
         X, model = _run_glm(formula)
         mult_X.append(X)
         mult_model_aic.append(model.aic)
-        mult_model_res[var] = model
+        mult_model_res[var_m] = model
 
     # Find lowest AIC for multiple variable (multiplicative interactions) regression and
     # corresponding model
