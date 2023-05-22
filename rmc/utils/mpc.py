@@ -433,16 +433,15 @@ def run_regressions(
         min_single_aic_var,
     )
 
-    # List possible variable combinations for Joint Regression
-    comb_var = []
-    for k in range(2,6):
-        comb_var += [x for x in combinations(all_var,k)]
+    # List possible variable combinations for joint regression
+    var_combs = []
+    for k in range(2, len(all_var) + 1):
+        var_combs += [x for x in combinations(all_var, k)]
 
-    logger.info("Running joint (additive interactions only) regression...")
     add_model_res = {}
     add_model_aic = []
-    add_X = []
-    for var_a in comb_var:
+    add_model_X = []
+    for var_comb in var_combs:
         logger.info("Running joint (additive interactions) regression for %s...", var_a)
         formula = f"pop_v_path ~ {' + '.join(var_a)}"
         X, model = _run_glm(formula)
@@ -463,7 +462,9 @@ def run_regressions(
     mult_model_aic = []
     mult_X = []
     for var_m in comb_var:
-        logger.info("Running joint (multiplicative interactions) regression for %s...", var_m)
+        logger.info(
+            "Running joint (multiplicative interactions) regression for %s...", var_m
+        )
         formula = f"pop_v_path ~ {' * '.join(var_m)}"
         X, model = _run_glm(formula)
         mult_X.append(X)
@@ -498,7 +499,7 @@ def run_regressions(
         logger.info(
             "Single variable regression using %s had the lowest AIC", min_single_aic_var
         )
-        logger.info("Coefficients: %s", single_var_res[min_single_aic_var])
+        logger.info("Coefficients: %s", single_var_res[min_single_aic_var].params)
         model = single_var_res[min_single_aic_var]
         X = min_single_X
     elif min_aic == min_add_aic:
