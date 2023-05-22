@@ -343,7 +343,7 @@ def run_regressions(
     Note that higher MPC scores predict increased missense deleteriousness, and
     smaller n_less values and fitted scores will lead to higher MPC scores.
 
-    :param List[str] variables: Primary Variables to include in all regressions (single, joint).
+    :param List[str] variables: Primary variables to include in all regressions (single, joint).
         Default is ["oe", "misbad", "polyphen"].
     :param List[str] additional_variables: Additional variables to include in all regressions (single, joint).
         Default is ["blosum", "grantham"].
