@@ -113,7 +113,14 @@ def prepare_amino_acid_ht(
     context_ht = context_ht.filter(
         hl.is_missing(context_ht.lof) | (context_ht.lof == loftee_hc_str)
     )
-    hc_lof_flag_agg = context_ht.aggregate(hl.agg.counter(context_ht.lof_flags))
+    hc_lof_flag_agg_path = f"{TEMP_PATH_WITH_FAST_DEL}/lof_flag_agg.he"
+    if not overwrite_temp and file_exists(hc_lof_flag_agg_path):
+        hc_lof_flag_agg = hl.eval(hl.experimental.read_expression(hc_lof_flag_agg_path))
+    else:
+        hc_lof_flag_agg = context_ht.aggregate(hl.agg.counter(context_ht.lof_flags))
+        hl.experimental.write_expression(
+            hl.literal(hc_lof_flag_agg), hc_lof_flag_agg_path
+        )
     logger.info("Flag counter for LOFTEE HC pLoF: %s", hc_lof_flag_agg)
     context_ht = context_ht.filter(hl.is_missing(context_ht.lof_flags))
 
