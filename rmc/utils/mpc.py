@@ -489,7 +489,7 @@ def run_regressions(
     # corresponding model
     min_mult_aic = min(mult_model_aic)
     min_mult_idx = mult_model_aic.index(min_mult_aic)
-    min_mult_aic_var = comb_var[min_mult_idx]
+    min_mult_aic_var = var_combs[min_mult_idx]
     min_mult_X = mult_model_X[min_mult_idx]
     min_mult_formula = f"pop_v_path ~ {' * '.join(min_mult_aic_var)}"
 
