@@ -442,7 +442,9 @@ def run_regressions(
     add_model_aic = []
     add_model_X = []
     for var_comb_add in var_combs:
-        logger.info("Running joint (additive interactions) regression for %s...", var_comb_add)
+        logger.info(
+            "Running joint (additive interactions) regression for %s...", var_comb_add
+        )
         formula = f"pop_v_path ~ {' + '.join(var_comb_add)}"
         X, model = _run_glm(formula)
         add_model_X.append(X)
@@ -474,7 +476,8 @@ def run_regressions(
     mult_model_X = []
     for var_comb_mult in var_combs:
         logger.info(
-            "Running joint (multiplicative interactions) regression for %s...", var_comb_mult
+            "Running joint (multiplicative interactions) regression for %s...",
+            var_comb_mult,
         )
         formula = f"pop_v_path ~ {' * '.join(var_comb_mult)}"
         X, model = _run_glm(formula)
