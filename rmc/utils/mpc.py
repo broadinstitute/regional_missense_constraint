@@ -372,6 +372,7 @@ def run_regressions(
         if df[column].dtype == "Float64":
             df[column] = df[column].astype(np.float64)
 
+    # Helper functions for running regressions
     def _run_glm(
         formula: str,
     ) -> Tuple[
@@ -401,109 +402,95 @@ def run_regressions(
         logger.info("AIC: %i", model.aic)
         return (X, model)
 
-    logger.info("Run single variable regressions...")
-    # E.g., mod.misbad3 <- glm(pop_v_path ~ mis_badness3, data=cleaned_joint_exac_clinvar.scores, family=binomial)
-    single_var_res = {}
-    single_var_aic = []
-    single_var_X = []
-    all_var = variables + additional_variables
-    for var in all_var:
-        logger.info("Running %s regression...", var)
-        # Create design matrices
-        formula = f"pop_v_path ~ {var}"
-        X, model = _run_glm(formula)
-        single_var_X.append(X)
-        single_var_aic.append(model.aic)
-        single_var_res[var] = model
+    def _run_all_glm(
+        Vars: List[Union[str, Tuple[str, ...]]],
+        Type: str = "single",
+    ) -> Tuple[
+        float,
+        pd.core.frame.DataFrame,
+        Dict[
+            Union[str, Tuple[str, ...]],
+            statsmodels.genmod.generalized_linear_model.GLMResultsWrapper,
+        ],
+    ]:
+        """
+        Helper function for running various logistic regressions on different variable combinations
 
-    # Find lowest AIC for single variable regressions and corresponding model
-    min_single_aic = min(single_var_aic)
-    single_var_idx = single_var_aic.index(min_single_aic)
-    min_single_aic_var = all_var[single_var_idx]
-    min_single_X = single_var_X[single_var_idx]
-    if single_var_aic.count(min_single_aic) > 1:
-        logger.warning(
-            """
-            There is a tie for minimum AIC.
-            This function will use the first variable it finds by default!
-            """
+        :param List[str] Vars: Either a list of variables or a tuple of different variable combinations
+        :param str Type: Specify the type of regression. One of "single", "additive" or "multiplicative". Default is "single"
+        :return: List of logistic regression results for variable combination with lowest AIC
+        """
+        # Iterate over variable combinations
+        all_model_res = {}
+        all_model_X = []
+        all_model_aic = []
+        for var in Vars:
+            if Type == "single":
+                logger.info("Running single variable regression for %s...", var)
+                formula = f"pop_v_path ~ {var}"
+            elif Type == "additive":
+                logger.info(
+                    "Running joint (additive interactions) regression for %s...", var
+                )
+                formula = f"pop_v_path ~ {' + '.join(var)}"
+            else:
+                logger.info(
+                    "Running joint (multiplicative interactions) regression for %s...",
+                    var,
+                )
+                formula = f"pop_v_path ~ {' * '.join(var)}"
+            X, model = _run_glm(formula)
+            all_model_X.append(X)
+            all_model_aic.append(model.aic)
+            all_model_res[var] = model
+
+        # Find model with lowest AIC
+        min_model_aic = min(all_model_aic)
+        min_model_idx = all_model_aic.index(min_model_aic)
+        min_model_aic_var = Vars[min_model_idx]
+        min_model_X = all_model_X[min_model_idx]
+        min_model_res = {min_model_aic_var: all_model_res[min_model_aic_var]}
+        if all_model_aic.count(min_model_aic) > 1:
+            logger.warning(
+                """
+                There is a tie for minimum AIC.
+                This function will use the first variable it finds by default!
+                """
+            )
+        logger.info(
+            "Model with smallest AIC for %s regressions used %s",
+            Type,
+            min_model_aic_var,
         )
-    logger.info(
-        "Model with smallest AIC for single variable regressions used %s",
-        min_single_aic_var,
-    )
+
+        return (min_model_aic, min_model_X, min_model_res)
+
+    # Single variable regressions
+    # Find lowest AIC for single variable regressions and corresponding model
+    # E.g., mod.misbad3 <- glm(pop_v_path ~ mis_badness3, data=cleaned_joint_exac_clinvar.scores, family=binomial)
+    all_var = variables + additional_variables
+    min_single_aic, min_single_X, min_single_res = _run_all_glm(all_var, Type="single")
+    min_single_aic_var = min_single_res.copy().popitem()[0]
 
     # List possible variable combinations for joint regression
     var_combs = []
     for k in range(2, len(all_var) + 1):
         var_combs += [x for x in combinations(all_var, k)]
 
-    add_model_res = {}
-    add_model_aic = []
-    add_model_X = []
-    for var_comb_add in var_combs:
-        logger.info(
-            "Running joint (additive interactions) regression for %s...", var_comb_add
-        )
-        formula = f"pop_v_path ~ {' + '.join(var_comb_add)}"
-        X, model = _run_glm(formula)
-        add_model_X.append(X)
-        add_model_aic.append(model.aic)
-        add_model_res[var_comb_add] = model
-
+    # Joint regressions
     # Find lowest AIC for multiple variable (additive interactions only) regression and
     # corresponding model
-    min_add_aic = min(add_model_aic)
-    min_add_idx = add_model_aic.index(min_add_aic)
-    min_add_aic_var = var_combs[min_add_idx]
-    min_add_X = add_model_X[min_add_idx]
+    min_add_aic, min_add_X, min_add_res = _run_all_glm(var_combs, Type="additive")
+    min_add_aic_var = min_add_res.copy().popitem()[0]
     min_add_formula = f"pop_v_path ~ {' + '.join(min_add_aic_var)}"
-
-    if add_model_aic.count(min_add_aic) > 1:
-        logger.warning(
-            """
-            There is a tie for minimum AIC.
-            This function will use the first variable combination it finds by default!
-            """
-        )
-    logger.info(
-        "Model with smallest AIC for joint (additive interactions) regressions used %s",
-        min_add_aic_var,
-    )
-
-    mult_model_res = {}
-    mult_model_aic = []
-    mult_model_X = []
-    for var_comb_mult in var_combs:
-        logger.info(
-            "Running joint (multiplicative interactions) regression for %s...",
-            var_comb_mult,
-        )
-        formula = f"pop_v_path ~ {' * '.join(var_comb_mult)}"
-        X, model = _run_glm(formula)
-        mult_model_X.append(X)
-        mult_model_aic.append(model.aic)
-        mult_model_res[var_comb_mult] = model
 
     # Find lowest AIC for multiple variable (multiplicative interactions) regression and
     # corresponding model
-    min_mult_aic = min(mult_model_aic)
-    min_mult_idx = mult_model_aic.index(min_mult_aic)
-    min_mult_aic_var = var_combs[min_mult_idx]
-    min_mult_X = mult_model_X[min_mult_idx]
-    min_mult_formula = f"pop_v_path ~ {' * '.join(min_mult_aic_var)}"
-
-    if mult_model_aic.count(min_mult_aic) > 1:
-        logger.warning(
-            """
-            There is a tie for minimum AIC.
-            This function will use the first variable combination it finds by default!
-            """
-        )
-    logger.info(
-        "Model with smallest AIC for joint (multiplicative interactions) regressions used %s",
-        min_mult_aic_var,
+    min_mult_aic, min_mult_X, min_mult_res = _run_all_glm(
+        var_combs, Type="multiplicative"
     )
+    min_mult_aic_var = min_mult_res.copy().popitem()[0]
+    min_mult_formula = f"pop_v_path ~ {' * '.join(min_mult_aic_var)}"
 
     logger.info("Running joint regression with specific interactions...")
     # Currently hardcoded to be formula from ExAC
@@ -525,24 +512,24 @@ def run_regressions(
         logger.info(
             "Single variable regression using %s had the lowest AIC", min_single_aic_var
         )
-        logger.info("Coefficients: %s", single_var_res[min_single_aic_var].params)
-        model = single_var_res[min_single_aic_var]
+        logger.info("Coefficients: %s", min_single_res[min_single_aic_var].params)
+        model = min_single_res[min_single_aic_var]
         X = min_single_X
     elif min_aic == min_add_aic:
         logger.info(
             "Joint regression using additive interactions (%s) had the lowest AIC",
             min_add_formula,
         )
-        logger.info("Coefficients: %s", add_model_res[min_add_aic_var].params)
-        model = add_model_res[min_add_aic_var]
+        logger.info("Coefficients: %s", min_add_res[min_add_aic_var].params)
+        model = min_add_res[min_add_aic_var]
         X = min_add_X
     elif min_aic == min_mult_aic:
         logger.info(
             "Joint regression using multiplicative interactions (%s) had the lowest AIC",
             min_mult_formula,
         )
-        logger.info("Coefficients: %s", mult_model_res[min_mult_aic_var].params)
-        model = mult_model_res[min_mult_aic_var]
+        logger.info("Coefficients: %s", min_mult_res[min_mult_aic_var].params)
+        model = min_mult_res[min_mult_aic_var]
         X = min_mult_X
     else:
         logger.info(
