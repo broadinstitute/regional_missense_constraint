@@ -175,6 +175,7 @@ FINAL_ANNOTATIONS = {
 Set of annotations to keep from individual break search round result HTs when finalizing release HT.
 """
 
+
 # NOTE: Removed all references to rescue search pathway,
 # but freeze 2 and 3 temp results were written with code that
 # differentiated between "initial" and "rescue" search
@@ -466,6 +467,7 @@ Table containing all transcripts with evidence of regional missense constraint.
 Contains same information as `rmc_results` but has different formatting for gnomAD browser.
 """
 
+
 ####################################################################################
 ## Missense badness related resources
 ####################################################################################
@@ -512,7 +514,7 @@ def amino_acids_oe_path(
         )
     transcript_type = "test" if is_test else ("val" if is_val else "train")
     fold_name = f"_fold{fold}" if fold is not None else ""
-    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/amino_acid_oe_{transcript_type}{fold_name}.ht"
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/{transcript_type}{fold_name}/amino_acid_oe.ht"
 
 
 def misbad_path(
@@ -556,7 +558,7 @@ def misbad_path(
         )
     transcript_type = "test" if is_test else ("val" if is_val else "train")
     fold_name = f"_fold{fold}" if fold is not None else ""
-    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/missense_badness_{transcript_type}{fold_name}.ht"
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/{transcript_type}{fold_name}/missense_badness.ht"
 
 
 ####################################################################################
