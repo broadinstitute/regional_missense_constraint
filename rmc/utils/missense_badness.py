@@ -401,43 +401,36 @@ def calculate_misbad(
             low_obs=low_ht.obs,
             low_pos=low_ht.possible,
         )
-        ht = high_ht.join(low_ht, how="outer")
-        ht = ht.transmute(mut_type=hl.coalesce(ht.mut_type, ht.mut_type_1))
-        mb_ht = ht.group_by("ref", "alt").aggregate(
-            high_obs=hl.agg.sum(ht.high_obs),
-            high_pos=hl.agg.sum(ht.high_pos),
-            low_obs=hl.agg.sum(ht.low_obs),
-            low_pos=hl.agg.sum(ht.low_pos),
-        )
+        mb_ht = high_ht.join(low_ht, how="outer")
+        mb_ht = mb_ht.transmute(mut_type=hl.coalesce(ht.mut_type, ht.mut_type_1))
         mb_ht = mb_ht.annotate(
             high_low=(
                 (mb_ht.high_obs / mb_ht.high_pos) / (mb_ht.low_obs / mb_ht.low_pos)
             )
         )
-        mb_ht = mb_ht.annotate(mut_type=variant_csq_expr(mb_ht.ref, mb_ht.alt))
 
-        logger.info("Calculating synonymous rates...")
-        syn_obs_high = get_total_csq_count(high_ht, csq="syn", count_field="high_obs")
-        syn_pos_high = get_total_csq_count(high_ht, csq="syn", count_field="high_pos")
-        syn_obs_low = get_total_csq_count(low_ht, csq="syn", count_field="low_obs")
-        syn_pos_low = get_total_csq_count(low_ht, csq="syn", count_field="low_pos")
-        syn_rate = (syn_obs_high / syn_pos_high) / (syn_obs_low / syn_pos_low)
-        logger.info("Synonymous rate: %f", syn_rate)
-
-        logger.info("Calculating nonsense rates...")
-        non_obs_high = get_total_csq_count(high_ht, csq="non", count_field="high_obs")
-        non_pos_high = get_total_csq_count(high_ht, csq="non", count_field="high_pos")
-        non_obs_low = get_total_csq_count(low_ht, csq="non", count_field="low_obs")
-        non_pos_low = get_total_csq_count(low_ht, csq="non", count_field="low_pos")
-        non_rate = (non_obs_high / non_pos_high) / (non_obs_low / non_pos_low)
-        logger.info("Nonsense rate: %f", non_rate)
+        total_rates = {}
+        for mut_type in ["syn", "non"]:
+            logger.info("Calculating %s rates...", mut_type)
+            total_rates[mut_type] = (
+                get_total_csq_count(mb_ht, csq=mut_type, count_field="high_obs")
+                / get_total_csq_count(mb_ht, csq=mut_type, count_field="high_pos")
+            ) / (
+                get_total_csq_count(mb_ht, csq=mut_type, count_field="low_obs")
+                / get_total_csq_count(mb_ht, csq=mut_type, count_field="low_pos")
+            )
+            logger.info("%s rate: %f", mut_type, total_rates[mut_type])
 
         logger.info("Calculating missense badness...")
         mb_ht = mb_ht.annotate(
             misbad=hl.or_missing(
                 mb_ht.mut_type == "mis",
                 # Cap missense badness at 1
-                hl.min((mb_ht.high_low - syn_rate) / (non_rate - syn_rate), 1),
+                hl.min(
+                    (mb_ht.high_low - total_rates["syn"])
+                    / (total_rates["non"] - total_rates["syn"]),
+                    1,
+                ),
             ),
         )
 
