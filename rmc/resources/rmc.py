@@ -564,41 +564,109 @@ def misbad_path(
 ####################################################################################
 ## MPC related resources
 ####################################################################################
-joint_clinvar_gnomad = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/joint_clinvar_gnomad.ht"
+def joint_clinvar_gnomad_path(
+    is_test: bool = False,
+    fold: int = None,
+    is_val: bool = False,
+    freeze: int = CURRENT_FREEZE,
+) -> str:
+    """
+    Return path to Table containing 'population' and 'pathogenic' variants.
+
+    Table contains common (AF > 0.001) gnomAD variants ('population') and
+    ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes
+    that cause severe disease ('pathogenic') with defined CADD, BLOSUM, Grantham, missense observed/expected ratios,
+    missense badness, and PolyPhen-2 scores.
+
+    Table is input to MPC (missense badness, polyphen-2, and constraint) calculations.
+
+    :param bool is_test: Whether the Table is generated from variants in test transcripts.
+        If False, the Table is generated from variants in training transcripts only.
+        If True, the Table is generated from variants in test transcripts only.
+        Default is False.
+    :param int fold: Fold number in training set to select training transcripts from.
+        If not None, the Table is generated from variants in only validation or training transcripts
+            from the specified fold.
+        If None, the Table is generated from variants in test transcripts or from variants in all
+            training transcripts.
+        Default is None.
+        NOTE that `is_test` must be False if `fold` is not None.
+    :param bool is_val: Whether the Table is generated from variants in validation transcripts.
+        If True, the Table is generated from variants in the validation transcripts
+            from the specified fold of the training set.
+        If False, the Table is generated from variants in test transcripts,
+            from variants in all training transcripts, or from variants in
+            training transcripts from the specified fold of the training set.
+        Default is False.
+        NOTE that `fold` must not be None if `is_val` is True.
+    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
+    :return: Path to Table.
+    """
+    if is_test and fold is not None:
+        raise DataException("Fold number cannot be specified for test set!")
+    if is_val and fold is None:
+        raise DataException("Fold number must be specified for validation set!")
+    if fold is not None and fold not in range(1, FOLD_K + 1):
+        raise DataException(
+            f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
         )
-        for freeze in FREEZES
-    },
-)
-"""
-Table containing 'population' and 'pathogenic' variants.
-
-Table contains common (AF > 0.001) gnomAD variants ('population') and
-ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient genes
-that cause severe disease ('pathogenic') with defined CADD, BLOSUM, Grantham, missense observed/expected ratios,
-missense badness, and PolyPhen-2 scores.
-
-Table is input to MPC (missense badness, polyphen-2, and constraint) calculations.
-"""
+    transcript_type = "test" if is_test else ("val" if is_val else "train")
+    fold_name = f"_fold{fold}" if fold is not None else ""
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/{transcript_type}{fold_name}/joint_clinvar_gnomad.ht"
 
 
-def mpc_model_pkl_path(freeze: int = CURRENT_FREEZE) -> str:
+def mpc_model_pkl_path(
+    is_test: bool = False,
+    fold: int = None,
+    is_val: bool = False,
+    freeze: int = CURRENT_FREEZE,
+) -> str:
     """
     Return path to model (stored as pickle) that contains relationship of MPC variables.
 
     Model created using logistic regression.
 
+    :param bool is_test: Whether the Table is generated from variants in test transcripts.
+        If False, the Table is generated from variants in training transcripts only.
+        If True, the Table is generated from variants in test transcripts only.
+        Default is False.
+    :param int fold: Fold number in training set to select training transcripts from.
+        If not None, the Table is generated from variants in only validation or training transcripts
+            from the specified fold.
+        If None, the Table is generated from variants in test transcripts or from variants in all
+            training transcripts.
+        Default is None.
+        NOTE that `is_test` must be False if `fold` is not None.
+    :param bool is_val: Whether the Table is generated from variants in validation transcripts.
+        If True, the Table is generated from variants in the validation transcripts
+            from the specified fold of the training set.
+        If False, the Table is generated from variants in test transcripts,
+            from variants in all training transcripts, or from variants in
+            training transcripts from the specified fold of the training set.
+        Default is False.
+        NOTE that `fold` must not be None if `is_val` is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
-    :return: Path to model.
+    :return: Path to Table.
     """
-    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/mpc_model.pkl"
+    if is_test and fold is not None:
+        raise DataException("Fold number cannot be specified for test set!")
+    if is_val and fold is None:
+        raise DataException("Fold number must be specified for validation set!")
+    if fold is not None and fold not in range(1, FOLD_K + 1):
+        raise DataException(
+            f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
+        )
+    transcript_type = "test" if is_test else ("val" if is_val else "train")
+    fold_name = f"_fold{fold}" if fold is not None else ""
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/{transcript_type}{fold_name}/mpc_model.pkl"
 
 
 def gnomad_fitted_score_path(
-    is_grouped: bool = False, freeze: int = CURRENT_FREEZE
+    is_grouped: bool = False,
+    is_test: bool = False,
+    fold: int = None,
+    is_val: bool = False,
+    freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
     Return path to fitted scores (from MPC model regression) of common (AF > 0.001) gnomAD variants.
@@ -606,13 +674,40 @@ def gnomad_fitted_score_path(
     Table is input to MPC (missense badness, polyphen-2, and constraint) calculations on other datasets.
 
     :param bool is_grouped: Whether the Table is grouped by score. Default is False.
+    :param bool is_test: Whether the Table is generated from variants in test transcripts.
+        If False, the Table is generated from variants in training transcripts only.
+        If True, the Table is generated from variants in test transcripts only.
+        Default is False.
+    :param int fold: Fold number in training set to select training transcripts from.
+        If not None, the Table is generated from variants in only validation or training transcripts
+            from the specified fold.
+        If None, the Table is generated from variants in test transcripts or from variants in all
+            training transcripts.
+        Default is None.
+        NOTE that `is_test` must be False if `fold` is not None.
+    :param bool is_val: Whether the Table is generated from variants in validation transcripts.
+        If True, the Table is generated from variants in the validation transcripts
+            from the specified fold of the training set.
+        If False, the Table is generated from variants in test transcripts,
+            from variants in all training transcripts, or from variants in
+            training transcripts from the specified fold of the training set.
+        Default is False.
+        NOTE that `fold` must not be None if `is_val` is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to Table.
     """
+    if is_test and fold is not None:
+        raise DataException("Fold number cannot be specified for test set!")
+    if is_val and fold is None:
+        raise DataException("Fold number must be specified for validation set!")
+    if fold is not None and fold not in range(1, FOLD_K + 1):
+        raise DataException(
+            f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
+        )
+    transcript_type = "test" if is_test else ("val" if is_val else "train")
+    fold_name = f"_fold{fold}" if fold is not None else ""
     group = "_group" if is_grouped else ""
-    return (
-        f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/gnomad_fitted_scores{group}.ht"
-    )
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/{transcript_type}{fold_name}/gnomad_fitted_scores{group}.ht"
 
 
 mpc_release = VersionedTableResource(
