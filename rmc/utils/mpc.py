@@ -374,7 +374,7 @@ def run_regressions(
 
     model_types = ["single", "additive", "multiplicative", "spec"]
     # Model type labels for use in logging information
-    model_types_log = {
+    log_model_types = {
         "single": "single variable",
         "additive": "joint (no interactions)",
         "multiplicative": "joint (with interactions)",
@@ -437,7 +437,7 @@ def run_regressions(
         model_aics = []
         model_formulas = []
         formula_interaction_char = "*" if model_type == "multiplicative" else "+"
-        log_model_type = model_types_log[model_type]
+        log_model_type = log_model_types[model_type]
 
         for var_comb in var_combs:
             logger.info("Running %s regression for %s...", log_model_type, var_comb)
