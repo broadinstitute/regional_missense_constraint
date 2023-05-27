@@ -7,7 +7,6 @@ from gnomad.utils.file_utils import file_exists
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.reference_data import (
     FOLD_K,
-    test_transcripts_path,
     training_transcripts_path,
 )
 from rmc.resources.rmc import CURRENT_FREEZE, amino_acids_oe_path, misbad_path
@@ -29,7 +28,6 @@ logger.setLevel(logging.INFO)
 def prepare_amino_acid_ht(
     overwrite_temp: bool,
     overwrite_output: bool,
-    use_test_transcripts: bool = False,
     do_k_fold_training: bool = False,
     freeze: int = CURRENT_FREEZE,
     gnomad_data_type: str = "exomes",
@@ -52,15 +50,10 @@ def prepare_amino_acid_ht(
         If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
         If True, will clear existing output data and write new output data.
         The output Table is the amino acid Table.
-    :param use_test_transcripts: Whether to use test transcripts in calculations.
-        If False, will use training transcripts only.
-        If True, will use test transcripts only.
-        Default is False.
     :param do_k_fold_training: Whether to generate k-fold models with the training transcripts.
         If False, will use all training transcripts in calculation of a single model.
         If True, will calculate k models corresponding to the k-folds of the training transcripts.
         Default is False.
-        NOTE that `use_test_transcripts` must be False if `do_k_fold_training` is True.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
@@ -68,9 +61,6 @@ def prepare_amino_acid_ht(
     :param loftee_hc_str: String indicating that a variant is predicted to cause loss-of-function with high confidence by LOFTEE.
     :return: None; writes amino acid Table(s) to resource path(s).
     """
-    if use_test_transcripts and do_k_fold_training:
-        raise DataException("Cannot generate k-fold models with test transcripts!")
-
     logger.info("Reading in VEP context HT...")
     # NOTE: Keeping all variant types here because need synonymous and nonsense variants to calculate missense badness
     context_ht = process_context_ht(filter_to_missense=False, add_annotations=False)
@@ -182,19 +172,12 @@ def prepare_amino_acid_ht(
         ht = ht.filter(filter_transcripts.contains(ht.transcript))
         ht.write(output_path, overwrite=overwrite_output)
 
-    if use_test_transcripts or not do_k_fold_training:
-        logger.info(
-            "Writing out HT for %s transcripts only...",
-            "test" if use_test_transcripts else "training",
-        )
+    if not do_k_fold_training:
+        logger.info("Writing out HT for training transcripts only...")
         _filter_transcripts(
             ht=context_ht,
-            transcripts_path=test_transcripts_path
-            if use_test_transcripts
-            else training_transcripts_path(),
-            output_path=amino_acids_oe_path(
-                is_test=use_test_transcripts, freeze=freeze
-            ),
+            transcripts_path=training_transcripts_path(),
+            output_path=amino_acids_oe_path(freeze=freeze),
         )
     else:
         logger.info(
@@ -208,7 +191,6 @@ def prepare_amino_acid_ht(
                     ht=context_ht,
                     transcripts_path=training_transcripts_path(fold=i, is_val=is_val),
                     output_path=amino_acids_oe_path(
-                        is_test=use_test_transcripts,
                         fold=i,
                         is_val=is_val,
                         freeze=freeze,
@@ -297,7 +279,6 @@ def calculate_misbad(
     use_exac_oe_cutoffs: bool,
     overwrite_temp: bool,
     overwrite_output: bool,
-    use_test_transcripts: bool = False,
     do_k_fold_training: bool = False,
     oe_threshold: float = 0.6,
     freeze: int = CURRENT_FREEZE,
@@ -317,15 +298,10 @@ def calculate_misbad(
         If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
         If True, will clear existing output data and write new output data.
         The output Table is the missense badness score Table.
-    :param bool use_test_transcripts: Whether to use test transcripts in calculations.
-        If False, will use training transcripts only.
-        If True, will use test transcripts only.
-        Default is False.
     :param bool do_k_fold_training: Whether to generate k-fold models with the training transcripts.
         If False, will use all training transcripts in calculation of a single model.
         If True, will calculate k models corresponding to the k-folds of the training transcripts.
         Default is False.
-        NOTE that `use_test_transcripts` must be False if `do_k_fold_training` is True.
     :param float oe_threshold: OE Threshold used to split Table.
         Rows with OE less or equal to this threshold will be considered "low" OE, and
         rows with OE greater than this threshold will considered "high" OE.
@@ -333,25 +309,16 @@ def calculate_misbad(
     :param int freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: None; writes Table(s) with missense badness scores to resource path(s).
     """
-    if use_test_transcripts and do_k_fold_training:
-        raise DataException("Cannot generate k-fold models with test transcripts!")
-
-    transcript_type = "test" if use_test_transcripts else "train"
-
-    if use_test_transcripts or not do_k_fold_training:
-        if not file_exists(
-            amino_acids_oe_path(is_test=use_test_transcripts, freeze=freeze)
-        ):
+    if not do_k_fold_training:
+        if not file_exists(amino_acids_oe_path(freeze=freeze)):
             raise DataException(
-                "Table with all amino acid substitutions and missense OE "
-                f"in {transcript_type} transcripts doesn't exist!"
+                "Table with all amino acid substitutions and missense OE in training transcripts doesn't exist!"
             )
     else:
         if not all(
             [
                 file_exists(
                     amino_acids_oe_path(
-                        is_test=use_test_transcripts,
                         fold=i,
                         is_val=is_val,
                         freeze=freeze,
@@ -362,8 +329,7 @@ def calculate_misbad(
             ]
         ):
             raise DataException(
-                "Not all k-fold training and validation tables with all amino acid substitutions "
-                "and missense OE exist!"
+                "Not all k-fold training and validation tables with all amino acid substitutions and missense OE exist!"
             )
 
     def _create_misbad_model(ht: hl.Table, mb_path: str, temp_label: str) -> None:
@@ -443,12 +409,10 @@ def calculate_misbad(
 
         mb_ht.write(mb_path, overwrite=overwrite_output)
 
-    if use_test_transcripts or not do_k_fold_training:
+    if not do_k_fold_training:
         _create_misbad_model(
-            ht=hl.read_table(
-                amino_acids_oe_path(is_test=use_test_transcripts, freeze=freeze)
-            ),
-            mb_path=misbad_path(is_test=use_test_transcripts, freeze=freeze),
+            ht=hl.read_table(amino_acids_oe_path(freeze=freeze)),
+            mb_path=misbad_path(freeze=freeze),
             temp_label=f"_{transcript_type}",
         )
     else:
@@ -459,14 +423,12 @@ def calculate_misbad(
                 _create_misbad_model(
                     ht=hl.read_table(
                         amino_acids_oe_path(
-                            is_test=use_test_transcripts,
                             fold=i,
                             is_val=is_val,
                             freeze=freeze,
                         )
                     ),
                     mb_path=misbad_path(
-                        is_test=use_test_transcripts,
                         fold=i,
                         is_val=is_val,
                         freeze=freeze,
