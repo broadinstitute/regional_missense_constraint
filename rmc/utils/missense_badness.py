@@ -164,8 +164,8 @@ def prepare_amino_acid_ht(
         Filter table to a set of transcripts and write out.
 
         :param hl.Table ht: Input table.
-        :param str transcripts_path: String containing path to HailExpression of transcripts to filter to.
-        :param str output_path: String containing path to write out table to.
+        :param str transcripts_path: Path to HailExpression of transcripts to filter to.
+        :param str output_path: Path to write out table to.
         :return: None; function writes HT to specified path.
         """
         filter_transcripts = hl.experimental.read_expression(transcripts_path)
