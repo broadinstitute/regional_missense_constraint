@@ -167,22 +167,34 @@ def prepare_amino_acid_ht(
         overwrite=overwrite_temp,
     )
 
+    def _filter_transcripts(
+        ht: hl.Table, transcripts_path: str, output_path: str
+    ) -> None:
+        """
+        Filter table to a set of transcripts and write out.
+
+        :param hl.Table ht: Input table.
+        :param str transcripts_path: String containing path to HailExpression of transcripts to filter to.
+        :param str output_path: String containing path to write out table to.
+        :return: None; function writes HT to specified path.
+        """
+        filter_transcripts = hl.experimental.read_expression(transcripts_path)
+        ht = ht.filter(filter_transcripts.contains(ht.transcript))
+        ht.write(output_path, overwrite=overwrite_output)
+
     if use_test_transcripts or not do_k_fold_training:
         logger.info(
             "Writing out HT for %s transcripts only...",
             "test" if use_test_transcripts else "training",
         )
-        filter_transcripts = hl.experimental.read_expression(
-            test_transcripts_path
+        _filter_transcripts(
+            ht=context_ht,
+            transcripts_path=test_transcripts_path
             if use_test_transcripts
-            else training_transcripts_path()
-        )
-        context_ht = context_ht.filter(
-            filter_transcripts.contains(context_ht.transcript)
-        )
-        context_ht.write(
-            amino_acids_oe_path(is_test=use_test_transcripts, freeze=freeze),
-            overwrite=overwrite_output,
+            else training_transcripts_path(),
+            output_path=amino_acids_oe_path(
+                is_test=use_test_transcripts, freeze=freeze
+            ),
         )
     else:
         logger.info(
@@ -192,20 +204,15 @@ def prepare_amino_acid_ht(
         for i in range(1, FOLD_K + 1):
             for is_val in [True, False]:
                 logger.info("Writing out amino acid OE HT for fold %i...", i)
-                filter_transcripts = hl.experimental.read_expression(
-                    training_transcripts_path(fold=i, is_val=is_val)
-                )
-                context_ht = context_ht.filter(
-                    filter_transcripts.contains(context_ht.transcript)
-                )
-                context_ht.write(
-                    amino_acids_oe_path(
+                _filter_transcripts(
+                    ht=context_ht,
+                    transcripts_path=training_transcripts_path(fold=i, is_val=is_val),
+                    output_path=amino_acids_oe_path(
                         is_test=use_test_transcripts,
                         fold=i,
                         is_val=is_val,
                         freeze=freeze,
                     ),
-                    overwrite=overwrite_output,
                 )
 
 
