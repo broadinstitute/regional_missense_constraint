@@ -337,7 +337,7 @@ def calculate_misbad(
         Calculate missense badness scores from a Table of amino acid substitutions and their missense OE ratios.
 
         :param hl.Table ht: Table containing all possible amino acid substitutions and their missense OE ratio.
-        :param str mb_path: Output path for missense badness scores.
+        :param str mb_path: Output path for table of missense badness scores.
         :param str temp_label: Model-specific suffix to add to temporary table paths
             to avoid conflicting writes for different models.
         :return: None; writes Table with missense badness scores to resource path.
