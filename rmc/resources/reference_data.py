@@ -66,24 +66,36 @@ Number of folds in the training set.
 """
 
 
-def training_transcripts_path(fold: int = None, is_val: bool = False) -> str:
+def train_val_test_transcripts_path(
+    is_test: bool = False,
+    fold: int = None,
+    is_val: bool = False,
+) -> str:
     """
-    Return path to HailExpression of transcripts used for model training.
+    Return path to HailExpression of transcripts used for model training or testing.
 
+    By default, all training transcripts are returned.
+
+    :param is_test: Whether to return test transcripts.
+        If False, training transcripts will be returned. If True, test transcripts will be returned.
+        Default is False.
     :param fold: Fold number in training set to select transcripts from.
         If None, all training transcripts will be returned.
-        If not None, only validation or training transcripts from the specified fold
-            will be returned.
+        If not None, only validation or training transcripts from the specified fold will be returned.
         Default is None.
+        NOTE that `is_test` must be False if `fold` is not None.
     :param is_val: Whether to return validation transcripts.
-        If False, training transcripts from the specified fold of the training set
-            will be returned.
-        If True, validation transcripts from the specified fold of the training set
-            will be returned.
+        If False, training transcripts from the specified fold of the training set will be returned.
+        If True, validation transcripts from the specified fold of the training set will be returned.
         Default is False.
-        NOTE that `fold` must not be None if `is_val` is True.
+        NOTE that `is_test` and `is_val` cannot both be true, and that `fold` must not be None
+            if `is_val` is True.
     :return: Path to Table.
     """
+    if is_test and is_val:
+        raise DataException("Test and validation sets are mutually exclusive!")
+    if is_test and fold is not None:
+        raise DataException("Fold number cannot be specified for test set!")
     if is_val and fold is None:
         raise DataException("Fold number must be specified for validation transcripts!")
     if fold is not None and fold not in range(1, FOLD_K + 1):
@@ -91,15 +103,10 @@ def training_transcripts_path(fold: int = None, is_val: bool = False) -> str:
             f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
         )
 
-    train_type = "val" if is_val else "train"
+    transcript_type = "test" if is_test else ("val" if is_val else "train")
     fold_name = f"_fold{fold}" if fold is not None else ""
-    return f"{RESOURCE_BUILD_PREFIX}/{train_type}_transcripts{fold_name}.he"
+    return f"{RESOURCE_BUILD_PREFIX}/{transcript_type}_transcripts{fold_name}.he"
 
-
-test_transcripts_path = f"{RESOURCE_BUILD_PREFIX}/test_transcripts.he"
-"""
-Path to HailExpression of transcripts used for model testing.
-"""
 
 dosage_tsv_path = (
     f"{REF_DATA_PREFIX}/Collins_rCNV_2022.dosage_sensitivity_scores.tsv.gz"
