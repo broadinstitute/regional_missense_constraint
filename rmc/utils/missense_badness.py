@@ -349,32 +349,29 @@ def calculate_misbad(
         logger.info(
             "Splitting input Table by OE to get synonymous and nonsense rates for high and low OE groups..."
         )
-        logger.info("Creating high missense OE (OE > %s) HT...", oe_threshold)
-        high_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=True)
-        high_ht = high_ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_high_oe{temp_label}.ht",
-            _read_if_exists=not overwrite_temp,
-            overwrite=overwrite_temp,
-        )
-
-        logger.info("Creating low missense OE (OE <= %s) HT...", oe_threshold)
-        low_ht = aggregate_aa_and_filter_oe(ht, keep_high_oe=False)
-        low_ht = low_ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_low_oe{temp_label}.ht",
-            _read_if_exists=not overwrite_temp,
-            overwrite=overwrite_temp,
-        )
+        oe_hts = {}
+        for keep_high_oe in [True, False]:
+            oe_direction = "high" if keep_high_oe else "low"
+            logger.info(
+                "Creating %s missense OE (OE > %s) HT...", oe_direction, oe_threshold
+            )
+            oe_hts[oe_direction] = aggregate_aa_and_filter_oe(
+                ht, keep_high_oe=keep_high_oe
+            )
+            oe_hts[oe_direction] = oe_hts[oe_direction].transmute(
+                **{
+                    f"{oe_direction}_obs": oe_hts[oe_direction].obs,
+                    f"{oe_direction}_pos": oe_hts[oe_direction].possible,
+                }
+            )
+            oe_hts[oe_direction] = oe_hts[oe_direction].checkpoint(
+                f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_{oe_direction}_oe{temp_label}.ht",
+                _read_if_exists=not overwrite_temp,
+                overwrite=overwrite_temp,
+            )
 
         logger.info("Re-joining split HTs to calculate missense badness...")
-        high_ht = high_ht.transmute(
-            high_obs=high_ht.obs,
-            high_pos=high_ht.possible,
-        )
-        low_ht = low_ht.transmute(
-            low_obs=low_ht.obs,
-            low_pos=low_ht.possible,
-        )
-        mb_ht = high_ht.join(low_ht, how="outer")
+        mb_ht = oe_hts["high"].join(oe_hts["low"], how="outer")
         mb_ht = mb_ht.transmute(mut_type=hl.coalesce(ht.mut_type, ht.mut_type_1))
         mb_ht = mb_ht.annotate(
             high_low=(
@@ -386,11 +383,17 @@ def calculate_misbad(
         for mut_type in ["syn", "non"]:
             logger.info("Calculating %s rates...", mut_type)
             total_rates[mut_type] = (
-                get_total_csq_count(mb_ht, csq=mut_type, count_field="high_obs")
-                / get_total_csq_count(mb_ht, csq=mut_type, count_field="high_pos")
+                get_total_csq_count(
+                    oe_hts["high"], csq=mut_type, count_field="high_obs"
+                )
+                / get_total_csq_count(
+                    oe_hts["high"], csq=mut_type, count_field="high_pos"
+                )
             ) / (
-                get_total_csq_count(mb_ht, csq=mut_type, count_field="low_obs")
-                / get_total_csq_count(mb_ht, csq=mut_type, count_field="low_pos")
+                get_total_csq_count(oe_hts["low"], csq=mut_type, count_field="low_obs")
+                / get_total_csq_count(
+                    oe_hts["low"], csq=mut_type, count_field="low_pos"
+                )
             )
             logger.info("%s rate: %f", mut_type, total_rates[mut_type])
 
