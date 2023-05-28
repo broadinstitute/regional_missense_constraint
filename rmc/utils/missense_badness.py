@@ -7,7 +7,7 @@ from gnomad.utils.file_utils import file_exists
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.reference_data import (
     FOLD_K,
-    training_transcripts_path,
+    train_val_test_transcripts_path,
 )
 from rmc.resources.rmc import CURRENT_FREEZE, amino_acids_oe_path, misbad_path
 from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
@@ -158,27 +158,42 @@ def prepare_amino_acid_ht(
     )
 
     def _filter_transcripts(
-        ht: hl.Table, transcripts_path: str, output_path: str
+        ht: hl.Table,
+        fold: int = None,
+        is_val: bool = False,
     ) -> None:
         """
-        Filter table to a set of transcripts and write out.
+        Filter amino acid OE HT to a set of training transcripts and write out.
 
         :param hl.Table ht: Input table.
-        :param str transcripts_path: Path to HailExpression of transcripts to filter to.
-        :param str output_path: Path to write out table to.
+        :param int fold: Fold number in training set to select training transcripts from.
+            If not None, the Table is generated from variants in only validation or training transcripts
+                from the specified fold.
+            If None, the Table is generated from variants in test transcripts or from variants in all
+                training transcripts.
+            Default is None.
+        :param bool is_val: Whether the Table is generated from variants in validation transcripts.
+            If True, the Table is generated from variants in the validation transcripts
+                from the specified fold of the training set.
+            If False, the Table is generated from variants in test transcripts,
+                from variants in all training transcripts, or from variants in
+                training transcripts from the specified fold of the training set.
+            Default is False.
+            NOTE that `fold` must not be None if `is_val` is True.
         :return: None; function writes HT to specified path.
         """
-        filter_transcripts = hl.experimental.read_expression(transcripts_path)
+        filter_transcripts = hl.experimental.read_expression(
+            train_val_test_transcripts_path(fold=fold, is_val=is_val)
+        )
         ht = ht.filter(filter_transcripts.contains(ht.transcript))
-        ht.write(output_path, overwrite=overwrite_output)
+        ht.write(
+            amino_acids_oe_path(fold=fold, is_val=is_val, freeze=freeze),
+            overwrite=overwrite_output,
+        )
 
     if not do_k_fold_training:
         logger.info("Writing out HT for training transcripts only...")
-        _filter_transcripts(
-            ht=context_ht,
-            transcripts_path=training_transcripts_path(),
-            output_path=amino_acids_oe_path(freeze=freeze),
-        )
+        _filter_transcripts(ht=context_ht)
     else:
         logger.info(
             "Writing out amino acid OE HT for each of the %i-fold training and validation sets...",
@@ -187,15 +202,7 @@ def prepare_amino_acid_ht(
         for i in range(1, FOLD_K + 1):
             for is_val in [True, False]:
                 logger.info("Writing out amino acid OE HT for fold %i...", i)
-                _filter_transcripts(
-                    ht=context_ht,
-                    transcripts_path=training_transcripts_path(fold=i, is_val=is_val),
-                    output_path=amino_acids_oe_path(
-                        fold=i,
-                        is_val=is_val,
-                        freeze=freeze,
-                    ),
-                )
+                _filter_transcripts(ht=context_ht, fold=i, is_val=is_val)
 
 
 def variant_csq_expr(
@@ -332,16 +339,38 @@ def calculate_misbad(
                 "Not all k-fold training and validation tables with all amino acid substitutions and missense OE exist!"
             )
 
-    def _create_misbad_model(ht: hl.Table, mb_path: str, temp_label: str) -> None:
+    def _create_misbad_model(
+        temp_label: str,
+        fold: int = None,
+        is_val: bool = False,
+    ) -> None:
         """
         Calculate missense badness scores from a Table of amino acid substitutions and their missense OE ratios.
 
-        :param hl.Table ht: Table containing all possible amino acid substitutions and their missense OE ratio.
-        :param str mb_path: Output path for table of missense badness scores.
-        :param str temp_label: Model-specific suffix to add to temporary table paths
-            to avoid conflicting writes for different models.
+        :param str temp_label: Model-specific suffix to add to temporary table paths to avoid conflicting
+            path names for different models.
+        :param int fold: Fold number in training set to select training transcripts from.
+            If not None, the Table is generated from variants in only validation or training transcripts
+                from the specified fold.
+            If None, the Table is generated from variants in test transcripts or from variants in all
+                training transcripts.
+            Default is None.
+        :param bool is_val: Whether the Table is generated from variants in validation transcripts.
+            If True, the Table is generated from variants in the validation transcripts
+                from the specified fold of the training set.
+            If False, the Table is generated from variants in test transcripts,
+                from variants in all training transcripts, or from variants in
+                training transcripts from the specified fold of the training set.
+            Default is False.
         :return: None; writes Table with missense badness scores to resource path.
         """
+        ht = hl.read_table(
+            amino_acids_oe_path(
+                fold=fold,
+                is_val=is_val,
+                freeze=freeze,
+            )
+        )
         if use_exac_oe_cutoffs:
             logger.info("Removing rows with OE greater than 0.6 and less than 0.8...")
             ht = ht.filter((ht.oe <= 0.6) | (ht.oe > 0.8))
@@ -410,12 +439,17 @@ def calculate_misbad(
             ),
         )
 
-        mb_ht.write(mb_path, overwrite=overwrite_output)
+        mb_ht.write(
+            misbad_path(
+                fold=fold,
+                is_val=is_val,
+                freeze=freeze,
+            ),
+            overwrite=overwrite_output,
+        )
 
     if not do_k_fold_training:
         _create_misbad_model(
-            ht=hl.read_table(amino_acids_oe_path(freeze=freeze)),
-            mb_path=misbad_path(freeze=freeze),
             temp_label="_train",
         )
     else:
@@ -424,17 +458,7 @@ def calculate_misbad(
                 transcript_type = "val" if is_val else "train"
                 fold_name = f"_fold{i}" if i is not None else ""
                 _create_misbad_model(
-                    ht=hl.read_table(
-                        amino_acids_oe_path(
-                            fold=i,
-                            is_val=is_val,
-                            freeze=freeze,
-                        )
-                    ),
-                    mb_path=misbad_path(
-                        fold=i,
-                        is_val=is_val,
-                        freeze=freeze,
-                    ),
                     temp_label=f"_{transcript_type}{fold_name}",
+                    fold=i,
+                    is_val=is_val,
                 )
