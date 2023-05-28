@@ -416,7 +416,7 @@ def calculate_misbad(
         _create_misbad_model(
             ht=hl.read_table(amino_acids_oe_path(freeze=freeze)),
             mb_path=misbad_path(freeze=freeze),
-            temp_label=f"_{transcript_type}",
+            temp_label="_train",
         )
     else:
         for i in range(1, FOLD_K + 1):
