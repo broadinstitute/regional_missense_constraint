@@ -17,23 +17,24 @@ from rmc.resources.reference_data import (
     blosum_txt_path,
     cadd,
     clinvar_plp_mis_haplo,
+    FOLD_K,
     grantham,
     grantham_txt_path,
+    training_transcripts_path,
 )
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
     context_with_oe,
     context_with_oe_dedup,
     gnomad_fitted_score_path,
-    joint_clinvar_gnomad,
-    misbad,
+    joint_clinvar_gnomad_path,
+    misbad_path,
     mpc_model_pkl_path,
     mpc_release,
     mpc_release_dedup,
 )
 from rmc.utils.generic import (
     get_aa_map,
-    get_constraint_transcripts,
     get_gnomad_public_release,
     keep_criteria,
 )
@@ -174,6 +175,7 @@ def prepare_pop_path_ht(
     af_threshold: float = 0.001,
     overwrite_temp: bool = False,
     overwrite_output: bool = True,
+    do_k_fold_training: bool = False,
     freeze: int = CURRENT_FREEZE,
     adj_freq_index: int = 0,
     cov_threshold: int = 0,
@@ -200,6 +202,10 @@ def prepare_pop_path_ht(
         The output Tables are the OE-annotated context Tables with duplicated or deduplicated sections
         and the population/pathogenic variant Table.
         Default is True.
+    :param do_k_fold_training: Whether to generate k-fold models with the training transcripts.
+        If False, will use all training transcripts in calculation of a single model.
+        If True, will calculate k models corresponding to the k-folds of the training transcripts.
+        Default is False.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :param adj_freq_index: Index of array that contains allele frequency information calculated on
         high quality (adj) genotypes across genetic ancestry groups. Default is 0.
@@ -277,14 +283,10 @@ def prepare_pop_path_ht(
     context_ht = context_with_oe.versions[freeze].ht()
     ht = ht.annotate(**context_ht[ht.locus, ht.alleles, ht.transcript])
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad_transcript_aa.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad_context_annot.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
-
-    logger.info("Getting missense badness annotation...")
-    mb_ht = misbad.versions[freeze].ht()
-    ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
 
     logger.info("Adding BLOSUM and Grantham annotations...")
     if not file_exists(blosum.path):
@@ -297,36 +299,86 @@ def prepare_pop_path_ht(
         blosum=blosum_ht[ht.ref, ht.alt].score,
         grantham=grantham_ht[ht.ref, ht.alt].score,
     )
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad_full.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
 
-    logger.info(
-        "Filtering to rows with defined annotations in non-outlier transcripts and writing out..."
-    )
-    transcripts = get_constraint_transcripts(outlier=False)
+    logger.info("Filtering to rows with defined annotations...")
     ht = ht.filter(
         hl.is_defined(ht.cadd.phred)
         & hl.is_defined(ht.blosum)
         & hl.is_defined(ht.grantham)
         & hl.is_defined(ht.oe)
         & hl.is_defined(ht.polyphen.score)
-        & hl.is_defined(ht.misbad)
-        & transcripts.contains(ht.transcript)
     )
-    ht.write(joint_clinvar_gnomad.versions[freeze].path, overwrite=overwrite_output)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/joint_clinvar_gnomad_annot.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+
+    def _add_misbad_and_filter_transcripts(
+        ht: hl.Table, mb_path: str, transcripts_path: str, output_path: str
+    ) -> None:
+        """
+        Add missense badness annotation to table, filter to a set of transcripts, and write out.
+
+        :param hl.Table ht: Input table.
+        :param str mb_path: Path to table with missense badness scores.
+        :param str transcripts_path: Path to HailExpression of transcripts to filter to.
+        :param str output_path: Path to write out table to.
+        :return: None; function writes HT to specified path.
+        """
+        mb_ht = hl.read_table(mb_path)
+        ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
+        filter_transcripts = hl.experimental.read_expression(transcripts_path)
+        ht = ht.filter(
+            hl.is_defined(ht.misbad) & filter_transcripts.contains(ht.transcript)
+        )
+        ht.write(
+            output_path,
+            overwrite=overwrite_output,
+        )
+
+    if not do_k_fold_training:
+        logger.info(
+            "Adding misbad from training transcripts, filtering transcripts, writing out...",
+        )
+        _add_misbad_and_filter_transcripts(
+            ht=ht,
+            mb_path=misbad_path(freeze=freeze),
+            transcripts_path=training_transcripts_path(),
+            output_path=joint_clinvar_gnomad_path(freeze=freeze),
+        )
+    else:
+        logger.info(
+            "Adding misbad, filtering transcripts, writing out for the %i-fold training & validation sets...",
+            FOLD_K,
+        )
+        for i in range(1, FOLD_K + 1):
+            for is_val in [True, False]:
+                _add_misbad_and_filter_transcripts(
+                    ht=ht,
+                    mb_path=misbad_path(
+                        fold=i,
+                        is_val=is_val,
+                        freeze=freeze,
+                    ),
+                    transcripts_path=training_transcripts_path(fold=i, is_val=is_val),
+                    output_path=joint_clinvar_gnomad_path(
+                        fold=i,
+                        is_val=is_val,
+                        freeze=freeze,
+                    ),
+                )
 
 
 def run_regressions(
     variables: List[str] = ["oe", "misbad", "polyphen"],
     additional_variables: List[str] = ["blosum", "grantham"],
     overwrite: bool = True,
+    do_k_fold_training: bool = False,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
-    Run single variable and joint regressions and pick best model.
+    Run single variable and joint regressions and pick best model using training data.
 
     These regressions are used to determine the fitted score that is used to predict MPC scores.
 
@@ -347,31 +399,17 @@ def run_regressions(
     :param List[str] additional_variables: Additional variables to include in single variable regressions only.
         Default is ["blosum", "grantham"].
     :param bool overwrite: Whether to overwrite gnomAD fitted score table if it already exists. Default is True.
+    :param do_k_fold_training: Whether to generate k-fold models with the training transcripts.
+        If False, will use all training transcripts in calculation of a single model.
+        If True, will calculate k models corresponding to the k-folds of the training transcripts.
+        Default is False.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: None; function writes Table with gnomAD fitted scores
         and model coefficients as pickle to resource paths.
     """
-    # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
-    ht = joint_clinvar_gnomad.versions[freeze].ht()
-    ht = ht.transmute(polyphen=ht.polyphen.score)
-    df = ht.to_pandas()
-
-    # NOTE: `Table.to_pandas()` outputs a DataFrame with nullable dtypes
-    # for int and float fields, which patsy cannot handle
-    # These must be converted to non-nullable standard numpy dtypes
-    # prior to working with patsy
-    # See: https://github.com/hail-is/hail/commit/da557655ef1da99ddd1887bd32b33f4b5adcec9f
-    for column in df.columns:
-        if df[column].dtype == "Int32":
-            df[column] = df[column].astype(np.int32)
-        if df[column].dtype == "Int64":
-            df[column] = df[column].astype(np.int64)
-        if df[column].dtype == "Float32":
-            df[column] = df[column].astype(np.float32)
-        if df[column].dtype == "Float64":
-            df[column] = df[column].astype(np.float64)
 
     def _run_glm(
+        df: pd.core.frame.DataFrame,
         formula: str,
     ) -> Tuple[
         pd.core.frame.DataFrame,
@@ -387,7 +425,8 @@ def run_regressions(
 
         For formula reference, see: https://learn-scikit.oneoffcoder.com/patsy.html.
 
-        :param str formula: String containing R-style formula defining model.
+        :param pd.core.frame.DataFrame df: Table holding data to fit model with.
+        :param str formula: R-style formula defining model.
         :return: Logistic regression results.
         """
         # Create design matrices to fit model
@@ -400,110 +439,176 @@ def run_regressions(
         logger.info("AIC: %i", model.aic)
         return (X, model)
 
-    logger.info("Run single variable regressions...")
-    # E.g., mod.misbad3 <- glm(pop_v_path ~ mis_badness3, data=cleaned_joint_exac_clinvar.scores, family=binomial)
-    single_var_res = {}
-    single_var_aic = []
-    single_var_X = []
-    all_var = variables + additional_variables
-    for var in all_var:
-        logger.info("Running %s regression...", var)
-        # Create design matrices
-        formula = f"pop_v_path ~ {var}"
-        X, model = _run_glm(formula)
-        single_var_X.append(X)
-        single_var_aic.append(model.aic)
-        single_var_res[var] = model.params
+    def _run_regressions_on_transcripts(
+        clinvar_gnomad_path: str, mpc_model_path: str, gnomad_score_path: str
+    ) -> None:
+        """
+        Run single variable and joint regressions and pick best model using a given set of transcripts.
 
-    # Find lowest AIC for single variable regressions and corresponding model
-    min_single_aic = min(single_var_aic)
-    single_var_idx = single_var_aic.index(min_single_aic)
-    min_single_aic_var = all_var[single_var_idx]
-    min_single_X = single_var_X[single_var_idx]
-    if single_var_aic.count(min_single_aic) > 1:
-        logger.warning(
-            """
-            There is a tie for minimum AIC.
-            This function will use the first variable it finds by default!
-            """
-        )
-    logger.info(
-        "Model with smallest AIC for single variable regressions used %s",
-        min_single_aic_var,
-    )
+        :param str clinvar_gnomad_path: Path to table with population and pathogenic variants.
+        :param str mpc_model_path: Path to write MPC model pickle to.
+        :param str gnomad_score_path: Path to write out table of fitted scores for gnomAD common variants to.
+        :return: None; function writes HT to specified path.
+        """
+        # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
+        ht = hl.read_table(clinvar_gnomad_path)
+        ht = ht.transmute(polyphen=ht.polyphen.score)
+        df = ht.to_pandas()
 
-    logger.info("Running joint (additive interactions only) regression...")
-    add_formula = f"pop_v_path ~ {' + '.join(variables)}"
-    add_X, add_model = _run_glm(add_formula)
+        # NOTE: `Table.to_pandas()` outputs a DataFrame with nullable dtypes
+        # for int and float fields, which patsy cannot handle
+        # These must be converted to non-nullable standard numpy dtypes
+        # prior to working with patsy
+        # See: https://github.com/hail-is/hail/commit/da557655ef1da99ddd1887bd32b33f4b5adcec9f
+        for column in df.columns:
+            if df[column].dtype == "Int32":
+                df[column] = df[column].astype(np.int32)
+            if df[column].dtype == "Int64":
+                df[column] = df[column].astype(np.int64)
+            if df[column].dtype == "Float32":
+                df[column] = df[column].astype(np.float32)
+            if df[column].dtype == "Float64":
+                df[column] = df[column].astype(np.float64)
 
-    logger.info("Running joint regression with all interactions...")
-    mult_formula = f"pop_v_path ~ {' * '.join(variables)}"
-    mult_X, mult_model = _run_glm(mult_formula)
+        logger.info("Run single variable regressions...")
+        # E.g., mod.misbad3 <- glm(pop_v_path ~ mis_badness3, data=cleaned_joint_exac_clinvar.scores, family=binomial)
+        single_var_res = {}
+        single_var_aic = []
+        single_var_X = []
+        all_var = variables + additional_variables
+        for var in all_var:
+            logger.info("Running %s regression...", var)
+            # Create design matrices
+            formula = f"pop_v_path ~ {var}"
+            X, model = _run_glm(df=df, formula=formula)
+            single_var_X.append(X)
+            single_var_aic.append(model.aic)
+            single_var_res[var] = model.params
 
-    logger.info("Running joint regression with specific interactions...")
-    # Currently hardcoded to be formula from ExAC
-    spec_formula = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
-    spec_X, spec_model = _run_glm(spec_formula)
-
-    all_model_aic = single_var_aic + [add_model.aic, mult_model.aic, spec_model.aic]
-    min_aic = min(all_model_aic)
-    logger.info("Lowest model AIC: %f", min_aic)
-    if all_model_aic.count(min_aic) > 1:
-        logger.warning(
-            """
-            There is a tie for minimum AIC.
-            This function will use the first model it finds by default
-            (single variable -> additive interactions -> all interactions -> specific interactions)!
-            """
-        )
-    if min_aic == min_single_aic:
+        # Find lowest AIC for single variable regressions and corresponding model
+        min_single_aic = min(single_var_aic)
+        single_var_idx = single_var_aic.index(min_single_aic)
+        min_single_aic_var = all_var[single_var_idx]
+        min_single_X = single_var_X[single_var_idx]
+        if single_var_aic.count(min_single_aic) > 1:
+            logger.warning(
+                """
+                There is a tie for minimum AIC.
+                This function will use the first variable it finds by default!
+                """
+            )
         logger.info(
-            "Single variable regression using %s had the lowest AIC", min_single_aic_var
+            "Model with smallest AIC for single variable regressions used %s",
+            min_single_aic_var,
         )
-        logger.info("Coefficients: %s", single_var_res[min_single_aic_var])
-        model = single_var_res
-        X = min_single_X
-    elif min_aic == add_model.aic:
+
+        logger.info("Running joint (additive interactions only) regression...")
+        add_formula = f"pop_v_path ~ {' + '.join(variables)}"
+        add_X, add_model = _run_glm(df=df, formula=add_formula)
+
+        logger.info("Running joint regression with all interactions...")
+        mult_formula = f"pop_v_path ~ {' * '.join(variables)}"
+        mult_X, mult_model = _run_glm(df=df, formula=mult_formula)
+
+        logger.info("Running joint regression with specific interactions...")
+        # Currently hardcoded to be formula from ExAC
+        spec_formula = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
+        spec_X, spec_model = _run_glm(df=df, formula=spec_formula)
+
+        all_model_aic = single_var_aic + [add_model.aic, mult_model.aic, spec_model.aic]
+        min_aic = min(all_model_aic)
+        logger.info("Lowest model AIC: %f", min_aic)
+        if all_model_aic.count(min_aic) > 1:
+            logger.warning(
+                """
+                There is a tie for minimum AIC.
+                This function will use the first model it finds by default
+                (single variable -> additive interactions -> all interactions -> specific interactions)!
+                """
+            )
+        if min_aic == min_single_aic:
+            logger.info(
+                "Single variable regression using %s had the lowest AIC",
+                min_single_aic_var,
+            )
+            logger.info("Coefficients: %s", single_var_res[min_single_aic_var])
+            model = single_var_res
+            X = min_single_X
+        elif min_aic == add_model.aic:
+            logger.info(
+                "Joint regression using additive interactions (%s) had the lowest AIC",
+                add_formula,
+            )
+            logger.info("Coefficients: %s", add_model.params)
+            model = add_model
+            X = add_X
+        elif min_aic == mult_model.aic:
+            logger.info(
+                "Joint regression using all interactions (%s) had the lowest AIC",
+                mult_formula,
+            )
+            logger.info("Coefficients: %s", mult_model.params)
+            model = mult_model
+            X = mult_X
+        else:
+            logger.info(
+                "Joint regression using specific interactions (%s) had the lowest AIC",
+                spec_formula,
+            )
+            logger.info("Coefficients: %s", spec_model.params)
+            model = spec_model
+            X = spec_X
+
+        logger.info("Saving model as pickle...")
+        with hl.hadoop_open(mpc_model_path, "wb") as p:
+            pickle.dump(model, p, protocol=pickle.HIGHEST_PROTOCOL)
+
         logger.info(
-            "Joint regression using additive interactions (%s) had the lowest AIC",
-            add_formula,
+            "Annotating gnomAD variants with fitted score and writing to gnomad_fitted_score path..."
         )
-        logger.info("Coefficients: %s", add_model.params)
-        model = add_model
-        X = add_X
-    elif min_aic == mult_model.aic:
+        ht = ht.filter(ht.pop_v_path == 1)
+        ht = calculate_fitted_scores(ht=ht, freeze=freeze)
+        ht.write(gnomad_score_path, overwrite=overwrite)
+
+    if not do_k_fold_training:
         logger.info(
-            "Joint regression using all interactions (%s) had the lowest AIC",
-            mult_formula,
+            "Running regressions on training transcripts...",
         )
-        logger.info("Coefficients: %s", mult_model.params)
-        model = mult_model
-        X = mult_X
+        _run_regressions_on_transcripts(
+            clinvar_gnomad_path=joint_clinvar_gnomad_path(freeze=freeze),
+            mpc_model_path=mpc_model_pkl_path(freeze=freeze),
+            gnomad_score_path=gnomad_fitted_score_path(freeze=freeze),
+        )
     else:
         logger.info(
-            "Joint regression using specific interactions (%s) had the lowest AIC",
-            spec_formula,
+            "Adding misbad, filtering transcripts, writing out for the %i-fold training & validation sets...",
+            FOLD_K,
         )
-        logger.info("Coefficients: %s", spec_model.params)
-        model = spec_model
-        X = spec_X
-
-    logger.info("Saving model as pickle...")
-    model_path = mpc_model_pkl_path(freeze)
-    with hl.hadoop_open(model_path, "wb") as p:
-        pickle.dump(model, p, protocol=pickle.HIGHEST_PROTOCOL)
-
-    logger.info(
-        "Annotating gnomAD variants with fitted score and writing to gnomad_fitted_score path..."
-    )
-    ht = ht.filter(ht.pop_v_path == 1)
-    ht = calculate_fitted_scores(ht=ht, freeze=freeze)
-    ht.write(gnomad_fitted_score_path(freeze=freeze), overwrite=overwrite)
+        for i in range(1, FOLD_K + 1):
+            for is_val in [True, False]:
+                _run_regressions_on_transcripts(
+                    clinvar_gnomad_path=joint_clinvar_gnomad_path(
+                        fold=i,
+                        is_val=is_val,
+                        freeze=freeze,
+                    ),
+                    mpc_model_path=mpc_model_pkl_path(
+                        fold=i,
+                        is_val=is_val,
+                        freeze=freeze,
+                    ),
+                    gnomad_score_path=gnomad_fitted_score_path(
+                        fold=i,
+                        is_val=is_val,
+                        freeze=freeze,
+                    ),
+                )
 
 
 def calculate_fitted_scores(
     ht: hl.Table,
-    freeze: int = CURRENT_FREEZE,
+    mpc_model_path: str,
+    mb_path: str,
     interaction_char: str = ":",
     intercept_str: str = "Intercept",
 ) -> hl.Table:
@@ -515,7 +620,8 @@ def calculate_fitted_scores(
         - Function will remove any rows with undefined annotations from input Table.
 
     :param hl.Table ht: Input Table with variants to be annotated.
-    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
+    :param str mpc_model_path: Path to MPC model pickle.
+    :param str mb_path: Path to table containing missense badness scores.
     :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
         Default is ":".
     :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
@@ -524,8 +630,7 @@ def calculate_fitted_scores(
     assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
 
     logger.info("Extracting MPC model relationships from pickle...")
-    model_path = mpc_model_pkl_path(freeze)
-    with hl.hadoop_open(model_path, "rb") as p:
+    with hl.hadoop_open(mpc_model_path, "rb") as p:
         model = pickle.load(p)
     mpc_rel_vars = model.params.to_dict()
     try:
@@ -540,7 +645,7 @@ def calculate_fitted_scores(
     annotations = []
     if "misbad" in variables:
         logger.info("Getting missense badness annotation...")
-        mb_ht = misbad.versions[freeze].ht()
+        mb_ht = hl.read_table(mb_path)
         ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
         annotations.append("misbad")
 

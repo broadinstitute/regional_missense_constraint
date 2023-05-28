@@ -38,6 +38,7 @@ def main(args):
             prepare_pop_path_ht(
                 overwrite_temp=args.overwrite_temp,
                 overwrite_output=args.overwrite_output,
+                do_k_fold_training=args.do_k_fold_training,
                 freeze=args.freeze,
             )
 
@@ -47,6 +48,7 @@ def main(args):
                 variables=args.variables.split(","),
                 additional_variables=args.extra_variables.split(","),
                 overwrite=args.overwrite,
+                do_k_fold_training=args.do_k_fold_training,
                 freeze=args.freeze,
             )
 
