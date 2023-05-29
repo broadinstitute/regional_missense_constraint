@@ -82,14 +82,12 @@ def train_val_test_transcripts_path(
     :param fold: Fold number in training set to select transcripts from.
         If None, all training transcripts will be returned.
         If not None, only validation or training transcripts from the specified fold will be returned.
-        Default is None.
-        NOTE that `is_test` must be False if `fold` is not None.
+        Default is None. NOTE that `is_test` must be False if `fold` is not None.
     :param is_val: Whether to return validation transcripts.
         If False, training transcripts from the specified fold of the training set will be returned.
         If True, validation transcripts from the specified fold of the training set will be returned.
-        Default is False.
-        NOTE that `is_test` and `is_val` cannot both be true, and that `fold` must not be None
-            if `is_val` is True.
+        Default is False. NOTE that `is_test` and `is_val` cannot both be true,
+        and that `fold` must not be None if `is_val` is True.
     :return: Path to Table.
     """
     if is_test and is_val:

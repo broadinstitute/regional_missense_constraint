@@ -168,18 +168,13 @@ def prepare_amino_acid_ht(
         :param hl.Table ht: Input table.
         :param int fold: Fold number in training set to select training transcripts from.
             If not None, the Table is generated from variants in only validation or training transcripts
-                from the specified fold.
-            If None, the Table is generated from variants in test transcripts or from variants in all
-                training transcripts.
+            from the specified fold. If None, the Table is generated from variants in all training transcripts.
             Default is None.
         :param bool is_val: Whether the Table is generated from variants in validation transcripts.
-            If True, the Table is generated from variants in the validation transcripts
-                from the specified fold of the training set.
-            If False, the Table is generated from variants in test transcripts,
-                from variants in all training transcripts, or from variants in
-                training transcripts from the specified fold of the training set.
+            If True, the Table is generated from variants in the validation transcripts from
+            the specified fold of the training set. If False, the Table is generated from
+            variants in all training transcripts or training transcripts from the specified fold.
             Default is False.
-            NOTE that `fold` must not be None if `is_val` is True.
         :return: None; function writes HT to specified path.
         """
         filter_transcripts = hl.experimental.read_expression(
@@ -347,20 +342,15 @@ def calculate_misbad(
         """
         Calculate missense badness scores from a Table of amino acid substitutions and their missense OE ratios.
 
-        :param str temp_label: Model-specific suffix to add to temporary table paths to avoid conflicting
-            path names for different models.
+        :param str temp_label: Suffix to add to temporary data paths to avoid conflicting names for different models.
         :param int fold: Fold number in training set to select training transcripts from.
             If not None, the Table is generated from variants in only validation or training transcripts
-                from the specified fold.
-            If None, the Table is generated from variants in test transcripts or from variants in all
-                training transcripts.
+            from the specified fold. If None, the Table is generated from variants in all training transcripts.
             Default is None.
         :param bool is_val: Whether the Table is generated from variants in validation transcripts.
-            If True, the Table is generated from variants in the validation transcripts
-                from the specified fold of the training set.
-            If False, the Table is generated from variants in test transcripts,
-                from variants in all training transcripts, or from variants in
-                training transcripts from the specified fold of the training set.
+            If True, the Table is generated from variants in the validation transcripts from
+            the specified fold of the training set. If False, the Table is generated from
+            variants in all training transcripts or training transcripts from the specified fold.
             Default is False.
         :return: None; writes Table with missense badness scores to resource path.
         """

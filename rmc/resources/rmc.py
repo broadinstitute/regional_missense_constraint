@@ -483,16 +483,13 @@ def amino_acids_oe_path(
 
     :param int fold: Fold number in training set to select training transcripts from.
         If not None, the Table is generated from variants in only validation or training transcripts
-        from the specified fold of the overall training set.
-        If None, the Table is generated from variants in all training transcripts.
-        Default is None.
+        from the specified fold of the overall training set. If None, the Table is generated from
+        variants in all training transcripts. Default is None.
     :param bool is_val: Whether the Table is generated from variants in validation transcripts.
         If True, the Table is generated from variants in the validation transcripts from the specified fold
-        of the overall training set.
-        If False, the Table is generated from variants in all training transcripts or from variants in
-        training transcripts from the specified fold of the overall training set.
-        Default is False.
-        NOTE that `fold` must not be None if `is_val` is True.
+        of the overall training set. If False, the Table is generated from variants in
+        all training transcripts or training transcripts from the specified fold.
+        Default is False. NOTE that `fold` must not be None if `is_val` is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to Table.
     """
@@ -517,16 +514,13 @@ def misbad_path(
 
     :param int fold: Fold number in training set to select training transcripts from.
         If not None, the Table is generated from variants in only validation or training transcripts
-        from the specified fold of the overall training set.
-        If None, the Table is generated from variants in all training transcripts.
-        Default is None.
+        from the specified fold of the overall training set. If None, the Table is generated from
+        variants in all training transcripts. Default is None.
     :param bool is_val: Whether the Table is generated from variants in validation transcripts.
         If True, the Table is generated from variants in the validation transcripts from the specified fold
-        of the overall training set.
-        If False, the Table is generated from variants in all training transcripts or from variants in
-        training transcripts from the specified fold of the overall training set.
-        Default is False.
-        NOTE that `fold` must not be None if `is_val` is True.
+        of the overall training set. If False, the Table is generated from variants in
+        all training transcripts or training transcripts from the specified fold.
+        Default is False. NOTE that `fold` must not be None if `is_val` is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to Table.
     """
@@ -561,16 +555,13 @@ def joint_clinvar_gnomad_path(
 
     :param int fold: Fold number in training set to select training transcripts from.
         If not None, the Table is generated from variants in only validation or training transcripts
-        from the specified fold of the overall training set.
-        If None, the Table is generated from variants in all training transcripts.
-        Default is None.
+        from the specified fold of the overall training set. If None, the Table is generated from
+        variants in all training transcripts. Default is None.
     :param bool is_val: Whether the Table is generated from variants in validation transcripts.
         If True, the Table is generated from variants in the validation transcripts from the specified fold
-        of the overall training set.
-        If False, the Table is generated from variants in all training transcripts or from variants in
-        training transcripts from the specified fold of the overall training set.
-        Default is False.
-        NOTE that `fold` must not be None if `is_val` is True.
+        of the overall training set. If False, the Table is generated from variants in
+        all training transcripts or training transcripts from the specified fold.
+        Default is False. NOTE that `fold` must not be None if `is_val` is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to Table.
     """
@@ -596,17 +587,14 @@ def mpc_model_pkl_path(
     Model created using logistic regression.
 
     :param int fold: Fold number in training set to select training transcripts from.
-        If not None, the Table is generated from variants in only validation or training transcripts
-        from the specified fold of the overall training set.
-        If None, the Table is generated from variants in all training transcripts.
-        Default is None.
-    :param bool is_val: Whether the Table is generated from variants in validation transcripts.
-        If True, the Table is generated from variants in the validation transcripts from the specified fold
-        of the overall training set.
-        If False, the Table is generated from variants in all training transcripts or from variants in
-        training transcripts from the specified fold of the overall training set.
-        Default is False.
-        NOTE that `fold` must not be None if `is_val` is True.
+        If not None, the model is generated from variants in only validation or training transcripts
+        from the specified fold of the overall training set. If None, the model is generated from
+        variants in all training transcripts. Default is None.
+    :param bool is_val: Whether the model is generated from variants in validation transcripts.
+        If True, the model is generated from variants in the validation transcripts from the specified fold
+        of the overall training set. If False, the model is generated from variants in
+        all training transcripts or training transcripts from the specified fold.
+        Default is False. NOTE that `fold` must not be None if `is_val` is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to Table.
     """
@@ -635,16 +623,13 @@ def gnomad_fitted_score_path(
     :param bool is_grouped: Whether the Table is grouped by score. Default is False.
     :param int fold: Fold number in training set to select training transcripts from.
         If not None, the Table is generated from variants in only validation or training transcripts
-        from the specified fold of the overall training set.
-        If None, the Table is generated from variants in all training transcripts.
-        Default is None.
+        from the specified fold of the overall training set. If None, the Table is generated from
+        variants in all training transcripts. Default is None.
     :param bool is_val: Whether the Table is generated from variants in validation transcripts.
         If True, the Table is generated from variants in the validation transcripts from the specified fold
-        of the overall training set.
-        If False, the Table is generated from variants in all training transcripts or from variants in
-        training transcripts from the specified fold of the overall training set.
-        Default is False.
-        NOTE that `fold` must not be None if `is_val` is True.
+        of the overall training set. If False, the Table is generated from variants in
+        all training transcripts or training transcripts from the specified fold.
+        Default is False. NOTE that `fold` must not be None if `is_val` is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to Table.
     """
