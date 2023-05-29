@@ -320,22 +320,18 @@ def prepare_pop_path_ht(
         is_val: bool = False,
     ) -> None:
         """
-        Add missense badness annotation to table, filter to a set of transcripts, and write out.
+        Add missense badness calculated on a set of transcripts to table, filter to those transcripts, and write out.
 
         :param hl.Table ht: Input table.
         :param int fold: Fold number in training set to select training transcripts from.
             If not None, the Table is generated from variants in only validation or training transcripts
-                from the specified fold.
-            If None, the Table is generated from variants in test transcripts or from variants in all
-                training transcripts.
-            Default is None.
+            from the specified fold of the overall training set. If None, the Table is generated from
+            variants in all training transcripts. Default is None.
         :param bool is_val: Whether the Table is generated from variants in validation transcripts.
-            If True, the Table is generated from variants in the validation transcripts
-                from the specified fold of the training set.
-            If False, the Table is generated from variants in test transcripts,
-                from variants in all training transcripts, or from variants in
-                training transcripts from the specified fold of the training set.
-            Default is False.
+            If True, the Table is generated from variants in the validation transcripts from the specified fold
+            of the overall training set. If False, the Table is generated from variants in
+            all training transcripts or training transcripts from the specified fold.
+            Default is False. NOTE that `fold` must not be None if `is_val` is True.
         :return: None; function writes HT to specified path.
         """
         mb_ht = hl.read_table(
@@ -446,26 +442,24 @@ def run_regressions(
         return (X, model)
 
     def _run_regressions_on_transcripts(
+        temp_label: str,
         fold: int = None,
         is_val: bool = False,
     ) -> None:
         """
-        Run single variable and joint regressions and pick best model using a given set of transcripts.
+            Run single variable and joint regressions and pick best model using a given set of transcripts.
 
+            :param str temp_label: Suffix to add to temporary data paths to avoid conflicting names for different models.
         :param int fold: Fold number in training set to select training transcripts from.
             If not None, the Table is generated from variants in only validation or training transcripts
-                from the specified fold.
-            If None, the Table is generated from variants in test transcripts or from variants in all
-                training transcripts.
-            Default is None.
+            from the specified fold of the overall training set. If None, the Table is generated from
+            variants in all training transcripts. Default is None.
         :param bool is_val: Whether the Table is generated from variants in validation transcripts.
-            If True, the Table is generated from variants in the validation transcripts
-                from the specified fold of the training set.
-            If False, the Table is generated from variants in test transcripts,
-                from variants in all training transcripts, or from variants in
-                training transcripts from the specified fold of the training set.
-            Default is False.
-        :return: None; function writes HT to specified path.
+            If True, the Table is generated from variants in the validation transcripts from the specified fold
+            of the overall training set. If False, the Table is generated from variants in
+            all training transcripts or training transcripts from the specified fold.
+            Default is False. NOTE that `fold` must not be None if `is_val` is True.
+            :return: None; function writes HT to specified path.
         """
         # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
         ht = hl.read_table(
@@ -588,7 +582,9 @@ def run_regressions(
             "Annotating gnomAD variants with fitted score and writing to gnomad_fitted_score path..."
         )
         ht = ht.filter(ht.pop_v_path == 1)
-        ht = calculate_fitted_scores(ht=ht, fold=fold, is_val=is_val, freeze=freeze)
+        ht = calculate_fitted_scores(
+            ht=ht, temp_label=temp_label, fold=fold, is_val=is_val, freeze=freeze
+        )
         ht.write(
             gnomad_fitted_score_path(fold=fold, is_val=is_val, freeze=freeze),
             overwrite=overwrite,
@@ -598,7 +594,7 @@ def run_regressions(
         logger.info(
             "Running regressions on training transcripts...",
         )
-        _run_regressions_on_transcripts()
+        _run_regressions_on_transcripts(temp_label="_train")
     else:
         logger.info(
             "Adding misbad, filtering transcripts, writing out for the %i-fold training & validation sets...",
@@ -606,11 +602,17 @@ def run_regressions(
         )
         for i in range(1, FOLD_K + 1):
             for is_val in [True, False]:
-                _run_regressions_on_transcripts(fold=i, is_val=is_val)
+                transcript_type = "val" if is_val else "train"
+                fold_name = f"_fold{i}" if i is not None else ""
+                _run_regressions_on_transcripts(
+                    temp_label=f"_{transcript_type}{fold_name}", fold=i, is_val=is_val
+                )
 
 
 def calculate_fitted_scores(
     ht: hl.Table,
+    temp_label: str = "",
+    overwrite_temp: bool = True,
     fold: int = None,
     is_val: bool = False,
     interaction_char: str = ":",
@@ -625,19 +627,19 @@ def calculate_fitted_scores(
         - Function will remove any rows with undefined annotations from input Table.
 
     :param hl.Table ht: Input Table with variants to be annotated.
+    :param str temp_label: Suffix to add to temporary data paths to avoid conflicting names for different models.
+        Default is the empty string.
+    :param overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
+        If False, will read existing intermediate temporary data rather than overwriting. Default is True.
     :param int fold: Fold number in training set to select training transcripts from.
         If not None, the Table is generated from variants in only validation or training transcripts
-            from the specified fold.
-        If None, the Table is generated from variants in test transcripts or from variants in all
-            training transcripts.
-        Default is None.
+        from the specified fold of the overall training set. If None, the Table is generated from
+        variants in all training transcripts. Default is None.
     :param bool is_val: Whether the Table is generated from variants in validation transcripts.
-        If True, the Table is generated from variants in the validation transcripts
-            from the specified fold of the training set.
-        If False, the Table is generated from variants in test transcripts,
-            from variants in all training transcripts, or from variants in
-            training transcripts from the specified fold of the training set.
-        Default is False.
+        If True, the Table is generated from variants in the validation transcripts from the specified fold
+        of the overall training set. If False, the Table is generated from variants in
+        all training transcripts or training transcripts from the specified fold.
+        Default is False. NOTE that `fold` must not be None if `is_val` is True.
     :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
         Default is ":".
     :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
@@ -681,7 +683,8 @@ def calculate_fitted_scores(
     ht = ht.filter(filter_expr)
     # Checkpoint here to force missense badness join and filter to complete
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_score_temp_join.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_score_temp_join{temp_label}.ht",
+        overwrite=overwrite_temp,
     )
 
     logger.info("Annotating fitted scores...")
@@ -725,7 +728,10 @@ def calculate_fitted_scores(
 
 
 def aggregate_gnomad_fitted_scores(
-    n_less_eq0_float: float = 0.83, freeze: int = CURRENT_FREEZE
+    n_less_eq0_float: float = 0.83,
+    fold: int = None,
+    is_val: bool = False,
+    freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
     Aggregate gnomAD fitted scores to count number of variants with a score less than a given score.
@@ -734,11 +740,22 @@ def aggregate_gnomad_fitted_scores(
         This avoids errors in the `hl.log10` call and ensures that MPC for variants with a fitted score
         more severe than any common gnomAD variant score (`n_less` = 0) is more severe (by a controlled amount)
         compared to MPC for variants with a fitted score more severe than one common gnomAD variant (`n_less` = 1).
+    :param int fold: Fold number in training set to select training transcripts from.
+        If not None, the Table is generated from variants in only validation or training transcripts
+        from the specified fold of the overall training set. If None, the Table is generated from
+        variants in all training transcripts. Default is None.
+    :param bool is_val: Whether the Table is generated from variants in validation transcripts.
+        If True, the Table is generated from variants in the validation transcripts from the specified fold
+        of the overall training set. If False, the Table is generated from variants in
+        all training transcripts or training transcripts from the specified fold.
+        Default is False.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: None; function writes Table to resource path.
     """
     logger.info("Aggregating gnomAD fitted scores...")
-    gnomad_ht = hl.read_table(gnomad_fitted_score_path(freeze=freeze))
+    gnomad_ht = hl.read_table(
+        gnomad_fitted_score_path(fold=fold, is_val=is_val, freeze=freeze)
+    )
     gnomad_ht = gnomad_ht.group_by("fitted_score").aggregate(n_var=hl.agg.count())
     gnomad_ht = gnomad_ht.order_by("fitted_score")
     gnomad_ht = gnomad_ht.key_by("fitted_score")
@@ -760,7 +777,9 @@ def aggregate_gnomad_fitted_scores(
     gnomad_ht = gnomad_ht.annotate(idx=hl.int(gnomad_ht.idx))
     gnomad_ht = gnomad_ht.key_by("idx")
     gnomad_ht.write(
-        gnomad_fitted_score_path(is_grouped=True, freeze=freeze),
+        gnomad_fitted_score_path(
+            is_grouped=True, fold=fold, is_val=is_val, freeze=freeze
+        ),
         overwrite=True,
     )
 
@@ -768,6 +787,8 @@ def aggregate_gnomad_fitted_scores(
 def create_mpc_ht(
     overwrite_temp: bool = True,
     overwrite_output: bool = True,
+    fold: int = None,
+    is_val: bool = False,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
@@ -794,18 +815,22 @@ def create_mpc_ht(
     logger.info("Calculating fitted scores...")
     ht = context_with_oe.versions[freeze].ht()
     ht = ht.transmute(polyphen=ht.polyphen.score)
-    ht = calculate_fitted_scores(ht=ht, freeze=freeze)
+    ht = calculate_fitted_scores(ht=ht, fold=fold, is_val=is_val, freeze=freeze)
 
     logger.info("Aggregating gnomAD fitted scores...")
-    fitted_group_path = gnomad_fitted_score_path(is_grouped=True, freeze=freeze)
+    fitted_group_path = gnomad_fitted_score_path(
+        is_grouped=True, fold=fold, is_val=is_val, freeze=freeze
+    )
     if not file_exists(fitted_group_path):
-        aggregate_gnomad_fitted_scores(freeze=freeze)
+        aggregate_gnomad_fitted_scores(fold=fold, is_val=is_val, freeze=freeze)
     gnomad_ht = hl.read_table(fitted_group_path)
     scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
     scores_len = len(scores)
 
     # Get total number of gnomAD common variants
-    gnomad_var_count = hl.read_table(gnomad_fitted_score_path(freeze=freeze)).count()
+    gnomad_var_count = hl.read_table(
+        gnomad_fitted_score_path(fold=fold, is_val=is_val, freeze=freeze)
+    ).count()
 
     logger.info("Getting n_less annotation...")
     # Annotate HT with sorted array of gnomAD fitted scores
