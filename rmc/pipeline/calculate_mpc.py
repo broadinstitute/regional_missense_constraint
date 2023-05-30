@@ -68,8 +68,9 @@ def main(args):
 
                 annotate_mpc(
                     ht=clinvar_plp_mis_haplo.ht(),
-                    output_path=f"{mpc_bucket_path}/clinvar_mpc_annot.ht",
-                    overwrite=args.overwrite,
+                    output_ht_path=f"{mpc_bucket_path}/clinvar_mpc_annot.ht",
+                    overwrite_temp=args.overwrite_temp,
+                    overwrite_output=args.overwrite_output,
                     freeze=args.freeze,
                 )
 
@@ -81,8 +82,9 @@ def main(args):
                 case_ht = dd_ht.filter(dd_ht.sample_set != "control")
                 annotate_mpc(
                     ht=case_ht,
-                    output_path=f"{mpc_bucket_path}/dd_case_mpc_annot.ht",
-                    overwrite=args.overwrite_temp,
+                    output_ht_path=f"{mpc_bucket_path}/dd_case_mpc_annot.ht",
+                    overwrite_temp=args.overwrite_temp,
+                    overwrite_output=args.overwrite_output,
                     freeze=args.freeze,
                 )
                 control_ht = dd_ht.filter(dd_ht.sample_set == "control")
@@ -93,8 +95,9 @@ def main(args):
                 )
                 annotate_mpc(
                     ht=control_ht,
-                    output_path=f"{mpc_bucket_path}/dd_control_mpc_annot.ht",
-                    overwrite=args.overwrite,
+                    output_ht_path=f"{mpc_bucket_path}/dd_control_mpc_annot.ht",
+                    overwrite_temp=args.overwrite_temp,
+                    overwrite_output=args.overwrite_output,
                     freeze=args.freeze,
                 )
 
@@ -104,16 +107,18 @@ def main(args):
                 ht = public_release("exomes").ht()
                 annotate_mpc(
                     ht=ht,
-                    output_path=f"{mpc_bucket_path}/gnomAD_mpc_annot.ht",
-                    overwrite=args.overwrite,
+                    output_ht_path=f"{mpc_bucket_path}/gnomAD_mpc_annot.ht",
+                    overwrite_temp=args.overwrite_temp,
+                    overwrite_output=args.overwrite_output,
                     freeze=args.freeze,
                 )
 
             if args.specify_ht:
                 annotate_mpc(
                     ht=hl.read_table(args.ht_in_path),
-                    output_path=args.ht_out_path,
-                    overwrite=args.overwrite,
+                    output_ht_path=args.ht_out_path,
+                    overwrite_temp=args.overwrite_temp,
+                    overwrite_output=args.overwrite_output,
                     freeze=args.freeze,
                 )
 
