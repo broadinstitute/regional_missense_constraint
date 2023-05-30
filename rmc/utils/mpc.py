@@ -740,21 +740,33 @@ def aggregate_gnomad_fitted_scores(
     )
 
 
-def create_mpc_release_ht(
+def annotate_mpc(
+    ht: hl.Table,
+    output_ht_path: str,
+    dup_output_ht_path: str,
+    use_release: bool = True,
     overwrite_temp: bool = True,
     overwrite_output: bool = True,
+    fold: int = None,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
-    Annotate VEP context Table with MPC component variables and calculate MPC using relationship defined in `mpc_rel_vars`.
+    Annotate input Table with MPC scores.
 
-    Relationship in `mpc_rel_vars` is the formula used to calculate a variant's fitted score.
-    A variant of interest's fitted score is combined with the number of common (AF > 0.01)
-    variants in gnomAD with fitted scores < the fitted score for the variant of interest
-    to determine a variant's MPC score.
+    This function can annotate with scores from the MPC release HT (VEP context HT with MPC scores
+    calculated from all training data) or it can calculate MPC scores directly using
+    a given MPC model (e.g., if saving scores for the whole VEP context HT is not needed).
+
+    To calculate the MPC score, a variant of interest's fitted score from the MPC model
+    is combined with the number of common (AF > 0.001) variants in gnomAD with fitted scores
+    < the fitted score for the variant of interest.
 
     For more information on the fitted score and MPC calculation, see the docstring of `run_regressions`.
 
+    :param hl.Table ht: Input Table.
+    :param str output_ht_path: Path to write out annotated table (with duplicate variants removed.
+    :param str dup_output_ht_path: Path to write out annotated table, possibly containing duplicate variants.
+        Duplicate variants may be present if a single site is part of multiple transcripts.
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
         Default is True.
@@ -763,106 +775,12 @@ def create_mpc_release_ht(
         If True, will clear existing output data and write new output data.
         The output Tables are the MPC score Tables with duplicated or deduplicated loci.
         Default is True.
+    :param int fold: Fold number in training set used to generate MPC model.
+        If not None, MPC scores are generated from variants in only training transcripts
+        from the specified fold of the overall training set. If None, scores are generated from
+        variants in all training transcripts. Default is None.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: None; function writes Table to resource path.
-    """
-    logger.info("Calculating fitted scores...")
-    ht = context_with_oe.versions[freeze].ht()
-    ht = ht.transmute(polyphen=ht.polyphen.score)
-    ht = calculate_fitted_scores(ht=ht, freeze=freeze)
-
-    logger.info("Aggregating gnomAD fitted scores...")
-    fitted_group_path = gnomad_fitted_score_path(is_grouped=True, freeze=freeze)
-    if not file_exists(fitted_group_path):
-        aggregate_gnomad_fitted_scores(freeze=freeze)
-    gnomad_ht = hl.read_table(fitted_group_path)
-    scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
-    scores_len = len(scores)
-
-    # Get total number of gnomAD common variants
-    gnomad_var_count = hl.read_table(gnomad_fitted_score_path(freeze=freeze)).count()
-
-    logger.info("Getting n_less annotation...")
-    # Annotate HT with sorted array of gnomAD fitted scores
-    ht = ht.annotate_globals(gnomad_scores=scores)
-    # Checkpoint here to force the gnomAD join to complete
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/mpc_temp_gnomad.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
-
-    # Search all gnomAD scores to find first score that is
-    # greater than or equal to score to be annotated
-    # `binary_search` will return the index of the first gnomAD fitted score that
-    # is >= the score of interest
-    # e.g., if the score of interest is 0.45, and gnomAD fitted scores are
-    # [0.3, 0.4, 0.5], then `binary_search` will return an index of 2
-    # the `n_less` of 0.5 will contain the counts of variants with gnomAD scores of
-    # 0.3 and 0.4 due to the non-inclusive nature of scans
-    # (n_less[0.5] = n_var[0.3] + n_var[0.4])
-    ht = ht.annotate(idx=hl.binary_search(ht.gnomad_scores, ht.fitted_score))
-    ht = ht.annotate(
-        n_less=hl.if_else(
-            # Make n_less equal to total gnomAD common variant count if
-            # index is equal to the length of the gnomAD scores array
-            ht.idx == scores_len,
-            gnomad_var_count,
-            gnomad_ht[ht.idx].n_less,
-        )
-    )
-    # Checkpoint here to force the binary search to compute
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/mpc_temp_binary.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
-
-    logger.info("Creating MPC release and writing out...")
-    ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
-
-    ht = ht.checkpoint(
-        mpc_release.versions[freeze].path,
-        overwrite=overwrite_output,
-        _read_if_exists=not overwrite_output,
-    )
-    logger.info("Output MPC HT fields: %s", set(ht.row))
-
-    logger.info("Creating dedup MPC release and writing out...")
-    ht = ht.select("mpc").key_by("locus", "alleles")
-    ht = ht.collect_by_key()
-    ht = ht.annotate(**{"mpc": hl.nanmax(ht.values["mpc"])})
-    ht = ht.annotate(
-        **{"transcript": ht.values.find(lambda x: x["mpc"] == ht["mpc"]).transcript}
-    )
-    ht = ht.drop("values")
-    ht.write(mpc_release_dedup.versions[freeze].path, overwrite=overwrite_output)
-    logger.info("Output MPC dedup HT fields: %s", set(ht.row))
-
-
-def annotate_mpc(
-    ht: hl.Table,
-    output_path: str,
-    overwrite: bool = True,
-    add_transcript_annotation: bool = True,
-    freeze: int = CURRENT_FREEZE,
-) -> None:
-    """
-    Annotate Table with MPC score using MPC release Table (`mpc_release`).
-
-    .. note::
-        - Assume input Table is keyed by locus and alleles.
-        - Function will add transcript annotations using `context_with_oe_dedup` resource
-            if they don't already exist in input Table.
-
-    :param hl.Table ht: Input Table to be annotated.
-    :param str output_path: Where to write Table after adding MPC annotations.
-    :param bool overwrite: Whether to overwrite specified output path if it already exists.
-        Default is True.
-    :param bool add_transcript_annotation: Whether to add transcript annotation to input Table
-        (even if it already exists). Default is True.
-    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
-    :return: None; function writes Table to specified output path.
     """
     assert (
         len(ht.key) == 2 and "locus" in ht.key and "alleles" in ht.key
@@ -875,18 +793,137 @@ def annotate_mpc(
         hl.tstr
     ), "'locus' must be a LocusExpression, and 'alleles' must be an array of strings!"
 
-    if "transcript" not in ht.row or add_transcript_annotation:
-        logger.info(
-            """
-            Input HT did not have transcript annotation. Function will add transcript information from MPC HT.
-            This means that duplicate variants (variants that overlap multiple transcripts)
-            will only get one transcript annotation (and therefore one MPC annotation)!
-            """
-        )
-        mpc_ht = mpc_release_dedup.versions[freeze].ht()
-        ht = ht.annotate(transcript=mpc_ht[ht.key].transcript)
+    if use_release:
+        if fold is not None:
+            raise DataException(
+                "MPC release is generated only from all training transcripts!"
+            )
+        if not (
+            file_exists(mpc_release.versions[freeze].path)
+            and file_exists(mpc_release_dedup.versions[freeze].path)
+        ):
+            raise DataException("MPC release has not yet been generated!")
 
-    mpc_ht = mpc_release.versions[freeze].ht()
-    mpc_ht = mpc_ht.key_by("locus", "alleles", "transcript")
-    ht = ht.annotate(mpc=mpc_ht[ht.locus, ht.alleles, ht.transcript].mpc)
-    ht.write(output_path, overwrite=overwrite)
+        # TODO: Remove this - only build dedup table
+        if "transcript" not in ht.row or add_transcript_annotation:
+            logger.info(
+                """
+                Input HT did not have transcript annotation.
+                Function will add transcript information from MPC HT.
+                This means that duplicate variants (variants that overlap multiple transcripts)
+                will only get one transcript annotation (and therefore one MPC annotation)!
+                """
+            )
+            mpc_ht = mpc_release_dedup.versions[freeze].ht()
+            ht = ht.annotate(transcript=mpc_ht[ht.key].transcript)
+
+        mpc_ht = mpc_release.versions[freeze].ht()
+        mpc_ht = mpc_ht.key_by("locus", "alleles", "transcript")
+        ht = ht.annotate(mpc=mpc_ht[ht.locus, ht.alleles, ht.transcript].mpc)
+        ht.write(output_ht_path, overwrite=overwrite_output)
+    else:
+        logger.info("Calculating fitted scores...")
+        ht = ht.transmute(polyphen=ht.polyphen.score)
+        ht = calculate_fitted_scores(ht=ht, freeze=freeze)
+
+        logger.info("Aggregating gnomAD fitted scores...")
+        fitted_group_path = gnomad_fitted_score_path(
+            is_grouped=True, fold=fold, freeze=freeze
+        )
+        if not file_exists(fitted_group_path):
+            aggregate_gnomad_fitted_scores(freeze=freeze)
+        gnomad_ht = hl.read_table(fitted_group_path)
+        scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
+        scores_len = len(scores)
+
+        # Get total number of gnomAD common variants
+        gnomad_var_count = hl.read_table(
+            gnomad_fitted_score_path(freeze=freeze)
+        ).count()
+
+        logger.info("Getting n_less annotation...")
+        # Annotate HT with sorted array of gnomAD fitted scores
+        ht = ht.annotate_globals(gnomad_scores=scores)
+        # Checkpoint here to force the gnomAD join to complete
+        ht = ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/mpc_temp_gnomad.ht",
+            _read_if_exists=not overwrite_temp,
+            overwrite=overwrite_temp,
+        )
+
+        # Search all gnomAD scores to find first score that is
+        # greater than or equal to score to be annotated
+        # `binary_search` will return the index of the first gnomAD fitted score that
+        # is >= the score of interest
+        # e.g., if the score of interest is 0.45, and gnomAD fitted scores are
+        # [0.3, 0.4, 0.5], then `binary_search` will return an index of 2
+        # the `n_less` of 0.5 will contain the counts of variants with gnomAD scores of
+        # 0.3 and 0.4 due to the non-inclusive nature of scans
+        # (n_less[0.5] = n_var[0.3] + n_var[0.4])
+        ht = ht.annotate(idx=hl.binary_search(ht.gnomad_scores, ht.fitted_score))
+        ht = ht.annotate(
+            n_less=hl.if_else(
+                # Make n_less equal to total gnomAD common variant count if
+                # index is equal to the length of the gnomAD scores array
+                ht.idx == scores_len,
+                gnomad_var_count,
+                gnomad_ht[ht.idx].n_less,
+            )
+        )
+        # Checkpoint here to force the binary search to compute
+        ht = ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/mpc_temp_binary.ht",
+            _read_if_exists=not overwrite_temp,
+            overwrite=overwrite_temp,
+        )
+
+        logger.info("Creating MPC release and writing out...")
+        ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
+
+        ht = ht.checkpoint(
+            dup_output_ht_path,
+            overwrite=overwrite_output,
+            _read_if_exists=not overwrite_output,
+        )
+        logger.info("Output MPC HT fields: %s", set(ht.row))
+
+        logger.info("Creating dedup MPC release and writing out...")
+        ht = ht.select("mpc").key_by("locus", "alleles")
+        ht = ht.collect_by_key()
+        ht = ht.annotate(**{"mpc": hl.nanmax(ht.values["mpc"])})
+        ht = ht.annotate(
+            **{"transcript": ht.values.find(lambda x: x["mpc"] == ht["mpc"]).transcript}
+        )
+        ht = ht.drop("values")
+        ht.write(dedup_output_ht_path, overwrite=overwrite_output)
+        logger.info("Output MPC dedup HT fields: %s", set(ht.row))
+
+
+def create_mpc_release_ht(
+    overwrite_temp: bool = True,
+    overwrite_output: bool = True,
+    freeze: int = CURRENT_FREEZE,
+) -> None:
+    """
+    Annotate VEP context Table with MPC scores calculated using training transcripts.
+
+    :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
+        If False, will read existing intermediate temporary data rather than overwriting.
+        Default is True.
+    :param bool overwrite_output: Whether to entirely overwrite final output data if it already exists.
+        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
+        If True, will clear existing output data and write new output data.
+        The output Tables are the MPC score Tables with duplicated or deduplicated loci.
+        Default is True.
+    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
+    :return: None; function writes Table to resource path.
+    """
+    annotate_mpc(
+        ht=context_with_oe.versions[freeze].ht(),
+        use_release=False,
+        dup_output_ht_path=mpc_release.versions[freeze].path,
+        dedup_output_ht_path=mpc_release_dedup.versions[freeze].path,
+        overwrite_temp=overwrite_temp,
+        overwrite_output=overwrite_output,
+        freeze=freeze,
+    )
