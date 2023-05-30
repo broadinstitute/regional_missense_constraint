@@ -475,7 +475,7 @@ def run_regressions(
 
     # Find model with lowest AIC for single variable regressions
     min_models["single"], min_model_formulas["single"] = _get_min_aic_glm(
-        [x for x in all_vars]
+        [[x] for x in all_vars]
     )
 
     # List possible variable combinations for joint regressions
