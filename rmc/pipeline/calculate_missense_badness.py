@@ -77,8 +77,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--do-k-fold-training",
         help="""
-        Generate k-fold missense badness models (one each for training and validation transcripts in each fold)
-        instead of one model for all training transcripts.
+        Generate k-fold missense badness models trained on training sets from respective folds.
+        Otherwise, one model is generated, trained on all training transcripts.
         """,
         action="store_true",
     )
