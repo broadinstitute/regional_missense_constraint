@@ -764,8 +764,6 @@ def annotate_mpc(
 
     :param hl.Table ht: Input Table.
     :param str output_ht_path: Path to write out annotated table (with duplicate variants removed.
-    :param str dup_output_ht_path: Path to write out annotated table, possibly containing duplicate variants.
-        Duplicate variants may be present if a single site is part of multiple transcripts.
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
         Default is True.
