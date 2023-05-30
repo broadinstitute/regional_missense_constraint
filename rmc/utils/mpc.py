@@ -779,9 +779,10 @@ def annotate_mpc(
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: None; function writes Table to resource path.
     """
-    assert (
-        len(ht.key) == 2 and "locus" in ht.key and "alleles" in ht.key
-    ), "HT key must be keyed by 'locus' and 'alleles'!"
+    assert list(ht.key) == [
+        "locus",
+        "alleles",
+    ], "HT must have key ['locus', 'alleles']!"
     # NOTE: hl.tlocus() will use the reference genome build from the hail initialization
     # if the user doesn't specify a reference build
     # This means that for v2, where hail is initialized with GRCh37, this will check for
@@ -801,6 +802,7 @@ def annotate_mpc(
         ):
             raise DataException("MPC release has not yet been generated!")
 
+        logger.info("Annotating MPC scores using MPC release HT and writing out...")
         mpc_ht = mpc_release.versions[freeze].ht()
         ht = ht.annotate(mpc=mpc_ht[ht.locus, ht.alleles].mpc)
         ht.write(output_ht_path, overwrite=overwrite_output)
@@ -868,8 +870,8 @@ def annotate_mpc(
             _read_if_exists=not overwrite_temp,
         )
 
-        logger.info("Creating MPC release and writing out...")
-        ht = ht.select("mpc").key_by("locus", "alleles")
+        logger.info("Deduplicating variants and writing out...")
+        ht = ht.select("mpc")
         ht = ht.collect_by_key()
         # Deduplicate variants in multiple transcripts by retaining only the most severe score
         # per variant
