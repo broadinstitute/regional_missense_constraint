@@ -743,7 +743,6 @@ def aggregate_gnomad_fitted_scores(
 def annotate_mpc(
     ht: hl.Table,
     output_ht_path: str,
-    dup_output_ht_path: str,
     use_release: bool = True,
     overwrite_temp: bool = True,
     overwrite_output: bool = True,
@@ -804,22 +803,8 @@ def annotate_mpc(
         ):
             raise DataException("MPC release has not yet been generated!")
 
-        # TODO: Remove this - only build dedup table
-        if "transcript" not in ht.row or add_transcript_annotation:
-            logger.info(
-                """
-                Input HT did not have transcript annotation.
-                Function will add transcript information from MPC HT.
-                This means that duplicate variants (variants that overlap multiple transcripts)
-                will only get one transcript annotation (and therefore one MPC annotation)!
-                """
-            )
-            mpc_ht = mpc_release_dedup.versions[freeze].ht()
-            ht = ht.annotate(transcript=mpc_ht[ht.key].transcript)
-
         mpc_ht = mpc_release.versions[freeze].ht()
-        mpc_ht = mpc_ht.key_by("locus", "alleles", "transcript")
-        ht = ht.annotate(mpc=mpc_ht[ht.locus, ht.alleles, ht.transcript].mpc)
+        ht = ht.annotate(mpc=mpc_ht[ht.locus, ht.alleles].mpc)
         ht.write(output_ht_path, overwrite=overwrite_output)
     else:
         logger.info("Calculating fitted scores...")
@@ -877,26 +862,25 @@ def annotate_mpc(
             overwrite=overwrite_temp,
         )
 
-        logger.info("Creating MPC release and writing out...")
+        logger.info("Calculating MPC scores...")
         ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
-
         ht = ht.checkpoint(
-            dup_output_ht_path,
-            overwrite=overwrite_output,
-            _read_if_exists=not overwrite_output,
+            f"{TEMP_PATH_WITH_FAST_DEL}/mpc_dup.ht",
+            overwrite=overwrite_temp,
+            _read_if_exists=not overwrite_temp,
         )
-        logger.info("Output MPC HT fields: %s", set(ht.row))
 
-        logger.info("Creating dedup MPC release and writing out...")
+        logger.info("Creating MPC release and writing out...")
         ht = ht.select("mpc").key_by("locus", "alleles")
         ht = ht.collect_by_key()
+        # Deduplicate variants in multiple transcripts by retaining only the most severe score
+        # per variant
         ht = ht.annotate(**{"mpc": hl.nanmax(ht.values["mpc"])})
         ht = ht.annotate(
             **{"transcript": ht.values.find(lambda x: x["mpc"] == ht["mpc"]).transcript}
         )
         ht = ht.drop("values")
-        ht.write(dedup_output_ht_path, overwrite=overwrite_output)
-        logger.info("Output MPC dedup HT fields: %s", set(ht.row))
+        ht.write(output_ht_path, overwrite=overwrite_output)
 
 
 def create_mpc_release_ht(
@@ -920,9 +904,8 @@ def create_mpc_release_ht(
     """
     annotate_mpc(
         ht=context_with_oe.versions[freeze].ht(),
+        output_ht_path=mpc_release.versions[freeze].path,
         use_release=False,
-        dup_output_ht_path=mpc_release.versions[freeze].path,
-        dedup_output_ht_path=mpc_release_dedup.versions[freeze].path,
         overwrite_temp=overwrite_temp,
         overwrite_output=overwrite_output,
         freeze=freeze,

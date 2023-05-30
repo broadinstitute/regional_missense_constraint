@@ -52,8 +52,8 @@ def main(args):
                 freeze=args.freeze,
             )
 
-        if args.command == "calculate-mpc":
-            hl.init(log="/calculate_mpc_release.log", tmp_dir=temp_dir)
+        if args.command == "create-mpc-release":
+            hl.init(log="/create_mpc_release.log", tmp_dir=temp_dir)
             create_mpc_release_ht(
                 overwrite_temp=args.overwrite_temp,
                 overwrite_output=args.overwrite_output,
@@ -82,7 +82,7 @@ def main(args):
                 annotate_mpc(
                     ht=case_ht,
                     output_path=f"{mpc_bucket_path}/dd_case_mpc_annot.ht",
-                    overwrite=args.overwrite,
+                    overwrite=args.overwrite_temp,
                     freeze=args.freeze,
                 )
                 control_ht = dd_ht.filter(dd_ht.sample_set == "control")
@@ -187,10 +187,10 @@ if __name__ == "__main__":
         default="blosum,grantham",
     )
 
-    calculate_score = subparsers.add_parser(
-        "calculate-mpc",
+    create_mpc_release = subparsers.add_parser(
+        "create-mpc-release",
         help="""
-        Calculate MPC release Table (VEP context Table filtered to missense variants in canonical, non-outlier transcripts).
+        Create MPC release Table (VEP context Table filtered to missense variants in canonical, non-outlier transcripts).
         """,
     )
 

@@ -613,19 +613,6 @@ mpc_release = VersionedTableResource(
 )
 """
 Table containing missense variants in canonical transcripts annotated with MPC.
-"""
-
-mpc_release_dedup = VersionedTableResource(
-    default_version=CURRENT_FREEZE,
-    versions={
-        freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/mpc_dedup.ht"
-        )
-        for freeze in FREEZES
-    },
-)
-"""
-Table containing missense variants in canonical transcripts annotated with MPC.
 
 This Table contains only one row per each unique locus/alleles combination.
 """
