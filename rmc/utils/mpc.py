@@ -407,13 +407,13 @@ def run_regressions(
         return model
 
     def _get_min_aic_glm(
-        var_combs: List[List[str]],
+        var_combs: List[Tuple[str, ...]],
         model_type: str = "single",
     ) -> Tuple[statsmodels.genmod.generalized_linear_model.GLMResultsWrapper, str,]:
         """
         Run logistic regressions on different variable combinations and return results on model with lowest AIC.
 
-        :param List[List[str]] var_combs: Variable combinations to generate regressions with.
+        :param List[Tuple[str]] var_combs: Variable combinations to generate regressions with.
         :param str model_type: Regression formula type.
             One of "single", "additive", or "multiplicative".
             If "single", each variable combination must consist of only one variable.
@@ -475,7 +475,7 @@ def run_regressions(
 
     # Find model with lowest AIC for single variable regressions
     min_models["single"], min_model_formulas["single"] = _get_min_aic_glm(
-        [[x] for x in all_vars]
+        [(x,) for x in all_vars]
     )
 
     # List possible variable combinations for joint regressions
