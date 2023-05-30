@@ -473,7 +473,6 @@ Contains same information as `rmc_results` but has different formatting for gnom
 ####################################################################################
 def amino_acids_oe_path(
     fold: int = None,
-    is_val: bool = False,
     freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
@@ -482,57 +481,40 @@ def amino_acids_oe_path(
     Table is input to missense badness calculations.
 
     :param int fold: Fold number in training set to select training transcripts from.
-        If not None, the Table is generated from variants in only validation or training transcripts
+        If not None, the Table is generated from variants in only training transcripts
         from the specified fold of the overall training set. If None, the Table is generated from
         variants in all training transcripts. Default is None.
-    :param bool is_val: Whether the Table is generated from variants in validation transcripts.
-        If True, the Table is generated from variants in the validation transcripts from the specified fold
-        of the overall training set. If False, the Table is generated from variants in
-        all training transcripts or training transcripts from the specified fold.
-        Default is False. NOTE that `fold` must not be None if `is_val` is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to Table.
     """
-    if is_val and fold is None:
-        raise DataException("Fold number must be specified for validation set!")
     if fold is not None and fold not in range(1, FOLD_K + 1):
         raise DataException(
             f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
         )
-    transcript_type = "val" if is_val else "train"
     fold_name = f"_fold{fold}" if fold is not None else ""
-    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/{transcript_type}{fold_name}/amino_acid_oe.ht"
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/amino_acid_oe.ht"
 
 
 def misbad_path(
     fold: int = None,
-    is_val: bool = False,
     freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
     Table containing all possible amino acid substitutions and their missense badness scores.
 
     :param int fold: Fold number in training set to select training transcripts from.
-        If not None, the Table is generated from variants in only validation or training transcripts
+        If not None, the Table is generated from variants in only training transcripts
         from the specified fold of the overall training set. If None, the Table is generated from
         variants in all training transcripts. Default is None.
-    :param bool is_val: Whether the Table is generated from variants in validation transcripts.
-        If True, the Table is generated from variants in the validation transcripts from the specified fold
-        of the overall training set. If False, the Table is generated from variants in
-        all training transcripts or training transcripts from the specified fold.
-        Default is False. NOTE that `fold` must not be None if `is_val` is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to Table.
     """
-    if is_val and fold is None:
-        raise DataException("Fold number must be specified for validation set!")
     if fold is not None and fold not in range(1, FOLD_K + 1):
         raise DataException(
             f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
         )
-    transcript_type = "val" if is_val else "train"
     fold_name = f"_fold{fold}" if fold is not None else ""
-    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/{transcript_type}{fold_name}/missense_badness.ht"
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/missense_badness.ht"
 
 
 ####################################################################################
@@ -540,7 +522,6 @@ def misbad_path(
 ####################################################################################
 def joint_clinvar_gnomad_path(
     fold: int = None,
-    is_val: bool = False,
     freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
@@ -554,31 +535,22 @@ def joint_clinvar_gnomad_path(
     Table is input to MPC (missense badness, polyphen-2, and constraint) calculations.
 
     :param int fold: Fold number in training set to select training transcripts from.
-        If not None, the Table is generated from variants in only validation or training transcripts
+        If not None, the Table is generated from variants in only  training transcripts
         from the specified fold of the overall training set. If None, the Table is generated from
         variants in all training transcripts. Default is None.
-    :param bool is_val: Whether the Table is generated from variants in validation transcripts.
-        If True, the Table is generated from variants in the validation transcripts from the specified fold
-        of the overall training set. If False, the Table is generated from variants in
-        all training transcripts or training transcripts from the specified fold.
-        Default is False. NOTE that `fold` must not be None if `is_val` is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to Table.
     """
-    if is_val and fold is None:
-        raise DataException("Fold number must be specified for validation set!")
     if fold is not None and fold not in range(1, FOLD_K + 1):
         raise DataException(
             f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
         )
-    transcript_type = "val" if is_val else "train"
     fold_name = f"_fold{fold}" if fold is not None else ""
-    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/{transcript_type}{fold_name}/joint_clinvar_gnomad.ht"
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/joint_clinvar_gnomad.ht"
 
 
 def mpc_model_pkl_path(
     fold: int = None,
-    is_val: bool = False,
     freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
@@ -587,32 +559,25 @@ def mpc_model_pkl_path(
     Model created using logistic regression.
 
     :param int fold: Fold number in training set to select training transcripts from.
-        If not None, the model is generated from variants in only validation or training transcripts
+        If not None, the model is generated from variants in only training transcripts
         from the specified fold of the overall training set. If None, the model is generated from
         variants in all training transcripts. Default is None.
-    :param bool is_val: Whether the model is generated from variants in validation transcripts.
-        If True, the model is generated from variants in the validation transcripts from the specified fold
-        of the overall training set. If False, the model is generated from variants in
-        all training transcripts or training transcripts from the specified fold.
-        Default is False. NOTE that `fold` must not be None if `is_val` is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to Table.
     """
-    if is_val and fold is None:
-        raise DataException("Fold number must be specified for validation set!")
     if fold is not None and fold not in range(1, FOLD_K + 1):
         raise DataException(
             f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
         )
-    transcript_type = "val" if is_val else "train"
     fold_name = f"_fold{fold}" if fold is not None else ""
-    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/{transcript_type}{fold_name}/mpc_model.pkl"
+    return (
+        f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/mpc_model.pkl"
+    )
 
 
 def gnomad_fitted_score_path(
     is_grouped: bool = False,
     fold: int = None,
-    is_val: bool = False,
     freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
@@ -622,27 +587,19 @@ def gnomad_fitted_score_path(
 
     :param bool is_grouped: Whether the Table is grouped by score. Default is False.
     :param int fold: Fold number in training set to select training transcripts from.
-        If not None, the Table is generated from variants in only validation or training transcripts
+        If not None, the Table is generated from variants in only training transcripts
         from the specified fold of the overall training set. If None, the Table is generated from
         variants in all training transcripts. Default is None.
-    :param bool is_val: Whether the Table is generated from variants in validation transcripts.
-        If True, the Table is generated from variants in the validation transcripts from the specified fold
-        of the overall training set. If False, the Table is generated from variants in
-        all training transcripts or training transcripts from the specified fold.
-        Default is False. NOTE that `fold` must not be None if `is_val` is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to Table.
     """
-    if is_val and fold is None:
-        raise DataException("Fold number must be specified for validation set!")
     if fold is not None and fold not in range(1, FOLD_K + 1):
         raise DataException(
             f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
         )
-    transcript_type = "val" if is_val else "train"
     fold_name = f"_fold{fold}" if fold is not None else ""
     group = "_group" if is_grouped else ""
-    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/{transcript_type}{fold_name}/gnomad_fitted_scores{group}.ht"
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/gnomad_fitted_scores{group}.ht"
 
 
 mpc_release = VersionedTableResource(
