@@ -729,8 +729,6 @@ def calculate_fitted_scores(
 
 def aggregate_gnomad_fitted_scores(
     n_less_eq0_float: float = 0.83,
-    fold: int = None,
-    is_val: bool = False,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
@@ -740,21 +738,12 @@ def aggregate_gnomad_fitted_scores(
         This avoids errors in the `hl.log10` call and ensures that MPC for variants with a fitted score
         more severe than any common gnomAD variant score (`n_less` = 0) is more severe (by a controlled amount)
         compared to MPC for variants with a fitted score more severe than one common gnomAD variant (`n_less` = 1).
-    :param int fold: Fold number in training set to select training transcripts from.
-        If not None, the Table is generated from variants in only validation or training transcripts
-        from the specified fold of the overall training set. If None, the Table is generated from
-        variants in all training transcripts. Default is None.
-    :param bool is_val: Whether the Table is generated from variants in validation transcripts.
-        If True, the Table is generated from variants in the validation transcripts from the specified fold
-        of the overall training set. If False, the Table is generated from variants in
-        all training transcripts or training transcripts from the specified fold.
-        Default is False.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: None; function writes Table to resource path.
     """
     logger.info("Aggregating gnomAD fitted scores...")
     gnomad_ht = hl.read_table(
-        gnomad_fitted_score_path(fold=fold, is_val=is_val, freeze=freeze)
+        gnomad_fitted_score_path(freeze=freeze)
     )
     gnomad_ht = gnomad_ht.group_by("fitted_score").aggregate(n_var=hl.agg.count())
     gnomad_ht = gnomad_ht.order_by("fitted_score")
@@ -778,17 +767,15 @@ def aggregate_gnomad_fitted_scores(
     gnomad_ht = gnomad_ht.key_by("idx")
     gnomad_ht.write(
         gnomad_fitted_score_path(
-            is_grouped=True, fold=fold, is_val=is_val, freeze=freeze
+            is_grouped=True, freeze=freeze
         ),
         overwrite=True,
     )
 
 
-def create_mpc_ht(
+def create_mpc_release_ht(
     overwrite_temp: bool = True,
     overwrite_output: bool = True,
-    fold: int = None,
-    is_val: bool = False,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
@@ -815,21 +802,21 @@ def create_mpc_ht(
     logger.info("Calculating fitted scores...")
     ht = context_with_oe.versions[freeze].ht()
     ht = ht.transmute(polyphen=ht.polyphen.score)
-    ht = calculate_fitted_scores(ht=ht, fold=fold, is_val=is_val, freeze=freeze)
+    ht = calculate_fitted_scores(ht=ht, freeze=freeze)
 
     logger.info("Aggregating gnomAD fitted scores...")
     fitted_group_path = gnomad_fitted_score_path(
-        is_grouped=True, fold=fold, is_val=is_val, freeze=freeze
+        is_grouped=True, freeze=freeze
     )
     if not file_exists(fitted_group_path):
-        aggregate_gnomad_fitted_scores(fold=fold, is_val=is_val, freeze=freeze)
+        aggregate_gnomad_fitted_scores(freeze=freeze)
     gnomad_ht = hl.read_table(fitted_group_path)
     scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
     scores_len = len(scores)
 
     # Get total number of gnomAD common variants
     gnomad_var_count = hl.read_table(
-        gnomad_fitted_score_path(fold=fold, is_val=is_val, freeze=freeze)
+        gnomad_fitted_score_path(freeze=freeze)
     ).count()
 
     logger.info("Getting n_less annotation...")
