@@ -496,7 +496,7 @@ def run_regressions(
     min_models["spec"] = _run_glm(min_model_formulas["spec"])
 
     min_model_aics = {x: min_models[x].aic for x in model_types}
-    overall_min_aic = min(min_model_aics)
+    overall_min_aic = min(min_model_aics.values())
     logger.info("Lowest model AIC: %f", overall_min_aic)
     if list(min_model_aics.values()).count(overall_min_aic) > 1:
         logger.warning(
