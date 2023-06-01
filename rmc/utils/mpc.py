@@ -31,7 +31,6 @@ from rmc.resources.rmc import (
     misbad_path,
     mpc_model_pkl_path,
     mpc_release,
-    mpc_release_dedup,
 )
 from rmc.utils.generic import (
     get_aa_map,
@@ -601,8 +600,12 @@ def calculate_fitted_scores(
     Use MPC model chosen in `run_regressions` to calculate fitted scores for input Table.
 
     .. note::
-        - Assumes input Table has missense observed/expected (`oe`) and `polyphen` annotations.
-        - Function will remove any rows with undefined annotations from input Table.
+        - Function will remove any rows with undefined MPC feature annotations from input Table.
+        - Input Table is assumed to be keyed by ['locus', 'alleles'].
+        - If the model uses transcript-specific features (e.g. RMC O/E) and there are variants
+            in the input HT in multiple transcripts, only the most severe fitted score
+            (and the corresponding annotations it was calculated from) per variant
+            will be retained.
 
     :param hl.Table ht: Input Table with variants to be annotated.
     :param str temp_label: Suffix to add to temporary data paths to avoid conflicting names for different models.
@@ -617,7 +620,7 @@ def calculate_fitted_scores(
         Default is ":".
     :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
-    :return: Table filtered to defined MPC model annotations and annotated with fitted score.
+    :return: Table annotated with MPC model features and fitted scores, filtered to variants with defined annotations.
     """
     assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
 
@@ -632,45 +635,56 @@ def calculate_fitted_scores(
             f"{intercept_str} not in model parameters! Please double check and rerun."
         )
 
-    logger.info("Annotating HT with MPC variables...")
-    variables = mpc_rel_vars.keys()
-    annotations = []
+    variable_dict = {k: v for k, v in mpc_rel_vars.items() if not interaction_char in k}
+    variables = variable_dict.keys()
+    interactions_dict = {k: v for k, v in mpc_rel_vars.items() if interaction_char in k}
+
+    # Select fields from context HT containing annotations to extract
+    # NOTE: `ref` and `alt` fields are also extracted for annotation of missense badness
+    context_ht_annots = {"oe", "polyphen"}
+    annots = context_ht_annots.intersection(variables)
+    logger.info("Annotating HT with MPC variables from context HT (%s)...", annots)
+    context_ht = context_with_oe.versions[freeze].ht()
+    # Re-key context HT by locus and alleles (original key contains transcript)
+    # to enable addition of annotations from each transcript corresponding to a variant
+    context_ht = context_ht.key_by("locus", "alleles").select(
+        *({"transcript", "ref", "alt"} | annots)
+    )
+    if "polyphen" in annots:
+        context_ht = context_ht.transmute(polyphen=context_ht.polyphen.score)
+    # Add annotations from all transcripts per variant
+    # This creates separate rows for each transcript a variant is in
+    scores_ht = context_ht.join(ht.select())
+    scores_ht = scores_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_score_annots_context{temp_label}.ht"
+    )
+
+    # Add annotations not in context HT
     if "misbad" in variables:
-        logger.info("Getting missense badness annotation...")
+        logger.info("Annotating HT with missense badness...")
         mb_ht = hl.read_table(misbad_path(fold=fold, freeze=freeze))
-        ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
-        annotations.append("misbad")
+        scores_ht = scores_ht.annotate(
+            misbad=mb_ht[scores_ht.ref, scores_ht.alt].misbad
+        )
+        annots.add("misbad")
 
-    if "oe" in variables:
-        annotations.append("oe")
+    if annots != variables:
+        raise DataException("Check that all MPC model features are accounted for!")
 
-    if "polyphen" in variables:
-        annotations.append("polyphen")
-
-    logger.info("Filtering to defined annotations and checkpointing...")
+    logger.info("Filtering to defined annotations...")
     filter_expr = True
-    for field in annotations:
-        filter_expr &= hl.is_defined(ht[field])
-    ht = ht.filter(filter_expr)
-    # Checkpoint here to force missense badness join and filter to complete
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_score_temp_join{temp_label}.ht",
+    for annot in annots:
+        filter_expr &= hl.is_defined(scores_ht[annot])
+    scores_ht = scores_ht.filter(filter_expr)
+    # Checkpoint here to force joins and filter to complete
+    scores_ht = scores_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_score_annots_filtered{temp_label}.ht",
         overwrite=overwrite_temp,
     )
 
-    logger.info("Annotating fitted scores...")
-    variable_dict = {
-        variable: mpc_rel_vars[variable]
-        for variable in variables
-        if not interaction_char in variable
-    }
-    interactions_dict = {
-        variable: mpc_rel_vars[variable]
-        for variable in variables
-        if interaction_char in variable
-    }
+    logger.info("Calculating fitted scores...")
     annot_expr = [
-        (ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()
+        (scores_ht[variable] * mpc_rel_vars[variable]) for variable in variables
     ]
     interaction_annot_expr = []
     for variable in interactions_dict.keys():
@@ -679,27 +693,53 @@ def calculate_fitted_scores(
             # (Assumes the number of variables is maximum 3)
             if len(variable.split(interaction_char)) > 2:
                 interaction_annot_expr.append(
-                    ht[variable.split(interaction_char)[0]]
-                    * ht[variable.split(interaction_char)[1]]
-                    * ht[variable.split(interaction_char)[2]]
+                    scores_ht[variable.split(interaction_char)[0]]
+                    * scores_ht[variable.split(interaction_char)[1]]
+                    * scores_ht[variable.split(interaction_char)[2]]
                     * mpc_rel_vars[variable]
                 )
             else:
                 interaction_annot_expr.append(
-                    ht[variable.split(interaction_char)[0]]
-                    * ht[variable.split(interaction_char)[1]]
+                    scores_ht[variable.split(interaction_char)[0]]
+                    * scores_ht[variable.split(interaction_char)[1]]
                     * mpc_rel_vars[variable]
                 )
 
     annot_expr.extend(interaction_annot_expr)
     combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
 
-    logger.info("Computing fitted score and returning...")
-    return ht.annotate(fitted_score=intercept + combined_annot_expr)
+    logger.info("Computing fitted scores...")
+    scores_ht = scores_ht.annotate(fitted_score=intercept + combined_annot_expr)
+    scores_ht = scores_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_scores_dup{temp_label}.ht"
+    )
+
+    # Deduplicate variants in multiple transcripts by retaining only the most severe score
+    # per variant and corresponding annotations for that transcript
+    logger.info("Filtering to most severe fitted score for each variant...")
+    min_scores_ht = scores_ht.select("transcript", "fitted_score")
+    min_scores_ht = min_scores_ht.collect_by_key()
+    min_scores_ht = min_scores_ht.annotate(
+        fitted_score=hl.nanmin(min_scores_ht.values["fitted_score"])
+    )
+    min_scores_ht = min_scores_ht.annotate(
+        transcript=min_scores_ht.values.find(
+            lambda x: x["fitted_score"] == min_scores_ht["fitted_score"]
+        ).transcript
+    )
+    min_scores_ht = min_scores_ht.drop("values")
+    min_scores_ht = min_scores_ht.key_by("locus", "alleles", "transcript")
+    scores_ht = scores_ht.key_by("locus", "alleles", "transcript").join(min_scores_ht)
+    scores_ht = scores_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_scores_dedup{temp_label}.ht"
+    )
+    logger.info("Annotating fitted score and model features onto input HT...")
+    return ht.join(scores_ht)
 
 
 def aggregate_gnomad_fitted_scores(
     n_less_eq0_float: float = 0.83,
+    fold: int = None,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
@@ -709,11 +749,15 @@ def aggregate_gnomad_fitted_scores(
         This avoids errors in the `hl.log10` call and ensures that MPC for variants with a fitted score
         more severe than any common gnomAD variant score (`n_less` = 0) is more severe (by a controlled amount)
         compared to MPC for variants with a fitted score more severe than one common gnomAD variant (`n_less` = 1).
+    :param int fold: Fold number in training set to select training transcripts from.
+        If not None, the Table is generated from variants in only training transcripts
+        from the specified fold of the overall training set. If None, the Table is generated from
+        variants in all training transcripts. Default is None.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: None; function writes Table to resource path.
     """
     logger.info("Aggregating gnomAD fitted scores...")
-    gnomad_ht = hl.read_table(gnomad_fitted_score_path(freeze=freeze))
+    gnomad_ht = hl.read_table(gnomad_fitted_score_path(fold=fold, freeze=freeze))
     gnomad_ht = gnomad_ht.group_by("fitted_score").aggregate(n_var=hl.agg.count())
     gnomad_ht = gnomad_ht.order_by("fitted_score")
     gnomad_ht = gnomad_ht.key_by("fitted_score")
@@ -735,7 +779,7 @@ def aggregate_gnomad_fitted_scores(
     gnomad_ht = gnomad_ht.annotate(idx=hl.int(gnomad_ht.idx))
     gnomad_ht = gnomad_ht.key_by("idx")
     gnomad_ht.write(
-        gnomad_fitted_score_path(is_grouped=True, freeze=freeze),
+        gnomad_fitted_score_path(is_grouped=True, fold=fold, freeze=freeze),
         overwrite=True,
     )
 
@@ -767,6 +811,7 @@ def annotate_mpc(
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
         Default is True.
+    # TODO: Update `overwrite_output` documentation
     :param bool overwrite_output: Whether to entirely overwrite final output data if it already exists.
         If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
         If True, will clear existing output data and write new output data.
@@ -796,10 +841,7 @@ def annotate_mpc(
             raise DataException(
                 "MPC release is generated only from all training transcripts!"
             )
-        if not (
-            file_exists(mpc_release.versions[freeze].path)
-            and file_exists(mpc_release_dedup.versions[freeze].path)
-        ):
+        if not file_exists(mpc_release.versions[freeze].path):
             raise DataException("MPC release has not yet been generated!")
 
         logger.info("Annotating MPC scores using MPC release HT and writing out...")
@@ -807,34 +849,34 @@ def annotate_mpc(
         ht = ht.annotate(mpc=mpc_ht[ht.locus, ht.alleles].mpc)
         ht.write(output_ht_path, overwrite=overwrite_output)
     else:
-        logger.info("Calculating fitted scores...")
-        ht = ht.transmute(polyphen=ht.polyphen.score)
-        ht = calculate_fitted_scores(ht=ht, freeze=freeze)
+        logger.info("Calculating fitted scores on input variants...")
+        scores_ht = calculate_fitted_scores(ht=ht.select(), freeze=freeze)
 
-        logger.info("Aggregating gnomAD fitted scores...")
+        logger.info("Aggregating fitted scores for gnomAD common variants...")
         fitted_group_path = gnomad_fitted_score_path(
             is_grouped=True, fold=fold, freeze=freeze
         )
         if not file_exists(fitted_group_path):
-            aggregate_gnomad_fitted_scores(freeze=freeze)
+            aggregate_gnomad_fitted_scores(fold=fold, freeze=freeze)
         gnomad_ht = hl.read_table(fitted_group_path)
         scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
         scores_len = len(scores)
 
         # Get total number of gnomAD common variants
         gnomad_var_count = hl.read_table(
-            gnomad_fitted_score_path(freeze=freeze)
+            gnomad_fitted_score_path(fold=fold, freeze=freeze)
         ).count()
 
-        logger.info("Getting n_less annotation...")
+        logger.info("Getting n_less values for input variants...")
         # Annotate HT with sorted array of gnomAD fitted scores
-        ht = ht.annotate_globals(gnomad_scores=scores)
+        scores_ht = scores_ht.annotate_globals(gnomad_scores=scores)
         # Checkpoint here to force the gnomAD join to complete
-        ht = ht.checkpoint(
+        scores_ht = scores_ht.checkpoint(
             f"{TEMP_PATH_WITH_FAST_DEL}/mpc_temp_gnomad.ht",
             _read_if_exists=not overwrite_temp,
             overwrite=overwrite_temp,
         )
+        # TODO: Add temp label here and other places as needed
 
         # Search all gnomAD scores to find first score that is
         # greater than or equal to score to be annotated
@@ -845,41 +887,37 @@ def annotate_mpc(
         # the `n_less` of 0.5 will contain the counts of variants with gnomAD scores of
         # 0.3 and 0.4 due to the non-inclusive nature of scans
         # (n_less[0.5] = n_var[0.3] + n_var[0.4])
-        ht = ht.annotate(idx=hl.binary_search(ht.gnomad_scores, ht.fitted_score))
-        ht = ht.annotate(
+        scores_ht = scores_ht.annotate(
+            idx=hl.binary_search(scores_ht.gnomad_scores, scores_ht.fitted_score)
+        )
+        scores_ht = scores_ht.annotate(
             n_less=hl.if_else(
                 # Make n_less equal to total gnomAD common variant count if
                 # index is equal to the length of the gnomAD scores array
-                ht.idx == scores_len,
+                scores_ht.idx == scores_len,
                 gnomad_var_count,
-                gnomad_ht[ht.idx].n_less,
+                gnomad_ht[scores_ht.idx].n_less,
             )
         )
         # Checkpoint here to force the binary search to compute
-        ht = ht.checkpoint(
+        scores_ht = scores_ht.checkpoint(
             f"{TEMP_PATH_WITH_FAST_DEL}/mpc_temp_binary.ht",
             _read_if_exists=not overwrite_temp,
             overwrite=overwrite_temp,
         )
 
         logger.info("Calculating MPC scores...")
-        ht = ht.annotate(mpc=-(hl.log10(ht.n_less / gnomad_var_count)))
-        ht = ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/mpc_dup.ht",
+        scores_ht = scores_ht.annotate(
+            mpc=-(hl.log10(scores_ht.n_less / gnomad_var_count))
+        )
+        scores_ht = scores_ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/mpc.ht",
             overwrite=overwrite_temp,
             _read_if_exists=not overwrite_temp,
         )
 
-        logger.info("Deduplicating variants and writing out...")
-        ht = ht.select("mpc")
-        ht = ht.collect_by_key()
-        # Deduplicate variants in multiple transcripts by retaining only the most severe score
-        # per variant
-        ht = ht.annotate(**{"mpc": hl.nanmax(ht.values["mpc"])})
-        ht = ht.annotate(
-            **{"transcript": ht.values.find(lambda x: x["mpc"] == ht["mpc"]).transcript}
-        )
-        ht = ht.drop("values")
+        logger.info("Annotating MPC scores to input table and writing out...")
+        ht = ht.annotate(mpc=scores_ht[ht.key].mpc)
         ht.write(output_ht_path, overwrite=overwrite_output)
 
 
@@ -903,7 +941,7 @@ def create_mpc_release_ht(
     :return: None; function writes Table to resource path.
     """
     annotate_mpc(
-        ht=context_with_oe.versions[freeze].ht(),
+        ht=context_with_oe.versions[freeze].ht().select(),
         output_ht_path=mpc_release.versions[freeze].path,
         use_release=False,
         overwrite_temp=overwrite_temp,
