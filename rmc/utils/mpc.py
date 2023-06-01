@@ -356,6 +356,8 @@ def prepare_pop_path_ht(
 
 
 def run_regressions(
+    use_model_formula: bool = False,
+    model_formula: str = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen",
     variables: List[str] = ["oe", "misbad", "polyphen"],
     additional_variables: List[str] = ["blosum", "grantham"],
     overwrite: bool = True,
@@ -363,9 +365,12 @@ def run_regressions(
     freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
-    Run single variable and joint regressions and pick best model using training data.
+    Train regression model used to determine the fitted score that is used to predict MPC scores.
 
-    These regressions are used to determine the fitted score that is used to predict MPC scores.
+    Depending on the `use_model_formula` parameter, this function can be used to:
+    (1) Train a model with a specified formula or
+    (2) Train single variable and joint regression models on combinations of the input variables
+    and pick the best model based on AIC.
 
     For a variant v:
     Fitted score (from ExAC):
@@ -379,6 +384,13 @@ def run_regressions(
     Note that higher MPC scores predict increased missense deleteriousness, and
     smaller n_less values and fitted scores will lead to higher MPC scores.
 
+    :param bool use_model_formula: Whether to use a specified model formula.
+        If True, only one model will be built using the formula specified in `model_formula`.
+        If False, all possible combinations of variables in `variables` and `additional_variables`
+        will be used to build models. The single best model based on AIC will be kept.
+        Default is False.
+    :param str model_formula: Model formula to use in regression.
+        Default is 'pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen'.
     :param List[str] variables: Variables to include in all regressions (single, joint).
         Default is ["oe", "misbad", "polyphen"].
     :param List[str] additional_variables: Additional variables to include in single variable regressions only.
@@ -389,8 +401,7 @@ def run_regressions(
         If True, will calculate k models corresponding to the k-folds of the training transcripts.
         Default is False.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
-    :return: None; function writes Table with gnomAD fitted scores
-        and model coefficients as pickle to resource paths.
+    :return: None; function writes Table with gnomAD fitted scores and pickled model to resource paths.
     """
 
     def _run_glm(
@@ -429,14 +440,14 @@ def run_regressions(
         fold: int = None,
     ) -> None:
         """
-            Run single variable and joint regressions and pick best model using a given set of transcripts.
+        Run single variable and joint regressions and pick best model using a given set of transcripts.
 
-            :param str temp_label: Suffix to add to temporary data paths to avoid conflicting names for different models.
+        :param str temp_label: Suffix to add to temporary data paths to avoid conflicting names for different models.
         :param int fold: Fold number in training set to select training transcripts from.
             If not None, the Table is generated from variants in only training transcripts
             from the specified fold of the overall training set. If None, the Table is generated from
             variants in all training transcripts. Default is None.
-            :return: None; function writes HT to specified path.
+        :return: None; function writes HT to specified path.
         """
         # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
         ht = hl.read_table(joint_clinvar_gnomad_path(fold=fold, freeze=freeze))
@@ -863,6 +874,8 @@ def annotate_mpc(
             overwrite=overwrite_temp,
         )
         # TODO: Add temp label here and other places as needed
+        # TODO: Allow specification of MPC model in fitting MPC model + calculating fitted scores
+        # for using same model across folds
 
         # Search all gnomAD scores to find first score that is
         # greater than or equal to score to be annotated
