@@ -622,7 +622,7 @@ def calculate_fitted_scores(
     interaction_annot_expr = []
     for interaction in interactions_dict.keys():
         expr = mpc_rel_vars[interaction]
-        for variable in variable.split(interaction_char):
+        for variable in interaction.split(interaction_char):
             expr *= ht[variable]
         interaction_annot_expr.append(expr)
 
