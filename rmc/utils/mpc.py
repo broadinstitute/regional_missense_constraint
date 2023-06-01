@@ -173,7 +173,6 @@ def prepare_pop_path_ht(
     gnomad_data_type: str = "exomes",
     af_threshold: float = 0.001,
     overwrite_temp: bool = False,
-    overwrite_output: bool = True,
     do_k_fold_training: bool = False,
     freeze: int = CURRENT_FREEZE,
     adj_freq_index: int = 0,
@@ -195,12 +194,6 @@ def prepare_pop_path_ht(
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
         Default is False.
-    :param bool overwrite_output: Whether to entirely overwrite final output data if it already exists.
-        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
-        If True, will clear existing output data and write new output data.
-        The output Tables are the OE-annotated context Tables with duplicated or deduplicated sections
-        and the population/pathogenic variant Table.
-        Default is True.
     :param do_k_fold_training: Whether to generate k-fold models with the training transcripts.
         If False, will use all training transcripts in calculation of a single model.
         If True, will calculate k models corresponding to the k-folds of the training transcripts.
@@ -345,7 +338,7 @@ def prepare_pop_path_ht(
                 fold=fold,
                 freeze=freeze,
             ),
-            overwrite=overwrite_output,
+            overwrite=True,
         )
 
     if not do_k_fold_training:
@@ -789,7 +782,6 @@ def annotate_mpc(
     output_ht_path: str,
     use_release: bool = True,
     overwrite_temp: bool = True,
-    overwrite_output: bool = True,
     fold: int = None,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
@@ -810,12 +802,6 @@ def annotate_mpc(
     :param str output_ht_path: Path to write out annotated table (with duplicate variants removed.
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
-        Default is True.
-    # TODO: Update `overwrite_output` documentation
-    :param bool overwrite_output: Whether to entirely overwrite final output data if it already exists.
-        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
-        If True, will clear existing output data and write new output data.
-        The output Tables are the MPC score Tables with duplicated or deduplicated loci.
         Default is True.
     :param int fold: Fold number in training set used to generate MPC model.
         If not None, MPC scores are generated from variants in only training transcripts
@@ -847,7 +833,7 @@ def annotate_mpc(
         logger.info("Annotating MPC scores using MPC release HT and writing out...")
         mpc_ht = mpc_release.versions[freeze].ht()
         ht = ht.annotate(mpc=mpc_ht[ht.locus, ht.alleles].mpc)
-        ht.write(output_ht_path, overwrite=overwrite_output)
+        ht.write(output_ht_path, overwrite=True)
     else:
         logger.info("Calculating fitted scores on input variants...")
         scores_ht = calculate_fitted_scores(ht=ht.select(), freeze=freeze)
@@ -918,12 +904,11 @@ def annotate_mpc(
 
         logger.info("Annotating MPC scores to input table and writing out...")
         ht = ht.annotate(mpc=scores_ht[ht.key].mpc)
-        ht.write(output_ht_path, overwrite=overwrite_output)
+        ht.write(output_ht_path, overwrite=True)
 
 
 def create_mpc_release_ht(
     overwrite_temp: bool = True,
-    overwrite_output: bool = True,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
@@ -931,11 +916,6 @@ def create_mpc_release_ht(
 
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
-        Default is True.
-    :param bool overwrite_output: Whether to entirely overwrite final output data if it already exists.
-        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
-        If True, will clear existing output data and write new output data.
-        The output Tables are the MPC score Tables with duplicated or deduplicated loci.
         Default is True.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: None; function writes Table to resource path.
@@ -945,6 +925,5 @@ def create_mpc_release_ht(
         output_ht_path=mpc_release.versions[freeze].path,
         use_release=False,
         overwrite_temp=overwrite_temp,
-        overwrite_output=overwrite_output,
         freeze=freeze,
     )

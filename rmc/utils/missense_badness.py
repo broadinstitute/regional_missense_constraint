@@ -27,7 +27,6 @@ logger.setLevel(logging.INFO)
 
 def prepare_amino_acid_ht(
     overwrite_temp: bool,
-    overwrite_output: bool,
     do_k_fold_training: bool = False,
     freeze: int = CURRENT_FREEZE,
     gnomad_data_type: str = "exomes",
@@ -46,10 +45,6 @@ def prepare_amino_acid_ht(
 
     :param overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
-    :param overwrite_output: Whether to entirely overwrite final output (OE-dependent) data if it already exists.
-        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
-        If True, will clear existing output data and write new output data.
-        The output Table is the amino acid Table.
     :param do_k_fold_training: Whether to generate k-fold models with the training transcripts.
         If False, will use all training transcripts in calculation of a single model.
         If True, will calculate k models corresponding to the k-folds of the training transcripts.
@@ -177,7 +172,7 @@ def prepare_amino_acid_ht(
         ht = ht.filter(filter_transcripts.contains(ht.transcript))
         ht.write(
             amino_acids_oe_path(fold=fold, freeze=freeze),
-            overwrite=overwrite_output,
+            overwrite=True,
         )
 
     if not do_k_fold_training:
@@ -273,7 +268,6 @@ def get_total_csq_count(ht: hl.Table, csq: str, count_field: str) -> int:
 def calculate_misbad(
     use_exac_oe_cutoffs: bool,
     overwrite_temp: bool,
-    overwrite_output: bool,
     do_k_fold_training: bool = False,
     oe_threshold: float = 0.6,
     freeze: int = CURRENT_FREEZE,
@@ -289,10 +283,6 @@ def calculate_misbad(
     :param bool use_exac_oe_cutoffs: Whether to use the same missense OE cutoffs as in ExAC missense badness calculation.
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
-    :param bool overwrite_output: Whether to entirely overwrite final output data if it already exists.
-        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
-        If True, will clear existing output data and write new output data.
-        The output Table is the missense badness score Table.
     :param bool do_k_fold_training: Whether to generate k-fold models with the training transcripts.
         If False, will use all training transcripts in calculation of a single model.
         If True, will calculate k models corresponding to the k-folds of the training transcripts.
@@ -413,13 +403,7 @@ def calculate_misbad(
             ),
         )
 
-        mb_ht.write(
-            misbad_path(
-                fold=fold,
-                freeze=freeze,
-            ),
-            overwrite=overwrite_output,
-        )
+        mb_ht.write(misbad_path(fold=fold, freeze=freeze), overwrite=True)
 
     if not do_k_fold_training:
         _create_misbad_model(
@@ -427,7 +411,4 @@ def calculate_misbad(
         )
     else:
         for i in range(1, FOLD_K + 1):
-            _create_misbad_model(
-                temp_label=f"_train_fold{i}",
-                fold=i,
-            )
+            _create_misbad_model(temp_label=f"_train_fold{i}", fold=i)
