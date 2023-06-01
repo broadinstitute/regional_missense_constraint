@@ -579,6 +579,22 @@ def calculate_fitted_scores(
     if "polyphen" in variables:
         annotations.append("polyphen")
 
+    if "blosum" in variables:
+        logger.info("Getting Blosum annotation...")
+        if not file_exists(blosum.path):
+            import_blosum()
+        blosum_ht = blosum.ht()
+        ht = ht.annotate(blosum=blosum_ht[ht.ref, ht.alt].score)
+        annotations.append("blosum")
+
+    if "grantham" in variables:
+        logger.info("Getting Grantham annotation...")
+        if not file_exists(grantham.path):
+            import_grantham()
+        grantham_ht = grantham.ht()
+        ht = ht.annotate(grantham=grantham_ht[ht.ref, ht.alt].score)
+        annotations.append("grantham")
+
     logger.info("Filtering to defined annotations and checkpointing...")
     filter_expr = True
     for field in annotations:
@@ -604,23 +620,11 @@ def calculate_fitted_scores(
         (ht[variable] * mpc_rel_vars[variable]) for variable in variable_dict.keys()
     ]
     interaction_annot_expr = []
-    for variable in interactions_dict.keys():
-        if len(variable.split(interaction_char)) > 2:
-            # NOTE: This assumes that variable is in the format of x:y:z or x*y*z
-            # (Assumes the number of variables is maximum 3)
-            if len(variable.split(interaction_char)) > 2:
-                interaction_annot_expr.append(
-                    ht[variable.split(interaction_char)[0]]
-                    * ht[variable.split(interaction_char)[1]]
-                    * ht[variable.split(interaction_char)[2]]
-                    * mpc_rel_vars[variable]
-                )
-            else:
-                interaction_annot_expr.append(
-                    ht[variable.split(interaction_char)[0]]
-                    * ht[variable.split(interaction_char)[1]]
-                    * mpc_rel_vars[variable]
-                )
+    for interaction in interactions_dict.keys():
+        expr = mpc_rel_vars[interaction]
+        for variable in interaction.split(interaction_char):
+            expr *= ht[variable]
+        interaction_annot_expr.append(expr)
 
     annot_expr.extend(interaction_annot_expr)
     combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
