@@ -231,7 +231,7 @@ if __name__ == "__main__":
     annotate_hts.add_argument(
         "--use-release",
         help="""
-        Use scores in MPC release HT to annotate.
+        Use scores in MPC release hail Table to annotate.
 
         Otherwise, scores will be directly computed using specified MPC model.
         """,
@@ -245,21 +245,21 @@ if __name__ == "__main__":
     )
     # temp_label="_clinvar",
     annotate_hts.add_argument(
-        "--clinvar", help="Calculate MPC for ClinVar variants", action="store_true"
+        "--clinvar", help="Calculate MPC for ClinVar variants.", action="store_true"
     )
     annotate_hts.add_argument(
         "--dd",
-        help="Calculate MPC for de novo variants from developmental disorder (DD) cases and controls",
+        help="Calculate MPC for de novo variants from developmental disorder (DD) cases and controls.",
         action="store_true",
     )
     annotate_hts.add_argument(
         "--gnomad-exomes",
-        help="Calculate MPC for all gnomAD exomes variants",
+        help="Calculate MPC for all gnomAD exomes variants.",
         action="store_true",
     )
     annotate_hts.add_argument(
         "--specify-ht",
-        help="Calculate MPC for variants in specified hail Table",
+        help="Calculate MPC for variants in specified hail Table.",
         action="store_true",
     )
     annotate_hts.add_argument(
