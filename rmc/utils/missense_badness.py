@@ -117,10 +117,7 @@ def prepare_amino_acid_ht(
     )
 
     logger.info("Filtering sites using gnomAD %s...", gnomad_data_type)
-    context_ht = filter_context_using_gnomad(
-        context_ht,
-        gnomad_data_type,
-    )
+    context_ht = filter_context_using_gnomad(context_ht, gnomad_data_type)
 
     logger.info("Adding observed annotation...")
     context_ht = add_obs_annotation(context_ht)
@@ -170,10 +167,7 @@ def prepare_amino_acid_ht(
             train_val_test_transcripts_path(fold=fold)
         )
         ht = ht.filter(filter_transcripts.contains(ht.transcript))
-        ht.write(
-            amino_acids_oe_path(fold=fold, freeze=freeze),
-            overwrite=True,
-        )
+        ht.write(amino_acids_oe_path(fold=fold, freeze=freeze), overwrite=True)
 
     if not do_k_fold_training:
         logger.info("Writing out HT for training transcripts only...")
@@ -302,12 +296,7 @@ def calculate_misbad(
     else:
         if not all(
             [
-                file_exists(
-                    amino_acids_oe_path(
-                        fold=i,
-                        freeze=freeze,
-                    )
-                )
+                file_exists(amino_acids_oe_path(fold=i, freeze=freeze))
                 for i in range(1, FOLD_K + 1)
             ]
         ):
@@ -329,12 +318,7 @@ def calculate_misbad(
             Default is None.
         :return: None; writes Table with missense badness scores to resource path.
         """
-        ht = hl.read_table(
-            amino_acids_oe_path(
-                fold=fold,
-                freeze=freeze,
-            )
-        )
+        ht = hl.read_table(amino_acids_oe_path(fold=fold, freeze=freeze))
         if use_exac_oe_cutoffs:
             logger.info("Removing rows with OE greater than 0.6 and less than 0.8...")
             ht = ht.filter((ht.oe <= 0.6) | (ht.oe > 0.8))
