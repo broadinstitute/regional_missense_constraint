@@ -563,7 +563,7 @@ def mpc_model_pkl_path(
         from the specified fold of the overall training set. If None, the model is generated from
         variants in all training transcripts. Default is None.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
-    :return: Path to Table.
+    :return: Path to model.
     """
     if fold is not None and fold not in range(1, FOLD_K + 1):
         raise DataException(
