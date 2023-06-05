@@ -201,11 +201,12 @@ def prepare_pop_path_ht(
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :param adj_freq_index: Index of array that contains allele frequency information calculated on
         high quality (adj) genotypes across genetic ancestry groups. Default is 0.
-    :param cov_threshold: Coverage threshold used to filter context Table. Default is 0.
+    :param int cov_threshold: Coverage threshold used to filter context Table. Default is 0.
     :return: None; function writes Table to resource path.
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
     clinvar_ht = clinvar_plp_mis_haplo.ht()
+    # TODO: Change severe gene definition? Include TS genes?
     clinvar_ht = clinvar_ht.annotate(pop_v_path=0)
 
     logger.info(
@@ -246,10 +247,7 @@ def prepare_pop_path_ht(
     logger.info("Adding CADD...")
     # TODO: Make sure future CADD HTs have already been split
     cadd_ht = cadd.ht()
-    cadd_ht = cadd_ht.transmute(
-        raw=cadd_ht.RawScore,
-        phred=cadd_ht.PHRED,
-    )
+    cadd_ht = cadd_ht.transmute(raw=cadd_ht.RawScore, phred=cadd_ht.PHRED)
     ht = ht.annotate(cadd=hl.struct(**cadd_ht[ht.key]))
 
     logger.info("Getting transcript annotations...")
@@ -320,12 +318,7 @@ def prepare_pop_path_ht(
             variants in all training transcripts. Default is None.
         :return: None; function writes HT to specified path.
         """
-        mb_ht = hl.read_table(
-            misbad_path(
-                fold=fold,
-                freeze=freeze,
-            )
-        )
+        mb_ht = hl.read_table(misbad_path(fold=fold, freeze=freeze))
         ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
         filter_transcripts = hl.experimental.read_expression(
             train_val_test_transcripts_path(fold=fold)
@@ -333,13 +326,7 @@ def prepare_pop_path_ht(
         ht = ht.filter(
             hl.is_defined(ht.misbad) & filter_transcripts.contains(ht.transcript)
         )
-        ht.write(
-            joint_clinvar_gnomad_path(
-                fold=fold,
-                freeze=freeze,
-            ),
-            overwrite=True,
-        )
+        ht.write(joint_clinvar_gnomad_path(fold=fold, freeze=freeze), overwrite=True)
 
     if not do_k_fold_training:
         logger.info(
@@ -355,34 +342,173 @@ def prepare_pop_path_ht(
             _add_misbad_and_filter_transcripts(ht=ht, fold=i)
 
 
+def run_glm(
+    df: pd.core.frame.DataFrame,
+    formula: str,
+) -> Tuple[
+    pd.core.frame.DataFrame,
+    statsmodels.genmod.generalized_linear_model.GLMResultsWrapper,
+]:
+    """
+    Run logistic regression using input formula and return model results.
+
+    For formula reference, see: https://learn-scikit.oneoffcoder.com/patsy.html.
+
+    :param pd.core.frame.DataFrame df: Table holding data to fit model with.
+    :param str formula: R-style formula defining model.
+    :return: Logistic regression results.
+    """
+    # Create design matrices to fit model
+    # NOTE: If run into a TypeError here, fix with df['field'].astype()
+    # Example error: TypeError: Cannot interpret 'string[python]' as a data type
+    # Example fix: df['misbad3'] = df['misbad3'].astype(float)
+    y, X = dmatrices(formula, data=df, return_type="dataframe")
+    model = sm.GLM(y, X, family=sm.families.Binomial()).fit()
+    logger.info("%s summary: %s", formula, model.summary())
+    logger.info("AIC: %i", model.aic)
+    return (X, model)
+
+
+# TODO: Separate out comparing models with AIC and training regressions from all combinations
+# of a set of variables
+# After merging with model flexibility code changes
+def get_min_aic_model(
+    df: pd.core.frame.DataFrame,
+    variables: List[str],
+) -> Tuple[
+    pd.core.frame.DataFrame,
+    statsmodels.genmod.generalized_linear_model.GLMResultsWrapper,
+]:
+    """
+    Run single variable and joint regressions using a given set of transcripts and pick best model.
+
+    :param pd.core.frame.DataFrame df: Table holding data to fit model with.
+    :param List[str] variables: Variables to include in all regressions (single, joint).
+    :return: Logistic regression results.
+    """
+    logger.info("Run single variable regressions...")
+    # E.g., mod.misbad3 <- glm(pop_v_path ~ mis_badness3, data=cleaned_joint_exac_clinvar.scores, family=binomial)
+    single_var_res = {}
+    single_var_aic = []
+    single_var_X = []
+    for var in variables:
+        logger.info("Running %s regression...", var)
+        # Create design matrices
+        formula = f"pop_v_path ~ {var}"
+        X, model = run_glm(df=df, formula=formula)
+        single_var_X.append(X)
+        single_var_aic.append(model.aic)
+        single_var_res[var] = model.params
+
+    # Find lowest AIC for single variable regressions and corresponding model
+    min_single_aic = min(single_var_aic)
+    single_var_idx = single_var_aic.index(min_single_aic)
+    min_single_aic_var = variables[single_var_idx]
+    min_single_X = single_var_X[single_var_idx]
+    if single_var_aic.count(min_single_aic) > 1:
+        logger.warning(
+            """
+            There is a tie for minimum AIC.
+            This function will use the first variable it finds by default!
+            """
+        )
+    logger.info(
+        "Model with smallest AIC for single variable regressions used %s",
+        min_single_aic_var,
+    )
+
+    logger.info("Running joint (additive interactions only) regression...")
+    add_formula = f"pop_v_path ~ {' + '.join(variables)}"
+    add_X, add_model = run_glm(df=df, formula=add_formula)
+
+    logger.info("Running joint regression with all interactions...")
+    mult_formula = f"pop_v_path ~ {' * '.join(variables)}"
+    mult_X, mult_model = run_glm(df=df, formula=mult_formula)
+
+    logger.info("Running joint regression with specific interactions...")
+    # Currently hardcoded to be formula from ExAC
+    spec_formula = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
+    spec_X, spec_model = run_glm(df=df, formula=spec_formula)
+
+    all_model_aic = single_var_aic + [add_model.aic, mult_model.aic, spec_model.aic]
+    min_aic = min(all_model_aic)
+    logger.info("Lowest model AIC: %f", min_aic)
+    if all_model_aic.count(min_aic) > 1:
+        logger.warning(
+            """
+            There is a tie for minimum AIC.
+            This function will use the first model it finds by default
+            (single variable -> additive interactions -> all interactions -> specific interactions)!
+            """
+        )
+    if min_aic == min_single_aic:
+        logger.info(
+            "Single variable regression using %s had the lowest AIC",
+            min_single_aic_var,
+        )
+        logger.info("Coefficients: %s", single_var_res[min_single_aic_var])
+        model = single_var_res
+        X = min_single_X
+    elif min_aic == add_model.aic:
+        logger.info(
+            "Joint regression using additive interactions (%s) had the lowest AIC",
+            add_formula,
+        )
+        logger.info("Coefficients: %s", add_model.params)
+        model = add_model
+        X = add_X
+    elif min_aic == mult_model.aic:
+        logger.info(
+            "Joint regression using all interactions (%s) had the lowest AIC",
+            mult_formula,
+        )
+        logger.info("Coefficients: %s", mult_model.params)
+        model = mult_model
+        X = mult_X
+    else:
+        logger.info(
+            "Joint regression using specific interactions (%s) had the lowest AIC",
+            spec_formula,
+        )
+        logger.info("Coefficients: %s", spec_model.params)
+        model = spec_model
+        X = spec_X
+
+    return (X, model)
+
+
 def run_regressions(
     use_model_formula: bool = False,
     model_formula: str = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen",
     variables: List[str] = ["oe", "misbad", "polyphen"],
     additional_variables: List[str] = ["blosum", "grantham"],
-    overwrite: bool = True,
+    overwrite_temp: bool = False,
     do_k_fold_training: bool = False,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
-    Train regression model used to determine the fitted score that is used to predict MPC scores.
+    Train regression model(s) on given set of transcripts to determine fitted scores for MPC calculation.
 
     Depending on the `use_model_formula` parameter, this function can be used to:
-    (1) Train a model with a specified formula or
-    (2) Train single variable and joint regression models on combinations of the input variables
-    and pick the best model based on AIC.
+    (1) Train a model with a specified formula, or
+    (2) Train single variable and joint regressions on combinations of the input variables
+    and pick the best model out of these based on AIC.
 
-    For a variant v:
-    Fitted score (from ExAC):
+    Regression formula from ExAC:
+        `pop_v_path ~ obs_exp + mis_badness3 + obs_exp:mis_badness3 + polyphen2 + obs_exp:polyphen2`
+    Missense badness was calculated three times in ExAC.
+    The third version (mis_badness3) is the version that was released.
+
+    Fitted score for a variant v from ExAC:
         fitted_score(v) = 4.282793 + (4.359682*v[obs_exp]) + (-3.654815*v[misbad]) + (-3.512215*v[pph2])
-                    + (2.585361*v[obs_exp]*v[misbad]) + (1.350056*v[obs_exp]*v[pph2])
+                        + (2.585361*v[obs_exp]*v[misbad]) + (1.350056*v[obs_exp]*v[pph2])
 
-    Relationship between fitted score and MPC (from ExAC):
+    Relationship between fitted score and MPC from ExAC:
         mpc(v) = -log10(n_less(v))/82932)
         n_less(v) = number of common (AC > 121, AF > 0.001) ExAC variants with fitted_score < fitted_score(v)
 
-    Note that higher MPC scores predict increased missense deleteriousness, and
-    smaller n_less values and fitted scores will lead to higher MPC scores.
+    Note that higher MPC scores indicate increased predicted missense deleteriousness, and
+    smaller n_less values and fitted scores correspond to higher MPC scores.
 
     :param bool use_model_formula: Whether to use a specified model formula.
         If True, only one model will be built using the formula specified in `model_formula`.
@@ -391,63 +517,39 @@ def run_regressions(
         Default is False.
     :param str model_formula: Model formula to use in regression.
         Default is 'pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen'.
+        This was the formula selected in ExAC.
     :param List[str] variables: Variables to include in all regressions (single, joint).
-        Default is ["oe", "misbad", "polyphen"].
+        Default is ['oe', 'misbad', 'polyphen'].
     :param List[str] additional_variables: Additional variables to include in single variable regressions only.
-        Default is ["blosum", "grantham"].
-    :param bool overwrite: Whether to overwrite gnomAD fitted score table if it already exists. Default is True.
-    :param do_k_fold_training: Whether to generate k-fold models with the training transcripts.
+        Default is ['blosum', 'grantham'].
+    :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
+        If False, will read existing intermediate temporary data rather than overwriting.
+        Default is False.
+    :param bool do_k_fold_training: Whether to generate k-fold models with the training transcripts.
         If False, will use all training transcripts in calculation of a single model.
         If True, will calculate k models corresponding to the k-folds of the training transcripts.
         Default is False.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
-    :return: None; function writes Table with gnomAD fitted scores and pickled model to resource paths.
+    :return: None; function writes Table(s) with gnomAD fitted scores and pickled model(s) to resource paths.
     """
+    if not use_model_formula and do_k_fold_training:
+        raise DataException(
+            "Training separate models with k folds may result in different optimums!"
+        )
 
-    def _run_glm(
-        df: pd.core.frame.DataFrame,
-        formula: str,
-    ) -> Tuple[
-        pd.core.frame.DataFrame,
-        statsmodels.genmod.generalized_linear_model.GLMResultsWrapper,
-    ]:
-        """
-        Run logistic regression using input formula and return model results.
-
-        MPC formula (from ExAC):
-        `pop_v_path ~ obs_exp + mis_badness3 + obs_exp:mis_badness3 + polyphen2 + obs_exp:polyphen2`
-        Missense badness was calculated three times in ExAC.
-        The third version (mis_badness3) is the version that was released.
-
-        For formula reference, see: https://learn-scikit.oneoffcoder.com/patsy.html.
-
-        :param pd.core.frame.DataFrame df: Table holding data to fit model with.
-        :param str formula: R-style formula defining model.
-        :return: Logistic regression results.
-        """
-        # Create design matrices to fit model
-        # NOTE: If run into a TypeError here, fix with df['field'].astype()
-        # Example error: TypeError: Cannot interpret 'string[python]' as a data type
-        # Example fix: df['misbad3'] = df['misbad3'].astype(float)
-        y, X = dmatrices(formula, data=df, return_type="dataframe")
-        model = sm.GLM(y, X, family=sm.families.Binomial()).fit()
-        logger.info("%s summary: %s", formula, model.summary())
-        logger.info("AIC: %i", model.aic)
-        return (X, model)
-
-    def _run_regressions_on_transcripts(
+    def _generate_regression_model(
         temp_label: str,
         fold: int = None,
-    ) -> None:
+    ):
         """
-        Run single variable and joint regressions and pick best model using a given set of transcripts.
+        Generate a regression model on the given set of transcripts.
 
         :param str temp_label: Suffix to add to temporary data paths to avoid conflicting names for different models.
         :param int fold: Fold number in training set to select training transcripts from.
             If not None, the Table is generated from variants in only training transcripts
             from the specified fold of the overall training set. If None, the Table is generated from
             variants in all training transcripts. Default is None.
-        :return: None; function writes HT to specified path.
+        :return: None; function writes Table with gnomAD fitted scores and pickled model to resource paths.
         """
         # Convert HT to pandas dataframe as logistic regression aggregations aren't currently possible in hail
         ht = hl.read_table(joint_clinvar_gnomad_path(fold=fold, freeze=freeze))
@@ -469,94 +571,22 @@ def run_regressions(
             if df[column].dtype == "Float64":
                 df[column] = df[column].astype(np.float64)
 
-        logger.info("Run single variable regressions...")
-        # E.g., mod.misbad3 <- glm(pop_v_path ~ mis_badness3, data=cleaned_joint_exac_clinvar.scores, family=binomial)
-        single_var_res = {}
-        single_var_aic = []
-        single_var_X = []
-        all_var = variables + additional_variables
-        for var in all_var:
-            logger.info("Running %s regression...", var)
-            # Create design matrices
-            formula = f"pop_v_path ~ {var}"
-            X, model = _run_glm(df=df, formula=formula)
-            single_var_X.append(X)
-            single_var_aic.append(model.aic)
-            single_var_res[var] = model.params
+        if use_model_formula:
+            import re
 
-        # Find lowest AIC for single variable regressions and corresponding model
-        min_single_aic = min(single_var_aic)
-        single_var_idx = single_var_aic.index(min_single_aic)
-        min_single_aic_var = all_var[single_var_idx]
-        min_single_X = single_var_X[single_var_idx]
-        if single_var_aic.count(min_single_aic) > 1:
-            logger.warning(
-                """
-                There is a tie for minimum AIC.
-                This function will use the first variable it finds by default!
-                """
-            )
-        logger.info(
-            "Model with smallest AIC for single variable regressions used %s",
-            min_single_aic_var,
-        )
+            # Check input formula is formulated properly
+            formula_components = re.split("[~+:*]", model_formula.replace(" ", ""))
+            formula_y = formula_components.pop(0)
+            formula_components = set(formula_components)
+            if (formula_y != "pop_v_path") or (
+                not all([x in df.columns.values for x in formula_components])
+            ):
+                raise DataException("Model formula is not formulated properly!")
 
-        logger.info("Running joint (additive interactions only) regression...")
-        add_formula = f"pop_v_path ~ {' + '.join(variables)}"
-        add_X, add_model = _run_glm(df=df, formula=add_formula)
-
-        logger.info("Running joint regression with all interactions...")
-        mult_formula = f"pop_v_path ~ {' * '.join(variables)}"
-        mult_X, mult_model = _run_glm(df=df, formula=mult_formula)
-
-        logger.info("Running joint regression with specific interactions...")
-        # Currently hardcoded to be formula from ExAC
-        spec_formula = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
-        spec_X, spec_model = _run_glm(df=df, formula=spec_formula)
-
-        all_model_aic = single_var_aic + [add_model.aic, mult_model.aic, spec_model.aic]
-        min_aic = min(all_model_aic)
-        logger.info("Lowest model AIC: %f", min_aic)
-        if all_model_aic.count(min_aic) > 1:
-            logger.warning(
-                """
-                There is a tie for minimum AIC.
-                This function will use the first model it finds by default
-                (single variable -> additive interactions -> all interactions -> specific interactions)!
-                """
-            )
-        if min_aic == min_single_aic:
-            logger.info(
-                "Single variable regression using %s had the lowest AIC",
-                min_single_aic_var,
-            )
-            logger.info("Coefficients: %s", single_var_res[min_single_aic_var])
-            model = single_var_res
-            X = min_single_X
-        elif min_aic == add_model.aic:
-            logger.info(
-                "Joint regression using additive interactions (%s) had the lowest AIC",
-                add_formula,
-            )
-            logger.info("Coefficients: %s", add_model.params)
-            model = add_model
-            X = add_X
-        elif min_aic == mult_model.aic:
-            logger.info(
-                "Joint regression using all interactions (%s) had the lowest AIC",
-                mult_formula,
-            )
-            logger.info("Coefficients: %s", mult_model.params)
-            model = mult_model
-            X = mult_X
+            _, model = run_glm(df, model_formula)
         else:
-            logger.info(
-                "Joint regression using specific interactions (%s) had the lowest AIC",
-                spec_formula,
-            )
-            logger.info("Coefficients: %s", spec_model.params)
-            model = spec_model
-            X = spec_X
+            all_variables = variables + additional_variables
+            _, model = get_min_aic_model(df, all_variables)
 
         logger.info("Saving model as pickle...")
         with hl.hadoop_open(mpc_model_pkl_path(fold=fold, freeze=freeze), "wb") as p:
@@ -567,34 +597,33 @@ def run_regressions(
         )
         ht = ht.filter(ht.pop_v_path == 1)
         ht = calculate_fitted_scores(
-            ht=ht, temp_label=temp_label, fold=fold, freeze=freeze
+            ht=ht,
+            temp_label=temp_label,
+            overwrite_temp=overwrite_temp,
+            fold=fold,
+            freeze=freeze,
         )
-        ht.write(
-            gnomad_fitted_score_path(fold=fold, freeze=freeze),
-            overwrite=overwrite,
-        )
+        ht.write(gnomad_fitted_score_path(fold=fold, freeze=freeze), overwrite=True)
 
     if not do_k_fold_training:
         logger.info(
-            "Running regressions on training transcripts...",
+            "Running regression(s) on training transcripts...",
         )
-        _run_regressions_on_transcripts(temp_label="_train")
+        _generate_regression_model(temp_label="_train")
     else:
         logger.info(
-            "Adding misbad, filtering transcripts, writing out for the %i-fold training sets...",
+            "Running regressions on the %i-fold training sets...",
             FOLD_K,
         )
         for i in range(1, FOLD_K + 1):
-            _run_regressions_on_transcripts(
-                temp_label=f"_train_fold{i}",
-                fold=i,
-            )
+            _generate_regression_model(temp_label=f"_train_fold{i}", fold=i)
+    # TODO: Make this show/save a table of AICs and model formulas instead of printing every one
 
 
 def calculate_fitted_scores(
     ht: hl.Table,
-    temp_label: str = "",
-    overwrite_temp: bool = True,
+    temp_label: str,
+    overwrite_temp: bool = False,
     fold: int = None,
     interaction_char: str = ":",
     intercept_str: str = "Intercept",
@@ -613,9 +642,9 @@ def calculate_fitted_scores(
 
     :param hl.Table ht: Input Table with variants to be annotated.
     :param str temp_label: Suffix to add to temporary data paths to avoid conflicting names for different models.
-        Default is the empty string.
-    :param overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
-        If False, will read existing intermediate temporary data rather than overwriting. Default is True.
+    :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
+        If False, will read existing intermediate temporary data rather than overwriting.
+        Default is False.
     :param int fold: Fold number in training set to select training transcripts from.
         If not None, the Table is generated from variants in only training transcripts
         from the specified fold of the overall training set. If None, the Table is generated from
@@ -660,7 +689,9 @@ def calculate_fitted_scores(
     # This creates separate rows for each transcript a variant is in
     scores_ht = context_ht.join(ht.select())
     scores_ht = scores_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_score_annots_context{temp_label}.ht"
+        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_score_annots_context{temp_label}.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
 
     # Add annotations not in context HT
@@ -683,6 +714,7 @@ def calculate_fitted_scores(
     # Checkpoint here to force joins and filter to complete
     scores_ht = scores_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/fitted_score_annots_filtered{temp_label}.ht",
+        _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
 
@@ -715,7 +747,9 @@ def calculate_fitted_scores(
     logger.info("Computing fitted scores...")
     scores_ht = scores_ht.annotate(fitted_score=intercept + combined_annot_expr)
     scores_ht = scores_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_scores_dup{temp_label}.ht"
+        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_scores_dup{temp_label}.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
 
     # Deduplicate variants in multiple transcripts by retaining only the most severe score
@@ -735,7 +769,9 @@ def calculate_fitted_scores(
     min_scores_ht = min_scores_ht.key_by("locus", "alleles", "transcript")
     scores_ht = scores_ht.key_by("locus", "alleles", "transcript").join(min_scores_ht)
     scores_ht = scores_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_scores_dedup{temp_label}.ht"
+        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_scores_dedup{temp_label}.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
     logger.info("Annotating fitted score and model features onto input HT...")
     return ht.join(scores_ht)
@@ -791,17 +827,22 @@ def aggregate_gnomad_fitted_scores(
 def annotate_mpc(
     ht: hl.Table,
     output_ht_path: str,
+    temp_label: str,
     use_release: bool = True,
-    overwrite_temp: bool = True,
-    fold: int = None,
+    overwrite_temp: bool = False,
+    model_train_fold: int = None,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
+    # TODO: Should this be `fold` or `all_k_folds`?
+    # TODO: Check how many variants overlap between training + test transcripts
     """
     Annotate input Table with MPC scores.
 
-    This function can annotate with scores from the MPC release HT (VEP context HT with MPC scores
-    calculated from all training data) or it can calculate MPC scores directly using
-    a given MPC model (e.g., if saving scores for the whole VEP context HT is not needed).
+    Depending on the `use_release` parameter, this function can be used to:
+    (1) Annotate with scores from the MPC release HT (VEP context HT with MPC scores
+    calculated from all training data), or
+    (2) Annotate with MPC scores calculated directly using a given MPC model
+    (e.g., if saving scores for the whole VEP context HT is not desired).
 
     To calculate the MPC score, a variant of interest's fitted score from the MPC model
     is combined with the number of common (AF > 0.001) variants in gnomAD with fitted scores
@@ -811,13 +852,19 @@ def annotate_mpc(
 
     :param hl.Table ht: Input Table.
     :param str output_ht_path: Path to write out annotated table (with duplicate variants removed.
+    :param str temp_label: Suffix to add to temporary data paths to avoid conflicting names for different models.
+    :param bool use_release: Whether to use the MPC HT release in annotation of MPC scores.
+        If True, MPC scores will be taken from the MPC release HT. If False, MPC scores
+        will be computed using the regression model saved for the given fold of the training set.
+        Default is True.
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
-        Default is True.
-    :param int fold: Fold number in training set used to generate MPC model.
-        If not None, MPC scores are generated from variants in only training transcripts
-        from the specified fold of the overall training set. If None, scores are generated from
-        variants in all training transcripts. Default is None.
+        Default is False.
+    :param int model_train_fold: Fold number in training set used to generate MPC model.
+        If not None, MPC model used to generate annotated scores is trained on variants
+        in training transcripts from the specified fold of the overall training set.
+        If None, model is trained on variants in all training transcripts.
+        Default is None.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: None; function writes Table to resource path.
     """
@@ -834,7 +881,7 @@ def annotate_mpc(
     ), "'locus' must be a LocusExpression, and 'alleles' must be an array of strings!"
 
     if use_release:
-        if fold is not None:
+        if model_train_fold is not None:
             raise DataException(
                 "MPC release is generated only from all training transcripts!"
             )
@@ -847,35 +894,40 @@ def annotate_mpc(
         ht.write(output_ht_path, overwrite=True)
     else:
         logger.info("Calculating fitted scores on input variants...")
-        scores_ht = calculate_fitted_scores(ht=ht.select(), freeze=freeze)
+        scores_ht = calculate_fitted_scores(
+            ht=ht.select(),
+            temp_label=temp_label,
+            overwrite_temp=overwrite_temp,
+            freeze=freeze,
+        )
 
         logger.info("Aggregating fitted scores for gnomAD common variants...")
+        # TODO: Add model labels in paths - separate folder for each model
         fitted_group_path = gnomad_fitted_score_path(
-            is_grouped=True, fold=fold, freeze=freeze
+            is_grouped=True, fold=model_train_fold, freeze=freeze
         )
         if not file_exists(fitted_group_path):
-            aggregate_gnomad_fitted_scores(fold=fold, freeze=freeze)
+            aggregate_gnomad_fitted_scores(fold=model_train_fold, freeze=freeze)
         gnomad_ht = hl.read_table(fitted_group_path)
-        scores = gnomad_ht.aggregate(hl.sorted(hl.agg.collect(gnomad_ht.fitted_score)))
-        scores_len = len(scores)
+        gnomad_scores = gnomad_ht.aggregate(
+            hl.sorted(hl.agg.collect(gnomad_ht.fitted_score))
+        )
+        gnomad_scores_len = len(gnomad_scores)
 
         # Get total number of gnomAD common variants
         gnomad_var_count = hl.read_table(
-            gnomad_fitted_score_path(fold=fold, freeze=freeze)
+            gnomad_fitted_score_path(fold=model_train_fold, freeze=freeze)
         ).count()
 
         logger.info("Getting n_less values for input variants...")
         # Annotate HT with sorted array of gnomAD fitted scores
-        scores_ht = scores_ht.annotate_globals(gnomad_scores=scores)
+        scores_ht = scores_ht.annotate_globals(gnomad_scores=gnomad_scores)
         # Checkpoint here to force the gnomAD join to complete
         scores_ht = scores_ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/mpc_temp_gnomad.ht",
+            f"{TEMP_PATH_WITH_FAST_DEL}/mpc_temp_gnomad{temp_label}.ht",
             _read_if_exists=not overwrite_temp,
             overwrite=overwrite_temp,
         )
-        # TODO: Add temp label here and other places as needed
-        # TODO: Allow specification of MPC model in fitting MPC model + calculating fitted scores
-        # for using same model across folds
 
         # Search all gnomAD scores to find first score that is
         # greater than or equal to score to be annotated
@@ -893,14 +945,14 @@ def annotate_mpc(
             n_less=hl.if_else(
                 # Make n_less equal to total gnomAD common variant count if
                 # index is equal to the length of the gnomAD scores array
-                scores_ht.idx == scores_len,
+                scores_ht.idx == gnomad_scores_len,
                 gnomad_var_count,
                 gnomad_ht[scores_ht.idx].n_less,
             )
         )
         # Checkpoint here to force the binary search to compute
         scores_ht = scores_ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/mpc_temp_binary.ht",
+            f"{TEMP_PATH_WITH_FAST_DEL}/mpc_temp_binary{temp_label}.ht",
             _read_if_exists=not overwrite_temp,
             overwrite=overwrite_temp,
         )
@@ -910,9 +962,9 @@ def annotate_mpc(
             mpc=-(hl.log10(scores_ht.n_less / gnomad_var_count))
         )
         scores_ht = scores_ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/mpc.ht",
-            overwrite=overwrite_temp,
+            f"{TEMP_PATH_WITH_FAST_DEL}/mpc{temp_label}.ht",
             _read_if_exists=not overwrite_temp,
+            overwrite=overwrite_temp,
         )
 
         logger.info("Annotating MPC scores to input table and writing out...")
@@ -925,7 +977,7 @@ def create_mpc_release_ht(
     freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
-    Annotate VEP context Table with MPC scores calculated using training transcripts.
+    Annotate variants in VEP context Table with MPC scores calculated using all training transcripts.
 
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
@@ -936,6 +988,7 @@ def create_mpc_release_ht(
     annotate_mpc(
         ht=context_with_oe.versions[freeze].ht().select(),
         output_ht_path=mpc_release.versions[freeze].path,
+        temp_label="_release",
         use_release=False,
         overwrite_temp=overwrite_temp,
         freeze=freeze,
