@@ -179,7 +179,11 @@ def prepare_pop_path_ht(
     cov_threshold: int = 0,
 ) -> None:
     """
-    Prepare Table with 'population' (common gnomAD missense) and 'pathogenic' (ClinVar pathogenic/likely pathogenic missense) variants.
+    Prepare Table(s) with 'population' and 'pathogenic' variants in given set of transcripts.
+
+    'Population' variants are defined as common gnomAD missenses.
+    'Pathogenic' variants are defined as ClinVar pathogenic/likely pathogenic missenses in
+    predicted-haploinsufficient genes.
 
     .. note::
         Assumes tables containing all variants in canonical transcripts and their
@@ -194,15 +198,15 @@ def prepare_pop_path_ht(
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
         Default is False.
-    :param do_k_fold_training: Whether to generate k-fold models with the training transcripts.
-        If False, will use all training transcripts in calculation of a single model.
-        If True, will calculate k models corresponding to the k-folds of the training transcripts.
+    :param do_k_fold_training: Whether to generate k-fold Tables with the training transcripts.
+        If False, will use all training transcripts to prepare a single Table for a single model.
+        If True, will prepare Tables for k models corresponding to the k-folds of the training transcripts.
         Default is False.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :param adj_freq_index: Index of array that contains allele frequency information calculated on
         high quality (adj) genotypes across genetic ancestry groups. Default is 0.
     :param int cov_threshold: Coverage threshold used to filter context Table. Default is 0.
-    :return: None; function writes Table to resource path.
+    :return: None; function writes Table(s) to resource path.
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
     clinvar_ht = clinvar_plp_mis_haplo.ht()
