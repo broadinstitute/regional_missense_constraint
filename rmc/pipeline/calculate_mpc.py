@@ -37,7 +37,6 @@ def main(args):
             hl.init(log="/write_pop_path_ht.log", tmp_dir=temp_dir)
             prepare_pop_path_ht(
                 overwrite_temp=args.overwrite_temp,
-                overwrite_output=args.overwrite_output,
                 do_k_fold_training=args.do_k_fold_training,
                 freeze=args.freeze,
             )
@@ -47,7 +46,7 @@ def main(args):
             run_regressions(
                 variables=args.variables.split(","),
                 additional_variables=args.extra_variables.split(","),
-                overwrite=args.overwrite,
+                overwrite_temp=args.overwrite_temp,
                 do_k_fold_training=args.do_k_fold_training,
                 freeze=args.freeze,
             )
@@ -56,7 +55,6 @@ def main(args):
             hl.init(log="/create_mpc_release.log", tmp_dir=temp_dir)
             create_mpc_release_ht(
                 overwrite_temp=args.overwrite_temp,
-                overwrite_output=args.overwrite_output,
                 freeze=args.freeze,
             )
 
@@ -70,7 +68,6 @@ def main(args):
                     ht=clinvar_plp_mis_haplo.ht(),
                     output_ht_path=f"{mpc_bucket_path}/clinvar_mpc_annot.ht",
                     overwrite_temp=args.overwrite_temp,
-                    overwrite_output=args.overwrite_output,
                     freeze=args.freeze,
                 )
 
@@ -84,7 +81,6 @@ def main(args):
                     ht=case_ht,
                     output_ht_path=f"{mpc_bucket_path}/dd_case_mpc_annot.ht",
                     overwrite_temp=args.overwrite_temp,
-                    overwrite_output=args.overwrite_output,
                     freeze=args.freeze,
                 )
                 control_ht = dd_ht.filter(dd_ht.sample_set == "control")
@@ -97,7 +93,6 @@ def main(args):
                     ht=control_ht,
                     output_ht_path=f"{mpc_bucket_path}/dd_control_mpc_annot.ht",
                     overwrite_temp=args.overwrite_temp,
-                    overwrite_output=args.overwrite_output,
                     freeze=args.freeze,
                 )
 
@@ -109,7 +104,6 @@ def main(args):
                     ht=ht,
                     output_ht_path=f"{mpc_bucket_path}/gnomAD_mpc_annot.ht",
                     overwrite_temp=args.overwrite_temp,
-                    overwrite_output=args.overwrite_output,
                     freeze=args.freeze,
                 )
 
@@ -118,7 +112,6 @@ def main(args):
                     ht=hl.read_table(args.ht_in_path),
                     output_ht_path=args.ht_out_path,
                     overwrite_temp=args.overwrite_temp,
-                    overwrite_output=args.overwrite_output,
                     freeze=args.freeze,
                 )
 
@@ -132,16 +125,8 @@ if __name__ == "__main__":
         "This regional missense constraint script calculates the MPC (missense badness, PolyPhen-2, and regional missense constraint) score."
     )
     parser.add_argument(
-        "--overwrite", help="Overwrite existing data.", action="store_true"
-    )
-    parser.add_argument(
         "--overwrite-temp",
-        help="Overwrite existing intermediate temporary data, for use in functions with option to modify existing final output data.",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--overwrite-output",
-        help="Completely overwrite existing final output data, for use in functions with option to modify existing final output data.",
+        help="Overwrite existing intermediate temporary data.",
         action="store_true",
     )
     parser.add_argument(
@@ -228,6 +213,7 @@ if __name__ == "__main__":
         "--ht-out-path",
         help="Output path for hail Table after adding MPC annotation. Required if --specify-ht is set.",
     )
+    # TODO: Review if all these args are needed
 
     args = parser.parse_args()
 
