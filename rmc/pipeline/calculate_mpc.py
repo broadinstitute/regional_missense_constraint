@@ -44,6 +44,8 @@ def main(args):
         if args.command == "run-glm":
             hl.init(log="/run_regressions_using_glm.log", tmp_dir=temp_dir)
             run_regressions(
+                use_model_formula=args.use_model_formula,
+                model_formula=args.model_formula,
                 variables=args.variables.split(","),
                 additional_variables=args.extra_variables.split(","),
                 overwrite_temp=args.overwrite_temp,
@@ -67,9 +69,13 @@ def main(args):
                 annotate_mpc(
                     ht=clinvar_plp_mis_haplo.ht(),
                     output_ht_path=f"{mpc_bucket_path}/clinvar_mpc_annot.ht",
+                    temp_label="_clinvar",
+                    model_train_fold=args.model_train_fold,
+                    use_release=args.use_release,
                     overwrite_temp=args.overwrite_temp,
                     freeze=args.freeze,
                 )
+                # TODO: Add support for annotating with models from specific folds (all folds?)
 
             if args.dd:
                 from rmc.resources.reference_data import ndd_de_novo
@@ -80,6 +86,9 @@ def main(args):
                 annotate_mpc(
                     ht=case_ht,
                     output_ht_path=f"{mpc_bucket_path}/dd_case_mpc_annot.ht",
+                    temp_label="_dd_case",
+                    model_train_fold=args.model_train_fold,
+                    use_release=args.use_release,
                     overwrite_temp=args.overwrite_temp,
                     freeze=args.freeze,
                 )
@@ -92,6 +101,9 @@ def main(args):
                 annotate_mpc(
                     ht=control_ht,
                     output_ht_path=f"{mpc_bucket_path}/dd_control_mpc_annot.ht",
+                    temp_label="_dd_control",
+                    model_train_fold=args.model_train_fold,
+                    use_release=args.use_release,
                     overwrite_temp=args.overwrite_temp,
                     freeze=args.freeze,
                 )
@@ -103,6 +115,9 @@ def main(args):
                 annotate_mpc(
                     ht=ht,
                     output_ht_path=f"{mpc_bucket_path}/gnomAD_mpc_annot.ht",
+                    temp_label="_gnomad_exome",
+                    model_train_fold=args.model_train_fold,
+                    use_release=args.use_release,
                     overwrite_temp=args.overwrite_temp,
                     freeze=args.freeze,
                 )
@@ -112,6 +127,9 @@ def main(args):
                     ht=hl.read_table(args.ht_in_path),
                     output_ht_path=args.ht_out_path,
                     overwrite_temp=args.overwrite_temp,
+                    model_train_fold=args.model_train_fold,
+                    use_release=args.use_release,
+                    temp_label=args.temp_label,
                     freeze=args.freeze,
                 )
 
@@ -138,6 +156,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
+    )
+    parser.add_argument(
+        "--do-k-fold-training",
+        help="""
+        Generate (or prepare generation of) k-fold MPC models trained on training sets from respective folds.
+        
+        Otherwise, one model is generated, trained on all training transcripts.
+        """,
+        action="store_true",
     )
 
     # Create subparsers for each step
@@ -167,6 +194,16 @@ if __name__ == "__main__":
         """,
     )
     run_glm.add_argument(
+        "--use-model-formula",
+        help="Use specified model formula in regression.",
+        action="store_true",
+    )
+    run_glm.add_argument(
+        "--model-formula",
+        help="R-style model formula to use in regression. Required if --use-model-formula is set.",
+        default="pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen",
+    )
+    run_glm.add_argument(
         "--variables",
         help="Comma separated string of variables to include in all logistic regression.",
         default="oe,misbad,polyphen",
@@ -187,6 +224,26 @@ if __name__ == "__main__":
     annotate_hts = subparsers.add_parser(
         "annotate-hts", help="Annotate specified dataset with MPC."
     )
+    annotate_hts.add_argument(
+        "--model-train-fold",
+        help="Fold number in training set used to generate MPC model.",
+    )
+    annotate_hts.add_argument(
+        "--use-release",
+        help="""
+        Use scores in MPC release HT to annotate.
+
+        Otherwise, scores will be directly computed using specified MPC model.
+        """,
+        action="store_true",
+    )
+    annotate_hts.add_argument(
+        "--temp-label",
+        help="""
+        Suffix to add to temporary data paths to avoid conflicting names for different models.
+        """,
+    )
+    # temp_label="_clinvar",
     annotate_hts.add_argument(
         "--clinvar", help="Calculate MPC for ClinVar variants", action="store_true"
     )
@@ -213,7 +270,6 @@ if __name__ == "__main__":
         "--ht-out-path",
         help="Output path for hail Table after adding MPC annotation. Required if --specify-ht is set.",
     )
-    # TODO: Review if all these args are needed
 
     args = parser.parse_args()
 
