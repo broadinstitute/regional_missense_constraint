@@ -10,6 +10,7 @@ import statsmodels.api as sm
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from patsy import dmatrices
+from itertools import combinations
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.reference_data import (
@@ -349,10 +350,7 @@ def prepare_pop_path_ht(
 def run_glm(
     df: pd.core.frame.DataFrame,
     formula: str,
-) -> Tuple[
-    pd.core.frame.DataFrame,
-    statsmodels.genmod.generalized_linear_model.GLMResultsWrapper,
-]:
+) -> statsmodels.genmod.generalized_linear_model.GLMResultsWrapper:
     """
     Run logistic regression using input formula and return model results.
 
@@ -360,7 +358,7 @@ def run_glm(
 
     :param pd.core.frame.DataFrame df: Table holding data to fit model with.
     :param str formula: R-style formula defining model.
-    :return: Logistic regression results.
+    :return: Model object holding logistic regression results.
     """
     # Create design matrices to fit model
     # NOTE: If run into a TypeError here, fix with df['field'].astype()
@@ -370,7 +368,7 @@ def run_glm(
     model = sm.GLM(y, X, family=sm.families.Binomial()).fit()
     logger.info("%s summary: %s", formula, model.summary())
     logger.info("AIC: %i", model.aic)
-    return (X, model)
+    return model
 
 
 # TODO: Separate out comparing models with AIC and training regressions from all combinations
@@ -379,10 +377,7 @@ def run_glm(
 def get_min_aic_model(
     df: pd.core.frame.DataFrame,
     variables: List[str],
-) -> Tuple[
-    pd.core.frame.DataFrame,
-    statsmodels.genmod.generalized_linear_model.GLMResultsWrapper,
-]:
+) -> statsmodels.genmod.generalized_linear_model.GLMResultsWrapper:
     """
     Run single variable and joint regressions using a given set of transcripts and pick best model.
 
@@ -390,95 +385,126 @@ def get_min_aic_model(
     :param List[str] variables: Variables to include in all regressions (single, joint).
     :return: Logistic regression results.
     """
-    logger.info("Run single variable regressions...")
-    # E.g., mod.misbad3 <- glm(pop_v_path ~ mis_badness3, data=cleaned_joint_exac_clinvar.scores, family=binomial)
-    single_var_res = {}
-    single_var_aic = []
-    single_var_X = []
-    for var in variables:
-        logger.info("Running %s regression...", var)
-        # Create design matrices
-        formula = f"pop_v_path ~ {var}"
-        X, model = run_glm(df=df, formula=formula)
-        single_var_X.append(X)
-        single_var_aic.append(model.aic)
-        single_var_res[var] = model.params
+    model_types = ["single", "additive", "multiplicative", "spec"]
+    # Model type labels for use in logging information
+    log_model_types = {
+        "single": "single variable",
+        "additive": "joint (no interactions)",
+        "multiplicative": "joint (with interactions)",
+        "spec": "specific formula",
+    }
 
-    # Find lowest AIC for single variable regressions and corresponding model
-    min_single_aic = min(single_var_aic)
-    single_var_idx = single_var_aic.index(min_single_aic)
-    min_single_aic_var = variables[single_var_idx]
-    min_single_X = single_var_X[single_var_idx]
-    if single_var_aic.count(min_single_aic) > 1:
-        logger.warning(
-            """
-            There is a tie for minimum AIC.
-            This function will use the first variable it finds by default!
-            """
+    def _find_min_aic_model(
+        var_combs: List[Tuple[str, ...]],
+        model_type: str = "single",
+    ) -> Tuple[statsmodels.genmod.generalized_linear_model.GLMResultsWrapper, str,]:
+        """
+        Run logistic regressions on different variable combinations and return results on model with lowest AIC.
+
+        :param List[Tuple[str]] var_combs: Variable combinations to generate regressions with.
+        :param str model_type: Regression formula type.
+            One of "single", "additive", or "multiplicative".
+            If "single", each variable combination must consist of only one variable.
+            If "additive", no interactions will be included.
+            If "multiplicative", all interaction terms will be included.
+            Default is "single".
+        :return: Tuple of logistic regression model results for variable combination with lowest AIC.
+            Tuple is composed of the model object and the regression formula.
+        """
+        if model_type not in {"single", "additive", "multiplicative"}:
+            raise DataException(
+                "Model type must be one of 'single', 'additive', or 'multiplicative'!"
+            )
+        if (model_type == "single") and (not all([len(x) == 1 for x in var_combs])):
+            raise DataException(
+                "Please check that all single variable inputs consist of only one variable!"
+            )
+
+        models = {}
+        model_aics = []
+        model_formulas = []
+        formula_interaction_char = "*" if model_type == "multiplicative" else "+"
+        log_model_type = log_model_types[model_type]
+
+        for var_comb in var_combs:
+            logger.info("Running %s regression for %s...", log_model_type, var_comb)
+            formula = f"pop_v_path ~ {formula_interaction_char.join(var_comb)}"
+            model = run_glm(df, formula)
+            models[var_comb] = model
+            model_aics.append(model.aic)
+            model_formulas.append(formula)
+
+        # Find model with lowest AIC
+        min_model_aic = min(model_aics)
+        min_model_idx = model_aics.index(min_model_aic)
+        min_model_var = var_combs[min_model_idx]
+        min_model = models[min_model_var]
+        min_model_formula = model_formulas[min_model_idx]
+        if model_aics.count(min_model_aic) > 1:
+            logger.warning(
+                """
+                There is a tie for minimum AIC in the %s regressions.
+                This function will use the first variable combination it finds by default!
+                """,
+                log_model_type,
+            )
+        logger.info(
+            "Model with smallest AIC for %s regressions used variables: %s",
+            log_model_type,
+            min_model_var,
         )
-    logger.info(
-        "Model with smallest AIC for single variable regressions used %s",
-        min_single_aic_var,
+
+        return (min_model, min_model_formula)
+
+    min_models = {}
+    min_model_formulas = {}
+    min_model_aics = {}
+
+    # Find model with lowest AIC for single variable regressions
+    min_models["single"], min_model_formulas["single"] = _find_min_aic_model(
+        [(x,) for x in variables]
     )
 
-    logger.info("Running joint (additive interactions only) regression...")
-    add_formula = f"pop_v_path ~ {' + '.join(variables)}"
-    add_X, add_model = run_glm(df=df, formula=add_formula)
-
-    logger.info("Running joint regression with all interactions...")
-    mult_formula = f"pop_v_path ~ {' * '.join(variables)}"
-    mult_X, mult_model = run_glm(df=df, formula=mult_formula)
+    # List possible variable combinations for joint regressions
+    var_combs = []
+    for k in range(2, len(variables) + 1):
+        var_combs += [x for x in combinations(variables, k)]
+    # Find models with lowest AICs for joint variable regressions (with or without interactions)
+    for model_type in ["additive", "multiplicative"]:
+        min_models[model_type], min_model_formulas[model_type] = _find_min_aic_model(
+            var_combs, model_type
+        )
 
     logger.info("Running joint regression with specific interactions...")
     # Currently hardcoded to be formula from ExAC
-    spec_formula = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
-    spec_X, spec_model = run_glm(df=df, formula=spec_formula)
+    min_model_formulas[
+        "spec"
+    ] = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
+    min_models["spec"] = run_glm(df, min_model_formulas["spec"])
 
-    all_model_aic = single_var_aic + [add_model.aic, mult_model.aic, spec_model.aic]
-    min_aic = min(all_model_aic)
-    logger.info("Lowest model AIC: %f", min_aic)
-    if all_model_aic.count(min_aic) > 1:
+    min_model_aics = {x: min_models[x].aic for x in model_types}
+    overall_min_aic = min(min_model_aics.values())
+    logger.info("Lowest model AIC: %f", overall_min_aic)
+    if list(min_model_aics.values()).count(overall_min_aic) > 1:
         logger.warning(
             """
-            There is a tie for minimum AIC.
+            There is a tie for minimum AIC over model types.
             This function will use the first model it finds by default
-            (single variable -> additive interactions -> all interactions -> specific interactions)!
+            (single variable -> no interactions -> all interactions -> specific interactions)!
             """
         )
-    if min_aic == min_single_aic:
-        logger.info(
-            "Single variable regression using %s had the lowest AIC",
-            min_single_aic_var,
-        )
-        logger.info("Coefficients: %s", single_var_res[min_single_aic_var])
-        model = single_var_res
-        X = min_single_X
-    elif min_aic == add_model.aic:
-        logger.info(
-            "Joint regression using additive interactions (%s) had the lowest AIC",
-            add_formula,
-        )
-        logger.info("Coefficients: %s", add_model.params)
-        model = add_model
-        X = add_X
-    elif min_aic == mult_model.aic:
-        logger.info(
-            "Joint regression using all interactions (%s) had the lowest AIC",
-            mult_formula,
-        )
-        logger.info("Coefficients: %s", mult_model.params)
-        model = mult_model
-        X = mult_X
-    else:
-        logger.info(
-            "Joint regression using specific interactions (%s) had the lowest AIC",
-            spec_formula,
-        )
-        logger.info("Coefficients: %s", spec_model.params)
-        model = spec_model
-        X = spec_X
+    overall_min_model_type = list(min_model_aics.keys())[
+        list(min_model_aics.values()).index(overall_min_aic)
+    ]
+    overall_min_model = min_models[overall_min_model_type]
+    logger.info(
+        "Model with overall lowest AIC is %s regression (%s)",
+        overall_min_model_type,
+        min_model_formulas[overall_min_model_type],
+    )
+    logger.info("Coefficients: %s", overall_min_model.params)
 
-    return (X, model)
+    return overall_min_model
 
 
 def run_regressions(
@@ -587,10 +613,10 @@ def run_regressions(
             ):
                 raise DataException("Model formula is not formulated properly!")
 
-            _, model = run_glm(df, model_formula)
+            model = run_glm(df, model_formula)
         else:
             all_variables = variables + additional_variables
-            _, model = get_min_aic_model(df, all_variables)
+            model = get_min_aic_model(df, all_variables)
 
         logger.info("Saving model as pickle...")
         with hl.hadoop_open(mpc_model_pkl_path(fold=fold, freeze=freeze), "wb") as p:
@@ -707,6 +733,26 @@ def calculate_fitted_scores(
         )
         annots.add("misbad")
 
+    if "blosum" in variables:
+        logger.info("Annotating HT with BLOSUM...")
+        if not file_exists(blosum.path):
+            import_blosum()
+        blosum_ht = blosum.ht()
+        scores_ht = scores_ht.annotate(
+            blosum=blosum_ht[scores_ht.ref, scores_ht.alt].score
+        )
+        annots.add("blosum")
+
+    if "grantham" in variables:
+        logger.info("Annotating HT with Grantham...")
+        if not file_exists(grantham.path):
+            import_grantham()
+        grantham_ht = grantham.ht()
+        scores_ht = scores_ht.annotate(
+            grantham=grantham_ht[scores_ht.ref, scores_ht.alt].score
+        )
+        annots.add("grantham")
+
     if annots != variables:
         raise DataException("Check that all MPC model features are accounted for!")
 
@@ -727,23 +773,11 @@ def calculate_fitted_scores(
         (scores_ht[variable] * mpc_rel_vars[variable]) for variable in variables
     ]
     interaction_annot_expr = []
-    for variable in interactions_dict.keys():
-        if len(variable.split(interaction_char)) > 2:
-            # NOTE: This assumes that variable is in the format of x:y:z or x*y*z
-            # (Assumes the number of variables is maximum 3)
-            if len(variable.split(interaction_char)) > 2:
-                interaction_annot_expr.append(
-                    scores_ht[variable.split(interaction_char)[0]]
-                    * scores_ht[variable.split(interaction_char)[1]]
-                    * scores_ht[variable.split(interaction_char)[2]]
-                    * mpc_rel_vars[variable]
-                )
-            else:
-                interaction_annot_expr.append(
-                    scores_ht[variable.split(interaction_char)[0]]
-                    * scores_ht[variable.split(interaction_char)[1]]
-                    * mpc_rel_vars[variable]
-                )
+    for interaction in interactions_dict.keys():
+        expr = mpc_rel_vars[interaction]
+        for variable in interaction.split(interaction_char):
+            expr *= scores_ht[variable]
+        interaction_annot_expr.append(expr)
 
     annot_expr.extend(interaction_annot_expr)
     combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
