@@ -607,9 +607,9 @@ def run_regressions(
             # Check input formula is formulated properly
             formula_components = re.split("[~+:*]", model_formula.replace(" ", ""))
             formula_y = formula_components.pop(0)
-            formula_components = set(formula_components)
+            formula_xs = set(formula_components)
             if (formula_y != "pop_v_path") or (
-                not all([x in df.columns.values for x in formula_components])
+                not all([x in df.columns.values for x in formula_xs])
             ):
                 raise DataException("Model formula is not formulated properly!")
 
