@@ -620,7 +620,9 @@ This Table contains only one row per each unique locus/alleles combination.
 ####################################################################################
 ## Assessment related resources
 ####################################################################################
-oe_bin_counts_tsv = f"{CONSTRAINT_PREFIX}/{CURRENT_FREEZE}/{CURRENT_FREEZE}/oe_bin.tsv"
+oe_bin_counts_tsv = (
+    f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/oe_bin.tsv"
+)
 """
 TSV with RMC regions grouped by obs/exp (OE) bin.
 
