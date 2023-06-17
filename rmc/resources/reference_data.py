@@ -98,7 +98,7 @@ def train_val_test_transcripts_path(
         raise DataException("Fold number must be specified for validation transcripts!")
     if fold is not None and fold not in range(1, FOLD_K + 1):
         raise DataException(
-            f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
+            f"Fold number must be an integer between 1 and {FOLD_K}, inclusive!"
         )
 
     transcript_type = "test" if is_test else ("val" if is_val else "train")

@@ -548,9 +548,9 @@ def run_regressions(
     :param str model_formula: Model formula to use in regression.
         Default is 'pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen'.
         This was the formula selected in ExAC.
-    :param List[str] variables: Variables to include in all regressions (single, joint).
+    :param List[str] variables: Primary variables to include in all regressions (single, joint).
         Default is ['oe', 'misbad', 'polyphen'].
-    :param List[str] additional_variables: Additional variables to include in single variable regressions only.
+    :param List[str] additional_variables: Additional variables to include in all regressions.
         Default is ['blosum', 'grantham'].
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
@@ -570,7 +570,7 @@ def run_regressions(
     def _generate_regression_model(
         temp_label: str,
         fold: int = None,
-    ):
+    ) -> None:
         """
         Generate a regression model on the given set of transcripts.
 

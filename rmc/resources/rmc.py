@@ -489,7 +489,7 @@ def amino_acids_oe_path(
     """
     if fold is not None and fold not in range(1, FOLD_K + 1):
         raise DataException(
-            f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
+            f"Fold number must be an integer between 1 and {FOLD_K}, inclusive!"
         )
     fold_name = f"_fold{fold}" if fold is not None else ""
     return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/amino_acid_oe.ht"
@@ -511,7 +511,7 @@ def misbad_path(
     """
     if fold is not None and fold not in range(1, FOLD_K + 1):
         raise DataException(
-            f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
+            f"Fold number must be an integer between 1 and {FOLD_K}, inclusive!"
         )
     fold_name = f"_fold{fold}" if fold is not None else ""
     return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/missense_badness.ht"
@@ -543,7 +543,7 @@ def joint_clinvar_gnomad_path(
     """
     if fold is not None and fold not in range(1, FOLD_K + 1):
         raise DataException(
-            f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
+            f"Fold number must be an integer between 1 and {FOLD_K}, inclusive!"
         )
     fold_name = f"_fold{fold}" if fold is not None else ""
     return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/joint_clinvar_gnomad.ht"
@@ -567,7 +567,7 @@ def mpc_model_pkl_path(
     """
     if fold is not None and fold not in range(1, FOLD_K + 1):
         raise DataException(
-            f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
+            f"Fold number must be an integer between 1 and {FOLD_K}, inclusive!"
         )
     fold_name = f"_fold{fold}" if fold is not None else ""
     return (
@@ -595,7 +595,7 @@ def gnomad_fitted_score_path(
     """
     if fold is not None and fold not in range(1, FOLD_K + 1):
         raise DataException(
-            f"Fold number must be an integer between 1 and {FOLD_K} inclusive!"
+            f"Fold number must be an integer between 1 and {FOLD_K}, inclusive!"
         )
     fold_name = f"_fold{fold}" if fold is not None else ""
     group = "_group" if is_grouped else ""
