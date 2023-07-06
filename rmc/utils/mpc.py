@@ -701,18 +701,25 @@ def calculate_fitted_scores(
     variables = variable_dict.keys()
     interactions_dict = {k: v for k, v in mpc_rel_vars.items() if interaction_char in k}
 
+    context_ht_annots = {"oe", "polyphen"}.intersection(variables)
+    addtl_annots = {"misbad", "blosum", "grantham"}.intersection(variables)
+    annots = context_ht_annots | addtl_annots
+    if annots != variables:
+        raise DataException("Check that all MPC model features will be accounted for!")
+
     # Select fields from context HT containing annotations to extract
     # NOTE: `ref` and `alt` fields are also extracted for annotation of missense badness
-    context_ht_annots = {"oe", "polyphen"}
-    annots = context_ht_annots.intersection(variables)
-    logger.info("Annotating HT with MPC variables from context HT (%s)...", annots)
+    logger.info(
+        "Annotating HT with MPC variables from context HT (%s)...", context_ht_annots
+    )
     context_ht = context_with_oe.versions[freeze].ht()
     # Re-key context HT by locus and alleles (original key contains transcript)
     # to enable addition of annotations from each transcript corresponding to a variant
+    helper_annots = {"transcript", "ref", "alt"}
     context_ht = context_ht.key_by("locus", "alleles").select(
-        *({"transcript", "ref", "alt"} | annots)
+        *(helper_annots | context_ht_annots)
     )
-    if "polyphen" in annots:
+    if "polyphen" in context_ht_annots:
         context_ht = context_ht.transmute(polyphen=context_ht.polyphen.score)
     # Add annotations from all transcripts per variant
     # This creates separate rows for each transcript a variant is in
@@ -724,15 +731,14 @@ def calculate_fitted_scores(
     )
 
     # Add annotations not in context HT
-    if "misbad" in variables:
+    if "misbad" in addtl_annots:
         logger.info("Annotating HT with missense badness...")
         mb_ht = hl.read_table(misbad_path(fold=fold, freeze=freeze))
         scores_ht = scores_ht.annotate(
             misbad=mb_ht[scores_ht.ref, scores_ht.alt].misbad
         )
-        annots.add("misbad")
 
-    if "blosum" in variables:
+    if "blosum" in addtl_annots:
         logger.info("Annotating HT with BLOSUM...")
         if not file_exists(blosum.path):
             import_blosum()
@@ -740,9 +746,8 @@ def calculate_fitted_scores(
         scores_ht = scores_ht.annotate(
             blosum=blosum_ht[scores_ht.ref, scores_ht.alt].score
         )
-        annots.add("blosum")
 
-    if "grantham" in variables:
+    if "grantham" in addtl_annots:
         logger.info("Annotating HT with Grantham...")
         if not file_exists(grantham.path):
             import_grantham()
@@ -750,10 +755,13 @@ def calculate_fitted_scores(
         scores_ht = scores_ht.annotate(
             grantham=grantham_ht[scores_ht.ref, scores_ht.alt].score
         )
-        annots.add("grantham")
 
-    if annots != variables:
-        raise DataException("Check that all MPC model features are accounted for!")
+    logger.info("Checking that all annotations have been added...")
+    scores_ht_annots = {field for field in scores_ht.row_value} - helper_annots
+    if scores_ht_annots != variables:
+        raise DataException(
+            "Check that all MPC model features have been added to Table!"
+        )
 
     logger.info("Filtering to defined annotations...")
     filter_expr = True
