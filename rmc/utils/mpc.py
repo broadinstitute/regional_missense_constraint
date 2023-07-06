@@ -1,5 +1,6 @@
 import logging
 import pickle
+from itertools import combinations
 from typing import Dict, List, Tuple, Union
 
 import hail as hl
@@ -10,15 +11,14 @@ import statsmodels.api as sm
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from patsy import dmatrices
-from itertools import combinations
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.reference_data import (
+    FOLD_K,
     blosum,
     blosum_txt_path,
     cadd,
     clinvar_plp_mis_haplo,
-    FOLD_K,
     grantham,
     grantham_txt_path,
     train_val_test_transcripts_path,
@@ -33,11 +33,7 @@ from rmc.resources.rmc import (
     mpc_model_pkl_path,
     mpc_release,
 )
-from rmc.utils.generic import (
-    get_aa_map,
-    get_gnomad_public_release,
-    keep_criteria,
-)
+from rmc.utils.generic import get_aa_map, get_gnomad_public_release, keep_criteria
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",

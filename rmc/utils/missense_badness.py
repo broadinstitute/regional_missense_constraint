@@ -5,10 +5,7 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
-from rmc.resources.reference_data import (
-    FOLD_K,
-    train_val_test_transcripts_path,
-)
+from rmc.resources.reference_data import FOLD_K, train_val_test_transcripts_path
 from rmc.resources.rmc import CURRENT_FREEZE, amino_acids_oe_path, misbad_path
 from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
