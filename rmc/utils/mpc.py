@@ -503,7 +503,6 @@ def get_min_aic_model(
         min_model_formulas[overall_min_model_type],
     )
     logger.info("Coefficients: %s", overall_min_model.params)
-
     return overall_min_model
 
 
