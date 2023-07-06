@@ -242,8 +242,10 @@ def aggregate_aa_and_filter_oe(
 
     logger.info("Grouping HT and aggregating observed and possible variant counts...")
     ht = ht.group_by("ref", "alt").aggregate(
-        obs=hl.agg.sum(ht.observed), possible=hl.agg.count()
+        obs=hl.agg.sum(ht.observed), pos=hl.agg.count()
     )
+    oe_direction = "high" if keep_high_oe else "low"
+    ht = ht.rename({"obs": f"{oe_direction}_obs", "pos": f"{oe_direction}_pos"})
 
     logger.info("Adding variant consequence (mut_type) annotation and returning...")
     return ht.annotate(mut_type=variant_csq_expr(ht.ref, ht.alt))
@@ -336,12 +338,6 @@ def calculate_misbad(
             )
             oe_hts[oe_direction] = aggregate_aa_and_filter_oe(
                 ht, keep_high_oe=keep_high_oe
-            )
-            oe_hts[oe_direction] = oe_hts[oe_direction].transmute(
-                **{
-                    f"{oe_direction}_obs": oe_hts[oe_direction].obs,
-                    f"{oe_direction}_pos": oe_hts[oe_direction].possible,
-                }
             )
             oe_hts[oe_direction] = oe_hts[oe_direction].checkpoint(
                 f"{TEMP_PATH_WITH_FAST_DEL}/amino_acids_{oe_direction}_oe{temp_label}.ht",
