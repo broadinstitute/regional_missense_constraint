@@ -207,7 +207,7 @@ def prepare_pop_path_ht(
     :param adj_freq_index: Index of array that contains allele frequency information calculated on
         high quality (adj) genotypes across genetic ancestry groups. Default is 0.
     :param int cov_threshold: Coverage threshold used to filter context Table. Default is 0.
-    :return: None; function writes Table(s) to resource path.
+    :return: None; function writes Table(s) to resource path(s).
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
     clinvar_ht = clinvar_plp_mis_haplo.ht()
@@ -314,9 +314,9 @@ def prepare_pop_path_ht(
         fold: int = None,
     ) -> None:
         """
-        Add missense badness calculated on a set of transcripts to table, filter to those transcripts, and write out.
+        Add missense badness calculated on a set of transcripts, filter to those transcripts, and write out Table.
 
-        :param hl.Table ht: Input table.
+        :param hl.Table ht: Input Table.
         :param int fold: Fold number in training set to select training transcripts from.
             If not None, the Table is generated from variants in only training transcripts
             from the specified fold of the overall training set. If None, the Table is generated from
@@ -397,7 +397,7 @@ def get_min_aic_model(
     def _find_min_aic_model(
         var_combs: List[Tuple[str, ...]],
         model_type: str = "single",
-    ) -> Tuple[statsmodels.genmod.generalized_linear_model.GLMResultsWrapper, str,]:
+    ) -> Tuple[statsmodels.genmod.generalized_linear_model.GLMResultsWrapper, str]:
         """
         Run logistic regressions on different variable combinations and return results on model with lowest AIC.
 
@@ -889,7 +889,7 @@ def annotate_mpc(
     For more information on the fitted score and MPC calculation, see the docstring of `run_regressions`.
 
     :param hl.Table ht: Input Table.
-    :param str output_ht_path: Path to write out annotated table (with duplicate variants removed.
+    :param str output_ht_path: Path to write out annotated Table (with duplicate variants removed.
     :param str temp_label: Suffix to add to temporary data paths to avoid conflicting names for different models.
     :param bool use_release: Whether to use the MPC HT release in annotation of MPC scores.
         If True, MPC scores will be taken from the MPC release HT. If False, MPC scores
