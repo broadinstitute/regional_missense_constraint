@@ -1011,26 +1011,3 @@ def annotate_mpc(
         logger.info("Annotating MPC scores to input table and writing out...")
         ht = ht.annotate(mpc=scores_ht[ht.key].mpc)
         ht.write(output_ht_path, overwrite=True)
-
-
-def create_mpc_release_ht(
-    overwrite_temp: bool = True,
-    freeze: int = CURRENT_FREEZE,
-) -> None:
-    """
-    Annotate variants in VEP context Table with MPC scores calculated using all training transcripts.
-
-    :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
-        If False, will read existing intermediate temporary data rather than overwriting.
-        Default is True.
-    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
-    :return: None; function writes Table to resource path.
-    """
-    annotate_mpc(
-        ht=context_with_oe.versions[freeze].ht().select(),
-        output_ht_path=mpc_release.versions[freeze].path,
-        temp_label="_release",
-        use_release=False,
-        overwrite_temp=overwrite_temp,
-        freeze=freeze,
-    )

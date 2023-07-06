@@ -12,11 +12,10 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
-from rmc.resources.rmc import CURRENT_FREEZE
+from rmc.resources.rmc import CURRENT_FREEZE, context_with_oe, mpc_release
 from rmc.slack_creds import slack_token
 from rmc.utils.mpc import (
     annotate_mpc,
-    create_mpc_release_ht,
     prepare_pop_path_ht,
     run_regressions,
 )
@@ -55,7 +54,11 @@ def main(args):
 
         if args.command == "create-mpc-release":
             hl.init(log="/create_mpc_release.log", tmp_dir=temp_dir)
-            create_mpc_release_ht(
+            annotate_mpc(
+                ht=context_with_oe.versions[args.freeze].ht().select(),
+                output_ht_path=mpc_release.versions[args.freeze].path,
+                temp_label="_release",
+                use_release=False,
                 overwrite_temp=args.overwrite_temp,
                 freeze=args.freeze,
             )
