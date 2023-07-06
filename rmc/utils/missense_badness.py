@@ -85,29 +85,34 @@ def prepare_amino_acid_ht(
 
     logger.info("Checking LOFTEE LoF information...")
     loftee_lof_agg_path = f"{TEMP_PATH_WITH_FAST_DEL}/lof_agg.he"
-    if not overwrite_temp and file_exists(loftee_lof_agg_path):
+    loftee_lof_flag_agg_path = f"{TEMP_PATH_WITH_FAST_DEL}/lof_flag_agg.he"
+    if (
+        not overwrite_temp
+        and file_exists(loftee_lof_agg_path)
+        and file_exists(loftee_lof_flag_agg_path)
+    ):
         loftee_lof_agg = hl.eval(hl.experimental.read_expression(loftee_lof_agg_path))
+        loftee_lof_flag_agg = hl.eval(
+            hl.experimental.read_expression(loftee_lof_flag_agg_path)
+        )
     else:
         loftee_lof_agg = context_ht.aggregate(hl.agg.counter(context_ht.lof))
         hl.experimental.write_expression(
             hl.literal(loftee_lof_agg), loftee_lof_agg_path
         )
-    logger.info("LOFTEE aggregation: %s", loftee_lof_agg)
-
+        loftee_lof_flag_agg = context_ht.aggregate(
+            hl.agg.filter(context_ht.lof, hl.agg.counter(context_ht.lof_flags))
+        )
+        hl.experimental.write_expression(
+            hl.literal(loftee_lof_flag_agg), loftee_lof_flag_agg_path
+        )
+    logger.info("Variant counts by LOFTEE LoF label: %s", loftee_lof_agg)
+    logger.info("Variant counts by LOFTEE LoF flag label: %s", loftee_lof_flag_agg)
     logger.info("Filtering to LOFTEE HC pLoF without flags...")
     context_ht = context_ht.filter(
-        hl.is_missing(context_ht.lof) | (context_ht.lof == loftee_hc_str)
+        ((hl.is_missing(context_ht.lof) | (context_ht.lof == loftee_hc_str)))
+        & (hl.is_missing(context_ht.lof_flags))
     )
-    hc_lof_flag_agg_path = f"{TEMP_PATH_WITH_FAST_DEL}/lof_flag_agg.he"
-    if not overwrite_temp and file_exists(hc_lof_flag_agg_path):
-        hc_lof_flag_agg = hl.eval(hl.experimental.read_expression(hc_lof_flag_agg_path))
-    else:
-        hc_lof_flag_agg = context_ht.aggregate(hl.agg.counter(context_ht.lof_flags))
-        hl.experimental.write_expression(
-            hl.literal(hc_lof_flag_agg), hc_lof_flag_agg_path
-        )
-    logger.info("Flag counter for LOFTEE HC pLoF: %s", hc_lof_flag_agg)
-    context_ht = context_ht.filter(hl.is_missing(context_ht.lof_flags))
 
     logger.info("Checkpointing HT before joining with gnomAD data...")
     context_ht = context_ht.checkpoint(
