@@ -66,59 +66,16 @@ def main(args):
         if args.command == "annotate-hts":
             hl.init(log="/annotate_hts.log", tmp_dir=temp_dir)
             mpc_bucket_path = f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{args.freeze}"
-            if args.clinvar:
-                from rmc.resources.reference_data import clinvar_plp_mis_haplo
-
-                annotate_mpc(
-                    ht=clinvar_plp_mis_haplo.ht(),
-                    output_ht_path=f"{mpc_bucket_path}/clinvar_mpc_annot.ht",
-                    temp_label="_clinvar",
-                    model_train_fold=args.model_train_fold,
-                    use_release=args.use_release,
-                    overwrite_temp=args.overwrite_temp,
-                    freeze=args.freeze,
-                )
-                # TODO: Add support for annotating with models from specific folds (all folds?)
+            # TODO: Add support for annotating with models from specific folds (all folds?)
 
             if args.dd:
                 from rmc.resources.reference_data import ndd_de_novo
 
                 dd_ht = ndd_de_novo.ht()
-                dd_ht = dd_ht.explode("sample_set")
-                case_ht = dd_ht.filter(dd_ht.sample_set != "control")
                 annotate_mpc(
-                    ht=case_ht,
-                    output_ht_path=f"{mpc_bucket_path}/dd_case_mpc_annot.ht",
-                    temp_label="_dd_case",
-                    model_train_fold=args.model_train_fold,
-                    use_release=args.use_release,
-                    overwrite_temp=args.overwrite_temp,
-                    freeze=args.freeze,
-                )
-                control_ht = dd_ht.filter(dd_ht.sample_set == "control")
-                shared_variants = case_ht.join(control_ht, how="inner")
-                logger.info(
-                    "%i variants overlapped between cases and controls",
-                    shared_variants.count(),
-                )
-                annotate_mpc(
-                    ht=control_ht,
-                    output_ht_path=f"{mpc_bucket_path}/dd_control_mpc_annot.ht",
-                    temp_label="_dd_control",
-                    model_train_fold=args.model_train_fold,
-                    use_release=args.use_release,
-                    overwrite_temp=args.overwrite_temp,
-                    freeze=args.freeze,
-                )
-
-            if args.gnomad_exomes:
-                from gnomad.resources.grch37.gnomad import public_release
-
-                ht = public_release("exomes").ht()
-                annotate_mpc(
-                    ht=ht,
-                    output_ht_path=f"{mpc_bucket_path}/gnomAD_mpc_annot.ht",
-                    temp_label="_gnomad_exome",
+                    ht=dd_ht,
+                    output_ht_path=f"{mpc_bucket_path}/dd_mpc_annot.ht",
+                    temp_label="_dd",
                     model_train_fold=args.model_train_fold,
                     use_release=args.use_release,
                     overwrite_temp=args.overwrite_temp,
