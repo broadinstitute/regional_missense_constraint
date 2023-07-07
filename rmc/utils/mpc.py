@@ -683,7 +683,10 @@ def calculate_fitted_scores(
     assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
 
     logger.info("Extracting MPC model relationships from pickle...")
-    with hl.hadoop_open(mpc_model_pkl_path(fold=fold, freeze=freeze), "rb") as p:
+    model_path = mpc_model_pkl_path(fold=fold, freeze=freeze)
+    if not file_exists(model_path):
+        raise DataException("Please check that MPC model exists!")
+    with hl.hadoop_open(model_path, "rb") as p:
         model = pickle.load(p)
     mpc_rel_vars = model.params.to_dict()
     try:
