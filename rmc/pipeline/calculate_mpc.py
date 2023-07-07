@@ -14,11 +14,7 @@ from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX, TEMP_PATH_WITH_FAST_D
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 from rmc.resources.rmc import CURRENT_FREEZE, context_with_oe, mpc_release
 from rmc.slack_creds import slack_token
-from rmc.utils.mpc import (
-    annotate_mpc,
-    prepare_pop_path_ht,
-    run_regressions,
-)
+from rmc.utils.mpc import annotate_mpc, prepare_pop_path_ht, run_regressions
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -121,7 +117,7 @@ if __name__ == "__main__":
         "--do-k-fold-training",
         help="""
         Generate (or prepare generation of) k-fold MPC models trained on training sets from respective folds.
-        
+
         Otherwise, one model is generated, trained on all training transcripts.
         """,
         action="store_true",
