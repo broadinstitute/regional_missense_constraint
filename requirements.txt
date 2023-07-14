@@ -1,5 +1,10 @@
 # Use the most up-to-date version gnomad_methods (==main branch)
 git+https://github.com/broadinstitute/gnomad_methods@main
+# Add gnomad_qc
+# NOTE: our repo does not rely on gnomad_qc,
+# but gnomad-constraint does, and gnomad_qc is not listed as a requirement
+# in gnomad-constraint
+git+https://github.com/broadinstitute/gnomad_qc.git@main
 hail
 patsy
 statsmodels
