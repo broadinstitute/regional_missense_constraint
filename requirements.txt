@@ -1,5 +1,6 @@
 # Use the most up-to-date version gnomad_methods (==main branch)
 git+https://github.com/broadinstitute/gnomad_methods@main
+git+https://github.com/broadinstitute/gnomad-constraint.git@main
 hail
 patsy
 statsmodels
