@@ -700,25 +700,35 @@ def calculate_fitted_scores(
     variables = variable_dict.keys()
     interactions_dict = {k: v for k, v in mpc_rel_vars.items() if interaction_char in k}
 
-    context_ht_annots = {"oe", "polyphen"}.intersection(variables)
-    addtl_annots = {"misbad", "blosum", "grantham"}.intersection(variables)
-    annots = context_ht_annots | addtl_annots
-    if annots != variables:
-        raise DataException("Check that all MPC model features will be accounted for!")
-
-    # Select fields from context HT containing annotations to extract
+    # Collect fields from context HT containing annotations to extract
     # NOTE: `ref` and `alt` fields are also extracted for annotation of missense badness
-    logger.info(
-        "Annotating HT with MPC variables from context HT (%s)...", context_ht_annots
-    )
+    logger.info("Collecting annotations for fitted score calculation...")
+    helper_annots = {"transcript", "ref", "alt"}
+    context_annots = {"oe", "polyphen"}.intersection(variables)
+    context_helper_annots = context_annots.union(helper_annots)
+    # Check that these annotations are indeed in the context HT
     context_ht = context_with_oe.versions[freeze].ht()
+    context_annots_check = context_helper_annots - {field for field in context_ht.row}
+    if len(context_annots_check) != 0:
+        raise DataException(f"{context_annots_check} missing from context HT!")
+    logger.info("Context HT annotations collected: %s", context_annots)
+    # Collect remaining annotations
+    addtl_annots = {"misbad", "blosum", "grantham"}.intersection(variables)
+    logger.info("Remaining annotations collected: %s", addtl_annots)
+
+    # Check that all MPC model variables are accounted for in collected annotations
+    annots = context_annots.union(addtl_annots)
+    variables_check = variables - annots
+    if len(variables_check) != 0:
+        raise DataException(
+            f"{variables_check} from MPC model not in collected annotations!"
+        )
+
+    logger.info("Annotating HT with MPC variables from context HT...")
     # Re-key context HT by locus and alleles (original key contains transcript)
     # to enable addition of annotations from each transcript corresponding to a variant
-    helper_annots = {"transcript", "ref", "alt"}
-    context_ht = context_ht.key_by("locus", "alleles").select(
-        *(helper_annots | context_ht_annots)
-    )
-    if "polyphen" in context_ht_annots:
+    context_ht = context_ht.key_by("locus", "alleles").select(context_helper_annots)
+    if "polyphen" in context_annots:
         context_ht = context_ht.transmute(polyphen=context_ht.polyphen.score)
     # Add annotations from all transcripts per variant
     # This creates separate rows for each transcript a variant is in
@@ -730,6 +740,7 @@ def calculate_fitted_scores(
     )
 
     # Add annotations not in context HT
+    logger.info("Annotating HT with remaining variables...")
     if "misbad" in addtl_annots:
         logger.info("Annotating HT with missense badness...")
         mb_ht = hl.read_table(misbad_path(fold=fold, freeze=freeze))
@@ -756,11 +767,9 @@ def calculate_fitted_scores(
         )
 
     logger.info("Checking that all annotations have been added...")
-    scores_ht_annots = {field for field in scores_ht.row_value} - helper_annots
-    if scores_ht_annots != variables:
-        raise DataException(
-            "Check that all MPC model features have been added to Table!"
-        )
+    annots_check = {field for field in scores_ht.row_value} - helper_annots - variables
+    if len(annots_check) != 0:
+        raise DataException(f"{annots_check} missing from added annotations!")
 
     logger.info("Filtering to defined annotations...")
     filter_expr = True
