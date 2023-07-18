@@ -1,7 +1,7 @@
 import logging
 import pickle
 from itertools import combinations
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Set, Tuple, Union
 
 import hail as hl
 import numpy as np
@@ -650,6 +650,8 @@ def calculate_fitted_scores(
     temp_label: str,
     overwrite_temp: bool = False,
     fold: int = None,
+    possible_context_annots: Set[str] = {"oe", "polyphen"},
+    possible_addtl_annots: Set[str] = {"misbad", "blosum", "grantham"},
     interaction_char: str = ":",
     intercept_str: str = "Intercept",
     freeze: int = CURRENT_FREEZE,
@@ -674,6 +676,10 @@ def calculate_fitted_scores(
         If not None, the Table is generated from variants in only training transcripts
         from the specified fold of the overall training set. If None, the Table is generated from
         variants in all training transcripts. Default is None.
+    :param Set[str] possible_context_annots: Fields in context Table from which variables for score calculation may be collected.
+        Default is {"oe", "polyphen"}.
+    :param Set[str] possible_addtl_annots: Annotations not in context Table from which variables for score calculation may be collected.
+        Default is {"misbad", "blosum", "grantham"}.
     :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
         Default is ":".
     :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
@@ -704,7 +710,7 @@ def calculate_fitted_scores(
     # NOTE: `ref` and `alt` fields are also extracted for annotation of missense badness
     logger.info("Collecting annotations for fitted score calculation...")
     helper_annots = {"transcript", "ref", "alt"}
-    context_annots = {"oe", "polyphen"}.intersection(variables)
+    context_annots = possible_context_annots.intersection(variables)
     context_helper_annots = context_annots.union(helper_annots)
     # Check that these annotations are indeed in the context HT
     context_ht = context_with_oe.versions[freeze].ht()
@@ -713,7 +719,7 @@ def calculate_fitted_scores(
         raise DataException(f"{context_annots_check} missing from context HT!")
     logger.info("Context HT annotations collected: %s", context_annots)
     # Collect remaining annotations
-    addtl_annots = {"misbad", "blosum", "grantham"}.intersection(variables)
+    addtl_annots = possible_addtl_annots.intersection(variables)
     logger.info("Remaining annotations collected: %s", addtl_annots)
 
     # Check that all MPC model variables are accounted for in collected annotations
