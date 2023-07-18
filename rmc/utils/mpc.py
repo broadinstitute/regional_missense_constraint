@@ -694,17 +694,17 @@ def calculate_fitted_scores(
         raise DataException("Please check that MPC model exists!")
     with hl.hadoop_open(model_path, "rb") as p:
         model = pickle.load(p)
-    mpc_rel_vars = model.params.to_dict()
+    mpc_vars_rel = model.params.to_dict()
     try:
-        intercept = mpc_rel_vars.pop(intercept_str)
+        intercept = mpc_vars_rel.pop(intercept_str)
     except KeyError:
         raise DataException(
             f"{intercept_str} not in model parameters! Please double check and rerun."
         )
 
-    variable_dict = {k: v for k, v in mpc_rel_vars.items() if not interaction_char in k}
+    variable_dict = {k: v for k, v in mpc_vars_rel.items() if not interaction_char in k}
     variables = variable_dict.keys()
-    interactions_dict = {k: v for k, v in mpc_rel_vars.items() if interaction_char in k}
+    interaction_dict = {k: v for k, v in mpc_vars_rel.items() if interaction_char in k}
 
     # Collect fields from context HT containing annotations to extract
     # NOTE: `ref` and `alt` fields are also extracted for annotation of missense badness
@@ -791,11 +791,11 @@ def calculate_fitted_scores(
 
     logger.info("Calculating fitted scores...")
     annot_expr = [
-        (scores_ht[variable] * mpc_rel_vars[variable]) for variable in variables
+        (scores_ht[variable] * mpc_vars_rel[variable]) for variable in variables
     ]
     interaction_annot_expr = []
-    for interaction in interactions_dict.keys():
-        expr = mpc_rel_vars[interaction]
+    for interaction in interaction_dict.keys():
+        expr = mpc_vars_rel[interaction]
         for variable in interaction.split(interaction_char):
             expr *= scores_ht[variable]
         interaction_annot_expr.append(expr)
