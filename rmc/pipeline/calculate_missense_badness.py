@@ -30,8 +30,6 @@ def main(args):
             hl.init(log="/calc_misbad_prep_context_gamma_ht.log", tmp_dir=temp_dir)
             prepare_amino_acid_ht(
                 overwrite_temp=args.overwrite_temp,
-                overwrite_output=args.overwrite_output,
-                use_test_transcripts=args.use_test_transcripts,
                 do_k_fold_training=args.do_k_fold_training,
                 freeze=args.freeze,
             )
@@ -41,8 +39,6 @@ def main(args):
             calculate_misbad(
                 use_exac_oe_cutoffs=args.use_exac_oe_cutoffs,
                 overwrite_temp=args.overwrite_temp,
-                overwrite_output=args.overwrite_output,
-                use_test_transcripts=args.use_test_transcripts,
                 do_k_fold_training=args.do_k_fold_training,
                 freeze=args.freeze,
             )
@@ -58,12 +54,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--overwrite-temp",
-        help="Overwrite existing temporary data, for use in functions with option to modify existing final output data.",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--overwrite-output",
-        help="Completely overwrite existing final output data, for use in functions with option to modify existing final output data.",
+        help="Overwrite existing intermediate temporary data.",
         action="store_true",
     )
     parser.add_argument(
@@ -77,15 +68,10 @@ if __name__ == "__main__":
         help="Send message to Slack channel/user.",
     )
     parser.add_argument(
-        "--use-test-transcripts",
-        help="Use test transcripts instead of training transcripts in creation of missense badness.",
-        action="store_true",
-    )
-    parser.add_argument(
         "--do-k-fold-training",
         help="""
-        Generate k-fold missense badness models (one each for training and validation transcripts in each fold)
-        instead of one model for all training transcripts.
+        Generate k-fold missense badness models trained on training sets from respective folds.
+        Otherwise, one model is generated, trained on all training transcripts.
         """,
         action="store_true",
     )

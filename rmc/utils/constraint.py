@@ -1220,7 +1220,6 @@ def create_context_with_oe(
     missense_str: str = MISSENSE,
     n_partitions: int = 30000,
     overwrite_temp: bool = False,
-    overwrite_output: bool = True,
 ) -> None:
     """
     Filter VEP context Table to missense variants in canonical transcripts, and add missense observed/expected.
@@ -1240,11 +1239,6 @@ def create_context_with_oe(
     :param bool overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
         Default is False.
-    :param bool overwrite_output: Whether to entirely overwrite final output (OE-dependent) data if it already exists.
-        If False, will read and modify existing output data by adding or modifying columns rather than overwriting entirely.
-        If True, will clear existing output data and write new output data.
-        The output Tables are the OE-annotated context Tables with duplicated or deduplicated sections.
-        Default is True.
     :return: None; function writes Table to resource path.
     """
     logger.info("Importing set of transcripts to keep...")
@@ -1281,8 +1275,7 @@ def create_context_with_oe(
     ht = ht.key_by("locus", "alleles", "transcript")
     ht = ht.checkpoint(
         context_with_oe.versions[freeze].path,
-        overwrite=overwrite_output,
-        _read_if_exists=not overwrite_output,
+        overwrite=True,
     )
     logger.info("Output OE-annotated context HT fields: %s", set(ht.row))
 
@@ -1298,7 +1291,7 @@ def create_context_with_oe(
     ht = ht.drop("values")
     ht.write(
         context_with_oe_dedup.versions[freeze].path,
-        overwrite=overwrite_output,
+        overwrite=True,
     )
     logger.info("Output OE-annotated dedup context HT fields: %s", set(ht.row))
 

@@ -12,14 +12,9 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
-from rmc.resources.rmc import CURRENT_FREEZE
+from rmc.resources.rmc import CURRENT_FREEZE, context_with_oe, mpc_release
 from rmc.slack_creds import slack_token
-from rmc.utils.mpc import (
-    annotate_mpc,
-    create_mpc_release_ht,
-    prepare_pop_path_ht,
-    run_regressions,
-)
+from rmc.utils.mpc import annotate_mpc, prepare_pop_path_ht, run_regressions
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -37,81 +32,60 @@ def main(args):
             hl.init(log="/write_pop_path_ht.log", tmp_dir=temp_dir)
             prepare_pop_path_ht(
                 overwrite_temp=args.overwrite_temp,
-                overwrite_output=args.overwrite_output,
+                do_k_fold_training=args.do_k_fold_training,
                 freeze=args.freeze,
             )
 
         if args.command == "run-glm":
             hl.init(log="/run_regressions_using_glm.log", tmp_dir=temp_dir)
             run_regressions(
+                use_model_formula=args.use_model_formula,
+                model_formula=args.model_formula,
                 variables=args.variables.split(","),
                 additional_variables=args.extra_variables.split(","),
-                overwrite=args.overwrite,
+                overwrite_temp=args.overwrite_temp,
+                do_k_fold_training=args.do_k_fold_training,
                 freeze=args.freeze,
             )
 
-        if args.command == "calculate-mpc":
-            hl.init(log="/calculate_mpc_release.log", tmp_dir=temp_dir)
-            create_mpc_release_ht(
+        if args.command == "create-mpc-release":
+            hl.init(log="/create_mpc_release.log", tmp_dir=temp_dir)
+            annotate_mpc(
+                ht=context_with_oe.versions[args.freeze].ht().select(),
+                output_ht_path=mpc_release.versions[args.freeze].path,
+                temp_label="_release",
+                use_release=False,
                 overwrite_temp=args.overwrite_temp,
-                overwrite_output=args.overwrite_output,
                 freeze=args.freeze,
             )
 
         if args.command == "annotate-hts":
             hl.init(log="/annotate_hts.log", tmp_dir=temp_dir)
             mpc_bucket_path = f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{args.freeze}"
-            if args.clinvar:
-                from rmc.resources.reference_data import clinvar_plp_mis_haplo
-
-                annotate_mpc(
-                    ht=clinvar_plp_mis_haplo.ht(),
-                    output_path=f"{mpc_bucket_path}/clinvar_mpc_annot.ht",
-                    overwrite=args.overwrite,
-                    freeze=args.freeze,
-                )
+            # TODO: Add support for annotating with models from specific folds (all folds?)
 
             if args.dd:
                 from rmc.resources.reference_data import ndd_de_novo
 
                 dd_ht = ndd_de_novo.ht()
-                dd_ht = dd_ht.explode("sample_set")
-                case_ht = dd_ht.filter(dd_ht.sample_set != "control")
                 annotate_mpc(
-                    ht=case_ht,
-                    output_path=f"{mpc_bucket_path}/dd_case_mpc_annot.ht",
-                    overwrite=args.overwrite,
-                    freeze=args.freeze,
-                )
-                control_ht = dd_ht.filter(dd_ht.sample_set == "control")
-                shared_variants = case_ht.join(control_ht, how="inner")
-                logger.info(
-                    "%i variants overlapped between cases and controls",
-                    shared_variants.count(),
-                )
-                annotate_mpc(
-                    ht=control_ht,
-                    output_path=f"{mpc_bucket_path}/dd_control_mpc_annot.ht",
-                    overwrite=args.overwrite,
-                    freeze=args.freeze,
-                )
-
-            if args.gnomad_exomes:
-                from gnomad.resources.grch37.gnomad import public_release
-
-                ht = public_release("exomes").ht()
-                annotate_mpc(
-                    ht=ht,
-                    output_path=f"{mpc_bucket_path}/gnomAD_mpc_annot.ht",
-                    overwrite=args.overwrite,
+                    ht=dd_ht,
+                    output_ht_path=f"{mpc_bucket_path}/dd_mpc_annot.ht",
+                    temp_label="_dd",
+                    model_train_fold=args.model_train_fold,
+                    use_release=args.use_release,
+                    overwrite_temp=args.overwrite_temp,
                     freeze=args.freeze,
                 )
 
             if args.specify_ht:
                 annotate_mpc(
                     ht=hl.read_table(args.ht_in_path),
-                    output_path=args.ht_out_path,
-                    overwrite=args.overwrite,
+                    output_ht_path=args.ht_out_path,
+                    overwrite_temp=args.overwrite_temp,
+                    model_train_fold=args.model_train_fold,
+                    use_release=args.use_release,
+                    temp_label=args.temp_label,
                     freeze=args.freeze,
                 )
 
@@ -125,16 +99,8 @@ if __name__ == "__main__":
         "This regional missense constraint script calculates the MPC (missense badness, PolyPhen-2, and regional missense constraint) score."
     )
     parser.add_argument(
-        "--overwrite", help="Overwrite existing data.", action="store_true"
-    )
-    parser.add_argument(
         "--overwrite-temp",
-        help="Overwrite existing intermediate temporary data, for use in functions with option to modify existing final output data.",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--overwrite-output",
-        help="Completely overwrite existing final output data, for use in functions with option to modify existing final output data.",
+        help="Overwrite existing intermediate temporary data.",
         action="store_true",
     )
     parser.add_argument(
@@ -146,6 +112,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--slack-channel",
         help="Send message to Slack channel/user.",
+    )
+    parser.add_argument(
+        "--do-k-fold-training",
+        help="""
+        Generate (or prepare generation of) k-fold MPC models trained on training sets from respective folds.
+
+        Otherwise, one model is generated, trained on all training transcripts.
+        """,
+        action="store_true",
     )
 
     # Create subparsers for each step
@@ -175,6 +150,16 @@ if __name__ == "__main__":
         """,
     )
     run_glm.add_argument(
+        "--use-model-formula",
+        help="Use specified model formula in regression.",
+        action="store_true",
+    )
+    run_glm.add_argument(
+        "--model-formula",
+        help="R-style model formula to use in regression. Required if --use-model-formula is set.",
+        default="pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen",
+    )
+    run_glm.add_argument(
         "--variables",
         help="Comma separated string of variables to include in all logistic regression.",
         default="oe,misbad,polyphen",
@@ -185,10 +170,10 @@ if __name__ == "__main__":
         default="blosum,grantham",
     )
 
-    calculate_score = subparsers.add_parser(
-        "calculate-mpc",
+    create_mpc_release = subparsers.add_parser(
+        "create-mpc-release",
         help="""
-        Calculate MPC release Table (VEP context Table filtered to missense variants in canonical, non-outlier transcripts).
+        Create MPC release Table (VEP context Table filtered to missense variants in canonical, non-outlier transcripts).
         """,
     )
 
@@ -196,21 +181,32 @@ if __name__ == "__main__":
         "annotate-hts", help="Annotate specified dataset with MPC."
     )
     annotate_hts.add_argument(
-        "--clinvar", help="Calculate MPC for ClinVar variants", action="store_true"
+        "--model-train-fold",
+        help="Fold number in training set used to generate MPC model.",
     )
     annotate_hts.add_argument(
-        "--dd",
-        help="Calculate MPC for de novo variants from developmental disorder (DD) cases and controls",
+        "--use-release",
+        help="""
+        Use scores in MPC release hail Table to annotate.
+
+        Otherwise, scores will be directly computed using specified MPC model.
+        """,
         action="store_true",
     )
     annotate_hts.add_argument(
-        "--gnomad-exomes",
-        help="Calculate MPC for all gnomAD exomes variants",
+        "--temp-label",
+        help="""
+        Suffix to add to temporary data paths to avoid conflicting names for different models.
+        """,
+    )
+    annotate_hts.add_argument(
+        "--dd",
+        help="Calculate MPC for de novo variants from developmental disorder (DD) cases and controls.",
         action="store_true",
     )
     annotate_hts.add_argument(
         "--specify-ht",
-        help="Calculate MPC for variants in specified hail Table",
+        help="Calculate MPC for variants in specified hail Table.",
         action="store_true",
     )
     annotate_hts.add_argument(
