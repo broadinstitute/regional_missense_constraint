@@ -753,7 +753,6 @@ def calculate_fitted_scores(
         scores_ht = scores_ht.annotate(
             misbad=mb_ht[scores_ht.ref, scores_ht.alt].misbad
         )
-
     if "blosum" in addtl_annots:
         logger.info("Annotating HT with BLOSUM...")
         if not file_exists(blosum.path):
@@ -762,7 +761,6 @@ def calculate_fitted_scores(
         scores_ht = scores_ht.annotate(
             blosum=blosum_ht[scores_ht.ref, scores_ht.alt].score
         )
-
     if "grantham" in addtl_annots:
         logger.info("Annotating HT with Grantham...")
         if not file_exists(grantham.path):
