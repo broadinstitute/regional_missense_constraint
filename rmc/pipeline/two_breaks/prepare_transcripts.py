@@ -48,7 +48,8 @@ def main(args):
             )
 
             logger.info(
-                "Creating grouped HT with lists of cumulative observed and expected missense values..."
+                "Creating grouped HT with lists of cumulative observed and expected"
+                " missense values..."
             )
             group_no_single_break_found_ht(
                 ht_path=single_search_round_ht_path(
@@ -83,7 +84,10 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="This regional missense constraint script prepares the input Table for the two simultaneous breaks search.",
+        description=(
+            "This regional missense constraint script prepares the input Table for the"
+            " two simultaneous breaks search."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -95,7 +99,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--search-num",
-        help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
+        help=(
+            "Search iteration number (e.g., second round of searching for two"
+            " simultaneous breaks would be 2)."
+        ),
         type=int,
     )
     parser.add_argument(
@@ -128,7 +135,10 @@ if __name__ == "__main__":
     )
     split_sections.add_argument(
         "--missense-len-threshold",
-        help="Cutoff for number of possible missense sites in transcript/transcript section. Used to create batches.",
+        help=(
+            "Cutoff for number of possible missense sites in transcript/transcript"
+            " section. Used to create batches."
+        ),
         type=int,
         default=5000,
     )

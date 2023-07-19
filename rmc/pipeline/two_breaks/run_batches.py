@@ -439,7 +439,9 @@ def process_section_group(
     hl.init(
         spark_conf={
             "spark.hadoop.fs.gs.requester.pays.mode": "CUSTOM",
-            "spark.hadoop.fs.gs.requester.pays.buckets": f"{requester_pays_bucket.lstrip('gs:/')}",
+            "spark.hadoop.fs.gs.requester.pays.buckets": (
+                f"{requester_pays_bucket.lstrip('gs:/')}"
+            ),
             "spark.hadoop.fs.gs.requester.pays.project.id": f"{google_project}",
         },
         tmp_dir=TEMP_PATH_WITH_FAST_DEL,
@@ -575,7 +577,8 @@ def main(args):
     # Make sure custom machine wasn't specified with under threshold
     if args.under_threshold and args.use_custom_machine:
         raise DataException(
-            "Do not specify --use-custom-machine when transcripts/sections are --under-threshold size!"
+            "Do not specify --use-custom-machine when transcripts/sections are"
+            " --under-threshold size!"
         )
 
     chisq_threshold = hl.eval(hl.qchisqtail(P_VALUE, 2))
@@ -764,7 +767,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--search-num",
-        help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
+        help=(
+            "Search iteration number (e.g., second round of searching for two"
+            " simultaneous breaks would be 2)."
+        ),
         type=int,
     )
     parser.add_argument(
@@ -799,12 +805,18 @@ if __name__ == "__main__":
     section_size = parser.add_mutually_exclusive_group(required=True)
     section_size.add_argument(
         "--under-threshold",
-        help="Transcripts/sections in batch should have less than --section-len-threshold possible missense positions.",
+        help=(
+            "Transcripts/sections in batch should have less than"
+            " --section-len-threshold possible missense positions."
+        ),
         action="store_true",
     )
     section_size.add_argument(
         "--over-threshold",
-        help="Transcripts/sections in batch should have greater than or equal to --section-len-threshold possible missense positions.",
+        help=(
+            "Transcripts/sections in batch should have greater than or equal to"
+            " --section-len-threshold possible missense positions."
+        ),
         action="store_true",
     )
     parser.add_argument(
