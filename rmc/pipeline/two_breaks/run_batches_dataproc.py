@@ -40,7 +40,9 @@ def main(args):
     try:
         logger.warning("This step should be run on an autoscaling cluster!")
         hl.init(
-            log=f"/round{args.search_num}search_for_two_breaks_run_batches_dataproc.log",
+            log=(
+                f"/round{args.search_num}search_for_two_breaks_run_batches_dataproc.log"
+            ),
             tmp_dir=TEMP_PATH_WITH_FAST_DEL,
         )
 
@@ -102,7 +104,8 @@ def main(args):
             output_ht_path = f"{raw_path}/simul_break_dataproc_{counter}.ht"
             if file_exists(output_ht_path):
                 raise DataException(
-                    f"Output already exists at {output_ht_path}! Double check before running script again."
+                    f"Output already exists at {output_ht_path}! Double check before"
+                    " running script again."
                 )
 
             process_section_group(
@@ -166,7 +169,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--search-num",
-        help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
+        help=(
+            "Search iteration number (e.g., second round of searching for two"
+            " simultaneous breaks would be 2)."
+        ),
         type=int,
     )
     parser.add_argument(
@@ -178,7 +184,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--split-list-len",
-        help="Max length to divide transcript/sections observed or expected missense and position lists into.",
+        help=(
+            "Max length to divide transcript/sections observed or expected missense and"
+            " position lists into."
+        ),
         type=int,
         default=500,
     )

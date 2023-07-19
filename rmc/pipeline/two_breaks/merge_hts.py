@@ -78,7 +78,10 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="This regional missense constraint script merges all intermediate simultaneous breaks results Tables into a single Table.",
+        description=(
+            "This regional missense constraint script merges all intermediate"
+            " simultaneous breaks results Tables into a single Table."
+        ),
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
@@ -96,7 +99,10 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--search-num",
-        help="Search iteration number (e.g., second round of searching for two simultaneous breaks would be 2).",
+        help=(
+            "Search iteration number (e.g., second round of searching for two"
+            " simultaneous breaks would be 2)."
+        ),
         type=int,
     )
     parser.add_argument(
