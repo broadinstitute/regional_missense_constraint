@@ -295,7 +295,8 @@ def calculate_exp_per_transcript(
     group_ht = group_ht.annotate(mu_adj=group_ht.mu_agg * model[1] + model[0])
 
     logger.info(
-        "Adjusting aggregated mutation rate with coverage correction to get expected counts..."
+        "Adjusting aggregated mutation rate with coverage correction to get expected"
+        " counts..."
     )
     group_ht = group_ht.annotate(
         coverage_correction=get_coverage_correction_expr(
@@ -588,12 +589,12 @@ def search_for_break(
     :return: Table annotated with whether position is a breakpoint (`is_break`).
     """
     logger.info(
-        "Creating section null (no regional variability in missense depletion)\
-        and alt (evidence of domains of missense constraint) expressions..."
+        "Creating section null (no regional variability in missense depletion)       "
+        " and alt (evidence of domains of missense constraint) expressions..."
     )
     logger.info(
-        "Skipping breakpoints that create at least one section\
-        that has < %i expected missense variants...",
+        "Skipping breakpoints that create at least one section        that has < %i"
+        " expected missense variants...",
         min_num_exp_mis,
     )
     # Split transcript or transcript subsection into two sections
@@ -885,7 +886,8 @@ def merge_simul_break_temp_hts(
                     SIMUL_SEARCH_ANNOTATIONS
                 ):
                     raise DataException(
-                        f"The following fields are missing from the temp table: {SIMUL_SEARCH_ANNOTATIONS.difference(row_fields)}!"
+                        "The following fields are missing from the temp table:"
+                        f" {SIMUL_SEARCH_ANNOTATIONS.difference(row_fields)}!"
                     )
                 temp = temp.select(*SIMUL_SEARCH_ANNOTATIONS)
                 intermediate_hts.append(temp)
@@ -964,23 +966,28 @@ def check_break_search_round_nums(freeze: int = CURRENT_FREEZE) -> List[int]:
     )
     if len(single_search_round_nums) == 0 or len(simul_search_round_nums) == 0:
         raise DataException(
-            "No rounds recorded for at least one of single and simultaneous search, please double-check!"
+            "No rounds recorded for at least one of single and simultaneous search,"
+            " please double-check!"
         )
     if single_search_round_nums != list(range(1, max(single_search_round_nums) + 1)):
         raise DataException(
-            "Single search round numbers are not consecutive and increasing from 1, please double-check!"
+            "Single search round numbers are not consecutive and increasing from 1,"
+            " please double-check!"
         )
     if simul_search_round_nums != list(range(1, max(simul_search_round_nums) + 1)):
         raise DataException(
-            "Simultaneous search round numbers are not consecutive and increasing from 1, please double-check!"
+            "Simultaneous search round numbers are not consecutive and increasing from"
+            " 1, please double-check!"
         )
     if single_search_round_nums != simul_search_round_nums:
         raise DataException(
-            "Round numbers from single and simultaneous searches do not match, please double-check!"
+            "Round numbers from single and simultaneous searches do not match, please"
+            " double-check!"
         )
     if len(single_search_round_nums) == 1:
         logger.warning(
-            "Only one break search round recorded. Either no breaks were found or break search is not complete, please double-check!"
+            "Only one break search round recorded. Either no breaks were found or break"
+            " search is not complete, please double-check!"
         )
     return single_search_round_nums
 
@@ -1027,7 +1034,8 @@ def merge_round_no_break_ht(
     row_fields = set(ht.row)
     if len(keep_annotations.intersection(row_fields)) < len(keep_annotations):
         raise DataException(
-            f"The following fields are missing from the break search result table: {keep_annotations.difference(row_fields)}!"
+            "The following fields are missing from the break search result table:"
+            f" {keep_annotations.difference(row_fields)}!"
         )
     ht = ht.select(*keep_annotations)
 
@@ -1043,7 +1051,8 @@ def merge_round_no_break_ht(
         ht = ht.filter(~hl.literal(simul_sections).contains(ht.section))
     else:
         logger.warning(
-            "Simul breaks results HT (round %i) did not exist. Please double check that this was expected!",
+            "Simul breaks results HT (round %i) did not exist. Please double check that"
+            " this was expected!",
             search_num,
         )
     return ht
@@ -1089,15 +1098,18 @@ def merge_rmc_hts(round_nums: List[int], freeze: int) -> hl.Table:
         ----------------------------------------
     """
     logger.warning(
-        "This function performs a join followed by a rekey, which will trigger a shuffle!"
+        "This function performs a join followed by a rekey, which will trigger a"
+        " shuffle!"
     )
     if len(round_nums) < 2:
         raise DataException(
-            "At least two rounds of break search are needed if evidence of RMC is found, please double-check!"
+            "At least two rounds of break search are needed if evidence of RMC is"
+            " found, please double-check!"
         )
 
     logger.info(
-        "Collecting and merging no-break HTs from each search round starting at round 2..."
+        "Collecting and merging no-break HTs from each search round starting at round"
+        " 2..."
     )
     hts = []
     for search_num in round_nums[1:]:
@@ -1245,7 +1257,8 @@ def create_context_with_oe(
     transcripts = get_constraint_transcripts(outlier=False)
 
     logger.info(
-        "Reading in VEP context HT and filtering to missense variants in canonical transcripts..."
+        "Reading in VEP context HT and filtering to missense variants in canonical"
+        " transcripts..."
     )
     # Using vep_context.path to read in table with fewer partitions
     # VEP context resource has 62164 partitions
@@ -1269,7 +1282,8 @@ def create_context_with_oe(
     )
 
     logger.info(
-        "Adding regional missense constraint missense o/e annotation and writing to resource path..."
+        "Adding regional missense constraint missense o/e annotation and writing to"
+        " resource path..."
     )
     ht = get_oe_annotation(ht, freeze)
     ht = ht.key_by("locus", "alleles", "transcript")
@@ -1433,7 +1447,8 @@ def get_oe_bins(ht: hl.Table) -> None:
     assess_ht_count = assess_ht.count()
     if assess_ht_count != 5:
         raise DataException(
-            f"Expected 5 OE bins but found {assess_ht_count}. Please double check and rerun!"
+            f"Expected 5 OE bins but found {assess_ht_count}. Please double check and"
+            " rerun!"
         )
 
     logger.info("Reformatting annotations on assessment HT to be proportions...")

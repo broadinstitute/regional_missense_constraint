@@ -295,7 +295,8 @@ def calculate_misbad(
     if not do_k_fold_training:
         if not file_exists(amino_acids_oe_path(freeze=freeze)):
             raise DataException(
-                "Table with all amino acid substitutions and missense OE in training transcripts doesn't exist!"
+                "Table with all amino acid substitutions and missense OE in training"
+                " transcripts doesn't exist!"
             )
     else:
         if not all(
@@ -305,7 +306,8 @@ def calculate_misbad(
             ]
         ):
             raise DataException(
-                "Not all k-fold training tables with all amino acid substitutions and missense OE exist!"
+                "Not all k-fold training tables with all amino acid substitutions and"
+                " missense OE exist!"
             )
 
     def _create_misbad_model(
@@ -328,7 +330,8 @@ def calculate_misbad(
             ht = ht.filter((ht.oe <= 0.6) | (ht.oe > 0.8))
 
         logger.info(
-            "Splitting input Table by OE to get synonymous and nonsense rates for high and low OE groups..."
+            "Splitting input Table by OE to get synonymous and nonsense rates for high"
+            " and low OE groups..."
         )
         oe_hts = {}
         for keep_high_oe in [True, False]:

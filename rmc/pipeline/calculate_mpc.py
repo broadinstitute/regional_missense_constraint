@@ -96,7 +96,8 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        "This regional missense constraint script calculates the MPC (missense badness, PolyPhen-2, and regional missense constraint) score."
+        "This regional missense constraint script calculates the MPC (missense badness,"
+        " PolyPhen-2, and regional missense constraint) score."
     )
     parser.add_argument(
         "--overwrite-temp",
@@ -156,17 +157,25 @@ if __name__ == "__main__":
     )
     run_glm.add_argument(
         "--model-formula",
-        help="R-style model formula to use in regression. Required if --use-model-formula is set.",
+        help=(
+            "R-style model formula to use in regression. Required if"
+            " --use-model-formula is set."
+        ),
         default="pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen",
     )
     run_glm.add_argument(
         "--variables",
-        help="Comma separated string of variables to include in all logistic regression.",
+        help=(
+            "Comma separated string of variables to include in all logistic regression."
+        ),
         default="oe,misbad,polyphen",
     )
     run_glm.add_argument(
         "--extra-variables",
-        help="Comma separated string of additional variables to include in single variable regressions.",
+        help=(
+            "Comma separated string of additional variables to include in single"
+            " variable regressions."
+        ),
         default="blosum,grantham",
     )
 
@@ -201,7 +210,10 @@ if __name__ == "__main__":
     )
     annotate_hts.add_argument(
         "--dd",
-        help="Calculate MPC for de novo variants from developmental disorder (DD) cases and controls.",
+        help=(
+            "Calculate MPC for de novo variants from developmental disorder (DD) cases"
+            " and controls."
+        ),
         action="store_true",
     )
     annotate_hts.add_argument(
@@ -211,11 +223,17 @@ if __name__ == "__main__":
     )
     annotate_hts.add_argument(
         "--ht-in-path",
-        help="Path to input hail Table for MPC calculations. Required if --specify-ht is set.",
+        help=(
+            "Path to input hail Table for MPC calculations. Required if --specify-ht is"
+            " set."
+        ),
     )
     annotate_hts.add_argument(
         "--ht-out-path",
-        help="Output path for hail Table after adding MPC annotation. Required if --specify-ht is set.",
+        help=(
+            "Output path for hail Table after adding MPC annotation. Required if"
+            " --specify-ht is set."
+        ),
     )
 
     args = parser.parse_args()

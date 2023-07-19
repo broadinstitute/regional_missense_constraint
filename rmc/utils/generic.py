@@ -184,7 +184,8 @@ def process_context_ht(
     ht = vep_context.ht().select_globals()
 
     logger.info(
-        "Filtering to canonical transcripts and annotating with most severe consequence...",
+        "Filtering to canonical transcripts and annotating with most severe"
+        " consequence...",
     )
     if filter_to_missense:
         ht = process_vep(ht, filter_csq=True, csq=missense_str)
@@ -592,7 +593,8 @@ def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
     :rtype: hl.expr.SetExpression
     """
     logger.warning(
-        "Assumes LoF constraint has been separately calculated and that constraint HT exists..."
+        "Assumes LoF constraint has been separately calculated and that constraint HT"
+        " exists..."
     )
     if not file_exists(constraint_ht.path):
         raise DataException("Constraint HT not found!")

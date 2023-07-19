@@ -76,7 +76,8 @@ def main(args):
             context_ht = process_context_ht()
 
             logger.info(
-                "Filtering context HT to all covered sites not found or rare in gnomAD exomes"
+                "Filtering context HT to all covered sites not found or rare in gnomAD"
+                " exomes"
             )
             context_ht = filter_context_using_gnomad(
                 context_ht,
@@ -85,7 +86,8 @@ def main(args):
             context_ht.write(filtered_context.path, overwrite=args.overwrite)
 
             logger.info(
-                "Filtering gnomAD exomes HT to missense variants in canonical transcripts only..."
+                "Filtering gnomAD exomes HT to missense variants in canonical"
+                " transcripts only..."
             )
             exome_ht = processed_exomes.ht()
             exome_ht = process_vep(exome_ht, filter_csq=True, csq=MISSENSE)
@@ -170,7 +172,8 @@ def main(args):
                 )
 
                 logger.info(
-                    "Creating autosomes + chrX PAR, chrX non-PAR, and chrY non-PAR HT versions..."
+                    "Creating autosomes + chrX PAR, chrX non-PAR, and chrY non-PAR HT"
+                    " versions..."
                 )
                 context_auto_ht = filter_to_region_type(context_ht, "autosomes")
                 context_x_ht = filter_to_region_type(context_ht, "chrX")
@@ -195,7 +198,8 @@ def main(args):
                 exp_ht = exp_ht.union(exp_x_ht).union(exp_y_ht)
 
                 logger.info(
-                    "Fixing expected values for genes that span PAR and nonPAR regions..."
+                    "Fixing expected values for genes that span PAR and nonPAR"
+                    " regions..."
                 )
                 # Adding a sum here to make sure that genes like XG that span PAR/nonPAR regions
                 # have correct total expected values
@@ -213,7 +217,8 @@ def main(args):
 
             else:
                 logger.warning(
-                    "Using observed and expected values calculated using LoF pipeline..."
+                    "Using observed and expected values calculated using LoF"
+                    " pipeline..."
                 )
                 exp_ht = (
                     constraint_ht.ht()
@@ -231,13 +236,15 @@ def main(args):
                 obs_ht = exp_ht
 
             logger.info(
-                "Annotating context HT with number of observed and expected variants per site..."
+                "Annotating context HT with number of observed and expected variants"
+                " per site..."
             )
             # Add observed variants to context HT
             context_ht = add_obs_annotation(context_ht, filter_csq=True)
 
             logger.info(
-                "Collecting by key to run constraint per base and not per base-allele..."
+                "Collecting by key to run constraint per base and not per"
+                " base-allele..."
             )
             # Context HT is keyed by locus and allele, which means there is one row for every possible missense variant
             # This means that any locus could be present up to three times (once for each possible missense)
@@ -273,7 +280,8 @@ def main(args):
             run_single_search = True
 
             logger.info(
-                "Searching for transcripts or transcript subsections with a single significant break..."
+                "Searching for transcripts or transcript subsections with a single"
+                " significant break..."
             )
             if args.search_num == 1:
                 all_loci_chisq_ht_path = f"{SINGLE_BREAK_TEMP_PATH}/all_loci_chisq.ht"
@@ -314,7 +322,8 @@ def main(args):
 
             if run_single_search:
                 logger.info(
-                    "Calculating nulls, alts, and chi square values and checkpointing..."
+                    "Calculating nulls, alts, and chi square values and"
+                    " checkpointing..."
                 )
                 ht = process_sections(
                     ht=ht,
@@ -348,12 +357,14 @@ def main(args):
             )
 
             logger.info(
-                "Filtering to transcripts or transcript subsections with breaks and checkpointing..."
+                "Filtering to transcripts or transcript subsections with breaks and"
+                " checkpointing..."
             )
             ht = ht.annotate(breakpoint=breakpoint_ht[ht.section].locus.position)
             # Possible checkpoint here if necessary
             logger.info(
-                "Splitting at breakpoints and re-annotating section starts, stops, and names..."
+                "Splitting at breakpoints and re-annotating section starts, stops, and"
+                " names..."
             )
             break_found_ht = ht.filter(hl.is_defined(ht.breakpoint))
             logger.info("Writing out sections with single significant break...")
@@ -408,7 +419,8 @@ def main(args):
             if file_exists(simul_break_by_section_path):
                 simul_exists = True
                 logger.info(
-                    "Converting merged simultaneous breaks HT from section-level to locus-level..."
+                    "Converting merged simultaneous breaks HT from section-level to"
+                    " locus-level..."
                 )
                 simul_break_by_section_ht = hl.read_table(simul_break_by_section_path)
 
@@ -422,7 +434,8 @@ def main(args):
                     hl.is_defined(single_no_break_ht.breakpoints)
                 )
                 logger.info(
-                    "Annotating simul breaks with new sections and re-keying for next search..."
+                    "Annotating simul breaks with new sections and re-keying for next"
+                    " search..."
                 )
                 simul_break_ht = simul_break_ht.annotate(
                     section_1=hl.if_else(
@@ -457,7 +470,8 @@ def main(args):
             else:
                 simul_exists = False
                 logger.info(
-                    "No sections in round %i had breakpoints in simultaneous breaks search.",
+                    "No sections in round %i had breakpoints in simultaneous breaks"
+                    " search.",
                     args.search_num,
                 )
 
@@ -471,7 +485,8 @@ def main(args):
             if file_exists(single_break_path):
                 single_exists = True
                 logger.info(
-                    "Annotating single breaks with new sections and re-keying for next search..."
+                    "Annotating single breaks with new sections and re-keying for next"
+                    " search..."
                 )
                 single_break_ht = hl.read_table(single_break_path)
                 single_break_ht = single_break_ht.annotate(
@@ -507,7 +522,8 @@ def main(args):
             )
             if single_exists and simul_exists:
                 logger.info(
-                    "Merging break results from single and simultaneous search and writing..."
+                    "Merging break results from single and simultaneous search and"
+                    " writing..."
                 )
                 merged_break_ht = single_break_ht.union(simul_break_ht)
                 # TODO: Change break results bucket structure to have round first, then simul vs. single split
@@ -518,7 +534,8 @@ def main(args):
                 simul_break_ht.write(merged_path, overwrite=args.overwrite)
             else:
                 logger.info(
-                    "No sections in round %i had breakpoints (neither in single nor in simultaneous search).",
+                    "No sections in round %i had breakpoints (neither in single nor in"
+                    " simultaneous search).",
                     args.search_num,
                 )
 
@@ -554,7 +571,8 @@ def main(args):
             # Add p-value threshold to globals
             if not args.p_value:
                 logger.warning(
-                    "p-value threshold not specified! Defaulting to value stored in `P_VALUE` constant..."
+                    "p-value threshold not specified! Defaulting to value stored in"
+                    " `P_VALUE` constant..."
                 )
                 p_value = P_VALUE
             else:
@@ -605,17 +623,26 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--skip-calc-oe",
-        help="Skip observed and expected variant calculations per transcript. Relevant only to gnomAD v2.1.1!",
+        help=(
+            "Skip observed and expected variant calculations per transcript. Relevant"
+            " only to gnomAD v2.1.1!"
+        ),
         action="store_true",
     )
     parser.add_argument(
         "--search-for-single-break",
-        help="Search for single significant break in transcripts or transcript subsections.",
+        help=(
+            "Search for single significant break in transcripts or transcript"
+            " subsections."
+        ),
         action="store_true",
     )
     parser.add_argument(
         "--search-num",
-        help="Search iteration number (e.g., second round of searching for single break would be 2).",
+        help=(
+            "Search iteration number (e.g., second round of searching for single break"
+            " would be 2)."
+        ),
         type=int,
     )
     parser.add_argument(

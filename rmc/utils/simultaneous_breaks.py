@@ -114,7 +114,8 @@ def split_sections_by_len(
     ht = ht.annotate(missense_list_len=ht.max_idx + 1)
 
     logger.info(
-        "Splitting sections into two categories: list length < %i and list length >= %i...",
+        "Splitting sections into two categories: list length < %i and list length >="
+        " %i...",
         missense_len_threshold,
         missense_len_threshold,
     )

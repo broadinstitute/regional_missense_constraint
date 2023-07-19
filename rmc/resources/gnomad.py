@@ -51,7 +51,9 @@ Input for `build_models`.
 """
 
 possible_variants_ht = TableResource(
-    path=f"{FLAGSHIP_LOF_MODEL_PREFIX}/possible_data/possible_transcript_pop_standard.ht"
+    path=(
+        f"{FLAGSHIP_LOF_MODEL_PREFIX}/possible_data/possible_transcript_pop_standard.ht"
+    )
 )
 """
 Table with all observed SNPs in hg19 fasta (context) Table.

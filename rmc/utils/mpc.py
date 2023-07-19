@@ -269,7 +269,8 @@ def prepare_pop_path_ht(
     )
 
     logger.info(
-        "Getting PolyPhen-2, codon, and regional missense constraint missense o/e annotations..."
+        "Getting PolyPhen-2, codon, and regional missense constraint missense o/e"
+        " annotations..."
     )
     context_ht = context_with_oe.versions[freeze].ht()
     ht = ht.annotate(**context_ht[ht.locus, ht.alleles, ht.transcript])
@@ -331,12 +332,14 @@ def prepare_pop_path_ht(
 
     if not do_k_fold_training:
         logger.info(
-            "Adding misbad from training transcripts, filtering transcripts, writing out...",
+            "Adding misbad from training transcripts, filtering transcripts, writing"
+            " out...",
         )
         _add_misbad_and_filter_transcripts(ht=ht)
     else:
         logger.info(
-            "Adding misbad, filtering transcripts, writing out for the %i-fold training sets...",
+            "Adding misbad, filtering transcripts, writing out for the %i-fold training"
+            " sets...",
             FOLD_K,
         )
         for i in range(1, FOLD_K + 1):
@@ -413,7 +416,8 @@ def get_min_aic_model(
             )
         if (model_type == "single") and (not all([len(x) == 1 for x in var_combs])):
             raise DataException(
-                "Please check that all single variable inputs consist of only one variable!"
+                "Please check that all single variable inputs consist of only one"
+                " variable!"
             )
 
         models = {}
@@ -618,7 +622,8 @@ def run_regressions(
             pickle.dump(model, p, protocol=pickle.HIGHEST_PROTOCOL)
 
         logger.info(
-            "Annotating gnomAD variants with fitted score and writing to gnomad_fitted_score path..."
+            "Annotating gnomAD variants with fitted score and writing to"
+            " gnomad_fitted_score path..."
         )
         ht = ht.filter(ht.pop_v_path == 1)
         ht = calculate_fitted_scores(
