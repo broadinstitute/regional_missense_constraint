@@ -18,7 +18,12 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_SLOW_DEL,
 )
 from rmc.resources.gnomad import constraint_ht, filtered_exomes
-from rmc.resources.reference_data import clinvar_plp_mis_haplo, gene_model, ndd_de_novo
+from rmc.resources.reference_data import (
+    clinvar_plp_mis_haplo,
+    gene_model,
+    ndd_de_novo,
+    transcript_cds,
+)
 from rmc.resources.resource_utils import MISSENSE
 from rmc.resources.rmc import (
     CONSTRAINT_ANNOTATIONS,
@@ -40,9 +45,11 @@ from rmc.resources.rmc import (
     single_search_round_ht_path,
 )
 from rmc.utils.generic import (
+    get_aa_from_context,
     get_annotations_from_context_ht_vep,
     get_constraint_transcripts,
     get_coverage_correction_expr,
+    get_ref_aa,
     import_clinvar,
     import_de_novo_variants,
     keep_criteria,
@@ -1311,7 +1318,247 @@ def create_context_with_oe(
     logger.info("Output OE-annotated dedup context HT fields: %s", set(ht.row))
 
 
-def reformat_annotations_for_release(freeze: int, overwrite: bool) -> None:
+def annot_rmc_with_aa(ht: hl.Table, overwrite_temp: bool):
+    """
+    Annotate RMC results HT with amino acid information.
+
+    :param ht: Input RMC results HT.
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
+    :return: RMC results HT annotated with amino acid information.
+    """
+    logger.info("Getting amino acid information from context HT...")
+    rmc_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
+    context_ht = get_aa_from_context(
+        overwrite_temp=overwrite_temp, keep_transcripts=rmc_transcripts
+    )
+    context_ht = get_ref_aa(
+        ht=context_ht, overwrite_temp=overwrite_temp, collect_all_aa=False
+    )
+    ht = ht.annotate(
+        start_aa=context_ht[ht.start_coordinate, ht.transcript].ref_aa,
+        stop_aa=context_ht[ht.stop_coordinate, ht.transcript].ref_aa,
+    )
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_aa_annot.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    return check_and_fix_missing_aa(ht, context_ht, overwrite_temp)
+
+
+def join_and_fix_aa(ht: hl.Table, fix_ht: hl.Table) -> hl.Table:
+    """
+    Add start and stop amino acid information from fix_ht to ht.
+
+    :param ht: Input HT. Should be RMC results HT annotated with amino acid information.
+    :param fix_ht: HT start and stop amino acids only for RMC regions that were
+        previously missing amino acid information.
+    :return: RMC results HT annotated with amino acid information from fix HT.
+    """
+    ht = ht.annotate(
+        start_aa=hl.if_else(
+            hl.is_missing(ht.start_aa) & ht.transcript_start,
+            fix_ht[ht.interval, ht.transcript].start_aa,
+            ht.start_aa,
+        ),
+        stop_aa=hl.if_else(
+            hl.is_missing(ht.stop_aa) & ht.transcript_stop,
+            fix_ht[ht.interval, ht.transcript].stop_aa,
+            ht.stop_aa,
+        ),
+    )
+    return ht
+
+
+def fix_transcript_start_stops(ht: hl.Table, overwrite_temp: bool) -> hl.Table:
+    """
+    Fix missing start or stop amino acid at transcript start or stop coordinates.
+
+    :param ht: Input HT. Should be RMC results HT annotated with amino acid information.
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
+    :return: HT containing start and stop amino acids only for RMC regions that were
+        previously missing amino acid information.
+    """
+    miss_start_stop_ht = ht.filter(
+        (hl.is_missing(ht.start_aa) & ht.transcript_start)
+        | (hl.is_missing(ht.stop_aa) & ht.transcript_stop)
+    )
+    miss_start_stop_ht = miss_start_stop_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/transcript_start_stop_missing_aa.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    miss_start_stop_transcripts = miss_start_stop_ht.aggregate(
+        hl.agg.collect_as_set(miss_start_stop_ht.transcript)
+    )
+    filt_context_ht = get_aa_from_context(
+        overwrite_temp=False, keep_transcripts=miss_start_stop_transcripts
+    )
+    filt_context_ht = filt_context_ht.filter(
+        hl.literal(miss_start_stop_transcripts).contains(filt_context_ht.transcript)
+    )
+    filt_context_ht = filt_context_ht.group_by("transcript").aggregate(
+        max_aa_num=hl.agg.max(filt_context_ht.protein_start)
+    )
+    filt_context_ht = filt_context_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/transcript_start_stop_missing_max_aa_num.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    miss_start_stop_ht = miss_start_stop_ht.annotate(
+        **filt_context_ht[miss_start_stop_ht.transcript]
+    )
+    miss_start_stop_ht = miss_start_stop_ht.annotate(
+        start_aa=hl.if_else(
+            hl.is_missing(miss_start_stop_ht.start_aa),
+            hl.if_else(
+                # Set all missing + strand transcript starts to Met1
+                miss_start_stop_ht.strand == "+",
+                "Met1",
+                hl.format("Ter%s", miss_start_stop_ht.max_aa_num),
+            ),
+            miss_start_stop_ht.start_aa,
+        ),
+        stop_aa=hl.if_else(
+            hl.is_missing(miss_start_stop_ht.stop_aa),
+            hl.if_else(
+                # Set all missing - strand transcript stops to Met1
+                miss_start_stop_ht.strand == "-",
+                "Met1",
+                hl.format("Ter%s", miss_start_stop_ht.max_aa_num),
+            ),
+            miss_start_stop_ht.start_aa,
+        ),
+    )
+    return miss_start_stop_ht.select("start_aa", "stop_aa")
+
+
+def fix_region_start_stops(
+    ht: hl.Table, context_ht: hl.Table, overwrite_temp: bool
+) -> hl.Table:
+    """
+    Fix missing start or stop amino acid information for non-transcript starts and stops.
+
+    :param ht: Input HT. Should be RMC results HT annotated with amino acid information.
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
+    :return: HT containing start and stop amino acids only for RMC regions that were
+        previously missing amino acid information.
+    """
+    missing_ht = ht.filter(hl.is_missing(ht.start_aa) | hl.is_missing(ht.stop_aa))
+    missing_transcripts = missing_ht.aggregate(
+        hl.agg.collect_as_set(missing_ht.transcript)
+    )
+    filt_context_ht = context_ht.filter(
+        hl.literal(missing_transcripts).contains(context_ht.transcript)
+    )
+    pos_ht = constraint_prep.ht().select_globals().select()
+    pos_ht = pos_ht.filter(hl.literal(missing_transcripts).contains(pos_ht.transcript))
+    pos_ht = pos_ht.annotate(pos=pos_ht.locus.position)
+    pos_ht = pos_ht.key_by("locus")
+    pos_ht = pos_ht.group_by("transcript").aggregate(
+        positions=hl.agg.collect(pos_ht.pos)
+    )
+    pos_ht = pos_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/pos_per_transcript.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    missing_ht = missing_ht.annotate(
+        # Take the first missense position that is >= start coordinate
+        closest_start_mis=hl.bind(
+            lambda x: x[hl.binary_search(x, missing_ht.start_coordinate.position)],
+            pos_ht[missing_ht.transcript].positions,
+        ),
+        # Take the first missense position that is <= stop coordinate
+        closest_stop_mis=hl.bind(
+            lambda x: x[hl.binary_search(x, missing_ht.stop_coordinate.position) - 1],
+            pos_ht[missing_ht.transcript].positions,
+        ),
+    )
+    # Checkpoint to make sure the binary search/join only runs once,
+    # especially since there is another join immediately afterwards
+    missing_ht = missing_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/region_missing_start_stop_pos.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    missing_ht = missing_ht.annotate(
+        start_aa=hl.if_else(
+            hl.is_missing(missing_ht.start_aa),
+            filt_context_ht[missing_ht.closest_start_mis, missing_ht.transcript].ref_aa,
+            missing_ht.start_aa,
+        ),
+        stop_aa=hl.if_else(
+            hl.is_missing(missing_ht.stop_aa),
+            filt_context_ht[missing_ht.closest_stop_mis, missing_ht.transcript].ref_aa,
+            missing_ht.stop_aa,
+        ),
+    )
+    return missing_ht.select("start_aa", "stop_aa")
+
+
+def check_and_fix_missing_aa(
+    ht: hl.Table, context_ht: hl.Table, overwrite_temp: bool
+) -> hl.Table:
+    """
+    Check for and fix any missing amino acid information.
+
+    :param ht: Input Table. Should be RMC results HT annotated with amino acid information.
+    :param context_ht: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
+    :return: RMC results HT annotated with amino acids for all region start/stops.
+    """
+    missing_ht = ht.filter(hl.is_missing(ht.start_aa) | hl.is_missing(ht.stop_aa))
+    missing_start_or_stop = missing_ht.count()
+    if missing_start_or_stop == 0:
+        return ht
+
+    logger.info(
+        "%i sites are missing either their stop or start AA!", missing_start_or_stop
+    )
+
+    # Get strand from browser HT
+    # TODO: recreate browser HT to include strand annotation
+    browser_ht = gene_model.ht().select("strand")
+    ht = ht.annotate(strand=gene_model[ht.transcript].strand)
+
+    # Get CDS start/stops from CDS HT
+    transcript_ht = transcript_cds.ht().key_by()
+    transcript_ht = transcript_ht.annotate(
+        cds_start=transcript_ht.interval.start,
+        cds_stop=transcript_ht.interval.end,
+    )
+    ht = ht.annotate(**transcript_ht[ht.transcript])
+    ht = ht.annotate(
+        transcript_start=ht.start_coordinate == ht.cds_start,
+        transcript_stop=ht.stop_coordinate == ht.cds_stop,
+    )
+    transcript_start_stop_fix_ht = fix_transcript_start_stops(ht, overwrite_temp)
+    ht = join_and_fix_aa(ht, transcript_start_stop_fix_ht)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/RMC_results_transcript_start_stop_aa_fix.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    region_fix_ht = fix_region_start_stops(ht, context_ht, overwrite_temp)
+    ht = join_and_fix_aa(ht, region_fix_ht)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/RMC_results_all_aa_fix.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    return ht
+
+
+def reformat_annotations_for_release(freeze: int, overwrite_temp: bool) -> None:
     """
     Reformat annotations in input HT for release.
 
@@ -1342,10 +1589,20 @@ def reformat_annotations_for_release(freeze: int, overwrite: bool) -> None:
     ----------------------------------------
 
     :param freeze: RMC data freeze number.
-    :param overwrite: Whether to overwrite existing data.
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
     :return: None; writes Table with desired schema to resource path.
     """
     ht = rmc_results.versions[freeze].ht()
+
+    # Annotate start and stop coordinates per region
+    ht = ht.annotate(
+        start_coordinate=ht.interval.start,
+        stop_coordinate=ht.interval.end,
+    )
+
+    ht = annot_rmc_with_aa(ht, overwrite_temp)
     ht = ht.annotate(
         regions=hl.struct(
             start_coordinate=ht.start_coordinate,
@@ -1362,7 +1619,7 @@ def reformat_annotations_for_release(freeze: int, overwrite: bool) -> None:
     ht = ht.group_by(transcript_id=ht.transcript).aggregate(
         regions=hl.agg.collect(ht.regions)
     )
-    ht.write(rmc_browser.versions[freeze].path, overwrite=overwrite)
+    ht.write(rmc_browser.versions[freeze].path, overwrite=True)
 
 
 def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:
