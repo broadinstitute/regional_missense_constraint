@@ -32,6 +32,7 @@ from rmc.resources.rmc import (
     filtered_context,
     no_breaks_he_path,
     oe_bin_counts_tsv,
+    rmc_browser,
     rmc_results,
     simul_search_bucket_path,
     simul_search_round_bucket_path,
@@ -1305,44 +1306,58 @@ def create_context_with_oe(
     logger.info("Output OE-annotated dedup context HT fields: %s", set(ht.row))
 
 
-def reformat_annotations_for_release(ht: hl.Table) -> hl.Table:
+def reformat_annotations_for_release(freeze: int, overwrite: bool) -> None:
     """
     Reformat annotations in input HT for release.
 
     This reformatting is necessary to load data into the gnomAD browser.
 
     Desired schema:
-    ---------------------------------------
+    ----------------------------------------
+    Global fields:
+        'transcripts_not_searched': set<str>
+        'transcripts_no_rmc': set<str>
+        'outlier_transcripts': set<str>
+    ----------------------------------------
     Row fields:
-        'transcript_id': str
-        'regions': array<struct {
-            'start': int32
-            'stop': int32
-            'observed_missense': int32
-            'expected_missense': float64
-            'chisq': float64
-        }>
-
+        'interval': interval<locus<GRCh37>>
+        'transcript': str
+        'regions': struct {
+            start_coordinate: locus<GRCh37>,
+            stop_coordinate: locus<GRCh37>,
+            start_aa: str,
+            stop_aa: str,
+            obs: int64,
+            exp: float64,
+            oe: float64,
+            chisq: float64
+        }
     ----------------------------------------
-    Key: ['transcript_id']
+    Key: ['interval', 'transcript']
     ----------------------------------------
 
-    :param ht: Input Table.
-    :return: Table with schema described above.
+    :param freeze: RMC data freeze number.
+    :param overwrite: Whether to overwrite existing data.
+    :return: None; writes Table with desired schema to resource path.
     """
+    ht = rmc_results.versions[freeze].ht()
     ht = ht.annotate(
         regions=hl.struct(
-            start=ht.section_start,
-            stop=ht.section_end,
-            observed_missense=ht.section_obs,
-            expected_missense=ht.section_exp,
+            start_coordinate=ht.start_coordinate,
+            stop_coordinate=ht.stop_coordinate,
+            start_aa=ht.start_aa,
+            stop_aa=ht.stop_aa,
+            obs=ht.section_obs,
+            exp=ht.section_exp,
+            oe=ht.section_oe,
             chisq=ht.section_chisq,
         )
     )
     # Group Table by transcript
-    return ht.group_by(transcript_id=ht.transcript).aggregate(
+    ht = ht.group_by(transcript_id=ht.transcript).aggregate(
         regions=hl.agg.collect(ht.regions)
     )
+    ht.write(rmc_browser.versions[freeze].path, overwrite=overwrite)
 
 
 def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:
