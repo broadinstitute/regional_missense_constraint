@@ -17,7 +17,7 @@ from rmc.resources.gnomad import (
     processed_exomes,
     prop_obs_coverage,
 )
-from rmc.resources.reference_data import filtered_context, gene_model
+from rmc.resources.reference_data import filtered_context, transcript_cds
 from rmc.resources.resource_utils import MISSENSE
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
@@ -304,7 +304,11 @@ def main(args):
                         "Adding section annotation before searching for first break..."
                     )
                     # Add transcript start and stop positions from browser HT
-                    transcript_ht = gene_model.ht().select("start", "stop")
+                    transcript_ht = transcript_cds.ht().key_by()
+                    transcript_ht = transcript_ht.annotate(
+                        start=transcript_ht.interval.start.position,
+                        stop=transcript_ht.interval.end.position,
+                    )
                     ht = ht.annotate(**transcript_ht[ht.transcript])
                     ht = ht.annotate(
                         section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop)
