@@ -1559,6 +1559,40 @@ def check_and_fix_missing_aa(
     return ht
 
 
+def annotate_transcript_globals(ht: hl.Table) -> hl.Table:
+    """
+    Annotate HT globals with transcript information.
+
+    Function is used when reformatting RMC results for browser release.
+    Annotates:
+        - transcripts not searched for RMC
+        - transcripts without evidence of RMC
+        - outlier transcripts
+    :param HT: Input Table. Should be RMC results HT.
+    :return: RMC results HT with updated globals annotations.
+    """
+    # Get transcripts with evidence of RMC
+    rmc_transcripts = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.transcript)))
+
+    # Get all QC pass transcripts and outlier transcripts
+    qc_pass_transcripts = get_constraint_transcripts(outlier=False)
+    outlier_transcripts = get_constraint_transcripts(outlier=True)
+
+    # Get all transcripts displayed on browser
+    transcript_ht = gene_model.ht()
+    all_transcripts = transcript_ht.aggregate(
+        hl.agg.collect_as_set(transcript_ht.transcript)
+    )
+    transcripts_no_rmc = qc_pass_transcripts.difference(rmc_transcripts)
+    transcripts_not_searched = all_transcripts.difference(qc_pass_transcripts)
+    ht = ht.select_globals()
+    return ht.annotate_globals(
+        transcripts_not_searched=transcripts_not_searched,
+        transcripts_no_rmc=transcripts_no_rmc,
+        outlier_transcripts=outlier_transcripts,
+    )
+
+
 def reformat_annotations_for_release(freeze: int, overwrite_temp: bool) -> None:
     """
     Reformat annotations in input HT for release.
@@ -1623,6 +1657,9 @@ def reformat_annotations_for_release(freeze: int, overwrite_temp: bool) -> None:
     ht = ht.group_by(transcript_id=ht.transcript).aggregate(
         regions=hl.agg.collect(ht.regions)
     )
+
+    # Annotate globals and write
+    ht = annotate_transcript_globals(ht)
     ht.write(rmc_browser.versions[freeze].path, overwrite=True)
 
 
