@@ -303,7 +303,9 @@ def main(args):
                     logger.info(
                         "Adding section annotation before searching for first break..."
                     )
-                    # Add transcript start and stop positions from browser HT
+                    # Add transcript start and stop positions from CDS HT
+                    # NOTE: For RMC freezes 1-7, the transcript start and ends were from the
+                    # browser HT (`gene_model`) rather than the CDS HT!
                     transcript_ht = transcript_cds.ht().key_by()
                     transcript_ht = transcript_ht.annotate(
                         start=transcript_ht.interval.start.position,
