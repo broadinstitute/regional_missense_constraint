@@ -31,6 +31,7 @@ from rmc.utils.constraint import (
     create_no_breaks_he,
     merge_rmc_hts,
     process_sections,
+    reformat_annotations_for_release,
 )
 from rmc.utils.generic import get_constraint_transcripts
 
@@ -417,6 +418,9 @@ def main(args):
             create_context_with_oe(
                 freeze=args.freeze, overwrite_temp=args.overwrite_temp
             )
+
+            logger.info("Reformatting RMC results for browser release...")
+            reformat_annotations_for_release(args.freeze, args.overwrite_temp)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
