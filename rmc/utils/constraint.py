@@ -1334,7 +1334,8 @@ def annot_rmc_with_aa(ht: hl.Table, overwrite_temp: bool):
         overwrite_temp=overwrite_temp, keep_transcripts=rmc_transcripts
     )
     context_ht = get_ref_aa(
-        ht=context_ht, overwrite_temp=overwrite_temp, collect_all_aa=False
+        ht=context_ht,
+        overwrite_temp=overwrite_temp,
     )
     ht = ht.annotate(
         start_aa=context_ht[ht.start_coordinate, ht.transcript].ref_aa,
@@ -1602,7 +1603,10 @@ def reformat_annotations_for_release(freeze: int, overwrite_temp: bool) -> None:
         stop_coordinate=ht.interval.end,
     )
 
+    # Annotate amino acids
     ht = annot_rmc_with_aa(ht, overwrite_temp)
+
+    # Add region struct
     ht = ht.annotate(
         regions=hl.struct(
             start_coordinate=ht.start_coordinate,
