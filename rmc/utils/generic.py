@@ -276,7 +276,6 @@ def get_aa_from_context(
 def get_ref_aa(
     ht: hl.Table,
     overwrite_temp: bool,
-    collect_all_aa: bool,
     extra_aa_map: Dict[str, str] = {"*": "Ter", "U": "Sec"},
     aa_to_remove: str = "X",
 ) -> hl.Table:
@@ -287,7 +286,6 @@ def get_ref_aa(
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
-    :param collect_all_aa: Whether to group input HT by transcript and collect all reference AAs in that transcript.
     :param extra_aa_map: Dictionary mapping any amino acid one letter codes to three letter codes.
         Designed to capture any amino acids not present in `ACID_NAMES_PATH`.
         Default is {"*": "Ter", "U": "Sec"}.
@@ -335,15 +333,7 @@ def get_ref_aa(
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
-    if collect_all_aa:
-        ht = ht.key_by("transcript", "locus")
-        group_ht = ht.group_by("transcript").aggregate(aa_list=hl.agg.collect(ht.aa))
-        group_ht = group_ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/rmc/ref_aa_per_transcript.ht", overwrite=True
-        )
-        return group_ht
-    ht = ht.transmute(ref_aa=ht.aa_info[0].ref_aa)
-    return ht
+    return ht.transmute(ref_aa=ht.aa_info[0].ref_aa)
 
 
 def get_gnomad_public_release(
