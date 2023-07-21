@@ -314,7 +314,7 @@ def get_ref_aa(
     aa_map = get_aa_map()
     # Add any extra mappings into amino acid mapping dict
     if extra_aa_map:
-        aa_map = aa_map | extra_aa_map
+        aa_map = aa_map.update(extra_aa_map)
     ht = ht.annotate(ref_aa_1_letter=ht.amino_acids.split("/")[0])
     ht = ht.annotate(
         ref_aa=hl.literal(aa_map).get(ht.ref_aa_1_letter, ht.ref_aa_1_letter)
