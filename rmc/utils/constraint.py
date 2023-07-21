@@ -1529,7 +1529,7 @@ def check_and_fix_missing_aa(
     # Get strand from browser HT
     # TODO: recreate browser HT to include strand annotation
     browser_ht = gene_model.ht().select("strand")
-    ht = ht.annotate(strand=gene_model[ht.transcript].strand)
+    ht = ht.annotate(strand=browser_ht[ht.transcript].strand)
 
     # Get CDS start/stops from CDS HT
     transcript_ht = transcript_cds.ht().key_by()
