@@ -32,8 +32,12 @@ lazy-object-proxy==1.9.0
     # via astroid
 mccabe==0.7.0
     # via pylint
+mypy==1.4.1
+    # via -r requirements-dev.in
 mypy-extensions==1.0.0
-    # via black
+    # via
+    #   black
+    #   mypy
 nodeenv==1.8.0
     # via pre-commit
 packaging==23.1
@@ -67,6 +71,8 @@ toml==0.10.2
     # via pre-commit
 tomlkit==0.11.8
     # via pylint
+typing-extensions==4.7.1
+    # via mypy
 virtualenv==20.23.1
     # via pre-commit
 wrapt==1.15.0
