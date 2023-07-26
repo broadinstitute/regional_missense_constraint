@@ -1460,10 +1460,8 @@ def fix_region_start_stops(
     )
     pos_ht = constraint_prep.ht().select_globals().select()
     pos_ht = pos_ht.filter(hl.literal(missing_transcripts).contains(pos_ht.transcript))
-    pos_ht = pos_ht.annotate(pos=pos_ht.locus.position)
-    pos_ht = pos_ht.key_by("locus")
     pos_ht = pos_ht.group_by("transcript").aggregate(
-        positions=hl.agg.collect(pos_ht.pos)
+        positions=hl.sorted(hl.agg.collect(pos_ht.locus.position))
     )
     pos_ht = pos_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/rmc/pos_per_transcript.ht",
@@ -1480,6 +1478,19 @@ def fix_region_start_stops(
         closest_stop_mis=hl.bind(
             lambda x: x[hl.binary_search(x, missing_ht.stop_coordinate.position) - 1],
             pos_ht[missing_ht.transcript].positions,
+        ),
+    )
+    # Adjust start/stop coordinates to closest missense positions
+    missing_ht = missing_ht.transmute(
+        start_coordinate=hl.if_else(
+            hl.is_defined(missing_ht.start_aa),
+            hl.locus(missing_ht.start_coordinate.contig, missing_ht.closest_start_mis),
+            missing_ht.start_coordinate,
+        ),
+        stop_coordinate=hl.if_else(
+            hl.is_defined(missing_ht.stop_aa),
+            hl.locus(missing_ht.start_coordinate.contig, missing_ht.closest_stop_mis),
+            missing_ht.stop_coordinate,
         ),
     )
     # Checkpoint to make sure the binary search/join only runs once,
