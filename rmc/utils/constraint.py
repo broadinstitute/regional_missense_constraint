@@ -1574,9 +1574,9 @@ def check_and_fix_missing_aa(
     return ht
 
 
-def annotate_transcript_globals(ht: hl.Table) -> hl.Table:
+def add_globals_rmc_browser(ht: hl.Table) -> hl.Table:
     """
-    Annotate HT globals with transcript information.
+    Annotate HT globals with RMC transcript information.
 
     Function is used when reformatting RMC results for browser release.
     Annotates:
@@ -1671,7 +1671,7 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
     ht = ht.group_by("transcript").aggregate(regions=hl.agg.collect(ht.regions))
 
     # Annotate globals and write
-    ht = annotate_transcript_globals(ht)
+    ht = add_globals_rmc_browser(ht)
     ht.write(rmc_browser.versions[freeze].path, overwrite=True)
 
 
