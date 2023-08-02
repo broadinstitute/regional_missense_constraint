@@ -1381,11 +1381,14 @@ def join_and_fix_aa(ht: hl.Table, fix_ht: hl.Table) -> hl.Table:
     return ht
 
 
-def fix_transcript_start_stop_aas(ht: hl.Table, overwrite_temp: bool) -> hl.Table:
+def fix_transcript_start_stop_aas(
+    ht: hl.Table, context_ht: hl.Table, overwrite_temp: bool
+) -> hl.Table:
     """
     Fix missing start or stop amino acid at transcript start or stop coordinates.
 
     :param ht: Input HT. Should be RMC results HT annotated with amino acid information.
+    :param context_ht: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
@@ -1405,22 +1408,19 @@ def fix_transcript_start_stop_aas(ht: hl.Table, overwrite_temp: bool) -> hl.Tabl
     miss_start_stop_transcripts = miss_start_stop_ht.aggregate(
         hl.agg.collect_as_set(miss_start_stop_ht.transcript)
     )
-    filt_context_ht = get_aa_from_context(
-        overwrite_temp=False, keep_transcripts=miss_start_stop_transcripts
+    context_ht = context_ht.filter(
+        hl.literal(miss_start_stop_transcripts).contains(context_ht.transcript)
     )
-    filt_context_ht = filt_context_ht.filter(
-        hl.literal(miss_start_stop_transcripts).contains(filt_context_ht.transcript)
+    context_ht = context_ht.group_by("transcript").aggregate(
+        max_aa_num=hl.agg.max(context_ht.protein_start)
     )
-    filt_context_ht = filt_context_ht.group_by("transcript").aggregate(
-        max_aa_num=hl.agg.max(filt_context_ht.protein_start)
-    )
-    filt_context_ht = filt_context_ht.checkpoint(
+    context_ht = context_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/rmc/transcript_start_stop_missing_max_aa_num.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
     miss_start_stop_ht = miss_start_stop_ht.annotate(
-        **filt_context_ht[miss_start_stop_ht.transcript]
+        **context_ht[miss_start_stop_ht.transcript]
     )
     miss_start_stop_ht = miss_start_stop_ht.annotate(
         start_aa=hl.if_else(
@@ -1454,6 +1454,7 @@ def fix_region_start_stop_aas(
     Fix missing start or stop amino acid information for non-transcript starts and stops.
 
     :param ht: Input HT. Should be RMC results HT annotated with amino acid information.
+    :param context_ht: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
@@ -1570,7 +1571,9 @@ def check_and_fix_missing_aa(
         is_transcript_start=ht.start_coordinate == ht.cds_start,
         is_transcript_stop=ht.stop_coordinate == ht.cds_stop,
     )
-    transcript_start_stop_fix_ht = fix_transcript_start_stop_aas(ht, overwrite_temp)
+    transcript_start_stop_fix_ht = fix_transcript_start_stop_aas(
+        ht, context_ht, overwrite_temp
+    )
     ht = join_and_fix_aa(ht, transcript_start_stop_fix_ht)
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/rmc/rmc_results_transcript_start_stop_aa_fix.ht",
