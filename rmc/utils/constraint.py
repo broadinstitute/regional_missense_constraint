@@ -1326,13 +1326,17 @@ def annot_rmc_with_aa(ht: hl.Table, overwrite_temp: bool):
     """
     logger.info("Getting amino acid information from context HT...")
     rmc_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
+    # Get amino acid information from context table for variants in chosen transcripts
     context_ht = get_aa_from_context(
         overwrite_temp=overwrite_temp, keep_transcripts=rmc_transcripts
     )
+    # Get reference AA label for each locus-transcript combination in context HT
     context_ht = get_ref_aa(
         ht=context_ht,
         overwrite_temp=overwrite_temp,
     )
+    # NOTE: For transcripts on the negative strand, `start_aa` is the larger AA number and
+    # `stop_aa` is the smaller number
     ht = ht.annotate(
         start_aa=context_ht[ht.start_coordinate, ht.transcript].ref_aa,
         stop_aa=context_ht[ht.stop_coordinate, ht.transcript].ref_aa,
@@ -1600,7 +1604,7 @@ def annotate_transcript_globals(ht: hl.Table) -> hl.Table:
     )
 
 
-def reformat_annotations_for_release(freeze: int, overwrite_temp: bool) -> None:
+def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
     """
     Reformat annotations in input HT for release.
 
@@ -1614,9 +1618,8 @@ def reformat_annotations_for_release(freeze: int, overwrite_temp: bool) -> None:
         'outlier_transcripts': set<str>
     ----------------------------------------
     Row fields:
-        'interval': interval<locus<GRCh37>>
         'transcript': str
-        'regions': struct {
+        'regions': array<struct {
             start_coordinate: locus<GRCh37>,
             stop_coordinate: locus<GRCh37>,
             start_aa: str,
@@ -1625,9 +1628,9 @@ def reformat_annotations_for_release(freeze: int, overwrite_temp: bool) -> None:
             exp: float64,
             oe: float64,
             chisq: float64
-        }
+        }>
     ----------------------------------------
-    Key: ['interval', 'transcript']
+    Key: ['transcript']
     ----------------------------------------
 
     :param freeze: RMC data freeze number.
@@ -1661,9 +1664,7 @@ def reformat_annotations_for_release(freeze: int, overwrite_temp: bool) -> None:
         )
     )
     # Group Table by transcript
-    ht = ht.group_by(transcript_id=ht.transcript).aggregate(
-        regions=hl.agg.collect(ht.regions)
-    )
+    ht = ht.group_by("transcript").aggregate(regions=hl.agg.collect(ht.regions))
 
     # Annotate globals and write
     ht = annotate_transcript_globals(ht)
