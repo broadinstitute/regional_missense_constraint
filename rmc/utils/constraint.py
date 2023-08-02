@@ -1357,6 +1357,10 @@ def join_and_fix_aa(ht: hl.Table, fix_ht: hl.Table) -> hl.Table:
     """
     Add start and stop amino acid information from fix_ht to ht.
 
+    .. note::
+        Function expects that start and stop AAs at transcript start/stops are fixed before
+        adjusting missing region start/stop AAs.
+
     :param ht: Input HT. Should be RMC results HT annotated with amino acid information.
     :param fix_ht: HT start and stop amino acids only for RMC regions that were
         previously missing amino acid information.
