@@ -37,10 +37,10 @@ from rmc.utils.constraint import (
     check_break_search_round_nums,
     create_context_with_oe,
     create_no_breaks_he,
+    format_rmc_browser_ht,
     get_max_chisq_per_group,
     merge_rmc_hts,
     process_sections,
-    reformat_annotations_for_release,
 )
 from rmc.utils.generic import (
     filter_context_using_gnomad,
@@ -605,7 +605,7 @@ def main(args):
             )
 
             logger.info("Reformatting RMC results for browser release...")
-            reformat_annotations_for_release(args.freeze, args.overwrite_temp)
+            format_rmc_browser_ht(args.freeze, args.overwrite_temp)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
