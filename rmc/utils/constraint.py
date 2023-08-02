@@ -1397,7 +1397,7 @@ def fix_transcript_start_stop_aas(
         | (hl.is_missing(ht.stop_aa) & ht.transcript_stop)
     )
     miss_start_stop_ht = miss_start_stop_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/transcript_start_stop_missing_aa.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/transcript_start_stop_missing_aa.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -1411,7 +1411,7 @@ def fix_transcript_start_stop_aas(
         max_aa_num=hl.agg.max(context_ht.protein_start)
     )
     context_ht = context_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/transcript_start_stop_missing_max_aa_num.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/transcript_start_stop_missing_max_aa_num.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -1470,7 +1470,7 @@ def fix_region_start_stop_aas(
         positions=hl.sorted(hl.agg.collect(pos_ht.locus.position))
     )
     pos_ht = pos_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/pos_per_transcript.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/pos_per_transcript.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -1502,7 +1502,7 @@ def fix_region_start_stop_aas(
     # Checkpoint to make sure the binary search/join only runs once,
     # especially since there is another join immediately afterwards
     missing_ht = missing_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/region_missing_start_stop_pos.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/region_missing_start_stop_pos.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -1572,14 +1572,14 @@ def check_and_fix_missing_aa(
     )
     ht = join_and_fix_aa(ht, transcript_start_stop_fix_ht)
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/rmc_results_transcript_start_stop_aa_fix.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_transcript_start_stop_aa_fix.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
     region_fix_ht = fix_region_start_stop_aas(ht, context_ht, overwrite_temp)
     ht = join_and_fix_aa(ht, region_fix_ht)
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/rmc_results_all_aa_fix.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_all_aa_fix.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
