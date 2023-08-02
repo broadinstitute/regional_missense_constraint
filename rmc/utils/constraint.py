@@ -1672,7 +1672,7 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
 
     # Add region struct
     ht = ht.annotate(
-        regions=hl.struct(
+        region=hl.struct(
             start_coordinate=ht.start_coordinate,
             stop_coordinate=ht.stop_coordinate,
             start_aa=ht.start_aa,
@@ -1684,7 +1684,7 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
         )
     )
     # Group Table by transcript
-    ht = ht.group_by("transcript").aggregate(regions=hl.agg.collect(ht.regions))
+    ht = ht.group_by("transcript").aggregate(regions=hl.agg.collect(ht.region))
 
     # Annotate globals and write
     ht = add_globals_rmc_browser(ht)
