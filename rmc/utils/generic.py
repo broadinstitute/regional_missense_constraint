@@ -343,7 +343,7 @@ def get_ref_aa(
 
     # Check to see if AA info is defined for all alleles associated with a locus-transcript combination
     ht = ht.annotate(
-        all_aa_def=hl.all(hl.map(lambda x: hl.is_missing(x.ref_aa), ht.aa_info))
+        all_aa_def=hl.all(hl.map(lambda x: hl.is_defined(x.ref_aa), ht.aa_info))
     )
     missing_aa_check = ht.aggregate(hl.agg.count_where(~ht.all_aa_def))
     if missing_aa_check != 0:
