@@ -17,7 +17,7 @@ from rmc.resources.gnomad import (
     processed_exomes,
     prop_obs_coverage,
 )
-from rmc.resources.reference_data import filtered_context, transcript_cds
+from rmc.resources.reference_data import filtered_context, transcript_ref
 from rmc.resources.resource_utils import MISSENSE
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
@@ -307,16 +307,7 @@ def main(args):
                     # Add transcript start and stop positions from CDS HT
                     # NOTE: For RMC freezes 1-7, the transcript start and ends were from the
                     # browser HT (`gene_model`) whose start and stop generally is in the UTRs
-                    transcript_ht = transcript_cds.ht()
-                    transcript_ht = transcript_ht.group_by("transcript").aggregate(
-                        start=hl.agg.min(transcript_ht.interval.start.position),
-                        stop=hl.agg.max(transcript_ht.interval.end.position),
-                    )
-                    transcript_ht = transcript_ht.checkpoint(
-                        f"{TEMP_PATH_WITH_FAST_DEL}/cds_start_stop_per_transcript.ht",
-                        overwrite=args.overwrite_temp,
-                        _read_if_exists=not args.overwrite_temp,
-                    )
+                    transcript_ht = transcript_ref.ht()
                     ht = ht.annotate(**transcript_ht[ht.transcript])
                     ht = ht.annotate(
                         section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop)
