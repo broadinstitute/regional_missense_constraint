@@ -309,6 +309,10 @@ def main(args):
                     # gnomAD browser HT (`gene_model`) whose start and stop generally is in the UTRs
                     # (these are the start/stops displayed in the browser for each gene)
                     transcript_ht = transcript_ref.ht()
+                    transcript_ht = transcript_ht.select(
+                        start=transcript_ht.gnomad_cds_start,
+                        stop=transcript_ht.gnomad_cds_end,
+                    )
                     ht = ht.annotate(**transcript_ht[ht.transcript])
                     ht = ht.annotate(
                         section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop)
