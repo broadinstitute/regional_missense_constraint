@@ -1393,8 +1393,8 @@ def fix_transcript_start_stop_aas(
     """
     # Filter to regions missing AA at transcript starts/ends
     miss_start_stop_ht = ht.filter(
-        (hl.is_missing(ht.start_aa) & ht.transcript_start)
-        | (hl.is_missing(ht.stop_aa) & ht.transcript_stop)
+        (hl.is_missing(ht.start_aa) & ht.is_transcript_start)
+        | (hl.is_missing(ht.stop_aa) & ht.is_transcript_stop)
     )
     miss_start_stop_ht = miss_start_stop_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/transcript_start_stop_missing_aa.ht",
@@ -1408,7 +1408,7 @@ def fix_transcript_start_stop_aas(
         hl.literal(miss_start_stop_transcripts).contains(context_ht.transcript)
     )
     context_ht = context_ht.group_by("transcript").aggregate(
-        max_aa_num=hl.agg.max(context_ht.protein_start)
+        max_aa_num=hl.agg.max(context_ht.aa_start_num)
     )
     context_ht = context_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/transcript_start_stop_missing_max_aa_num.ht",
