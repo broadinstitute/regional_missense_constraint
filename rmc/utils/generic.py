@@ -328,7 +328,7 @@ def get_ref_aa(
         overwrite=overwrite_temp,
     )
 
-    # Check if any there are any ref amino acids in HT that aren't in aa_map
+    # Check if there are any ref amino acids in HT that aren't in `aa_map`
     ref_aa_check = ht.aggregate(hl.agg.collect_as_set(ht.ref_aa))
     ref_aa_check = ref_aa_check.difference(set(hl.eval(aa_map).keys()))
     if len(ref_aa_check) != 0:
