@@ -1353,32 +1353,44 @@ def annot_rmc_with_aa(ht: hl.Table, overwrite_temp: bool):
     return check_and_fix_missing_aa(ht, context_ht, overwrite_temp)
 
 
-def join_and_fix_aa(ht: hl.Table, fix_ht: hl.Table) -> hl.Table:
+def join_and_fix_aa(
+    ht: hl.Table, fix_ht: hl.Table, fix_ts_boundaries: bool
+) -> hl.Table:
     """
     Add start and stop amino acid information from fix_ht to ht.
-
-    .. note::
-        Function expects that start and stop AAs at transcript start/stops are fixed before
-        adjusting missing region start/stop AAs.
 
     :param ht: Input HT. Should be RMC results HT annotated with amino acid information.
     :param fix_ht: HT start and stop amino acids only for RMC regions that were
         previously missing amino acid information.
+    :param fix_ts_boundaries: Whether to fix missing amino acid annotations at transcript boundaries
+        (CDS starts/stops) or at RMC region start/stops. If True, adjusts AAs at transcript boundaries only.
     :return: RMC results HT annotated with amino acid information from fix HT.
     """
-    ht = ht.annotate(
+    if fix_ts_boundaries:
+        return ht.annotate(
+            start_aa=hl.if_else(
+                hl.is_missing(ht.start_aa) & ht.is_transcript_start,
+                fix_ht[ht.interval, ht.transcript].start_aa,
+                ht.start_aa,
+            ),
+            stop_aa=hl.if_else(
+                hl.is_missing(ht.stop_aa) & ht.is_transcript_stop,
+                fix_ht[ht.interval, ht.transcript].stop_aa,
+                ht.stop_aa,
+            ),
+        )
+    return ht.annotate(
         start_aa=hl.if_else(
-            hl.is_missing(ht.start_aa) & ht.is_transcript_start,
+            hl.is_missing(ht.start_aa),
             fix_ht[ht.interval, ht.transcript].start_aa,
             ht.start_aa,
         ),
         stop_aa=hl.if_else(
-            hl.is_missing(ht.stop_aa) & ht.is_transcript_stop,
+            hl.is_missing(ht.stop_aa),
             fix_ht[ht.interval, ht.transcript].stop_aa,
             ht.stop_aa,
         ),
     )
-    return ht
 
 
 def fix_transcript_start_stop_aas(
@@ -1565,14 +1577,14 @@ def check_and_fix_missing_aa(
     transcript_start_stop_fix_ht = fix_transcript_start_stop_aas(
         ht, context_ht, overwrite_temp
     )
-    ht = join_and_fix_aa(ht, transcript_start_stop_fix_ht)
+    ht = join_and_fix_aa(ht, transcript_start_stop_fix_ht, fix_ts_boundaries=True)
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_transcript_start_stop_aa_fix.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
     region_fix_ht = fix_region_start_stop_aas(ht, context_ht, overwrite_temp)
-    ht = join_and_fix_aa(ht, region_fix_ht)
+    ht = join_and_fix_aa(ht, region_fix_ht, fix_ts_boundaries=False)
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_all_aa_fix.ht",
         _read_if_exists=not overwrite_temp,
