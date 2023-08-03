@@ -1737,7 +1737,7 @@ def get_oe_bins(ht: hl.Table) -> None:
     # Get total number of coding base pairs, also ClinVar and DNM variants
     # TODO: use exon field in gene model HT to get only coding bases (rather than using transcript end - start)
     transcript_ht = transcript_ht.annotate(
-        bp=transcript_ht.end_pos - transcript_ht.start_pos
+        bp=transcript_ht.gnomad_cds_end - transcript_ht.gnomad_cds_start
     )
     total_bp = transcript_ht.aggregate(hl.agg.sum(transcript_ht.bp))
     total_clinvar = clinvar_ht.count()
