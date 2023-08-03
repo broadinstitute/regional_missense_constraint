@@ -367,7 +367,7 @@ def get_ref_aa(
     )
 
     # Collect by key to collapse AA per locus
-    ht = ht.key_by("locus", "transcript").drop("alleles", "aa_start_num")
+    ht = ht.key_by("locus", "transcript").drop("alleles", "aa_start_num", "aa_end_num")
     ht = ht.collect_by_key(name="aa_info")
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/rmc/ref_aa_collected.ht",
