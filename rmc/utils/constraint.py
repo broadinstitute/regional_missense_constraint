@@ -1563,8 +1563,8 @@ def check_and_fix_missing_aa(
     ht = ht.annotate(**transcript_ht[ht.transcript])
     ht = ht.annotate(
         # NOTE: This is actually the transcript end for transcripts on the negative strand
-        is_transcript_start=ht.start_coordinate == ht.cds_start,
-        is_transcript_stop=ht.stop_coordinate == ht.cds_stop,
+        is_transcript_start=ht.start_coordinate == ht.gnomad_cds_start,
+        is_transcript_stop=ht.stop_coordinate == ht.gnomad_cds_end,
     )
     transcript_start_stop_fix_ht = fix_transcript_start_stop_aas(
         ht, context_ht, overwrite_temp
