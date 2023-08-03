@@ -321,7 +321,7 @@ def get_ref_aa(
         ht = ht.filter(~hl.literal(aa_to_remove).contains(ht.ref_aa))
 
     # Select fields and checkpoint
-    ht = ht.select("ref_aa", "aa_start_num", "transcript")
+    ht = ht.select("ref_aa", "aa_start_num", "aa_end_num", "transcript")
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/rmc/ref_amino_acids.ht",
         _read_if_exists=not overwrite_temp,
