@@ -300,7 +300,7 @@ def get_ref_aa(
     aa_map = hl.literal(aa_map)
     ht = ht.annotate(ref_aa=aa_map.get(ht.ref_aa_1_letter, ht.ref_aa_1_letter))
     if aa_to_remove:
-        ht = ht.filter(hl.literal(aa_to_remove).contains(ht.ref_aa))
+        ht = ht.filter(~hl.literal(aa_to_remove).contains(ht.ref_aa))
 
     # Select fields and checkpoint
     ht = ht.select("ref_aa", "aa_start_num", "transcript")
