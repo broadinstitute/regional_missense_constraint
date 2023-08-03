@@ -301,19 +301,19 @@ def get_ref_aa(
     ht = ht.annotate(ref_aa_1_letter=ht.amino_acids.split("/")[0])
     ht = ht.annotate(ref_aa=aa_map.get(ht.ref_aa_1_letter, ht.ref_aa_1_letter))
     if aa_to_remove:
-        ht = ht.filter(hl.literal(aa_to_remove).contains(ht.ref_aa))
+        ht = ht.filter(~hl.literal(aa_to_remove).contains(ht.ref_aa))
 
     # Select fields and checkpoint
-    ht = ht.select("ref_aa", "aa_start_num", "transcript")
+    ht = ht.select("ref_aa", "aa_start_num", "aa_end_num", "transcript")
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/rmc/ref_amino_acids.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
 
-    # Check if any there are any ref amino acids in HT that aren't in aa_map
+    # Check if there are any ref amino acids in HT that aren't in `aa_map`
     ref_aa_check = ht.aggregate(hl.agg.collect_as_set(ht.ref_aa))
-    ref_aa_check = ref_aa_check.difference(set(hl.eval(aa_map).keys()))
+    ref_aa_check = ref_aa_check.difference(set(hl.eval(aa_map).values()))
     if len(ref_aa_check) != 0:
         logger.warning(
             "The following reference amino acids were not mapped to three letter"
@@ -338,8 +338,8 @@ def get_ref_aa(
     )
     if protein_num_check != 0:
         raise DataException(
-            f"{protein_num_check} sites had different protein start and end values --"
-            " please double check!"
+            f"{protein_num_check} sites had different amino acid numbers at start and"
+            " end -- please double check!"
         )
     # Reformat reference AA to have both the 3 letter code and number
     ht = ht.annotate(
@@ -350,7 +350,7 @@ def get_ref_aa(
     )
 
     # Collect by key to collapse AA per locus
-    ht = ht.key_by("locus", "transcript").drop("alleles", "aa_start_num")
+    ht = ht.key_by("locus", "transcript").drop("alleles", "aa_start_num", "aa_end_num")
     ht = ht.collect_by_key(name="aa_info")
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/rmc/ref_aa_collected.ht",
@@ -374,8 +374,8 @@ def get_ref_aa(
     )
     if missing_aa_check != 0:
         logger.warning(
-            "Found that %i amino acids were missing! (Some alleles for a"
-            " locus/transcript combination had missing AA information!)"
+            "%i locus-transcript combinations had missing AA info for at least 1"
+            " allele!"
         )
     return ht.transmute(ref_aa=ht.aa_info[0].ref_aa)
 
