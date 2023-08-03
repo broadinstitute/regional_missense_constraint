@@ -1549,16 +1549,7 @@ def check_and_fix_missing_aa(
     ht = ht.annotate(strand=browser_ht[ht.transcript].strand)
 
     # Get CDS start/stops from CDS HT
-    transcript_ht = transcript_cds.ht().key_by()
-    transcript_ht = transcript_ht.group_by("transcript").aggregate(
-        start=hl.agg.min(transcript_ht.interval.start.position),
-        stop=hl.agg.max(transcript_ht.interval.end.position),
-    )
-    transcript_ht = transcript_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/cds_start_stop_per_transcript.ht",
-        overwrite=overwrite_temp,
-        _read_if_exists=not overwrite_temp,
-    )
+    transcript_ht = transcript_ref.ht().key_by()
 
     # Annotate whether RMC region is at the beginning or end of the transcript in coordinate space
     ht = ht.annotate(**transcript_ht[ht.transcript])
