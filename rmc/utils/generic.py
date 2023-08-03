@@ -322,8 +322,19 @@ def get_ref_aa(
         )
 
     # Double check that protein start always equals protein end
-    protein_num_check = ht.aggregate(
-        hl.agg.count_where(ht.aa_start_num != ht.aa_end_num)
+    protein_num_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/protein_num_count.he"
+    if overwrite_temp:
+        # Will always overwrite protein num check if overwrite_temp is set
+        # even if file already exists
+        protein_num_check = ht.aggregate(
+            hl.agg.count_where(ht.aa_start_num != ht.aa_end_num)
+        )
+        hl.experimental.write_expression(
+            protein_num_check, protein_num_check_he_path, overwrite=True
+        )
+
+    protein_num_check = hl.eval(
+        hl.experimental.read_expresion(protein_num_check_he_path)
     )
     if protein_num_check != 0:
         raise DataException(
@@ -348,10 +359,19 @@ def get_ref_aa(
     )
 
     # Check to see if AA info is defined for all alleles associated with a locus/transcript
-    ht = ht.annotate(
-        all_aa_def=hl.all(hl.map(lambda x: hl.is_missing(x.ref_aa), ht.aa_info))
+    missing_aa_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/missing_aa_check.he"
+    if overwrite_temp:
+        ht = ht.annotate(
+            all_aa_def=hl.all(hl.map(lambda x: hl.is_missing(x.ref_aa), ht.aa_info))
+        )
+        missing_aa_check = ht.aggregate(hl.agg.count_where(~ht.all_aa_def))
+        missing_aa_check = hl.experimental.write_expression(
+            missing_aa_check, missing_aa_check_he_path, overwrite=True
+        )
+
+    missing_aa_check = hl.eval(
+        hl.experimental.read_expression(missing_aa_check_he_path)
     )
-    missing_aa_check = ht.aggregate(hl.agg.count_where(~ht.all_aa_def))
     if missing_aa_check != 0:
         logger.warning(
             "Found that %i amino acids were missing! (Some alleles for a"
