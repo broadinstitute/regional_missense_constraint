@@ -326,7 +326,7 @@ def get_ref_aa(
     )
     if protein_num_check != 0:
         raise DataException(
-            f"{protein_num_check} sites had different protein start and end values --"
+            f"{protein_num_check} sites had different amino acid numbers at start and end --"
             " please double check!"
         )
     # Reformat reference AA to have both the 3 letter code and number
