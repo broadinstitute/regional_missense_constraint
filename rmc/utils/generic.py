@@ -331,7 +331,12 @@ def get_ref_aa(
             " please double check!"
         )
     # Reformat reference AA to have both the 3 letter code and number
-    ht = ht.annotate(ref_aa=hl.format("%s%s", ht.ref_aa, ht.aa_start_num))
+    ht = ht.annotate(
+        ref_aa=hl.or_missing(
+            hl.is_defined(ht.ref_aa) & hl.is_defined(ht.aa_start_num),
+            hl.format("%s%s", ht.ref_aa, ht.aa_start_num),
+        )
+    )
 
     # Collect by key to collapse AA per locus
     ht = ht.key_by("locus", "transcript").drop("alleles", "aa_start_num")
