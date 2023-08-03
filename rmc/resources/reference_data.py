@@ -39,6 +39,8 @@ However, for v2, this resource contains *all* canonical transcripts (including o
 gene_model = TableResource(path=f"{RESOURCE_BUILD_PREFIX}/browser/b37_transcripts.ht")
 """
 Table containing transcript start and stop positions displayed in the browser.
+
+Contains all transcripts displayed in the browser. (Contains more transcripts than `transcript_ref` below).
 """
 
 transcript_ref = TableResource(
@@ -47,8 +49,8 @@ transcript_ref = TableResource(
 """
 Table containing canonical transcripts with key reference info:
 gene name from gnomAD annotations, gene name from GENCODE v19,
-Ensembl gene ID in GENCODE v19, and overall and CDS start and end
-coordinates from gnomAD annotations.
+Ensembl gene ID in GENCODE v19, overall and CDS start and end
+coordinates from gnomAD annotations, and transcript strand.
 """
 
 transcript_cds = TableResource(path=f"{REF_DATA_PREFIX}/ht/b37_cds_coords.ht")
