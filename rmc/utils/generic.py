@@ -334,7 +334,7 @@ def get_ref_aa(
         )
 
     protein_num_check = hl.eval(
-        hl.experimental.read_expresion(protein_num_check_he_path)
+        hl.experimental.read_expression(protein_num_check_he_path)
     )
     if protein_num_check != 0:
         raise DataException(
