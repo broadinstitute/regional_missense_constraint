@@ -341,7 +341,7 @@ def get_ref_aa(
         overwrite=overwrite_temp,
     )
 
-    # Check to see if AA info is defined for all alleles associated with a locus/transcript
+    # Check to see if AA info is defined for all alleles associated with a locus-transcript combination
     ht = ht.annotate(
         all_aa_def=hl.all(hl.map(lambda x: hl.is_missing(x.ref_aa), ht.aa_info))
     )
