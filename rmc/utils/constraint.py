@@ -1559,15 +1559,11 @@ def check_and_fix_missing_aa(
         "%i regions are missing either their stop or start AA!", missing_start_or_stop
     )
 
-    # Get strand from browser HT
-    # TODO: recreate browser HT to include strand annotation
-    browser_ht = gene_model.ht().select("strand")
-    ht = ht.annotate(strand=browser_ht[ht.transcript].strand)
-
     # Get CDS start/stops from CDS HT
     transcript_ht = transcript_ref.ht().key_by()
 
     # Annotate whether RMC region is at the beginning or end of the transcript in coordinate space
+    # Also add strand annotation from `transcript_ref`
     ht = ht.annotate(**transcript_ht[ht.transcript])
     ht = ht.annotate(
         # NOTE: This is actually the transcript end for transcripts on the negative strand
@@ -1736,7 +1732,7 @@ def get_oe_bins(ht: hl.Table) -> None:
 
     clinvar_ht = clinvar_plp_mis_haplo.ht()
     dn_ht = ndd_de_novo.ht()
-    transcript_ht = gene_model.ht()
+    transcript_ht = transcript_ref.ht()
 
     # Split de novo HT into two HTs -- one for controls and one for cases
     dn_controls_ht = dn_ht.filter(dn_ht.case_control == "control")
