@@ -330,7 +330,7 @@ def get_ref_aa(
 
     # Check if there are any ref amino acids in HT that aren't in `aa_map`
     ref_aa_check = ht.aggregate(hl.agg.collect_as_set(ht.ref_aa))
-    ref_aa_check = ref_aa_check.difference(set(hl.eval(aa_map).keys()))
+    ref_aa_check = ref_aa_check.difference(set(hl.eval(aa_map).values()))
     if len(ref_aa_check) != 0:
         logger.warning(
             "The following reference amino acids were not mapped to three letter"
