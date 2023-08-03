@@ -306,7 +306,8 @@ def main(args):
                     )
                     # Add transcript start and stop positions from CDS HT
                     # NOTE: For RMC freezes 1-7, the transcript start and ends were from the
-                    # browser HT (`gene_model`) whose start and stop generally is in the UTRs
+                    # gnomAD browser HT whose start and stop generally is in the UTRs
+                    # (these are the start/stops displayed in the browser for each gene)
                     transcript_ht = transcript_ref.ht()
                     ht = ht.annotate(**transcript_ht[ht.transcript])
                     ht = ht.annotate(
