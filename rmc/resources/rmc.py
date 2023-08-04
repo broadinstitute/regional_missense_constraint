@@ -516,7 +516,9 @@ def misbad_path(
             f"Fold number must be an integer between 1 and {FOLD_K}, inclusive!"
         )
     fold_name = f"_fold{fold}" if fold is not None else ""
-    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/missense_badness.ht"
+    # return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/missense_badness.ht"
+    # return f"{TEMP_PATH}/high_low_train.ht"
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/missense_badness_train.ht"
 
 
 ####################################################################################
@@ -548,7 +550,8 @@ def joint_clinvar_gnomad_path(
             f"Fold number must be an integer between 1 and {FOLD_K}, inclusive!"
         )
     fold_name = f"_fold{fold}" if fold is not None else ""
-    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/joint_clinvar_gnomad.ht"
+    # return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/joint_clinvar_gnomad.ht"
+    return f"{TEMP_PATH}/joint_clinvar_gnomad_train.ht"
 
 
 def mpc_model_pkl_path(
@@ -572,9 +575,11 @@ def mpc_model_pkl_path(
             f"Fold number must be an integer between 1 and {FOLD_K}, inclusive!"
         )
     fold_name = f"_fold{fold}" if fold is not None else ""
-    return (
-        f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/mpc_model.pkl"
-    )
+    # return (
+    #     f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/mpc_model.pkl"
+    # )
+
+    return f"{TEMP_PATH}/mpc_model_train.pkl"
 
 
 def gnomad_fitted_score_path(
@@ -601,14 +606,16 @@ def gnomad_fitted_score_path(
         )
     fold_name = f"_fold{fold}" if fold is not None else ""
     group = "_group" if is_grouped else ""
-    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/gnomad_fitted_scores{group}.ht"
+    # return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/gnomad_fitted_scores{group}.ht"
+    return f"{TEMP_PATH}/gnomad_fitted_scores{group}_train_high_low.ht"
 
 
 mpc_release = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/mpc.ht"
+            # path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/mpc.ht"
+            path=f"{TEMP_PATH}/mpc_train_high_low.ht"
         )
         for freeze in FREEZES
     },

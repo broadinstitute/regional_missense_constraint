@@ -332,14 +332,18 @@ def prepare_pop_path_ht(
 
     if not do_k_fold_training:
         logger.info(
-            "Adding misbad from training transcripts, filtering transcripts, writing"
-            " out...",
+            (
+                "Adding misbad from training transcripts, filtering transcripts,"
+                " writing out..."
+            ),
         )
         _add_misbad_and_filter_transcripts(ht=ht)
     else:
         logger.info(
-            "Adding misbad, filtering transcripts, writing out for the %i-fold training"
-            " sets...",
+            (
+                "Adding misbad, filtering transcripts, writing out for the %i-fold"
+                " training sets..."
+            ),
             FOLD_K,
         )
         for i in range(1, FOLD_K + 1):
@@ -477,22 +481,20 @@ def get_min_aic_model(
 
     logger.info("Running joint regression with specific interactions...")
     # Currently hardcoded to be formula from ExAC
-    min_model_formulas[
-        "spec"
-    ] = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
+    min_model_formulas["spec"] = (
+        "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
+    )
     min_models["spec"] = run_glm(df, min_model_formulas["spec"])
 
     min_model_aics = {x: min_models[x].aic for x in model_types}
     overall_min_aic = min(min_model_aics.values())
     logger.info("Lowest model AIC: %f", overall_min_aic)
     if list(min_model_aics.values()).count(overall_min_aic) > 1:
-        logger.warning(
-            """
+        logger.warning("""
             There is a tie for minimum AIC over model types.
             This function will use the first model it finds by default
             (single variable -> no interactions -> all interactions -> specific interactions)!
-            """
-        )
+            """)
     overall_min_model_type = list(min_model_aics.keys())[
         list(min_model_aics.values()).index(overall_min_aic)
     ]
@@ -738,7 +740,7 @@ def calculate_fitted_scores(
     logger.info("Annotating HT with MPC variables from context HT...")
     # Re-key context HT by locus and alleles (original key contains transcript)
     # to enable addition of annotations from each transcript corresponding to a variant
-    context_ht = context_ht.key_by("locus", "alleles").select(context_helper_annots)
+    context_ht = context_ht.key_by("locus", "alleles").select(*context_helper_annots)
     if "polyphen" in context_annots:
         context_ht = context_ht.transmute(polyphen=context_ht.polyphen.score)
     # Add annotations from all transcripts per variant
@@ -829,7 +831,9 @@ def calculate_fitted_scores(
     )
     min_scores_ht = min_scores_ht.drop("values")
     min_scores_ht = min_scores_ht.key_by("locus", "alleles", "transcript")
+    # Perform inner join to filter to just these transcripts with most severe scores
     scores_ht = scores_ht.key_by("locus", "alleles", "transcript").join(min_scores_ht)
+    scores_ht = scores_ht.key_by("locus", "alleles")
     scores_ht = scores_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/fitted_scores_dedup{temp_label}.ht",
         _read_if_exists=not overwrite_temp,
