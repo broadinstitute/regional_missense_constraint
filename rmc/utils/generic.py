@@ -381,7 +381,7 @@ def get_ref_aa(
         ht = ht.annotate(
             all_aa_def=hl.all(hl.map(lambda x: hl.is_missing(x.ref_aa), ht.aa_info))
         )
-        missing_aa_check = ht.aggregate(hl.agg.count_where(~ht.all_aa_def))
+        missing_aa_check = ht.aggregate(hl.agg.count_where(ht.all_aa_def))
         missing_aa_check = hl.experimental.write_expression(
             missing_aa_check, missing_aa_check_he_path, overwrite=True
         )
