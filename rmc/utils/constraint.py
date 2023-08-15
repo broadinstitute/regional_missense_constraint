@@ -77,7 +77,6 @@ Fields taken from gnomAD LoF repo.
 def add_obs_annotation(
     ht: hl.Table,
     gnomad_data_type: str = "exomes",
-    filter_csq: bool = False,
 ) -> hl.Table:
     """
     Add observed variant count for each variant in input Table.
@@ -88,28 +87,22 @@ def add_obs_annotation(
     :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
-    :param filter_csq: Whether to filter gnomAD data to a specific consequence. Default is False.
-        If True, then only variants that match this consequence in the input Table will be annotated as observed.
     :return: Table with observed variant annotation.
     """
-    if filter_csq:
-        gnomad_ht = filtered_exomes.ht()
-
-    else:
-        logger.info("Adding observed annotation...")
-        gnomad_ht = public_release(gnomad_data_type).ht()
-        gnomad_cov = coverage(gnomad_data_type).ht()
-        gnomad_ht = gnomad_ht.select(
-            "filters",
-            ac=gnomad_ht.freq[0].AC,
-            af=gnomad_ht.freq[0].AF,
-            gnomad_coverage=gnomad_cov[gnomad_ht.locus].median,
+    logger.info("Adding observed annotation...")
+    gnomad_ht = public_release(gnomad_data_type).ht()
+    gnomad_cov = coverage(gnomad_data_type).ht()
+    gnomad_ht = gnomad_ht.select(
+        "filters",
+        ac=gnomad_ht.freq[0].AC,
+        af=gnomad_ht.freq[0].AF,
+        gnomad_coverage=gnomad_cov[gnomad_ht.locus].median,
+    )
+    gnomad_ht = gnomad_ht.filter(
+        keep_criteria(
+            gnomad_ht.ac, gnomad_ht.af, gnomad_ht.filters, gnomad_ht.gnomad_coverage
         )
-        gnomad_ht = gnomad_ht.filter(
-            keep_criteria(
-                gnomad_ht.ac, gnomad_ht.af, gnomad_ht.filters, gnomad_ht.gnomad_coverage
-            )
-        )
+    )
 
     ht = ht.annotate(_obs=gnomad_ht.index(ht.key))
     return ht.transmute(observed=hl.int(hl.is_defined(ht._obs)))

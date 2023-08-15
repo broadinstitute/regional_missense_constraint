@@ -240,14 +240,10 @@ def main(args):
                     expected=exp_ht.exp_mis,
                     mu_agg=exp_ht.mu_mis,
                 )
-                obs_ht = exp_ht
-
-            logger.info(
-                "Annotating context HT with number of observed and expected variants"
-                " per site..."
             )
-            # Add observed variants to context HT
-            context_ht = add_obs_annotation(context_ht, filter_csq=True)
+
+            logger.info("Annotating context HT with number of observed variants...")
+            context_ht = add_obs_annotation(context_ht)
 
             logger.info(
                 "Collecting by key to run constraint per base and not per"
