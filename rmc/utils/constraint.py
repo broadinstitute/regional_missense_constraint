@@ -1659,14 +1659,30 @@ def check_and_fix_missing_aa(
         If True, will overwrite temp data.
     :return: RMC results HT annotated with amino acids for all region start/stops.
     """
-    missing_ht = ht.filter(hl.is_missing(ht.start_aa) | hl.is_missing(ht.stop_aa))
-    missing_start_or_stop = missing_ht.count()
-    if missing_start_or_stop == 0:
-        return ht
 
-    logger.info(
-        "%i regions are missing either their stop or start AA!", missing_start_or_stop
-    )
+    def _missing_aa_check(ht: hl.Table) -> Union[hl.Table, None]:
+        """
+        Check input Table for missing amino acid (AA) annotations.
+
+        Function returns Table and number of rows missing amino acid annotations.
+
+        :param ht: Input Table.
+        :return: Table with rows missing AA annotation,
+            otherwise None.
+        """
+        missing_ht = ht.filter(hl.is_missing(ht.start_aa) | hl.is_missing(ht.stop_aa))
+        missing_start_or_stop = missing_ht.count()
+        if missing_start_or_stop != 0:
+            logger.info(
+                "%i regions are missing either their stop or start AA!",
+                missing_start_or_stop,
+            )
+            return missing_ht
+        return None
+
+    missing_ht = _missing_aa_check(ht)
+    if not missing_ht:
+        return ht
 
     # Get CDS start/stops from CDS HT
     transcript_ht = transcript_ref.ht().key_by()
@@ -1695,6 +1711,13 @@ def check_and_fix_missing_aa(
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
+    # Double check that all rows have defined AA annotations
+    missing_ht = _missing_aa_check(ht)
+    if missing_ht:
+        raise DataException(
+            f"{missing_ht.count()} rows still don't have AA annotations! Please double"
+            " check."
+        )
     return ht
 
 
