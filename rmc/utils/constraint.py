@@ -8,7 +8,6 @@ import scipy
 from gnomad.resources.grch37.gnomad import coverage, public_release
 from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.constraint import annotate_mutation_type
 from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import (
@@ -17,7 +16,7 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_FAST_DEL,
     TEMP_PATH_WITH_SLOW_DEL,
 )
-from rmc.resources.gnomad import constraint_ht, filtered_exomes
+from rmc.resources.gnomad import constraint_ht
 from rmc.resources.reference_data import clinvar_plp_mis_haplo, gene_model, ndd_de_novo
 from rmc.resources.resource_utils import MISSENSE
 from rmc.resources.rmc import (
@@ -64,13 +63,12 @@ GROUPINGS = [
     "annotation",
     "modifier",
     "transcript",
-    "gene",
-    "exome_coverage",
+    "coverage",
 ]
 """
-Core fields to group by when calculating expected variants per variant type.
+Fields to group by when calculating expected variants per variant type.
 
-Fields taken from gnomAD LoF repo.
+Fields based off of gnomAD LoF repo.
 """
 
 
@@ -174,109 +172,43 @@ def adjust_obs_expr(
     )
 
 
-def get_cumulative_mu_expr(
-    group_str: hl.expr.StringExpression,
-    mu_expr: hl.expr.Float64Expression,
-) -> hl.expr.DictExpression:
-    """
-    Return annotation with the cumulative mutation rate probability (non-inclusive).
-
-    Value is non-inclusive due to the nature of `hl.scan` and needs to be corrected later.
-
-    This function can produce the scan when searching for the first break or when searching for additional break(s).
-
-    :param group_str: StringExpression containing transcript or transcript subsection information.
-        Used to group observed and expected values.
-    :param mu_expr: FloatExpression containing mutation rate probability per variant.
-    :return: DictExpression containing scan expressions for cumulative mutation rate probability.
-    """
-    return hl.scan.group_by(group_str, hl.scan.sum(mu_expr))
-
-
-def adjust_mu_expr(
-    cumulative_mu_expr: hl.expr.DictExpression,
-    mu_expr: hl.expr.Float64Expression,
-    group_str: hl.expr.StringExpression,
-) -> hl.expr.Float64Expression:
-    """
-    Adjust the scan with the cumulative number mutation rate probability.
-
-    This adjustment is necessary because scans are always one line behind, and we want the values to match per line.
-
-    This function can correct the scan created when searching for the first break or when searching for additional break(s).
-
-    :param cumulative_mu_expr: DictExpression containing scan expressions for cumulative mutation rate probability.
-    :param mu_expr: FloatExpression containing mutation rate probability per variant.
-    :param group_str: StringExpression containing transcript or transcript subsection information.
-        Used to group observed and expected values.
-    :return: Adjusted cumulative mutation rate expression.
-    """
-    return hl.if_else(
-        # Check if the current transcript/section exists in the mu_scan dictionary
-        # If it doesn't exist, that means this is the first line in the HT for that particular transcript/section
-        # The first line of a scan is always missing, but we want it to exist
-        # Thus, set the cumulative_mu equal to the current mu_snp value
-        hl.is_missing(cumulative_mu_expr.get(group_str)),
-        mu_expr,
-        # Otherwise, add the current mu_snp to the scan to make sure the cumulative value isn't one line behind
-        cumulative_mu_expr[group_str] + mu_expr,
-    )
-
-
-def translate_mu_to_exp_expr(
-    cumulative_mu_expr: hl.expr.DictExpression,
-    total_mu_expr: hl.expr.Float64Expression,
-    total_exp_expr: hl.expr.Float64Expression,
-) -> hl.expr.DictExpression:
-    """
-    Translate cumulative mutation rate probability into cumulative expected count per base.
-
-    Expected variants counts are produced per base by first calculating the fraction of probability of mutation per base,
-    then multiplying that fraction by the total expected variants count for a transcript or transcript sub-section.
-
-    The expected variants count for section of interest is mutation rate per SNP adjusted by location in the genome/CpG status
-    (plateau model) and coverage (coverage model).
-
-    :param cumulative_mu_expr: DictExpression containing scan expressions for cumulative mutation rate probability.
-    :param total_mu_expr: FloatExpression describing total sum of mutation rate probabilities per transcript.
-    :param total_exp_expr: FloatExpression describing total expected variant counts per transcript.
-    :return: Cumulative expected variants count expression.
-    """
-    return (cumulative_mu_expr / total_mu_expr) * total_exp_expr
-
-
-def calculate_exp_per_transcript(
+def calculate_exp_from_mu(
     context_ht: hl.Table,
     locus_type: str,
     groupings: List[str] = GROUPINGS,
 ) -> hl.Table:
     """
-    Return the total number of expected variants and aggregate mutation rate per transcript.
+    Annotate Table with the per-allele expected counts based on the per-allele mu.
 
     .. note::
-        - Assumes that context_ht is annotated with all of the fields in `groupings` and that the names match exactly.
-        - Assumes that input table is filtered to autosomes/PAR only, X nonPAR only, or Y nonPAR only.
-        - Expects that input table contains coverage and plateau models in its global annotations (`coverage_model`, `plateau_models`).
-        - Expects that input table has multiple fields for mutation rate probabilities:
-            `mu_snp` for mutation rate probability adjusted by coverage, and
-            `raw_mu_snp` for raw mutation rate probability.
+        - Assumes that input Table is annotated with all of the fields in `groupings` and that
+            the names match exactly.
+        - Assumes that input Table is annotated with `cpg` and `mu_snp` (raw mutation rate probability
+            without coverage correction).
+        - Assumes that input Table is filtered to autosomes/PAR only, X nonPAR only, or Y nonPAR only.
+        - Assumes that input Table contains coverage and plateau models in its global annotations
+            (`coverage_model`, `plateau_models`).
+        - Adds `expected` and `coverage_correction` annotations.
 
-    :param context_ht: Context Table.
-    :param locus_type: Locus type of input table. One of "X", "Y", or "autosomes".
-        NOTE: will treat any input other than "X" or "Y" as autosomes.
+    :param context_ht: Allele-level input context Table.
+    :param locus_type: Locus type of input Table. One of "X", "Y", or "autosomes".
+        NOTE: Will treat any input other than "X" or "Y" as autosomes.
     :param groupings: List of Table fields used to group Table to adjust mutation rate.
-        Table must be annotated with these fields. Default is GROUPINGS.
-    :return: Table grouped by transcript with expected counts per search field.
+        Table must be annotated with these fields. Default is `GROUPINGS`.
+    :return: Table annotated with per-allele expected counts and coverage correction.
     """
-    logger.info("Grouping by %s...", groupings)
+    logger.info(
+        "Grouping by %s and aggregating mutation rates within groupings...", groupings
+    )
     group_ht = context_ht.group_by(*groupings).aggregate(
-        mu_agg=hl.agg.sum(context_ht.raw_mu_snp)
+        mu_agg=hl.agg.sum(context_ht.mu_snp),
+        n_grouping=hl.agg.count(),
+        # `cpg` is a function of `context`, `ref``, `alt` which are part of `groupings`
+        # so will be the same for all alleles in a grouping
+        cpg=hl.agg.take(context_ht.cpg, 1)[0],
     )
 
-    logger.info("Adding CpG annotations...")
-    group_ht = annotate_mutation_type(group_ht)
-
-    logger.info("Adjusting aggregated mutation rate with plateau model...")
+    logger.info("Adjusting aggregated mutation rates with plateau model...")
     if locus_type == "X":
         model = group_ht.plateau_x_models["total"][group_ht.cpg]
     elif locus_type == "Y":
@@ -287,23 +219,50 @@ def calculate_exp_per_transcript(
     group_ht = group_ht.annotate(mu_adj=group_ht.mu_agg * model[1] + model[0])
 
     logger.info(
-        "Adjusting aggregated mutation rate with coverage correction to get expected"
-        " counts..."
+        "Adjusting aggregated mutation rates with coverage correction to get expected"
+        " counts for each grouping..."
     )
     group_ht = group_ht.annotate(
         coverage_correction=get_coverage_correction_expr(
-            group_ht.exome_coverage, group_ht.coverage_model
+            group_ht.coverage, group_ht.coverage_model
         ),
     )
     group_ht = group_ht.annotate(
-        _exp=group_ht.mu_adj * group_ht.coverage_correction,
-        mu=group_ht.mu_agg * group_ht.coverage_correction,
+        expected_grouping=group_ht.mu_adj * group_ht.coverage_correction
     )
 
-    logger.info("Getting expected counts per transcript and returning...")
-    return group_ht.group_by("transcript").aggregate(
-        expected=hl.agg.sum(group_ht._exp), mu_agg=hl.agg.sum(group_ht.mu)
+    logger.info(
+        "Annotating expected counts per allele by distributing expected counts equally"
+        " among all alleles in each grouping..."
     )
+    group_ht = group_ht.annotate(
+        expected_per_variant=group_ht.expected_grouping / group_ht.n_grouping
+    )
+    context_ht = context_ht.annotate(
+        expected=group_ht[
+            context_ht.context,
+            context_ht.ref,
+            context_ht.alt,
+            context_ht.methylation_level,
+            context_ht.annotation,
+            context_ht.modifier,
+            context_ht.transcript,
+            context_ht.coverage,
+        ].expected_per_variant,
+        coverage_correction=group_ht[
+            context_ht.context,
+            context_ht.ref,
+            context_ht.alt,
+            context_ht.methylation_level,
+            context_ht.annotation,
+            context_ht.modifier,
+            context_ht.transcript,
+            context_ht.coverage,
+        ].coverage_correction,
+    )
+    # TODO: Condense the join above to use `groupings`, without re-keying `context_ht`
+    return context_ht
+
 
 
 def get_obs_exp_expr(

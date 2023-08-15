@@ -12,7 +12,6 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_SLOW_DEL,
 )
 from rmc.resources.gnomad import (
-    constraint_ht,
     filtered_exomes,
     processed_exomes,
     prop_obs_coverage,
@@ -30,10 +29,8 @@ from rmc.resources.rmc import (
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
-    GROUPINGS,
     add_obs_annotation,
-    calculate_exp_per_transcript,
-    calculate_observed,
+    calculate_exp_from_mu,
     check_break_search_round_nums,
     create_context_with_oe,
     create_no_breaks_he,
@@ -46,7 +43,6 @@ from rmc.utils.generic import (
     filter_to_region_type,
     generate_models,
     get_constraint_transcripts,
-    get_coverage_correction_expr,
     keep_criteria,
     process_context_ht,
     process_vep,
@@ -137,7 +133,6 @@ def main(args):
             coverage_y_ht = hl.read_table(
                 prop_obs_coverage.path.replace(".ht", "_y.ht")
             )
-
             (
                 coverage_model,
                 plateau_models,
@@ -148,126 +143,43 @@ def main(args):
                 coverage_x_ht,
                 coverage_y_ht,
             )
-
             context_ht = context_ht.annotate_globals(
                 plateau_models=plateau_models,
                 plateau_x_models=plateau_x_models,
                 plateau_y_models=plateau_y_models,
                 coverage_model=coverage_model,
             )
-            context_ht = context_ht.annotate(
-                coverage_correction=get_coverage_correction_expr(
-                    context_ht.exome_coverage,
-                    coverage_model,
-                    args.high_cov_cutoff,
-                )
-            )
 
-            # TODO: Make this a separate section of code (with its own argument)
-            if not args.skip_calc_oe:
-                logger.info(
-                    "Adding coverage correction to mutation rate probabilities..."
-                )
-                context_ht = context_ht.annotate(
-                    raw_mu_snp=context_ht.mu_snp,
-                    mu_snp=context_ht.mu_snp
-                    * get_coverage_correction_expr(
-                        context_ht.exome_coverage, context_ht.coverage_model
-                    ),
-                )
-
-                logger.info(
-                    "Creating autosomes + chrX PAR, chrX non-PAR, and chrY non-PAR HT"
-                    " versions..."
-                )
-                context_auto_ht = filter_to_region_type(context_ht, "autosomes")
-                context_x_ht = filter_to_region_type(context_ht, "chrX")
-                context_y_ht = filter_to_region_type(context_ht, "chrY")
-
-                logger.info("Calculating expected values per transcript...")
-                exp_ht = calculate_exp_per_transcript(
-                    context_auto_ht,
+            logger.info("Calculating expected values per allele...")
+            context_ht = (
+                calculate_exp_from_mu(
+                    filter_to_region_type(context_ht, "autosomes"),
                     locus_type="autosomes",
-                    groupings=GROUPINGS,
                 )
-                exp_x_ht = calculate_exp_per_transcript(
-                    context_x_ht,
-                    locus_type="X",
-                    groupings=GROUPINGS,
+                .union(
+                    calculate_exp_from_mu(
+                        filter_to_region_type(context_ht, "chrX"), locus_type="X"
+                    )
                 )
-                exp_y_ht = calculate_exp_per_transcript(
-                    context_y_ht,
-                    locus_type="Y",
-                    groupings=GROUPINGS,
-                )
-                exp_ht = exp_ht.union(exp_x_ht).union(exp_y_ht)
-
-                logger.info(
-                    "Fixing expected values for genes that span PAR and nonPAR"
-                    " regions..."
-                )
-                # Adding a sum here to make sure that genes like XG that span PAR/nonPAR regions
-                # have correct total expected values
-                exp_ht = exp_ht.group_by(transcript=exp_ht.transcript).aggregate(
-                    section_exp=hl.agg.sum(exp_ht.expected),
-                    section_mu=hl.agg.sum(exp_ht.mu_agg),
-                )
-                # TODO: Write exp HT here
-
-                logger.info(
-                    "Aggregating total observed variant counts per transcript..."
-                )
-                obs_ht = calculate_observed(exome_ht)
-                # TODO: Write obs HT here
-
-            else:
-                logger.warning(
-                    "Using observed and expected values calculated using LoF"
-                    " pipeline..."
-                )
-                exp_ht = (
-                    constraint_ht.ht()
-                    .key_by("transcript")
-                    .select("obs_mis", "exp_mis", "oe_mis")
-                )
-
-                # Filter to canonical transcripts only and rename fields
-                exp_ht = exp_ht.filter(exp_ht.canonical)
-                exp_ht = exp_ht.transmute(
-                    observed=exp_ht.obs_mis,
-                    expected=exp_ht.exp_mis,
-                    mu_agg=exp_ht.mu_mis,
+                .union(
+                    calculate_exp_from_mu(
+                        filter_to_region_type(context_ht, "chrY"), locus_type="Y"
+                    )
                 )
             )
-
-            logger.info("Annotating context HT with number of observed variants...")
-            context_ht = add_obs_annotation(context_ht)
+            context_ht = context_ht.checkpoint(
+                f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht"
+            )
 
             logger.info(
-                "Collecting by key to run constraint per base and not per"
-                " base-allele..."
+                "Annotating context HT with number of observed variants and writing"
+                " out..."
             )
-            # Context HT is keyed by locus and allele, which means there is one row for every possible missense variant
-            # This means that any locus could be present up to three times (once for each possible missense)
-            # Collect by key here to ensure all loci are unique
-            context_ht = context_ht.key_by("locus", "transcript").collect_by_key()
-            context_ht = context_ht.annotate(
-                # Collect the mutation rate probabilities at each locus
-                mu_snp=hl.sum(context_ht.values.mu_snp),
-                # Collect the observed counts for each locus
-                # (this includes counts for each possible missense at the locus)
-                observed=hl.sum(context_ht.values.observed),
-                # Take just the first coverage value, since the locus should have the same coverage across the possible variants
-                coverage=context_ht.values.exome_coverage[0],
-            )
-            # NOTE: v2 constraint_prep HT has total and cumulative values annotated
-            # (HT as written before we decided to move these annotations to within
-            # `process_sections`)
-            # TODO: Update get_subsection_exprs to pull expected values from exp_ht
-            context_ht = context_ht.drop("values")
+            context_ht = add_obs_annotation(context_ht)
             context_ht = context_ht.write(
                 constraint_prep.path, overwrite=args.overwrite
             )
+            # TODO: Repartition?
 
         if args.search_for_single_break:
             hl.init(

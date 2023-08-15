@@ -124,7 +124,7 @@ for each canonical transcript in Gencode v19.
 ## RMC-related resources
 ####################################################################################
 constraint_prep = VersionedTableResource(
-    default_version=1,
+    default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
             path=f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/context_obs_exp_annot.ht"
@@ -133,9 +133,15 @@ constraint_prep = VersionedTableResource(
     },
 )
 """
-Context Table ready for RMC calculations.
+Context Table filtered to missense, synonymous, nonsense variants_ ready for RMC calculations.
 
-HT is annotated with observed and expected variant counts per base.
+HT is annotated with annotations used in plateau model observed and expected variant counts per locus-allele combination.
+
+NOTE: The content of the freeze 1 HT is calculated and formatted differently. A few key differences:
+    - Is a locus-level table.
+    - Contains only missense variants.
+    - Expected counts were calculated using the workaround method instead of directly from the plateau model.
+    - `mu_snp` contains the coverage-corrected not raw mutation rates.
 """
 
 CONSTRAINT_ANNOTATIONS = {
