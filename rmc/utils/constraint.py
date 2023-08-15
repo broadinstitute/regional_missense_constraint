@@ -1695,6 +1695,10 @@ def check_and_fix_missing_aa(
         is_transcript_start=ht.start_coordinate == ht.gnomad_cds_start,
         is_transcript_stop=ht.stop_coordinate == ht.gnomad_cds_end,
     )
+    # NOTE: We adjusted transcript starts and stops that were missing AA annotations for gnomAD v2
+    # Some starts and stops had uninformative amino acid information in the VEP context HT:
+    # Amino acid was annotated as "X"
+    # VEP context HT was created using VEP version 85, GENCODE version 19
     transcript_start_stop_fix_ht = fix_transcript_start_stop_aas(
         ht, context_ht, overwrite_temp
     )
