@@ -103,7 +103,6 @@ def add_obs_annotation(
             gnomad_ht.ac, gnomad_ht.af, gnomad_ht.filters, gnomad_ht.gnomad_coverage
         )
     )
-
     ht = ht.annotate(_obs=gnomad_ht.index(ht.key))
     return ht.transmute(observed=hl.int(hl.is_defined(ht._obs)))
 
