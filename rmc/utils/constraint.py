@@ -1267,7 +1267,7 @@ def create_context_with_oe(
         .select_globals()
         .select("vep", "was_split")
     )
-    ht = process_vep(ht, filter_csq=True, csq=missense_str)
+    ht = process_vep(ht, filter_csq=True, csq={missense_str})
     ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
     ht = get_annotations_from_context_ht_vep(ht)
     # Save context Table to temporary path with specified deletion policy because this is a very large file

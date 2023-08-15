@@ -18,7 +18,7 @@ from rmc.resources.gnomad import (
     prop_obs_coverage,
 )
 from rmc.resources.reference_data import filtered_context, gene_model
-from rmc.resources.resource_utils import MISSENSE
+from rmc.resources.resource_utils import MISSENSE, NONSENSE, SYNONYMOUS
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
     P_VALUE,
@@ -72,8 +72,13 @@ def main(args):
             # TODO: Add code to create annotations necessary for constraint_flag_expr and filter transcripts prior to running constraint
             logger.warning("Code currently only processes b37 data!")
 
-            logger.info("Preprocessing reference fasta (context) HT...")
-            context_ht = process_context_ht()
+            logger.info(
+                "Preprocessing reference fasta (context) HT and filtering to missense,"
+                " nonsense, and synonymous..."
+            )
+            context_ht = process_context_ht(
+                filter_csq=True, csq={MISSENSE, NONSENSE, SYNONYMOUS}
+            )
 
             logger.info(
                 "Filtering context HT to all covered sites not found or rare in gnomAD"
@@ -86,11 +91,13 @@ def main(args):
             context_ht.write(filtered_context.path, overwrite=args.overwrite)
 
             logger.info(
-                "Filtering gnomAD exomes HT to missense variants in canonical"
-                " transcripts only..."
+                "Filtering gnomAD exomes HT to missense, nonsense, and synonymous"
+                " variants in canonical transcripts only..."
             )
             exome_ht = processed_exomes.ht()
-            exome_ht = process_vep(exome_ht, filter_csq=True, csq=MISSENSE)
+            exome_ht = process_vep(
+                exome_ht, filter_csq=True, csq={MISSENSE, NONSENSE, SYNONYMOUS}
+            )
 
             # Move nested annotations into top level annotations
             exome_ht = exome_ht.select(
