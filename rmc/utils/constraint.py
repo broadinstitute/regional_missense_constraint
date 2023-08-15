@@ -22,6 +22,7 @@ from rmc.resources.reference_data import (
     clinvar_plp_mis_haplo,
     gene_model,
     ndd_de_novo,
+    transcript_cds,
     transcript_ref,
 )
 from rmc.resources.resource_utils import MISSENSE
@@ -1512,6 +1513,20 @@ def fix_region_start_stop_aas(
     """
     Fix missing start or stop amino acid information for non-transcript starts and stops.
 
+    .. note::
+        - This function assumes that all start coordinates missing AA annotations are one position larger than
+            the previous exon stop position. (This was the case in RMC freeze 5.)
+        - This function assumes that all stop coordinates missing AA annotations are one position smaller than
+            the following exon start position. (This was the case in RMC freeze 5).
+        - See this ticket for more information about RMC freeze 5:
+            https://github.com/broadinstitute/rmc_production/issues/149
+
+    Fix for region start coordinates missing AA annotations:
+        - Function adds amino acid from following exon start to fix missing AA annotation
+
+    Fix for region stop coordinates missing AA annotations:
+        - Function adds amino acid from previous exon stop to fix missing AA annotation
+
     :param ht: Input HT. Should be RMC results HT annotated with amino acid information.
     :param context_ht: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
     :param overwrite_temp: Whether to overwrite temporary data.
@@ -1521,13 +1536,113 @@ def fix_region_start_stop_aas(
         previously missing amino acid information.
     """
     missing_ht = ht.filter(hl.is_missing(ht.start_aa) | hl.is_missing(ht.stop_aa))
-    missing_transcripts = missing_ht.aggregate(
-        hl.agg.collect_as_set(missing_ht.transcript)
+    missing_ht = missing_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/region_start_stop_missing_aa.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
-    filt_context_ht = context_ht.filter(
-        hl.literal(missing_transcripts).contains(context_ht.transcript)
+    missing_transcripts = hl.literal(
+        missing_ht.aggregate(hl.agg.collect_as_set(missing_ht.transcript))
     )
-    print(overwrite_temp)
+
+    # Read in CDS HT resource
+    # Filter CDS and context HT to transcripts with internal missing start or stop AAs
+    context_ht = context_ht.filter(missing_transcripts.contains(context_ht.transcript))
+    cds_ht = transcript_cds.ht()
+    cds_ht = cds_ht.filter(missing_transcripts.contains(cds_ht.transcript))
+    cds_ht = cds_ht.annotate(
+        exon_start=cds_ht.interval.start,
+        exon_end=cds_ht.interval.end,
+    )
+
+    # Create two versions of CDS HT to fix missing region start and stop AAs
+    def _create_exon_position_ht(
+        cds_ht: hl.Table, fix_missing_start: bool, overwrite_temp: bool
+    ) -> hl.Table:
+        """
+        Create Table keyed by either exon start or stop position.
+
+        :param cds_ht: CDS HT resource filtered to transcripts missing region start or stop
+            AA annotations only.
+        :param fix_missing_start: Whether the output HT is designed to fix region starts
+            that are missing AA annotations.
+        :param overwrite_temp: Whether to overwrite temporary data.
+            If False, will read existing temp data rather than overwriting.
+            If True, will overwrite temp data.
+        :return: CDS HT keyed by either exon start or stop position and transcript.
+        """
+        if fix_missing_start:
+            # Region starts missing AAs need to get adjusted to use the AA from the previous
+            # exon start
+            # Reorder HT so that _prev_nonnull returns the next exon start
+            checkpoint_path = f"{TEMP_PATH_WITH_FAST_DEL}/cds_start_fix.ht"
+            cds_ht = cds_ht.order_by(
+                hl.asc(cds_ht.transcript), hl.desc(cds_ht.exon_start)
+            )
+            cds_ht = cds_ht.annotate(
+                next_exon_start=hl.scan._prev_nonnull(cds_ht.exon_start)
+            )
+            cds_ht = cds_ht.key_by(cds_ht.exon_stop, cds_ht.transcript)
+        else:
+            checkpoint_path = f"{TEMP_PATH_WITH_FAST_DEL}/cds_stop_fix.ht"
+            cds_ht = cds_ht.annotate(
+                prev_exon_stop=hl.scan._prev_nonnull(cds_ht.exon_stop)
+            )
+            cds_ht = cds_ht.key_by(cds_ht.exon_start, cds_ht.transcript)
+
+        cds_ht = cds_ht.checkpoint(
+            checkpoint_path,
+            _read_if_exists=not overwrite_temp,
+            overwrite=overwrite_temp,
+        )
+        return cds_ht
+
+    # Get relevant exon start and stop positions
+    start_fix_ht = _create_exon_position_ht(
+        cds_ht=cds_ht, fix_missing_start=True, overwrite_temp=overwrite_temp
+    )
+    stop_fix_ht = _create_exon_position_ht(
+        cds_ht=cds_ht, fix_missing_start=False, overwrite_temp=overwrite_temp
+    )
+    missing_ht = missing_ht.annotate(
+        next_exon_start=hl.or_missing(
+            hl.is_missing(missing_ht.start_aa),
+            stop_fix_ht[
+                hl.locus(
+                    missing_ht.start_coordinate.contig,
+                    missing_ht.start_coordinate.locus - 1,
+                ),
+                missing_ht.transcript,
+            ].next_exon_start,
+        ),
+        prev_exon_stop=hl.or_missing(
+            hl.is_missing(missing_ht.stop_aa),
+            start_fix_ht[
+                hl.locus(
+                    missing_ht.stop_coordinate.contig,
+                    missing_ht.stop_coordinate.locus + 1,
+                ),
+                missing_ht.transcript,
+            ].prev_exon_stop,
+        ),
+    )
+    missing_ht = missing_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/region_start_stop_missing_aa_exon_annot.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    missing_ht = missing_ht.annotate(
+        start_aa=hl.if_else(
+            hl.is_missing(missing_ht.start_aa),
+            context_ht[missing_ht.next_exon_start, missing_ht.transcript].ref_aa,
+            missing_ht.start_aa,
+        ),
+        stop_aa=hl.if_else(
+            hl.is_missing(missing_ht.stop_aa),
+            context_ht[missing_ht.prev_exon_stop, missing_ht.transcript].ref_aa,
+            missing_ht.stop_aa,
+        ),
+    )
     return missing_ht.select("start_aa", "stop_aa")
 
 
