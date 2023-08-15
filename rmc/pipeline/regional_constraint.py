@@ -74,8 +74,9 @@ def main(args):
 
             logger.info(
                 "Preprocessing reference fasta (context) HT and filtering to missense,"
-                " nonsense, and synonymous..."
+                " nonsense, and synonymous variants in all canonical transcripts..."
             )
+            # Constraint outliers are not removed before computing regional missense constraint
             context_ht = process_context_ht(
                 filter_csq=True, csq={MISSENSE, NONSENSE, SYNONYMOUS}
             )
@@ -84,15 +85,12 @@ def main(args):
                 "Filtering context HT to all covered sites not found or rare in gnomAD"
                 " exomes"
             )
-            context_ht = filter_context_using_gnomad(
-                context_ht,
-                "exomes",
-            )
+            context_ht = filter_context_using_gnomad(context_ht, "exomes")
             context_ht.write(filtered_context.path, overwrite=args.overwrite)
 
             logger.info(
                 "Filtering gnomAD exomes HT to missense, nonsense, and synonymous"
-                " variants in canonical transcripts only..."
+                " variants in all canonical transcripts..."
             )
             exome_ht = processed_exomes.ht()
             exome_ht = process_vep(

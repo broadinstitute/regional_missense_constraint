@@ -165,21 +165,24 @@ def annotate_and_filter_codons(ht: hl.Table) -> hl.Table:
 def process_context_ht(
     filter_csq: bool = False,
     csq: Set[str] = None,
+    filter_outlier_transcripts: bool = False,
     add_annotations: bool = True,
 ) -> hl.Table:
     """
-    Prepare context HT (SNPs only, annotated with VEP) for regional missense constraint calculations.
+    Get context HT for SNPs annotated with VEP in canonical protein-coding transcripts.
 
-    Filter to missense variants in canonical protein coding transcripts.
-    Also annotate with probability of mutation for each variant, CpG status, and methylation level.
+    This function offers options to filter to specific variant consequences and add annotations
+    to prepare for regional missense constraint calculations.
 
     :param bool filter_csq: Whether to filter Table to specific consequences. Default is False.
     :param Set[str] csq: Desired consequences. Default is None. Must be specified if filter is True.
-    :return: Table filtered to canonical transcripts with option to filter to specific variant consequences.
-    :param bool add_annotations: Whether to add ref, alt, methylation_level, exome_coverage, cpg, transition,
-        and mutation_type annotations. Default is True.
-    :return: Context HT filtered to canonical transcripts and optionally filtered to variants
-        with specific consequences with their mutation rate, CpG status, and methylation level annotations.
+    :param bool filter_outlier_transcripts: Whether to remove constraint outlier transcripts from Table. Default is False.
+    :param bool add_annotations: Whether to add `context`, `ref`, `alt`, `methylation_level`, `cpg`,
+        `mutation_type`, `annotation`, `modifier`, `coverage`, `transcript`, and `mu_snp` annotations.
+        NOTE: `coverage` replaces `exome_coverage` in name.
+        Default is True.
+    :return: VEP context HT filtered to canonical transcripts and optionally filtered to variants
+        in non-outlier transcripts with specific consequences annotated with mutation rate etc.
     :rtype: hl.Table
     """
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
@@ -187,36 +190,50 @@ def process_context_ht(
 
     logger.info(
         (
-            "Filtering to canonical transcripts and annotating with most severe"
-            " consequence..."
+            "Filtering to canonical transcripts and annotating variants with most"
+            " severe consequence..."
         ),
     )
-    ht = process_vep(ht, filter_csq=filter_csq, csq=csq)
+    ht = process_vep(
+        ht,
+        filter_csq=filter_csq,
+        csq=csq,
+        filter_outlier_transcripts=filter_outlier_transcripts,
+    )
 
     if add_annotations:
-        # `prepare_ht_for_constraint_calculations` annotates HT with:
-        # ref, alt, methylation_level, exome_coverage, cpg, transition, mutation_type
+        logger.info("Adding annotations for constraint calculation...")
+        # NOTE: `prepare_ht_for_constraint_calculations` annotates HT with:
+        # `ref`, `alt`, `methylation_level`, `exome_coverage`, and annotations added by
+        # `annotate_mutation_type()`, `collapse_strand()`, and `add_most_severe_csq_to_tc_within_vep_root()`
+        # including `cpg`, `transition`, and `mutation_type`
         # NOTE: `mutation_type` was initially named `variant_type`, but this
         # field was renamed because `variant_type` refers to a different piece of
         # information in the gnomad_methods repo
         # See docstring for `annotate_mutation_type` for more details
         ht = prepare_ht_for_constraint_calculations(ht)
 
-        logger.info("Annotating with mutation rate...")
-        # Mutation rate HT is keyed by context, ref, alt, methylation level
-        mu_ht = mutation_rate.ht().select("mu_snp")
-        ht, grouping = annotate_exploded_vep_for_constraint_groupings(ht)
+        # NOTE: `annotate_exploded_vep_for_constraint_groupings` annotates HT with:
+        # `annotation`, `modifier`, `gene`, `coverage`, `transcript`, and `canonical`
+        # NOTE: `coverage` is a duplicate of `exome_coverage`
+        ht, _ = annotate_exploded_vep_for_constraint_groupings(ht)
+
         ht = ht.select(
             "context",
             "ref",
             "alt",
             "methylation_level",
-            "exome_coverage",
             "cpg",
-            "transition",
             "mutation_type",
-            *grouping,
+            "annotation",
+            "modifier",
+            "coverage",
+            "transcript",
         )
+
+        logger.info("Annotating with mutation rate...")
+        # Mutation rate HT is keyed by context, ref, alt, methylation level
+        mu_ht = mutation_rate.ht().select("mu_snp")
         return annotate_with_mu(ht, mu_ht)
     return ht
 
@@ -420,17 +437,23 @@ def keep_criteria(
 
 
 def process_vep(
-    ht: hl.Table, filter_csq: bool = False, csq: Set[str] = None
+    ht: hl.Table,
+    filter_csq: bool = False,
+    csq: Set[str] = None,
+    filter_outlier_transcripts: bool = False,
 ) -> hl.Table:
     """
-    Filter input Table to canonical transcripts only.
+    Filter input VEP context Table to variants in canonical transcripts and annotate with most severe consequence.
 
-    Option to filter Table to specific variant consequences.
+    Option to filter Table to specific variant consequences and remove constraint outlier transcripts.
 
     :param Table ht: Input Table.
     :param bool filter_csq: Whether to filter Table to specific consequences. Default is False.
     :param Set[str] csq: Desired consequences. Default is None. Must be specified if filter is True.
-    :return: Table filtered to canonical transcripts with option to filter to specific variant consequences.
+    :param bool filter_outlier_transcripts: Whether to remove constraint outlier transcripts from Table.
+        Default is False.
+    :return: Table filtered to canonical transcripts with option to filter to specific variant consequences
+        and remove constraint outlier transcripts.
     :rtype: hl.Table
     """
     if "was_split" not in ht.row:
@@ -439,19 +462,20 @@ def process_vep(
         ht = ht.filter(hl.is_snp(ht.alleles[0], ht.alleles[1]))
 
     logger.info("Filtering to canonical transcripts...")
-    ht = filter_vep_to_canonical_transcripts(ht, vep_root="vep", filter_empty_csq=True)
+    ht = filter_vep_to_canonical_transcripts(ht, filter_empty_csq=True)
 
     logger.info("Annotating HT with most severe consequence...")
     ht = add_most_severe_csq_to_tc_within_vep_root(ht)
     ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
     ht = ht.explode(ht.transcript_consequences)
 
-    logger.info("Filtering to non-outlier transcripts...")
-    # Keep transcripts used in LoF constraint only (remove all other outlier transcripts)
-    constraint_transcripts = get_constraint_transcripts(outlier=False)
-    ht = ht.filter(
-        constraint_transcripts.contains(ht.transcript_consequences.transcript_id)
-    )
+    if filter_outlier_transcripts:
+        logger.info("Filtering to non-outlier transcripts...")
+        # Keep transcripts used in LoF constraint only (remove all other outlier transcripts)
+        constraint_transcripts = get_constraint_transcripts(outlier=False)
+        ht = ht.filter(
+            constraint_transcripts.contains(ht.transcript_consequences.transcript_id)
+        )
 
     if filter_csq:
         if not csq:

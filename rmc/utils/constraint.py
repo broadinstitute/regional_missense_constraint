@@ -1249,8 +1249,8 @@ def create_context_with_oe(
     transcripts = get_constraint_transcripts(outlier=False)
 
     logger.info(
-        "Reading in VEP context HT and filtering to missense variants in canonical"
-        " transcripts..."
+        "Reading in SNPs-only, VEP-annotated context HT and filtering to missense"
+        " variants in canonical transcripts..."
     )
     # Using vep_context.path to read in table with fewer partitions
     # VEP context resource has 62164 partitions
@@ -1259,7 +1259,9 @@ def create_context_with_oe(
         .select_globals()
         .select("vep", "was_split")
     )
-    ht = process_vep(ht, filter_csq=True, csq={missense_str})
+    ht = process_vep(
+        ht, filter_csq=True, csq={missense_str}, filter_outlier_transcripts=True
+    )
     ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
     ht = get_annotations_from_context_ht_vep(ht)
     # Save context Table to temporary path with specified deletion policy because this is a very large file
