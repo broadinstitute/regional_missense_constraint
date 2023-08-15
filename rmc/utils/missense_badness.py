@@ -55,7 +55,7 @@ def prepare_amino_acid_ht(
     """
     logger.info("Reading in VEP context HT...")
     # NOTE: Keeping all variant types here because need synonymous and nonsense variants to calculate missense badness
-    context_ht = process_context_ht(filter_to_missense=False, add_annotations=False)
+    context_ht = process_context_ht(filter_csq=False, add_annotations=False)
 
     logger.info("Selecting relevant annotations...")
     context_ht = context_ht.select(

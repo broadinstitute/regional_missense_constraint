@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Set
 
 import hail as hl
 from gnomad.resources.grch37.gnomad import coverage, public_release
@@ -163,8 +163,8 @@ def annotate_and_filter_codons(ht: hl.Table) -> hl.Table:
 ## Reference genome processing-related utils
 ####################################################################################
 def process_context_ht(
-    filter_to_missense: bool = True,
-    missense_str: str = MISSENSE,
+    filter_csq: bool = False,
+    csq: Set[str] = None,
     add_annotations: bool = True,
 ) -> hl.Table:
     """
@@ -173,24 +173,25 @@ def process_context_ht(
     Filter to missense variants in canonical protein coding transcripts.
     Also annotate with probability of mutation for each variant, CpG status, and methylation level.
 
-    :param bool filter_to_missense: Whether to filter Table to missense variants only. Default is True.
+    :param bool filter_csq: Whether to filter Table to specific consequences. Default is False.
+    :param Set[str] csq: Desired consequences. Default is None. Must be specified if filter is True.
+    :return: Table filtered to canonical transcripts with option to filter to specific variant consequences.
     :param bool add_annotations: Whether to add ref, alt, methylation_level, exome_coverage, cpg, transition,
         and mutation_type annotations. Default is True.
-    :return: Context HT filtered to canonical transcripts and optionally filtered to missense variants with
-        mutation rate, CpG status, and methylation level annotations.
+    :return: Context HT filtered to canonical transcripts and optionally filtered to variants
+        with specific consequences with their mutation rate, CpG status, and methylation level annotations.
     :rtype: hl.Table
     """
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     ht = vep_context.ht().select_globals()
 
     logger.info(
-        "Filtering to canonical transcripts and annotating with most severe"
-        " consequence...",
+        (
+            "Filtering to canonical transcripts and annotating with most severe"
+            " consequence..."
+        ),
     )
-    if filter_to_missense:
-        ht = process_vep(ht, filter_csq=True, csq=missense_str)
-    else:
-        ht = process_vep(ht)
+    ht = process_vep(ht, filter_csq=filter_csq, csq=csq)
 
     if add_annotations:
         # `prepare_ht_for_constraint_calculations` annotates HT with:
@@ -418,16 +419,18 @@ def keep_criteria(
     )
 
 
-def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.Table:
+def process_vep(
+    ht: hl.Table, filter_csq: bool = False, csq: Set[str] = None
+) -> hl.Table:
     """
     Filter input Table to canonical transcripts only.
 
-    Option to filter Table to specific variant consequence (csq).
+    Option to filter Table to specific variant consequences.
 
     :param Table ht: Input Table.
-    :param bool filter_csq: Whether to filter Table to a specific consequence. Default is False.
-    :param str csq: Desired consequence. Default is None. Must be specified if filter is True.
-    :return: Table filtered to canonical transcripts with option to filter to specific variant consequence.
+    :param bool filter_csq: Whether to filter Table to specific consequences. Default is False.
+    :param Set[str] csq: Desired consequences. Default is None. Must be specified if filter is True.
+    :return: Table filtered to canonical transcripts with option to filter to specific variant consequences.
     :rtype: hl.Table
     """
     if "was_split" not in ht.row:
@@ -454,7 +457,7 @@ def process_vep(ht: hl.Table, filter_csq: bool = False, csq: str = None) -> hl.T
         if not csq:
             raise DataException("Need to specify consequence if filter_csq is True!")
         logger.info("Filtering to %s...", csq)
-        ht = ht.filter(ht.transcript_consequences.most_severe_consequence == csq)
+        ht = ht.filter(csq.contains(ht.transcript_consequences.most_severe_consequence))
     return ht
 
 
