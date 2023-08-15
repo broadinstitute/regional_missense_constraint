@@ -65,23 +65,27 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
-            # TODO: Add code to create annotations necessary for constraint_flag_expr and filter transcripts prior to running constraint
             logger.warning("Code currently only processes b37 data!")
 
             logger.info(
-                "Preprocessing reference fasta (context) HT and filtering to missense,"
-                " nonsense, and synonymous variants in all canonical transcripts..."
+                "Preprocessing VEP context HT to filter to missense, nonsense, and"
+                " synonymous variants in all canonical transcripts and add constraint"
+                " annotations..."
             )
-            # Constraint outliers are not removed before computing regional missense constraint
+            # NOTE: Constraint outlier transcripts are not removed before computing RMC
             context_ht = process_context_ht(
                 filter_csq=True, csq={MISSENSE, NONSENSE, SYNONYMOUS}
             )
-
+            logger.info("Checkpointing context HT...")
+            context_ht = context_ht.checkpoint(
+                f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht"
+            )
             logger.info(
                 "Filtering context HT to all covered sites not found or rare in gnomAD"
-                " exomes"
+                " exomes..."
             )
             context_ht = filter_context_using_gnomad(context_ht, "exomes")
+            logger.info("Writing out context HT...")
             context_ht.write(filtered_context.path, overwrite=args.overwrite)
 
             logger.info(
@@ -92,7 +96,14 @@ def main(args):
             exome_ht = process_vep(
                 exome_ht, filter_csq=True, csq={MISSENSE, NONSENSE, SYNONYMOUS}
             )
-
+            logger.info("Checkpointing gnomAD exomes HT...")
+            exome_ht = exome_ht.checkpoint(
+                f"{TEMP_PATH_WITH_FAST_DEL}/processed_vep.ht"
+            )
+            logger.info(
+                "Filtering gnomAD exomes HT to rare variants that pass filters and"
+                " coverage criteria..."
+            )
             # Move nested annotations into top level annotations
             exome_ht = exome_ht.select(
                 ac=exome_ht.freq[0].AC,
@@ -109,9 +120,8 @@ def main(args):
                     cov_expr=exome_ht.exome_coverage,
                 )
             )
+            logger.info("Writing out filtered gnomAD exomes HT...")
             exome_ht.write(filtered_exomes.path, overwrite=args.overwrite)
-
-            logger.info("Done preprocessing files")
 
         if args.prep_for_constraint:
             hl.init(
