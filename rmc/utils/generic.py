@@ -163,8 +163,7 @@ def annotate_and_filter_codons(ht: hl.Table) -> hl.Table:
 ## Reference genome processing-related utils
 ####################################################################################
 def process_context_ht(
-    filter_csq: bool = False,
-    csq: Set[str] = None,
+    filter_csq: Set[str] = None,
     filter_outlier_transcripts: bool = False,
     add_annotations: bool = True,
 ) -> hl.Table:
@@ -174,8 +173,7 @@ def process_context_ht(
     This function offers options to filter to specific variant consequences and add annotations
     to prepare for regional missense constraint calculations.
 
-    :param bool filter_csq: Whether to filter Table to specific consequences. Default is False.
-    :param Set[str] csq: Desired consequences. Default is None. Must be specified if filter is True.
+    :param Set[str] csq: Specific consequences to keep. Default is None.
     :param bool filter_outlier_transcripts: Whether to remove constraint outlier transcripts from Table. Default is False.
     :param bool add_annotations: Whether to add `context`, `ref`, `alt`, `methylation_level`, `cpg`,
         `mutation_type`, `annotation`, `modifier`, `coverage`, `transcript`, and `mu_snp` annotations.
@@ -197,7 +195,6 @@ def process_context_ht(
     ht = process_vep(
         ht,
         filter_csq=filter_csq,
-        csq=csq,
         filter_outlier_transcripts=filter_outlier_transcripts,
     )
 
@@ -438,8 +435,7 @@ def keep_criteria(
 
 def process_vep(
     ht: hl.Table,
-    filter_csq: bool = False,
-    csq: Set[str] = None,
+    filter_csq: Set[str] = None,
     filter_outlier_transcripts: bool = False,
 ) -> hl.Table:
     """
@@ -448,8 +444,7 @@ def process_vep(
     Option to filter Table to specific variant consequences and remove constraint outlier transcripts.
 
     :param Table ht: Input Table.
-    :param bool filter_csq: Whether to filter Table to specific consequences. Default is False.
-    :param Set[str] csq: Desired consequences. Default is None. Must be specified if filter is True.
+    :param Set[str] filter_csq: Specific consequences to keep. Default is None.
     :param bool filter_outlier_transcripts: Whether to remove constraint outlier transcripts from Table.
         Default is False.
     :return: Table filtered to canonical transcripts with option to filter to specific variant consequences
@@ -478,9 +473,7 @@ def process_vep(
         )
 
     if filter_csq:
-        if not csq:
-            raise DataException("Need to specify consequence if filter_csq is True!")
-        logger.info("Filtering to %s...", csq)
+        logger.info("Filtering to %s...", filter_csq)
         ht = ht.filter(
             hl.literal(csq).contains(ht.transcript_consequences.most_severe_consequence)
         )
