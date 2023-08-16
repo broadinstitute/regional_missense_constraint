@@ -182,7 +182,7 @@ def process_context_ht(
         NOTE: `coverage` replaces `exome_coverage` in name.
         Default is True.
     :return: VEP context HT filtered to canonical transcripts and optionally filtered to variants
-        in non-outlier transcripts with specific consequences annotated with mutation rate etc.
+        in non-outlier transcripts with specific consequences and annotated with mutation rate etc.
     :rtype: hl.Table
     """
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")

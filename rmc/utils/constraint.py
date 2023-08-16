@@ -121,7 +121,9 @@ def get_fwd_cumulative_count_expr(
     """
     Return annotation with the cumulative number of variant counts (non-inclusive).
 
-    Value is non-inclusive (does not include value of row) due to the nature of `hl.scan`
+    Function can return either the cumulative expected and observed counts.
+    
+    Value returned is non-inclusive (does not include value of row) due to the nature of `hl.scan`
     and needs to be corrected later.
 
     This function can produce the scan when searching for the first break or when searching for additional break(s).
@@ -172,7 +174,7 @@ def calculate_exp_from_mu(
     groupings: List[str] = GROUPINGS,
 ) -> hl.Table:
     """
-    Annotate Table with the per-allele expected counts based on the per-allele mu.
+    Annotate Table with the per-variant (locus+allele) expected counts based on the per-variant mu.
 
     .. note::
         - Assumes that input Table is annotated with all of the fields in `groupings` and that
@@ -184,12 +186,12 @@ def calculate_exp_from_mu(
             (`coverage_model`, `plateau_models`).
         - Adds `expected` and `coverage_correction` annotations.
 
-    :param context_ht: Allele-level input context Table.
+    :param context_ht: Variant-level input context Table.
     :param locus_type: Locus type of input Table. One of "X", "Y", or "autosomes".
         NOTE: Will treat any input other than "X" or "Y" as autosomes.
     :param groupings: List of Table fields used to group Table to adjust mutation rate.
         Table must be annotated with these fields. Default is `GROUPINGS`.
-    :return: Table annotated with per-allele expected counts and coverage correction.
+    :return: Table annotated with per-variant expected counts and coverage correction.
     """
     logger.info(
         "Grouping by %s and aggregating mutation rates within groupings...", groupings
