@@ -446,7 +446,7 @@ if __name__ == "__main__":
         "--overwrite",
         help="""
         Overwrite existing output data.
-        Applies to all outputs except OE-annotated context table (created in `--finalize`).
+        Applies to all outputs except OE-annotated context table (created in `finalize`).
         """,
         action="store_true",
     )
