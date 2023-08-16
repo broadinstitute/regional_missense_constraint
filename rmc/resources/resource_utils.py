@@ -9,11 +9,11 @@ MISSENSE = "missense_variant"
 """
 String representing missense variant VEP annotation.
 """
-NONSENSE = "nonsense_variant"
-"""
-String representing nonsense variant VEP annotation.
-"""
 SYNONYMOUS = "synonymous_variant"
 """
 String representing synonymous variant VEP annotation.
+"""
+READ_THROUGH = "stop_lost"
+"""
+String representing read-through (stop lost) variant VEP annotation.
 """
