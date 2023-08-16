@@ -363,6 +363,7 @@ def create_constraint_prep_ht(
         if not csq:
             raise DataException("Need to specify consequence if filter_csq is True!")
         logger.info("Filtering to %s...", csq)
+        csq = hl.literal(csq)
         ht = ht.filter(csq.contains(ht.annotation))
 
     logger.info("Aggregating by locus...")
