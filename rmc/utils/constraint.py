@@ -363,8 +363,7 @@ def create_constraint_prep_ht(
         if not csq:
             raise DataException("Need to specify consequence if filter_csq is True!")
         logger.info("Filtering to %s...", csq)
-        csq = hl.literal(csq)
-        ht = ht.filter(csq.contains(ht.annotation))
+        ht = ht.filter(hl.literal(csq).contains(ht.annotation))
 
     logger.info("Aggregating by locus...")
     # Context HT is keyed by locus and allele, which means there is one row for every possible missense variant
