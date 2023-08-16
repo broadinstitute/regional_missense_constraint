@@ -709,12 +709,11 @@ def annotate_subsection_exprs(ht: hl.Table) -> hl.Table:
         " subsection..."
     )
     group_ht = ht.group_by("section").aggregate(
-        obs=hl.agg.sum(ht.observed),
-        exp=hl.agg.sum(ht.expected),
+        section_obs=hl.agg.sum(ht.observed),
+        section_exp=hl.agg.sum(ht.expected),
     )
     ht = ht.annotate(
-        section_obs=group_ht[ht.section].obs,
-        section_exp=group_ht[ht.section].exp,
+        **group_ht[ht.section]
     )
     logger.info(
         "Getting observed/expected value for each transcript or transcript"
