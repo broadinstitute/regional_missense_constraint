@@ -454,8 +454,15 @@ def annotate_fwd_exprs(ht: hl.Table) -> hl.Table:
     .. note::
         'Forward' refers to moving through the transcript from smaller to larger chromosomal positions.
 
-    Expects:
-        - Input HT is annotated with section, observed, and expected counts per site.
+    Expects input HT to contain the following fields:
+        - section
+        - observed
+        - expected
+
+    Adds the following fields:
+        - fwd_cumulative_obs
+        - fwd_cumulative_exp
+        - fwd_oe
 
     :param ht: Input Table.
     :return: Table with forward values (cumulative obs, exp, and forward o/e) annotated.
@@ -498,6 +505,17 @@ def annotate_reverse_exprs(ht: hl.Table) -> hl.Table:
 
     .. note::
         'Reverse' refers to moving through the transcript from larger to smaller chromosomal positions.
+
+    Expects input HT to contain the following fields:
+        - section_obs
+        - section_exp
+        - fwd_cumulative_obs
+        - fwd_cumulative_exp
+
+    Adds the following fields:
+        - reverse_cumulative_obs
+        - reverse_cumulative_exp
+        - reverse_oe
 
     :param ht: Input Table.
     :return: Table with reverse values annotated.
@@ -557,6 +575,13 @@ def annotate_max_chisq_per_section(
 ) -> hl.Table:
     """
     Get maximum chi square value per transcript or transcript subsection.
+
+    Expects input HT to contain the following fields:
+        - section
+        - chisq
+
+    Adds the following field:
+        - section_max_chisq
 
     :param ht: Input Table.
     :param freeze: RMC data freeze number.
@@ -697,9 +722,15 @@ def annotate_subsection_exprs(ht: hl.Table) -> hl.Table:
     """
     Annotate total observed, expected, and observed/expected (OE) counts for each section of a transcript.
 
-    .. note::
-        - Assumes input Table has annotations `section`, `observed`, `expected`.
-        - Adds annotations `section_obs`, `section_exp`, `section_oe`.
+    Expects input HT to contain the following fields:
+        - section
+        - observed
+        - expected
+
+    Adds the following fields:
+        - section_obs
+        - section_exp
+        - section_oe
 
     :param ht: Input Table.
     :return: Table annotated with section observed, expected, and OE counts.
