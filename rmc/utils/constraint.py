@@ -376,10 +376,8 @@ def create_constraint_prep_ht(
     # Add transcript start and stop positions from browser HT
     transcript_ht = gene_model.ht().select("start", "stop")
     ht = ht.annotate(**transcript_ht[ht.transcript])
-    ht = ht.annotate(
-        section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop)
-    ).drop("start", "stop")
-    ht = ht.key_by("locus", "section").drop("transcript")
+    ht = ht.annotate(section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop))
+    ht = ht.key_by("locus", "section").drop("start", "stop", "transcript")
 
     ht.write(constraint_prep.path, overwrite=overwrite)
     # TODO: Repartition?
