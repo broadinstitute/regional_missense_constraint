@@ -20,7 +20,6 @@ from rmc.resources.gnomad import constraint_ht
 from rmc.resources.reference_data import clinvar_plp_mis_haplo, gene_model, ndd_de_novo
 from rmc.resources.resource_utils import MISSENSE
 from rmc.resources.rmc import (
-    CONSTRAINT_ANNOTATIONS,
     CURRENT_FREEZE,
     FINAL_ANNOTATIONS,
     MIN_EXP_MIS,
@@ -837,7 +836,7 @@ def check_break_search_round_nums(freeze: int = CURRENT_FREEZE) -> List[int]:
 def merge_round_no_break_ht(
     search_num: int,
     freeze: int,
-    keep_annotations: Set[str] = CONSTRAINT_ANNOTATIONS,
+    keep_annotations: Set[str] = FINAL_ANNOTATIONS,
 ) -> hl.Table:
     """
     Get merged single and simultaneous search no-break table from a given round of break search.

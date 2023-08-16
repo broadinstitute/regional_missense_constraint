@@ -144,35 +144,6 @@ NOTE: The content of the freeze 1 HT is calculated and formatted differently. A 
     - `mu_snp` contains the coverage-corrected not raw mutation rates.
 """
 
-CONSTRAINT_ANNOTATIONS = {
-    "mu_snp",
-    "observed",
-    "coverage",
-    "total_exp",
-    "total_mu",
-    "total_obs",
-    "fwd_cumulative_obs",
-    "fwd_cumulative_exp",
-    "fwd_oe",
-    "mu_scan",
-    "section_mu",
-    "section_exp",
-    "section_obs",
-    "section_oe",
-    "reverse_cumulative_obs",
-    "reverse_cumulative_exp",
-    "reverse_oe",
-    "total_null",
-    "total_alt",
-    "chisq",
-    "max_chisq",
-}
-"""
-Set of annotations used to calculate constraint and to hold resulting statistics.
-
-TODO: assess which annotations in this list can be removed
-"""
-
 FINAL_ANNOTATIONS = {
     "section_obs",
     "section_exp",
