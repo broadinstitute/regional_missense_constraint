@@ -229,9 +229,7 @@ def calculate_exp_from_mu(
         "Annotating expected counts per allele by distributing expected counts equally"
         " among all alleles in each grouping..."
     )
-    group_ht = group_ht.annotate(
-        expected=group_ht.exp_agg / group_ht.n_grouping
-    )
+    group_ht = group_ht.annotate(expected=group_ht.exp_agg / group_ht.n_grouping)
     context_ht = context_ht.annotate(
         expected=group_ht[
             context_ht.context,
@@ -258,7 +256,9 @@ def calculate_exp_from_mu(
     return context_ht
 
 
-def create_filtered_context_ht(overwrite: bool = True) -> None:
+def create_filtered_context_ht(
+    overwrite_temp: bool = False, overwrite: bool = True
+) -> None:
     """
     Create allele-level VEP context Table with constraint annotations including expected variant counts.
 
@@ -268,7 +268,8 @@ def create_filtered_context_ht(overwrite: bool = True) -> None:
     transcripts as annotated by VEP. Table is filtered to alleles not found or rare in gnomAD exomes
     at covered sites.
 
-    :param overwrite: Whether to overwrite Table. Default is True.
+    :param overwrite_temp: Whether to overwrite temporary data. Default is False.
+    :param overwrite: Whether to overwrite output Table. Default is True.
     :return: None; writes Table to path.
     """
     logger.info(
@@ -286,7 +287,11 @@ def create_filtered_context_ht(overwrite: bool = True) -> None:
     )
     ht = filter_context_using_gnomad(ht, "exomes")
     logger.info("Checkpointing context HT before annotating obs and exp...")
-    ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht")
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
 
     logger.info("Building plateau and coverage models...")
     coverage_ht = prop_obs_coverage.ht()
@@ -329,7 +334,11 @@ def create_filtered_context_ht(overwrite: bool = True) -> None:
         .union(calculate_exp_from_mu(filter_to_region_type(ht, "chrX"), locus_type="X"))
         .union(calculate_exp_from_mu(filter_to_region_type(ht, "chrY"), locus_type="Y"))
     )
-    ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht")
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
 
     logger.info("Removing alleles with negative expected values...")
     # Negative expected values happen for a handful of alleles on chrY due to

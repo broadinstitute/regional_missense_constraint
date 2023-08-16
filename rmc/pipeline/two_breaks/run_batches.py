@@ -507,8 +507,8 @@ def process_section_group(
         )
         ht = ht.checkpoint(
             f"{prep_path}/{section_group[0]}.ht",
-            overwrite=not read_if_exists,
             _read_if_exists=read_if_exists,
+            overwrite=not read_if_exists,
         )
     else:
         # Add start_idx struct with i_start, j_start, i_max_idx, j_max_idx annotations

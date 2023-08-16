@@ -157,6 +157,7 @@ def main(args):
                     is_breakpoint_only=True,
                     freeze=args.freeze,
                 ),
+                _read_if_exists=not args.overwrite,
                 overwrite=args.overwrite,
             )
 
@@ -366,8 +367,8 @@ def main(args):
             rmc_ht = rmc_ht.select_globals()
             rmc_ht = rmc_ht.checkpoint(
                 f"{TEMP_PATH_WITH_SLOW_DEL}/freeze{args.freeze}_rmc_results.ht",
-                overwrite=args.overwrite,
                 _read_if_exists=not args.overwrite,
+                overwrite=args.overwrite,
             )
 
             if args.filter_outliers:
