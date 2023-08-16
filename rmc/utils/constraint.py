@@ -223,16 +223,14 @@ def calculate_exp_from_mu(
             group_ht.coverage, group_ht.coverage_model
         ),
     )
-    group_ht = group_ht.annotate(
-        expected_grouping=group_ht.mu_adj * group_ht.coverage_correction
-    )
+    group_ht = group_ht.annotate(exp_agg=group_ht.mu_adj * group_ht.coverage_correction)
 
     logger.info(
         "Annotating expected counts per allele by distributing expected counts equally"
         " among all alleles in each grouping..."
     )
     group_ht = group_ht.annotate(
-        expected_per_variant=group_ht.expected_grouping / group_ht.n_grouping
+        expected=group_ht.exp_agg / group_ht.n_grouping
     )
     context_ht = context_ht.annotate(
         expected=group_ht[
@@ -244,7 +242,7 @@ def calculate_exp_from_mu(
             context_ht.modifier,
             context_ht.transcript,
             context_ht.coverage,
-        ].expected_per_variant,
+        ].expected,
         coverage_correction=group_ht[
             context_ht.context,
             context_ht.ref,
