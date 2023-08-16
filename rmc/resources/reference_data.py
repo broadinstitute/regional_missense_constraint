@@ -33,6 +33,43 @@ Table contains constraint-related annotations, including observed variant counts
 expected variant counts, probability of mutation, CpG status, gnomAD exome coverage,
 and methylation level.
 
+Schema:
+----------------------------------------
+Global fields:
+    'plateau_models': struct {
+        total: dict<bool, array<float64>>
+    } 
+    'plateau_x_models': struct {
+        total: dict<bool, array<float64>>
+    } 
+    'plateau_y_models': struct {
+        total: dict<bool, array<float64>>
+    } 
+    'coverage_model': tuple (
+        float64, 
+        float64
+    ) 
+----------------------------------------
+Row fields:
+    'locus': locus<GRCh37>
+    'alleles': array<str>
+    'context': str
+    'ref': str
+    'alt': str
+    'methylation_level': int32
+    'cpg': bool
+    'mutation_type': str
+    'annotation': str
+    'modifier': str
+    'coverage': int32
+    'transcript': str
+    'expected': float64
+    'coverage_correction': float64
+    'observed': int32    
+----------------------------------------
+Key: ['locus', 'alleles']
+----------------------------------------
+
 Used to create the constraint prep Table.
 """
 

@@ -151,6 +151,32 @@ constraint_prep = VersionedTableResource(
 Locus-level Table used in first step of regional constraint calculation over specific coding variant
 consequences for all canonical protein-coding transcripts.
 
+Schema:
+----------------------------------------
+Global fields:
+    'plateau_models': struct {
+        total: dict<bool, array<float64>>
+    } 
+    'plateau_x_models': struct {
+        total: dict<bool, array<float64>>
+    } 
+    'plateau_y_models': struct {
+        total: dict<bool, array<float64>>
+    } 
+    'coverage_model': tuple (
+        float64, 
+        float64
+    ) 
+----------------------------------------
+Row fields:
+    'locus': locus<GRCh37>
+    'section': str
+    'observed': int32  
+    'expected': float64 
+----------------------------------------
+Key: ['locus', 'section']
+----------------------------------------
+
 NOTE: The content of the freeze 1 HT for RMC is slightly different:
     - Expected counts were calculated using the workaround method instead of directly from the plateau model.
     - `mu_snp` contains the coverage-corrected not raw mutation rates.
