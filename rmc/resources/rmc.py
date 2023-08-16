@@ -124,6 +124,19 @@ for each canonical transcript in Gencode v19.
 ## RMC-related resources
 ####################################################################################
 coverage_plateau_models_path = "{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/coverage_plateau_models.he"
+"""
+Path to HailExpression containing struct for coverage correction model and plateau models.
+
+Schema:
+    struct {
+        coverage: Tuple[float, float],
+        plateau_autosomes: DictExpression,
+        plateau_X: DictExpression,
+        plateau_Y: DictExpression
+    }
+
+Used to compute expected variant counts.
+"""
 
 constraint_prep = VersionedTableResource(
     default_version=CURRENT_FREEZE,
