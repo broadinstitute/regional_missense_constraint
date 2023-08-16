@@ -1150,6 +1150,7 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     Use regional OE value if available, otherwise use transcript OE value.
 
     .. note::
+        - Assumes `constraint_prep` Table is missense-specific
         - Assumes input Table has `locus` and `trancript` annotations
         - OE values are transcript specific
         - Assumes merged RMC results HT exists
@@ -1162,7 +1163,6 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     :return: Table with `oe` annotation.
     """
     ht = constraint_prep.ht().select_globals()
-    ht = ht.filter(ht.annotation == MISSENSE)
     group_ht = ht.group_by("transcript").aggregate(
         obs=hl.agg.sum(ht.observed),
         exp=hl.agg.sum(ht.expected),
