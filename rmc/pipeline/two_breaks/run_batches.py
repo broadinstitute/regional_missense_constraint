@@ -18,7 +18,7 @@ This script should be run locally because it submits jobs to the Hail Batch serv
 """
 import argparse
 import logging
-from typing import Dict, List, Optional, Set, Union
+from typing import List, Optional, Set
 
 import hail as hl
 import hailtop.batch as hb
@@ -151,29 +151,25 @@ def get_obs_exp_expr(
 
 def get_dpois_expr(
     cond_expr: hl.expr.BooleanExpression,
-    section_oe_expr: hl.expr.Float64Expression,
-    obs_expr: Union[
-        Dict[hl.expr.StringExpression, hl.expr.Int64Expression], hl.expr.Int64Expression
-    ],
-    exp_expr: Union[
-        Dict[hl.expr.StringExpression, hl.expr.Float64Expression],
-        hl.expr.Float64Expression,
-    ],
+    oe_expr: hl.expr.Float64Expression,
+    obs_expr: hl.expr.Int64Expression,
+    exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.StructExpression:
     """
-    Calculate probabilities (natural log) of the observed values under a Poisson model.
+    Calculate probability density (natural log) of the observed values under a Poisson model.
 
     Typically imported from `constraint.py`. See `constraint.py` for full docstring.
 
     :param cond_expr: Conditional expression to check before calculating probability.
-    :param section_oe_expr: Expression of section observed/expected value.
+    :param oe_expr: Expression of observed/expected value.
     :param obs_expr: Expression containing observed variants count.
     :param exp_expr: Expression containing expected variants count.
     :return: natural log of the probability under Poisson model.
     """
     # log_p = True returns the natural logarithm of the probability density
     return hl.or_missing(
-        cond_expr, hl.dpois(obs_expr, exp_expr * section_oe_expr, log_p=True)
+        cond_expr,
+        hl.dpois(obs_expr, exp_expr * oe_expr, log_p=True),
     )
 
 
@@ -183,7 +179,7 @@ def calculate_window_chisq(
     j: hl.expr.Int32Expression,
     cum_obs: hl.expr.ArrayExpression,
     cum_exp: hl.expr.ArrayExpression,
-    total_oe: hl.expr.Float64Expression,
+    section_oe: hl.expr.Float64Expression,
     min_num_exp_mis: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
     """
@@ -198,7 +194,7 @@ def calculate_window_chisq(
     :param hl.expr.Int32Expression j: Larger list index value corresponding to the larger position of the two break window.
     :param hl.expr.ArrayExpression cum_obs: List containing cumulative observed missense values.
     :param hl.expr.ArrayExpression cum_exp: List containing cumulative expected missense values.
-    :param hl.expr.Float64Expression total_oe: Transcript/transcript section overall observed/expected (OE) missense ratio.
+    :param hl.expr.Float64Expression section_oe: Transcript/transcript section overall observed/expected (OE) missense ratio.
     :param hl.expr.Float64Expression min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
     :return: Chi square significance value.
@@ -222,7 +218,7 @@ def calculate_window_chisq(
                     # one index smaller than index i
                     get_dpois_expr(
                         cond_expr=True,
-                        section_oe_expr=get_obs_exp_expr(
+                        oe_expr=get_obs_exp_expr(
                             True,
                             cum_obs[i - 1],
                             hl.max(cum_exp[i - 1], 1e-09),
@@ -235,7 +231,7 @@ def calculate_window_chisq(
                     # minus the cumulative values at index i -1
                     + get_dpois_expr(
                         cond_expr=True,
-                        section_oe_expr=get_obs_exp_expr(
+                        oe_expr=get_obs_exp_expr(
                             True,
                             (cum_obs[j] - cum_obs[i - 1]),
                             hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
@@ -248,7 +244,7 @@ def calculate_window_chisq(
                     # minus the cumulative values at index j
                     + get_dpois_expr(
                         cond_expr=True,
-                        section_oe_expr=get_obs_exp_expr(
+                        oe_expr=get_obs_exp_expr(
                             True,
                             (cum_obs[-1] - cum_obs[j]),
                             hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
@@ -261,19 +257,19 @@ def calculate_window_chisq(
                 - (
                     get_dpois_expr(
                         cond_expr=True,
-                        section_oe_expr=total_oe,
+                        oe_expr=section_oe,
                         obs_expr=cum_obs[i - 1],
                         exp_expr=hl.max(cum_exp[i - 1], 1e-09),
                     )
                     + get_dpois_expr(
                         cond_expr=True,
-                        section_oe_expr=total_oe,
+                        oe_expr=section_oe,
                         obs_expr=cum_obs[j] - cum_obs[i - 1],
                         exp_expr=hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
                     )
                     + get_dpois_expr(
                         cond_expr=True,
-                        section_oe_expr=total_oe,
+                        oe_expr=section_oe,
                         obs_expr=cum_obs[-1] - cum_obs[j],
                         exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                     )
@@ -302,7 +298,7 @@ def search_for_two_breaks(
         a single significant breakpoint.
     :param count: Which transcript group is being run (based on counter generated in `main`).
     :param chisq_threshold: Chi-square significance threshold. Default is
-        scipy.stats.chi2.ppf(1 - P_VALUE, 2).
+        `scipy.stats.chi2.ppf(1 - P_VALUE, 2)`.
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001
         with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
@@ -313,7 +309,7 @@ def search_for_two_breaks(
         which corresponds to a p-value of 0.025 with 2 degrees of freedom.
     :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
         (as long as chi square value is >= min_chisq_threshold).
-        This saves a lot of extra data and should only occur once.
+        This saves a lot of extra data and should only occur during the initial search round.
         Default is False.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Table filtered to transcript/sections with significant simultaneous breakpoints
@@ -335,7 +331,7 @@ def search_for_two_breaks(
                         j,
                         group_ht.cum_obs,
                         group_ht.cum_exp,
-                        group_ht.total_oe,
+                        group_ht.section_oe,
                         min_num_exp_mis,
                     ),
                     -1,
@@ -403,28 +399,29 @@ def process_section_group(
 
     Designed for use with Hail Batch.
 
-    :param str ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
-    :param List[str] section_group: List of transcripts or transcript sections to process.
-    :param count: Which transcript group is being run (based on counter generated in `main`).
+    :param ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
+    :param section_group: List of transcripts or transcript sections to process.
+    :param count: Which transcript or transcript section group is being run (based on counter generated in `main`).
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
-    :param bool over_threshold: Whether input transcript/sections have more
+    :param over_threshold: Whether input transcript/sections have more
         possible missense sites than threshold specified in `run_simultaneous_breaks`.
-    :param str output_ht_path: Path to output results Table.
+    :param output_ht_path: Path to output results Table.
     :param output_n_partitions: Desired number of partitions for output Table.
         Default is 10.
     :param chisq_threshold: Chi-square significance threshold. Default is
-        scipy.stats.chi2.ppf(1 - P_VALUE, 2).
+        `scipy.stats.chi2.ppf(1 - P_VALUE, 2)`.
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001
         with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
-    :param float min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
+    :param min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
-    :param int split_list_len: Max length to divide transcript/sections observed or expected missense and position lists into.
+        Default is MIN_EXP_MIS.
+    :param split_list_len: Max length to divide transcript/sections observed or expected missense and position lists into.
         E.g., if split_list_len is 500, and the list lengths are 998, then the transcript/section will be
         split into two rows with lists of length 500 and 498.
         Only used if over_threshold is True. Default is 500.
-    :param bool read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
+    :param read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
         Only applies to Table that is input to `search_for_two_breaks`
         (`f"{temp_ht_path}/{transcript_group[0]}_prep.ht"`).
         Default is False.
@@ -432,7 +429,10 @@ def process_section_group(
         (as long as chi square value is >= min_chisq_threshold).
         This saves a lot of extra data and should only occur once.
         Default is False.
+    :param requester_pays_bucket: Requester-pays bucket to initialize hail configuration with.
+        Default is `RMC_PREFIX`.
     :param google_project: Google project used to read and write data to requester-pays bucket.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: None; processes Table and writes to path. Also writes success TSV to path.
     """
     # Initialize hail to read from requester-pays correctly
