@@ -10,16 +10,6 @@ Path to bucket with gnomAD v2 loss-of-function (LoF) constraint results.
 
 FLAGSHIP_LOF_MODEL_PREFIX = f"{FLAGSHIP_LOF}/model"
 
-processed_genomes = TableResource(
-    path=f"{FLAGSHIP_LOF_MODEL_PREFIX}/genomes_processed.ht"
-)
-"""
-Processed gnomAD genomes Table.
-
-Dropped colocated variants in vep annotation and removed all non-pass variants.
-Also annotated with context Table (sequence context, transcript information, most severe consequence).
-"""
-
 prop_obs_coverage = TableResource(
     path=f"{FLAGSHIP_LOF_MODEL_PREFIX}/prop_observed_by_coverage_no_common_pass_filtered_bins.ht"
 )
