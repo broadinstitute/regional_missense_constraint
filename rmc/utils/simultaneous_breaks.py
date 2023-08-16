@@ -71,7 +71,7 @@ def group_no_single_break_found_ht(
             ),
             key=lambda x: x.locus,
         ),
-        total_oe=hl.agg.take(ht.section_oe, 1)[0],
+        section_oe=hl.agg.take(ht.section_oe, 1)[0],
     )
     group_ht = group_ht.annotate(max_idx=hl.len(group_ht.values.positions) - 1)
     group_ht = group_ht.transmute(
@@ -209,7 +209,7 @@ def calculate_window_chisq(
     j: hl.expr.Int32Expression,
     cum_obs: hl.expr.ArrayExpression,
     cum_exp: hl.expr.ArrayExpression,
-    total_oe: hl.expr.Float64Expression,
+    section_oe: hl.expr.Float64Expression,
     min_num_exp_mis: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
     """
@@ -224,7 +224,7 @@ def calculate_window_chisq(
     :param hl.expr.Int32Expression j: Larger list index value corresponding to the larger position of the two break window.
     :param hl.expr.ArrayExpression cum_obs: List containing cumulative observed missense values.
     :param hl.expr.ArrayExpression cum_exp: List containing cumulative expected missense values.
-    :param hl.expr.Float64Expression total_oe: Transcript/transcript section overall observed/expected (OE) missense ratio.
+    :param hl.expr.Float64Expression section_oe: Transcript/transcript section overall observed/expected (OE) missense ratio.
     :param hl.expr.Float64Expression min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
     :return: Chi square significance value.
@@ -287,19 +287,19 @@ def calculate_window_chisq(
                 - (
                     get_dpois_expr(
                         cond_expr=True,
-                        oe_expr=total_oe,
+                        oe_expr=section_oe,
                         obs_expr=cum_obs[i - 1],
                         exp_expr=hl.max(cum_exp[i - 1], 1e-09),
                     )
                     + get_dpois_expr(
                         cond_expr=True,
-                        oe_expr=total_oe,
+                        oe_expr=section_oe,
                         obs_expr=cum_obs[j] - cum_obs[i - 1],
                         exp_expr=hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
                     )
                     + get_dpois_expr(
                         cond_expr=True,
-                        oe_expr=total_oe,
+                        oe_expr=section_oe,
                         obs_expr=cum_obs[-1] - cum_obs[j],
                         exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                     )
@@ -361,7 +361,7 @@ def search_for_two_breaks(
                         j,
                         group_ht.cum_obs,
                         group_ht.cum_exp,
-                        group_ht.total_oe,
+                        group_ht.section_oe,
                         min_num_exp_mis,
                     ),
                     -1,
