@@ -534,15 +534,15 @@ def get_dpois_expr(
     exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.StructExpression:
     """
-    Calculate probability density (natural log) of the observed values under a Poisson model.
+    Calculate probability densities (natural log) of the observed values under a Poisson model.
 
-    Rate in model given by expected * observed/expected values.
+    Poisson rate for each region is defined as expected * given observed/expected values.
 
     :param cond_expr: Conditional expression to check before calculating probability.
     :param oe_expr: Expression of observed/expected value.
     :param obs_expr: Expression containing observed variants count.
     :param exp_expr: Expression containing expected variants count.
-    :return: natural log of the probability under Poisson model.
+    :return: Natural log of the probability density under Poisson model.
     """
     # log_p = True returns the natural logarithm of the probability density
     return hl.or_missing(
@@ -1047,7 +1047,7 @@ def calculate_oe_neq_1_chisq(
     exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
     """
-    Check for significance of observed/expected being different from 1.
+    Check for significance that observed/expected values for regions are different from 1.
 
     Formula is: (obs - exp)^2 / exp.
 
