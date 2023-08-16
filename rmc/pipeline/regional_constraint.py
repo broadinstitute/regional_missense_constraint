@@ -11,7 +11,7 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_FAST_DEL,
     TEMP_PATH_WITH_SLOW_DEL,
 )
-from rmc.resources.resource_utils import MISSENSE
+from rmc.resources.resource_utils import MISSENSE, NONSENSE, SYNONYMOUS
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
     P_VALUE,
@@ -44,7 +44,7 @@ logger.setLevel(logging.INFO)
 def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
     try:
-        if args.pre_process_data:
+        if args.command == "prep-filtered-context":
             hl.init(
                 log="/RMC_pre_process.log",
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
@@ -54,19 +54,32 @@ def main(args):
             logger.info("Creating filtered context HT...")
             create_filtered_context_ht(args.overwrite)
 
-        if args.prep_for_constraint:
+        if args.command == "prep-constraint":
             hl.init(
                 log="/RMC_prep_for_constraint.log",
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
             logger.info("Creating constraint prep HT...")
-            # TODO: Make the below argparse arguments
-            create_constraint_prep_ht(
-                filter_csq=True, csq={MISSENSE}, overwrite=args.overwrite
-            )
+            if (
+                not args.prep_missense
+                and not args.prep_nonsense
+                and not args.prep_synonymous
+            ):
+                create_constraint_prep_ht(filter_csq=False, overwrite=args.overwrite)
+            else:
+                csq = set()
+                if args.prep_missense:
+                    csq = csq.add(MISSENSE)
+                if args.prep_nonsense:
+                    csq = csq.add(NONSENSE)
+                if args.prep_synonymous:
+                    csq = csq.add(SYNONYMOUS)
+                create_constraint_prep_ht(
+                    filter_csq=True, csq=csq, overwrite=args.overwrite
+                )
 
-        if args.search_for_single_break:
+        if args.command == "search-for-single-break":
             hl.init(
                 log=f"/round{args.search_num}_single_break_search.log",
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
@@ -185,7 +198,7 @@ def main(args):
                 overwrite=args.overwrite,
             )
 
-        if args.merge_single_simul:
+        if args.command == "merge-single-simul":
             hl.init(
                 log=f"/round{args.search_num}_merge_single_simul.log",
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
@@ -337,7 +350,7 @@ def main(args):
 
             # TODO: Add validity checks that we haven't dropped any transcripts/sections - e.g. using sections with breaks expression
 
-        if args.finalize:
+        if args.command == "finalize":
             hl.init(
                 log="/RMC_finalize.log",
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
@@ -396,40 +409,10 @@ if __name__ == "__main__":
         "This script searches for regional missense constraint in gnomAD."
     )
     parser.add_argument(
-        "--pre-process-data", help="Pre-process data.", action="store_true"
-    )
-    parser.add_argument(
         "--n-partitions",
         help="Desired number of partitions for output data.",
         type=int,
         default=40000,
-    )
-    parser.add_argument(
-        "--high-cov-cutoff",
-        help="Coverage threshold for a site to be considered high coverage",
-        type=int,
-        default=40,
-    )
-    parser.add_argument(
-        "--prep-for-constraint",
-        help="Prepare tables for constraint calculations.",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--skip-calc-oe",
-        help=(
-            "Skip observed and expected variant calculations per transcript. Relevant"
-            " only to gnomAD v2.1.1!"
-        ),
-        action="store_true",
-    )
-    parser.add_argument(
-        "--search-for-single-break",
-        help=(
-            "Search for single significant break in transcripts or transcript"
-            " subsections."
-        ),
-        action="store_true",
     )
     parser.add_argument(
         "--search-num",
@@ -438,32 +421,6 @@ if __name__ == "__main__":
             " would be 2)."
         ),
         type=int,
-    )
-    parser.add_argument(
-        "--save-chisq-ht",
-        help="""
-        Save temporary Table that contains chi square significance values
-        for all possible loci. Note that chi square values will be missing for
-        any loci that would divide a transcript into subsections with fewer than
-        `MIN_EXP_MIS` expected missense variants.
-
-        NOTE that this temporary Table should only get saved once.
-        """,
-        action="store_true",
-    )
-    parser.add_argument(
-        "--merge-single-simul",
-        help="""
-        Merge those transcripts/transcript sections with significant breakpoints from
-        single and simultaneous breaks searches into a single Table, and those without
-        significant breakpoints into another Table.
-        """,
-        action="store_true",
-    )
-    parser.add_argument(
-        "--finalize",
-        help="Combine and reformat (finalize) RMC output.",
-        action="store_true",
     )
     parser.add_argument(
         "--p-value",
@@ -510,6 +467,71 @@ if __name__ == "__main__":
         help="Initialize Hail with `quiet=True` to print fewer log messages",
         action="store_true",
     )
+
+    subparsers = parser.add_subparsers(title="command", dest="command", required=True)
+
+    prep_filtered_context = subparsers.add_parser(
+        "prep-filtered-context",
+        help="""
+        Process VEP context HT to create allele-level filtered context HT with constraint annotations.
+        """,
+    )
+
+    prep_constraint = subparsers.add_parser(
+        "prep-constraint",
+        help="""
+        Prepare locus-level Table filtered to specific variant consequences for regional constraint
+        break search.
+        """,
+    )
+    prep_constraint.add_argument(
+        "--prep-missense",
+        help="Include missense variants in constraint prep Table.",
+        action="store_true",
+    )
+    prep_constraint.add_argument(
+        "--prep-nonsense",
+        help="Include nonsense variants in constraint prep Table.",
+        action="store_true",
+    )
+    prep_constraint.add_argument(
+        "--prep-synonymous",
+        help="Include synonymous variants in constraint prep Table.",
+        action="store_true",
+    )
+
+    single_break = subparsers.add_parser(
+        "search-for-single-break",
+        help="""
+        Search for single significant break in transcripts or transcript subsections.
+        """,
+    )
+    single_break.add_argument(
+        "--save-chisq-ht",
+        help="""
+        Save temporary Table that contains chi square significance values
+        for all possible loci. Note that chi square values will be missing for
+        any loci that would divide a transcript into subsections with fewer than
+        `MIN_EXP_MIS` expected missense variants.
+
+        NOTE that this temporary Table should only get saved once.
+        """,
+        action="store_true",
+    )
+
+    merge_single_simul = subparsers.add_parser(
+        "merge-single-simul",
+        help="""
+        Merge those transcripts/transcript sections with significant breakpoints from
+        single and simultaneous breaks searches into a single Table, and those without
+        significant breakpoints into another Table.
+        """,
+    )
+
+    finalize = subparsers.add_parser(
+        "finalize", help="Combine and reformat (finalize) RMC output."
+    )
+
     args = parser.parse_args()
 
     if args.slack_channel:
