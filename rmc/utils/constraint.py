@@ -136,7 +136,7 @@ def get_fwd_cumulative_count_expr(
     return hl.scan.group_by(group_expr, hl.scan.sum(count_expr))
 
 
-def adjust_cumulative_count_expr(
+def adjust_fwd_cumulative_count_expr(
     cumulative_count_expr: hl.expr.DictExpression,
     count_expr: hl.expr.Int64Expression,
     group_expr: hl.expr.StringExpression,
@@ -457,7 +457,7 @@ def annotate_fwd_exprs(ht: hl.Table) -> hl.Table:
     """
     logger.info("Getting forward cumulative observed and expected variant counts...")
     ht = ht.annotate(
-        fwd_cumulative_obs=adjust_cumulative_count_expr(
+        fwd_cumulative_obs=adjust_fwd_cumulative_count_expr(
             cumulative_count_expr=get_fwd_cumulative_count_expr(
                 group_expr=ht.section,
                 count_expr=ht.observed,
@@ -465,7 +465,7 @@ def annotate_fwd_exprs(ht: hl.Table) -> hl.Table:
             count_expr=ht.observed,
             group_expr=ht.section,
         ),
-        fwd_cumulative_exp=adjust_cumulative_count_expr(
+        fwd_cumulative_exp=adjust_fwd_cumulative_count_expr(
             cumulative_count_expr=get_fwd_cumulative_count_expr(
                 group_expr=ht.section,
                 count_expr=ht.expected,
@@ -1244,9 +1244,7 @@ def create_context_with_oe(
         .select_globals()
         .select("vep", "was_split")
     )
-    ht = process_vep(
-        ht, filter_csq={missense_str}, filter_outlier_transcripts=True
-    )
+    ht = process_vep(ht, filter_csq={missense_str}, filter_outlier_transcripts=True)
     ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
     ht = get_annotations_from_context_ht_vep(ht)
     # Save context Table to temporary path with specified deletion policy because this is a very large file
