@@ -24,6 +24,7 @@ from rmc.resources.rmc import (
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     check_break_search_round_nums,
+    create_filtered_context_ht,
     create_constraint_prep_ht,
     create_context_with_oe,
     create_no_breaks_he,
@@ -31,7 +32,7 @@ from rmc.utils.constraint import (
     merge_rmc_hts,
     process_sections,
 )
-from rmc.utils.generic import create_filtered_context_ht, get_constraint_transcripts
+from rmc.utils.generic import get_constraint_transcripts
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
