@@ -377,18 +377,16 @@ def create_constraint_prep_ht(
     # Context HT is keyed by locus and allele, which means there is one row for every possible missense variant
     # This means that any locus could be present up to three times (once for each possible missense)
     ht = ht.group_by("locus", "transcript").aggregate(
-        observed=hl.sum(ht.observed),
-        expected=hl.sum(ht.expected),
+        observed=hl.agg.sum(ht.observed),
+        expected=hl.agg.sum(ht.expected),
     )
 
     logger.info("Adding section annotation...")
     # Add transcript start and stop positions from browser HT
     transcript_ht = gene_model.ht().select("start", "stop")
     ht = ht.annotate(**transcript_ht[ht.transcript])
-    ht = ht.annotate(
-        section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop)
-    ).drop("start", "stop")
-    ht = ht.key_by("locus", "section").drop("transcript")
+    ht = ht.annotate(section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop))
+    ht = ht.key_by("locus", "section").drop("start", "stop", "transcript")
 
     ht.write(constraint_prep.path, overwrite=overwrite)
     # TODO: Repartition?
