@@ -316,6 +316,7 @@ def create_filtered_context_ht(
             plateau_Y=plateau_y_models,
         ),
         coverage_plateau_models_path,
+        overwrite=overwrite_temp,
     )
     # Also annotate as HT globals
     ht = ht.annotate_globals(
