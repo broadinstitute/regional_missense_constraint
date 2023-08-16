@@ -356,7 +356,8 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
-
+            # TODO: Check that all downstream usages of RMC results table filter out
+            # constraint outliers appropriately
             logger.info("Checking round paths...")
             round_nums = check_break_search_round_nums(args.freeze)
 
@@ -370,10 +371,12 @@ def main(args):
                 _read_if_exists=not args.overwrite,
             )
 
-            # TODO: Remove this block to retain outlier transcripts initially
-            logger.info("Removing outlier transcripts...")
-            constraint_transcripts = get_constraint_transcripts(outlier=False)
-            rmc_ht = rmc_ht.filter(constraint_transcripts.contains(rmc_ht.transcript))
+            if args.filter_outliers:
+                logger.info("Removing outlier transcripts...")
+                constraint_transcripts = get_constraint_transcripts(outlier=False)
+                rmc_ht = rmc_ht.filter(
+                    constraint_transcripts.contains(rmc_ht.transcript)
+                )
 
             # Add p-value threshold to globals
             if not args.p_value:
@@ -530,6 +533,10 @@ if __name__ == "__main__":
 
     finalize = subparsers.add_parser(
         "finalize", help="Combine and reformat (finalize) RMC output."
+    )
+    finalize.add_argument(
+        "--filter-outliers",
+        help="Remove constraint outlier transcripts from RMC output.",
     )
 
     args = parser.parse_args()
