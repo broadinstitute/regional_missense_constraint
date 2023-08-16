@@ -9,7 +9,6 @@ from gnomad.resources.grch37.gnomad import coverage, public_release
 from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
-from gnomad.utils.vep import LOF_CSQ_SET
 
 from rmc.resources.basics import (
     SINGLE_BREAK_TEMP_PATH,
@@ -24,7 +23,7 @@ from rmc.resources.reference_data import (
     gene_model,
     ndd_de_novo,
 )
-from rmc.resources.resource_utils import MISSENSE, SYNONYMOUS, READ_THROUGH
+from rmc.resources.resource_utils import MISSENSE, NONSENSES, READ_THROUGH, SYNONYMOUS
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
     FINAL_ANNOTATIONS,
@@ -278,7 +277,7 @@ def create_filtered_context_ht(overwrite: bool = True) -> None:
         " annotations..."
     )
     # NOTE: Constraint outlier transcripts are not removed
-    csq = {MISSENSE, SYNONYMOUS, READ_THROUGH}.union(LOF_CSQ_SET)
+    csq = {MISSENSE, SYNONYMOUS, READ_THROUGH}.union(NONSENSES)
     ht = process_context_ht(filter_csq=True, csq=csq)
 
     logger.info(

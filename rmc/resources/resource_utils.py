@@ -9,11 +9,15 @@ MISSENSE = "missense_variant"
 """
 String representing missense variant VEP annotation.
 """
-SYNONYMOUS = "synonymous_variant"
+NONSENSES = {"stop_gained", "splice_donor_variant", "splice_acceptor_variant"}
 """
-String representing synonymous variant VEP annotation.
+Set containing loss-of-function (LoF) single-nucleotide variant VEP annotations.
 """
 READ_THROUGH = "stop_lost"
 """
 String representing read-through (stop lost) variant VEP annotation.
+"""
+SYNONYMOUS = "synonymous_variant"
+"""
+String representing synonymous variant VEP annotation.
 """

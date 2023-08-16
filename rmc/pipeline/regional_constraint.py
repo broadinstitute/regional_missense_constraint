@@ -4,7 +4,6 @@ import logging
 import hail as hl
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
-from gnomad.utils.vep import LOF_CSQ_SET
 
 from rmc.resources.basics import (
     LOGGING_PATH,
@@ -12,7 +11,7 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_FAST_DEL,
     TEMP_PATH_WITH_SLOW_DEL,
 )
-from rmc.resources.resource_utils import MISSENSE, SYNONYMOUS
+from rmc.resources.resource_utils import MISSENSE, NONSENSES, SYNONYMOUS
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
     P_VALUE,
@@ -74,7 +73,7 @@ def main(args):
                 if args.prep_missense:
                     csq.add(MISSENSE)
                 if args.prep_nonsense:
-                    csq.update(LOF_CSQ_SET)
+                    csq.update(NONSENSES)
                 if args.prep_synonymous:
                     csq.add(SYNONYMOUS)
                 create_constraint_prep_ht(
