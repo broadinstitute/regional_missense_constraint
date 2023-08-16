@@ -122,7 +122,7 @@ def get_fwd_cumulative_count_expr(
     Return annotation with the cumulative number of variant counts (non-inclusive).
 
     Function can return either the cumulative expected and observed counts.
-    
+
     Value returned is non-inclusive (does not include value of row) due to the nature of `hl.scan`
     and needs to be corrected later.
 
@@ -174,7 +174,7 @@ def calculate_exp_from_mu(
     groupings: List[str] = GROUPINGS,
 ) -> hl.Table:
     """
-    Annotate Table with the per-variant (locus+allele) expected counts based on the per-variant mu.
+    Annotate Table with the per-variant (locus-allele) expected counts based on the per-variant mu.
 
     .. note::
         - Assumes that input Table is annotated with all of the fields in `groupings` and that
