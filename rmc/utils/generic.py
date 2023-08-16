@@ -173,7 +173,7 @@ def process_context_ht(
     This function offers options to filter to specific variant consequences and add annotations
     to prepare for regional missense constraint calculations.
 
-    :param Set[str] csq: Specific consequences to keep. Default is None.
+    :param Set[str] filter_csq: Specific consequences to keep. Default is None.
     :param bool filter_outlier_transcripts: Whether to remove constraint outlier transcripts from Table. Default is False.
     :param bool add_annotations: Whether to add `context`, `ref`, `alt`, `methylation_level`, `cpg`,
         `mutation_type`, `annotation`, `modifier`, `coverage`, `transcript`, and `mu_snp` annotations.
@@ -475,7 +475,9 @@ def process_vep(
     if filter_csq:
         logger.info("Filtering to %s...", filter_csq)
         ht = ht.filter(
-            hl.literal(csq).contains(ht.transcript_consequences.most_severe_consequence)
+            hl.literal(filter_csq).contains(
+                ht.transcript_consequences.most_severe_consequence
+            )
         )
     return ht
 

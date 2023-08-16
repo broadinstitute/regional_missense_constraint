@@ -280,7 +280,7 @@ def create_filtered_context_ht(overwrite: bool = True) -> None:
     )
     # NOTE: Constraint outlier transcripts are not removed
     csq = {MISSENSE, SYNONYMOUS, READ_THROUGH}.union(NONSENSES)
-    ht = process_context_ht(filter_csq=True, csq=csq)
+    ht = process_context_ht(filter_csq=csq)
 
     logger.info(
         "Filtering context HT to all covered sites not found or rare in gnomAD"
@@ -347,7 +347,7 @@ def create_filtered_context_ht(overwrite: bool = True) -> None:
 
 
 def create_constraint_prep_ht(
-    filter_csq: bool = True, csq: Set[str] = {MISSENSE}, overwrite: bool = True
+    filter_csq: Set[str] = {MISSENSE}, overwrite: bool = True
 ) -> None:
     """
     Create locus-level constraint prep Table from filtered context Table for all canonical protein-coding transcripts.
@@ -363,10 +363,8 @@ def create_constraint_prep_ht(
     """
     ht = filtered_context.ht()
     if filter_csq:
-        if not csq:
-            raise DataException("Need to specify consequence if filter_csq is True!")
-        logger.info("Filtering to %s...", csq)
-        ht = ht.filter(hl.literal(csq).contains(ht.annotation))
+        logger.info("Filtering to %s...", filter_csq)
+        ht = ht.filter(hl.literal(filter_csq).contains(ht.annotation))
 
     logger.info("Aggregating by locus...")
     # Context HT is keyed by locus and allele, which means there is one row for every possible missense variant
@@ -1247,7 +1245,7 @@ def create_context_with_oe(
         .select("vep", "was_split")
     )
     ht = process_vep(
-        ht, filter_csq=True, csq={missense_str}, filter_outlier_transcripts=True
+        ht, filter_csq={missense_str}, filter_outlier_transcripts=True
     )
     ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
     ht = get_annotations_from_context_ht_vep(ht)

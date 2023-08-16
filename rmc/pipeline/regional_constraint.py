@@ -67,7 +67,7 @@ def main(args):
                 and not args.prep_nonsense
                 and not args.prep_synonymous
             ):
-                create_constraint_prep_ht(overwrite=args.overwrite)
+                create_constraint_prep_ht(filter_csq=None, overwrite=args.overwrite)
             else:
                 csq = set()
                 if args.prep_missense:
@@ -76,9 +76,7 @@ def main(args):
                     csq.update(NONSENSES)
                 if args.prep_synonymous:
                     csq.add(SYNONYMOUS)
-                create_constraint_prep_ht(
-                    filter_csq=csq, overwrite=args.overwrite
-                )
+                create_constraint_prep_ht(filter_csq=csq, overwrite=args.overwrite)
 
         if args.command == "search-for-single-break":
             hl.init(
