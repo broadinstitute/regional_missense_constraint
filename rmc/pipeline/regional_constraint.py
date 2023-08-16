@@ -34,7 +34,7 @@ from rmc.utils.constraint import (
     check_break_search_round_nums,
     create_context_with_oe,
     create_no_breaks_he,
-    get_max_chisq_per_group,
+    annotate_max_chisq_per_section,
     merge_rmc_hts,
     process_sections,
 )
@@ -177,6 +177,7 @@ def main(args):
                     )
                 )
             )
+            # TODO: Remove sites where expected is negative
             context_ht = context_ht.checkpoint(
                 f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht"
             )
@@ -207,10 +208,12 @@ def main(args):
                 " significant break..."
             )
             if args.search_num == 1:
+                # TODO: Move existing HT to a different path so this can be remade
                 all_loci_chisq_ht_path = f"{SINGLE_BREAK_TEMP_PATH}/all_loci_chisq.ht"
                 if file_exists(all_loci_chisq_ht_path) and not args.save_chisq_ht:
+                    logger.info("Reading in all loci chisq HT...")
                     ht = hl.read_table(all_loci_chisq_ht_path)
-                    ht = get_max_chisq_per_group(ht, "section", "chisq", args.freeze)
+                    ht = annotate_max_chisq_per_section(ht, args.freeze)
                     ht = ht.annotate(
                         is_break=(
                             (ht.chisq == ht.section_max_chisq)
@@ -220,8 +223,22 @@ def main(args):
                     run_single_search = False
 
                 else:
-                    # Read constraint_prep resource HT if this is the first search
+                    # Read `constraint_prep` resource HT if this is the first search
+                    logger.info(
+                        "Reading in constraint prep HT, filtering to missenses, and"
+                        " aggregating by locus..."
+                    )
                     ht = constraint_prep.ht()
+                    ht = ht.filter(ht.annotation == MISSENSE)
+                    # Context HT is keyed by locus and allele, which means there is one row for every possible missense variant
+                    # This means that any locus could be present up to three times (once for each possible missense)
+                    ht = ht.group_by("locus", "transcript").aggregate(
+                        mu_snp=hl.sum(ht.mu_snp),
+                        observed=hl.sum(ht.observed),
+                        expected=hl.sum(ht.expected),
+                        # Locus should have the same coverage across the possible variants
+                        coverage=ht.coverage[0],
+                    )
 
                     logger.info(
                         "Adding section annotation before searching for first break..."
@@ -235,7 +252,9 @@ def main(args):
                     ht = ht.key_by("locus", "section").drop("transcript")
 
             else:
-                # Read in merged single and simultaneous breaks results HT
+                logger.info(
+                    "Reading in merged single and simultaneous breaks results HT..."
+                )
                 ht = hl.read_table(
                     merged_search_ht_path(
                         search_num=args.search_num - 1,
@@ -393,8 +412,10 @@ def main(args):
             else:
                 simul_exists = False
                 logger.info(
-                    "No sections in round %i had breakpoints in simultaneous breaks"
-                    " search.",
+                    (
+                        "No sections in round %i had breakpoints in simultaneous breaks"
+                        " search."
+                    ),
                     args.search_num,
                 )
 
@@ -457,15 +478,14 @@ def main(args):
                 simul_break_ht.write(merged_path, overwrite=args.overwrite)
             else:
                 logger.info(
-                    "No sections in round %i had breakpoints (neither in single nor in"
-                    " simultaneous search).",
+                    (
+                        "No sections in round %i had breakpoints (neither in single nor"
+                        " in simultaneous search)."
+                    ),
                     args.search_num,
                 )
 
-            # DONE: 1. Annotate this newly found simul_ht with same annotations as on break_found_ht
-            # DONE: 2. Merge simul_ht with break_found_ht and write
-            # TODO: 3. Add validity checks that we haven't dropped any transcripts/sections - e.g. using sections with breaks expression
-            # DONE: 4. Create and write final no break found ht for this round number
+            # TODO: Add validity checks that we haven't dropped any transcripts/sections - e.g. using sections with breaks expression
 
         if args.finalize:
             hl.init(
@@ -487,6 +507,7 @@ def main(args):
                 _read_if_exists=not args.overwrite,
             )
 
+            # TODO: Remove this block to retain outlier transcripts initially
             logger.info("Removing outlier transcripts...")
             constraint_transcripts = get_constraint_transcripts(outlier=False)
             rmc_ht = rmc_ht.filter(constraint_transcripts.contains(rmc_ht.transcript))
