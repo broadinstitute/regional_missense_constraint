@@ -381,7 +381,7 @@ def create_constraint_prep_ht(
     ).drop("start", "stop")
     ht = ht.key_by("locus", "section").drop("transcript")
 
-    ht = ht.write(constraint_prep.path, overwrite=overwrite)
+    ht.write(constraint_prep.path, overwrite=overwrite)
     # TODO: Repartition?
 
 
