@@ -1,7 +1,6 @@
 """Script containing resources for the current gnomAD version."""
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
 
-from rmc.resources.basics import RESOURCE_BUILD_PREFIX
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
 FLAGSHIP_LOF = "gs://gnomad-public-requester-pays/papers/2019-flagship-lof/v1.0"
@@ -10,25 +9,6 @@ Path to bucket with gnomAD v2 loss-of-function (LoF) constraint results.
 """
 
 FLAGSHIP_LOF_MODEL_PREFIX = f"{FLAGSHIP_LOF}/model"
-
-processed_exomes = TableResource(
-    path=f"{FLAGSHIP_LOF_MODEL_PREFIX}/exomes_processed.ht"
-)
-"""
-Processed gnomAD exomes Table.
-
-Dropped colocated variants in vep annotation and removed all non-pass variants.
-Also annotated with context Table (sequence context, transcript information, most severe consequence).
-"""
-filtered_exomes = TableResource(
-    path=f"{RESOURCE_BUILD_PREFIX}/gnomad/ht/exomes_missense_only.ht"
-)
-"""
-Processed gnomAD exomes Table filtered to rare (AF < 0.001) missense variants in canonical transcripts only.
-
-NOTE: This resource is created with `process_vep`, which now filters to non-outlier transcripts by default.
-However, for v2, this resource contains *all* canonical transcripts (including outliers).
-"""
 
 processed_genomes = TableResource(
     path=f"{FLAGSHIP_LOF_MODEL_PREFIX}/genomes_processed.ht"

@@ -11,13 +11,8 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_FAST_DEL,
     TEMP_PATH_WITH_SLOW_DEL,
 )
-from rmc.resources.gnomad import (
-    filtered_exomes,
-    processed_exomes,
-    prop_obs_coverage,
-)
-from rmc.resources.reference_data import filtered_context, gene_model
-from rmc.resources.resource_utils import MISSENSE, NONSENSE, SYNONYMOUS
+from rmc.resources.reference_data import gene_model
+from rmc.resources.resource_utils import MISSENSE
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
     P_VALUE,
@@ -29,24 +24,15 @@ from rmc.resources.rmc import (
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
-    add_obs_annotation,
-    calculate_exp_from_mu,
     check_break_search_round_nums,
+    create_constraint_prep_ht,
     create_context_with_oe,
     create_no_breaks_he,
     annotate_max_chisq_per_section,
     merge_rmc_hts,
     process_sections,
 )
-from rmc.utils.generic import (
-    filter_context_using_gnomad,
-    filter_to_region_type,
-    generate_models,
-    get_constraint_transcripts,
-    keep_criteria,
-    process_context_ht,
-    process_vep,
-)
+from rmc.utils.generic import create_filtered_context_ht, get_constraint_transcripts
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -66,62 +52,8 @@ def main(args):
                 quiet=args.quiet,
             )
             logger.warning("Code currently only processes b37 data!")
-
-            logger.info(
-                "Preprocessing VEP context HT to filter to missense, nonsense, and"
-                " synonymous variants in all canonical transcripts and add constraint"
-                " annotations..."
-            )
-            # NOTE: Constraint outlier transcripts are not removed before computing RMC
-            context_ht = process_context_ht(
-                filter_csq=True, csq={MISSENSE, NONSENSE, SYNONYMOUS}
-            )
-            logger.info("Checkpointing context HT...")
-            context_ht = context_ht.checkpoint(
-                f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht"
-            )
-            logger.info(
-                "Filtering context HT to all covered sites not found or rare in gnomAD"
-                " exomes..."
-            )
-            context_ht = filter_context_using_gnomad(context_ht, "exomes")
-            logger.info("Writing out context HT...")
-            context_ht.write(filtered_context.path, overwrite=args.overwrite)
-
-            logger.info(
-                "Filtering gnomAD exomes HT to missense, nonsense, and synonymous"
-                " variants in all canonical transcripts..."
-            )
-            exome_ht = processed_exomes.ht()
-            exome_ht = process_vep(
-                exome_ht, filter_csq=True, csq={MISSENSE, NONSENSE, SYNONYMOUS}
-            )
-            logger.info("Checkpointing gnomAD exomes HT...")
-            exome_ht = exome_ht.checkpoint(
-                f"{TEMP_PATH_WITH_FAST_DEL}/processed_vep.ht"
-            )
-            logger.info(
-                "Filtering gnomAD exomes HT to rare variants that pass filters and"
-                " coverage criteria..."
-            )
-            # Move nested annotations into top level annotations
-            exome_ht = exome_ht.select(
-                ac=exome_ht.freq[0].AC,
-                af=exome_ht.freq[0].AF,
-                filters=exome_ht.filters,
-                exome_coverage=exome_ht.coverage.exomes.median,
-                transcript_consequences=exome_ht.transcript_consequences,
-            )
-            exome_ht = exome_ht.filter(
-                keep_criteria(
-                    ac_expr=exome_ht.ac,
-                    af_expr=exome_ht.af,
-                    filters_expr=exome_ht.filters,
-                    cov_expr=exome_ht.exome_coverage,
-                )
-            )
-            logger.info("Writing out filtered gnomAD exomes HT...")
-            exome_ht.write(filtered_exomes.path, overwrite=args.overwrite)
+            logger.info("Creating filtered context HT...")
+            create_filtered_context_ht(args.overwrite)
 
         if args.prep_for_constraint:
             hl.init(
@@ -129,68 +61,8 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
-            logger.info("Reading in exome HT...")
-            exome_ht = filtered_exomes.ht()
-
-            logger.info("Reading in context HT...")
-            context_ht = filtered_context.ht()
-
-            logger.info("Building plateau and coverage models...")
-            coverage_ht = prop_obs_coverage.ht()
-            coverage_x_ht = hl.read_table(
-                prop_obs_coverage.path.replace(".ht", "_x.ht")
-            )
-            coverage_y_ht = hl.read_table(
-                prop_obs_coverage.path.replace(".ht", "_y.ht")
-            )
-            (
-                coverage_model,
-                plateau_models,
-                plateau_x_models,
-                plateau_y_models,
-            ) = generate_models(
-                coverage_ht,
-                coverage_x_ht,
-                coverage_y_ht,
-            )
-            context_ht = context_ht.annotate_globals(
-                plateau_models=plateau_models,
-                plateau_x_models=plateau_x_models,
-                plateau_y_models=plateau_y_models,
-                coverage_model=coverage_model,
-            )
-
-            logger.info("Calculating expected values per allele...")
-            context_ht = (
-                calculate_exp_from_mu(
-                    filter_to_region_type(context_ht, "autosomes"),
-                    locus_type="autosomes",
-                )
-                .union(
-                    calculate_exp_from_mu(
-                        filter_to_region_type(context_ht, "chrX"), locus_type="X"
-                    )
-                )
-                .union(
-                    calculate_exp_from_mu(
-                        filter_to_region_type(context_ht, "chrY"), locus_type="Y"
-                    )
-                )
-            )
-            # TODO: Remove sites where expected is negative
-            context_ht = context_ht.checkpoint(
-                f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht"
-            )
-
-            logger.info(
-                "Annotating context HT with number of observed variants and writing"
-                " out..."
-            )
-            context_ht = add_obs_annotation(context_ht)
-            context_ht = context_ht.write(
-                constraint_prep.path, overwrite=args.overwrite
-            )
-            # TODO: Repartition?
+            logger.info("Creating constraint prep HT...")
+            create_constraint_prep_ht(args.overwrite)
 
         if args.search_for_single_break:
             hl.init(

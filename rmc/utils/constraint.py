@@ -16,8 +16,13 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_FAST_DEL,
     TEMP_PATH_WITH_SLOW_DEL,
 )
-from rmc.resources.gnomad import constraint_ht
-from rmc.resources.reference_data import clinvar_plp_mis_haplo, gene_model, ndd_de_novo
+from rmc.resources.gnomad import constraint_ht, prop_obs_coverage
+from rmc.resources.reference_data import (
+    clinvar_plp_mis_haplo,
+    filtered_context,
+    gene_model,
+    ndd_de_novo,
+)
 from rmc.resources.resource_utils import MISSENSE
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
@@ -37,6 +42,8 @@ from rmc.resources.rmc import (
     single_search_round_ht_path,
 )
 from rmc.utils.generic import (
+    filter_to_region_type,
+    generate_models,
     get_annotations_from_context_ht_vep,
     get_constraint_transcripts,
     get_coverage_correction_expr,
@@ -246,6 +253,58 @@ def calculate_exp_from_mu(
     )
     # TODO: Condense the join above to use `groupings`, without re-keying `context_ht`
     return context_ht
+
+
+def create_constraint_prep_ht(overwrite: bool = True) -> None:
+    context_ht = filtered_context.ht()
+
+    logger.info("Building plateau and coverage models...")
+    coverage_ht = prop_obs_coverage.ht()
+    coverage_x_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_x.ht"))
+    coverage_y_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_y.ht"))
+    (
+        coverage_model,
+        plateau_models,
+        plateau_x_models,
+        plateau_y_models,
+    ) = generate_models(
+        coverage_ht,
+        coverage_x_ht,
+        coverage_y_ht,
+    )
+    context_ht = context_ht.annotate_globals(
+        plateau_models=plateau_models,
+        plateau_x_models=plateau_x_models,
+        plateau_y_models=plateau_y_models,
+        coverage_model=coverage_model,
+    )
+
+    logger.info("Calculating expected values per allele...")
+    context_ht = (
+        calculate_exp_from_mu(
+            filter_to_region_type(context_ht, "autosomes"),
+            locus_type="autosomes",
+        )
+        .union(
+            calculate_exp_from_mu(
+                filter_to_region_type(context_ht, "chrX"), locus_type="X"
+            )
+        )
+        .union(
+            calculate_exp_from_mu(
+                filter_to_region_type(context_ht, "chrY"), locus_type="Y"
+            )
+        )
+    )
+    # TODO: Remove sites where expected is negative
+    context_ht = context_ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht")
+
+    logger.info(
+        "Annotating context HT with number of observed variants and writing out..."
+    )
+    context_ht = add_obs_annotation(context_ht)
+    context_ht = context_ht.write(constraint_prep.path, overwrite=overwrite)
+    # TODO: Repartition?
 
 
 def get_obs_exp_expr(

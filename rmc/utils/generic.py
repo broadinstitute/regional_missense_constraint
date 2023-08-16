@@ -32,12 +32,13 @@ from rmc.resources.reference_data import (
     clinvar_plp_mis_triplo,
     dosage_ht,
     dosage_tsv_path,
+    filtered_context,
     haplo_genes_path,
     ndd_de_novo,
     ndd_de_novo_2020_tsv_path,
     triplo_genes_path,
 )
-from rmc.resources.resource_utils import MISSENSE
+from rmc.resources.resource_utils import MISSENSE, NONSENSE, SYNONYMOUS
 from rmc.resources.rmc import DIVERGENCE_SCORES_TSV_PATH, MUTATION_RATE_TABLE_PATH
 
 logging.basicConfig(
@@ -300,6 +301,39 @@ def filter_context_using_gnomad(
         )
     )
     return context_ht
+
+
+def create_filtered_context_ht(overwrite: bool = True) -> None:
+    """
+    Create allele-level VEP context Table filtered to alleles not found or rare in gnomAD exomes at covered sites.
+
+    This Table is used to create the constraint prep Table.
+
+    Table contains only missense, nonsense, and synonymous alleles as annotated by VEP.
+
+    :param overwrite: Whether to overwrite Table. Default is True.
+    :return: None; writes Table to path.
+    """
+    logger.info(
+        "Preprocessing VEP context HT to filter to missense, nonsense, and"
+        " synonymous variants in all canonical transcripts and add constraint"
+        " annotations..."
+    )
+    # NOTE: Constraint outlier transcripts are not removed before computing RMC
+    context_ht = process_context_ht(
+        filter_csq=True, csq={MISSENSE, NONSENSE, SYNONYMOUS}
+    )
+    logger.info("Checkpointing context HT...")
+    context_ht = context_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht"
+    )
+    logger.info(
+        "Filtering context HT to all covered sites not found or rare in gnomAD"
+        " exomes..."
+    )
+    context_ht = filter_context_using_gnomad(context_ht, "exomes")
+    logger.info("Writing out context HT...")
+    context_ht.write(filtered_context.path, overwrite=overwrite)
 
 
 def get_annotations_from_context_ht_vep(
