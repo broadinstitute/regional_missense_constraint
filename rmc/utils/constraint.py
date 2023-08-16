@@ -43,8 +43,8 @@ from rmc.resources.rmc import (
     single_search_round_ht_path,
 )
 from rmc.utils.generic import (
-    filter_to_region_type,
     filter_context_using_gnomad,
+    filter_to_region_type,
     generate_models,
     get_annotations_from_context_ht_vep,
     get_constraint_transcripts,

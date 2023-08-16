@@ -23,12 +23,12 @@ from rmc.resources.rmc import (
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
+    annotate_max_chisq_per_section,
     check_break_search_round_nums,
-    create_filtered_context_ht,
     create_constraint_prep_ht,
     create_context_with_oe,
+    create_filtered_context_ht,
     create_no_breaks_he,
-    annotate_max_chisq_per_section,
     merge_rmc_hts,
     process_sections,
 )

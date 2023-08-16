@@ -16,8 +16,8 @@ from rmc.resources.rmc import (
     simul_sections_split_by_len_path,
 )
 from rmc.utils.constraint import (
-    get_dpois_expr,
     annotate_max_chisq_per_section,
+    get_dpois_expr,
     get_obs_exp_expr,
 )
 
