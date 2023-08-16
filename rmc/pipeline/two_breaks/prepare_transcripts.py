@@ -59,7 +59,6 @@ def main(args):
                     freeze=args.freeze,
                 ),
                 out_ht_path=grouped_ht_path,
-                group_str="section",
                 overwrite=args.overwrite,
             )
 
@@ -70,7 +69,6 @@ def main(args):
             )
             split_sections_by_len(
                 ht_path=grouped_ht_path,
-                group_str="section",
                 search_num=args.search_num,
                 missense_len_threshold=args.missense_len_threshold,
                 overwrite=args.overwrite,
