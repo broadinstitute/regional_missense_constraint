@@ -338,17 +338,15 @@ def annotate_fwd_exprs(ht: hl.Table) -> hl.Table:
     )
 
     logger.info("Getting forward observed/expected counts and returning...")
-    # NOTE: adding `_cond_expr` here because `get_obs_exp_expr` expects it
-    # `_cond_expr` is necessary for reverse obs/exp, which is why the function has it
-    ht = ht.annotate(_cond_expr=True)
-    ht = ht.annotate(
+    # NOTE: Adding `cond_expr` here because `get_obs_exp_expr` expects it
+    # `cond_expr` is necessary for reverse obs/exp, which is why the function has it
+    return ht.annotate(
         fwd_oe=get_obs_exp_expr(
-            ht._cond_expr,
-            ht.fwd_cumulative_obs,
-            ht.fwd_cumulative_exp,
+            cond_expr=True,
+            obs_expr=ht.fwd_cumulative_obs,
+            exp_expr=ht.fwd_cumulative_exp,
         )
     )
-    return ht.drop("_cond_expr")
 
 
 def annotate_reverse_exprs(ht: hl.Table) -> hl.Table:
