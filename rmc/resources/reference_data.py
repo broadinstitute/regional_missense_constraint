@@ -26,14 +26,12 @@ filtered_context = VersionedTableResource(
     },
 )
 """
-Context Table filtered to missense variants in canonical protein coding transcripts and annotated with
-probability of mutation for each variant, CpG status, gnomAD exome coverage, and methylation level.
+Variant-level VEP context Table filtered to missense, nonsense, and synonymous variants in all canonical
+protein-coding transcripts with constraint-related annotations including observed variant counts,
+expected variant counts, and probability of mutation for each variant, CpG status, gnomAD exome coverage,
+and methylation level.
 
-Used to calculate the cumulative observed and expected missense values per locus and
-generate regional missense constraint results.
-
-NOTE: This resource is created with `process_vep`, which now filters to non-outlier transcripts by default.
-However, for v2, this resource contains *all* canonical transcripts (including outliers).
+Used to create the constraint prep Table.
 """
 
 gene_model = TableResource(path=f"{RESOURCE_BUILD_PREFIX}/browser/b37_transcripts.ht")

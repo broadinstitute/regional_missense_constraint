@@ -133,13 +133,10 @@ constraint_prep = VersionedTableResource(
     },
 )
 """
-Context Table filtered to missense, synonymous, nonsense variants_ ready for RMC calculations.
+Locus-level Table used in first step of regional constraint calculation over specific coding variant
+consequences for all canonical protein-coding transcripts.
 
-HT is annotated with annotations used in plateau model observed and expected variant counts per locus-allele combination.
-
-NOTE: The content of the freeze 1 HT is calculated and formatted differently. A few key differences:
-    - Is a locus-level table.
-    - Contains only missense variants.
+NOTE: The content of the freeze 1 HT for RMC is slightly different:
     - Expected counts were calculated using the workaround method instead of directly from the plateau model.
     - `mu_snp` contains the coverage-corrected not raw mutation rates.
 """

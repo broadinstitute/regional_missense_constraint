@@ -62,7 +62,10 @@ def main(args):
                 quiet=args.quiet,
             )
             logger.info("Creating constraint prep HT...")
-            create_constraint_prep_ht(args.overwrite)
+            # TODO: Make the below argparse arguments
+            create_constraint_prep_ht(
+                filter_csq=True, csq={MISSENSE}, overwrite=args.overwrite
+            )
 
         if args.search_for_single_break:
             hl.init(
@@ -96,32 +99,8 @@ def main(args):
 
                 else:
                     # Read `constraint_prep` resource HT if this is the first search
-                    logger.info(
-                        "Reading in constraint prep HT, filtering to missenses, and"
-                        " aggregating by locus..."
-                    )
+                    logger.info("Reading in constraint prep HT...")
                     ht = constraint_prep.ht()
-                    ht = ht.filter(ht.annotation == MISSENSE)
-                    # Context HT is keyed by locus and allele, which means there is one row for every possible missense variant
-                    # This means that any locus could be present up to three times (once for each possible missense)
-                    ht = ht.group_by("locus", "transcript").aggregate(
-                        mu_snp=hl.sum(ht.mu_snp),
-                        observed=hl.sum(ht.observed),
-                        expected=hl.sum(ht.expected),
-                        # Locus should have the same coverage across the possible variants
-                        coverage=ht.coverage[0],
-                    )
-
-                    logger.info(
-                        "Adding section annotation before searching for first break..."
-                    )
-                    # Add transcript start and stop positions from browser HT
-                    transcript_ht = gene_model.ht().select("start", "stop")
-                    ht = ht.annotate(**transcript_ht[ht.transcript])
-                    ht = ht.annotate(
-                        section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop)
-                    ).drop("start", "stop")
-                    ht = ht.key_by("locus", "section").drop("transcript")
 
             else:
                 logger.info(

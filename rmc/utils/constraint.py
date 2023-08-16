@@ -23,7 +23,7 @@ from rmc.resources.reference_data import (
     gene_model,
     ndd_de_novo,
 )
-from rmc.resources.resource_utils import MISSENSE
+from rmc.resources.resource_utils import MISSENSE, NONSENSE, SYNONYMOUS
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
     FINAL_ANNOTATIONS,
@@ -43,6 +43,7 @@ from rmc.resources.rmc import (
 )
 from rmc.utils.generic import (
     filter_to_region_type,
+    filter_context_using_gnomad,
     generate_models,
     get_annotations_from_context_ht_vep,
     get_constraint_transcripts,
@@ -50,6 +51,7 @@ from rmc.utils.generic import (
     import_clinvar,
     import_de_novo_variants,
     keep_criteria,
+    process_context_ht,
     process_vep,
 )
 
@@ -255,8 +257,34 @@ def calculate_exp_from_mu(
     return context_ht
 
 
-def create_constraint_prep_ht(overwrite: bool = True) -> None:
-    context_ht = filtered_context.ht()
+def create_filtered_context_ht(overwrite: bool = True) -> None:
+    """
+    Create allele-level VEP context Table with constraint annotations including expected variant counts.
+
+    This Table is used to create the constraint prep Table.
+
+    Table contains only missense, nonsense, and synonymous alleles in all canonical protein-coding
+    transcripts as annotated by VEP. Table is filtered to alleles not found or rare in gnomAD exomes
+    at covered sites.
+
+    :param overwrite: Whether to overwrite Table. Default is True.
+    :return: None; writes Table to path.
+    """
+    logger.info(
+        "Preprocessing VEP context HT to filter to missense, nonsense, and"
+        " synonymous variants in all canonical transcripts and add constraint"
+        " annotations..."
+    )
+    # NOTE: Constraint outlier transcripts are not removed
+    ht = process_context_ht(filter_csq=True, csq={MISSENSE, NONSENSE, SYNONYMOUS})
+
+    logger.info(
+        "Filtering context HT to all covered sites not found or rare in gnomAD"
+        " exomes..."
+    )
+    ht = filter_context_using_gnomad(ht, "exomes")
+    logger.info("Checkpointing context HT before annotating obs and exp...")
+    ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht")
 
     logger.info("Building plateau and coverage models...")
     coverage_ht = prop_obs_coverage.ht()
@@ -272,38 +300,82 @@ def create_constraint_prep_ht(overwrite: bool = True) -> None:
         coverage_x_ht,
         coverage_y_ht,
     )
-    context_ht = context_ht.annotate_globals(
+    # TODO: Add HE here
+    ht = ht.annotate_globals(
         plateau_models=plateau_models,
         plateau_x_models=plateau_x_models,
         plateau_y_models=plateau_y_models,
         coverage_model=coverage_model,
     )
 
-    logger.info("Calculating expected values per allele...")
-    context_ht = (
+    logger.info("Calculating expected values per allele and checkpointing...")
+    ht = (
         calculate_exp_from_mu(
-            filter_to_region_type(context_ht, "autosomes"),
+            filter_to_region_type(ht, "autosomes"),
             locus_type="autosomes",
         )
-        .union(
-            calculate_exp_from_mu(
-                filter_to_region_type(context_ht, "chrX"), locus_type="X"
-            )
-        )
-        .union(
-            calculate_exp_from_mu(
-                filter_to_region_type(context_ht, "chrY"), locus_type="Y"
-            )
-        )
+        .union(calculate_exp_from_mu(filter_to_region_type(ht, "chrX"), locus_type="X"))
+        .union(calculate_exp_from_mu(filter_to_region_type(ht, "chrY"), locus_type="Y"))
     )
-    # TODO: Remove sites where expected is negative
-    context_ht = context_ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht")
+    ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht")
+
+    logger.info("Removing alleles with negative expected values...")
+    # Negative expected values happen for a handful of alleles on chrY due to
+    # a negative coefficient in the model on this chr
+    # We decided to just remove these sites
+    ht = ht.filter(ht.expected >= 0)
 
     logger.info(
         "Annotating context HT with number of observed variants and writing out..."
     )
-    context_ht = add_obs_annotation(context_ht)
-    context_ht = context_ht.write(constraint_prep.path, overwrite=overwrite)
+    ht = add_obs_annotation(ht)
+    ht.write(filtered_context.path, overwrite=overwrite)
+
+
+def create_constraint_prep_ht(
+    filter_csq: bool = True, csq: Set[str] = {MISSENSE}, overwrite: bool = True
+) -> None:
+    """
+    Create locus-level constraint prep Table from filtered context Table for all canonical protein-coding transcripts.
+
+    This Table is used in the first step of regional constraint breakpoint search.
+
+    Table can be filtered to variants with specific consequences before aggregation by locus.
+
+    :param filter_csq: Whether to filter Table to specific consequences. Default is True.
+    :param csq: Desired consequences. Default is {`MISSENSE`}. Must be specified if filter is True.
+    :param overwrite: Whether to overwrite Table. Default is True.
+    :return: None; writes Table to path.
+    """
+    ht = filtered_context.ht()
+    if filter_csq:
+        if not csq:
+            raise DataException("Need to specify consequence if filter_csq is True!")
+        logger.info("Filtering to %s...", csq)
+        ht = ht.filter(csq.contains(ht.annotation))
+
+    logger.info("Aggregating by locus...")
+    # Context HT is keyed by locus and allele, which means there is one row for every possible missense variant
+    # This means that any locus could be present up to three times (once for each possible missense)
+    ht = ht.group_by("locus", "transcript").aggregate(
+        mu_snp=hl.sum(ht.mu_snp),
+        observed=hl.sum(ht.observed),
+        expected=hl.sum(ht.expected),
+        # Locus should have the same coverage across the possible variants
+        coverage=ht.coverage[0],
+        # TODO: Remove mu_snp and coverage fields since we don't use them
+    )
+
+    logger.info("Adding section annotation...")
+    # Add transcript start and stop positions from browser HT
+    transcript_ht = gene_model.ht().select("start", "stop")
+    ht = ht.annotate(**transcript_ht[ht.transcript])
+    ht = ht.annotate(
+        section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop)
+    ).drop("start", "stop")
+    ht = ht.key_by("locus", "section").drop("transcript")
+
+    ht = ht.write(constraint_prep.path, overwrite=overwrite)
     # TODO: Repartition?
 
 
