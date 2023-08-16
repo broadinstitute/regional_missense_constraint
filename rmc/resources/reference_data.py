@@ -27,8 +27,10 @@ filtered_context = VersionedTableResource(
 )
 """
 Variant-level VEP context Table filtered to missense, nonsense, and synonymous variants in all canonical
-protein-coding transcripts with constraint-related annotations including observed variant counts,
-expected variant counts, and probability of mutation for each variant, CpG status, gnomAD exome coverage,
+protein-coding transcripts.
+
+Table contains constraint-related annotations, including observed variant counts,
+expected variant counts, probability of mutation, CpG status, gnomAD exome coverage,
 and methylation level.
 
 Used to create the constraint prep Table.
