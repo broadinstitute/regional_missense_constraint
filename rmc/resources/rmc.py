@@ -123,6 +123,8 @@ for each canonical transcript in Gencode v19.
 ####################################################################################
 ## RMC-related resources
 ####################################################################################
+coverage_plateau_models_path = "{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/coverage_plateau_models.he"
+
 constraint_prep = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={

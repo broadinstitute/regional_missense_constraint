@@ -33,6 +33,7 @@ from rmc.resources.rmc import (
     constraint_prep,
     context_with_oe,
     context_with_oe_dedup,
+    coverage_plateau_models_path,
     no_breaks_he_path,
     oe_bin_counts_tsv,
     rmc_results,
@@ -300,7 +301,17 @@ def create_filtered_context_ht(overwrite: bool = True) -> None:
         coverage_x_ht,
         coverage_y_ht,
     )
-    # TODO: Add HE here
+    # Write out models to HailExpression to save
+    hl.experimental.write_expression(
+        hl.struct(
+            coverage=coverage_model,
+            plateau_autosomes=plateau_models,
+            plateau_X=plateau_x_models,
+            plateau_Y=plateau_y_models,
+        ),
+        coverage_plateau_models_path,
+    )
+    # Also annotate as HT globals
     ht = ht.annotate_globals(
         plateau_models=plateau_models,
         plateau_x_models=plateau_x_models,
