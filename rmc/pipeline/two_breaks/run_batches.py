@@ -137,7 +137,6 @@ def get_obs_exp_expr(
 
     Typically imported from `constraint.py`. See `constraint.py` for full docstring.
 
-    :param hl.expr.BooleanExpression cond_expr: Condition to check prior to adding obs/exp expression.
     :param hl.expr.Int64Expression obs_expr: Expression containing number of observed variants.
     :param hl.expr.Float64Expression exp_expr: Expression containing number of expected variants.
     :return: Observed/expected expression.
