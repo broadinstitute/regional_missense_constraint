@@ -1,8 +1,5 @@
 """Script containing reference resources."""
-from gnomad.resources.resource_utils import (
-    DataException,
-    TableResource,
-)
+from gnomad.resources.resource_utils import DataException, TableResource
 
 from rmc.resources.basics import AMINO_ACIDS_PREFIX, RESOURCE_BUILD_PREFIX
 from rmc.resources.resource_utils import CURRENT_BUILD

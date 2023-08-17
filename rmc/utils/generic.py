@@ -187,10 +187,8 @@ def process_context_ht(
     ht = vep_context.ht().select_globals()
 
     logger.info(
-        (
-            "Filtering to canonical transcripts and annotating variants with most"
-            " severe consequence..."
-        ),
+        "Filtering to canonical transcripts and annotating variants with most"
+        " severe consequence...",
     )
     ht = process_vep(
         ht,

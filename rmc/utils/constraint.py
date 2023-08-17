@@ -17,11 +17,7 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_SLOW_DEL,
 )
 from rmc.resources.gnomad import constraint_ht, prop_obs_coverage
-from rmc.resources.reference_data import (
-    clinvar_plp_mis_haplo,
-    gene_model,
-    ndd_de_novo,
-)
+from rmc.resources.reference_data import clinvar_plp_mis_haplo, gene_model, ndd_de_novo
 from rmc.resources.resource_utils import KEEP_CODING_CSQ, MISSENSE
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
@@ -622,10 +618,8 @@ def search_for_break(
         " and alt (evidence of domains of missense constraint) probability densities..."
     )
     logger.info(
-        (
-            "Skipping breakpoints that create at least one section that has < %i"
-            " expected missense variants..."
-        ),
+        "Skipping breakpoints that create at least one section that has < %i"
+        " expected missense variants...",
         min_num_exp_mis,
     )
     ht = ht.annotate(
@@ -1028,10 +1022,8 @@ def merge_round_no_break_ht(
         ht = ht.filter(~hl.literal(simul_sections).contains(ht.section))
     else:
         logger.warning(
-            (
-                "Simul breaks results HT (round %i) did not exist. Please double check"
-                " that this was expected!"
-            ),
+            "Simul breaks results HT (round %i) did not exist. Please double check"
+            " that this was expected!",
             search_num,
         )
     return ht
