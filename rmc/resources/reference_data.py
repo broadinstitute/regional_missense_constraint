@@ -17,62 +17,6 @@ Path to bucket containing reference data resources.
 ####################################################################################
 ## Reference genome related resources
 ####################################################################################
-filtered_context = VersionedTableResource(
-    default_version="v1",
-    versions={
-        "v1": TableResource(
-            path=f"{REF_DATA_PREFIX}/ht/context_fasta_snps_only_vep_v1.ht",
-        )
-    },
-)
-"""
-Variant-level VEP context Table filtered to missense, nonsense, and synonymous variants in all canonical
-protein-coding transcripts.
-
-Table contains constraint-related annotations, including observed variant counts,
-expected variant counts, probability of mutation, CpG status, gnomAD exome coverage,
-and methylation level.
-
-Schema:
-----------------------------------------
-Global fields:
-    'plateau_models': struct {
-        total: dict<bool, array<float64>>
-    } 
-    'plateau_x_models': struct {
-        total: dict<bool, array<float64>>
-    } 
-    'plateau_y_models': struct {
-        total: dict<bool, array<float64>>
-    } 
-    'coverage_model': tuple (
-        float64, 
-        float64
-    ) 
-----------------------------------------
-Row fields:
-    'locus': locus<GRCh37>
-    'alleles': array<str>
-    'context': str
-    'ref': str
-    'alt': str
-    'methylation_level': int32
-    'cpg': bool
-    'mutation_type': str
-    'annotation': str
-    'modifier': str
-    'coverage': int32
-    'transcript': str
-    'expected': float64
-    'coverage_correction': float64
-    'observed': int32    
-----------------------------------------
-Key: ['locus', 'alleles']
-----------------------------------------
-
-Used to create the constraint prep Table.
-"""
-
 gene_model = TableResource(path=f"{RESOURCE_BUILD_PREFIX}/browser/b37_transcripts.ht")
 """
 Table containing transcript start and stop positions displayed in the browser.
