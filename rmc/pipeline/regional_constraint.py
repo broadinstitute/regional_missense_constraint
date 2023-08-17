@@ -502,7 +502,7 @@ if __name__ == "__main__":
     )
     prep_csq.add_argument(
         "--prep-synonymous",
-        hhelp="""
+        help="""
         "Filter to synonymous instead of missense variants in constraint prep Table.
         """,
         action="store_true",
