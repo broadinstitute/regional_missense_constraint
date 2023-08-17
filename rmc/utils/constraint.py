@@ -229,30 +229,12 @@ def calculate_exp_from_mu(
         "Annotating expected counts per allele by distributing expected counts equally"
         " among all alleles in each grouping..."
     )
-    group_ht = group_ht.annotate(expected=group_ht.exp_agg / group_ht.n_grouping)
+    group_ht = group_ht.annotate(
+        expected=group_ht.exp_agg / group_ht.n_grouping
+    ).select("expected", "coverage_correction")
     context_ht = context_ht.annotate(
-        expected=group_ht[
-            context_ht.context,
-            context_ht.ref,
-            context_ht.alt,
-            context_ht.methylation_level,
-            context_ht.annotation,
-            context_ht.modifier,
-            context_ht.transcript,
-            context_ht.coverage,
-        ].expected,
-        coverage_correction=group_ht[
-            context_ht.context,
-            context_ht.ref,
-            context_ht.alt,
-            context_ht.methylation_level,
-            context_ht.annotation,
-            context_ht.modifier,
-            context_ht.transcript,
-            context_ht.coverage,
-        ].coverage_correction,
+        **group_ht.index(*[context_ht[g] for g in groupings])
     )
-    # TODO: Condense the join above to use `groupings`, without re-keying `context_ht`
     return context_ht
 
 
