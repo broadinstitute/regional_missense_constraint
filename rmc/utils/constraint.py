@@ -286,11 +286,12 @@ def create_filtered_context_ht(
         " exomes..."
     )
     ht = filter_context_using_gnomad(ht, "exomes")
-    logger.info("Checkpointing context HT before annotating obs and exp...")
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
+    # Repartition
+    ht.write(
+        f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht", overwrite=overwrite_temp
+    )
+    ht = hl.read_table(
+        f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht", _n_partitions=30000
     )
 
     # TODO: Import models built in gnomad-constraint rather than rebuilding here
