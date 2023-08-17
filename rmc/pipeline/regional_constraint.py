@@ -53,7 +53,12 @@ def main(args):
             )
             logger.warning("Code currently only processes b37 data!")
             logger.info("Creating filtered context HT...")
-            create_filtered_context_ht(args.overwrite)
+            n_partitions = 30000
+            create_filtered_context_ht(
+                n_partitions=args.n_partitions if args.n_partitions else n_partitions,
+                overwrite_temp=args.overwrite_temp,
+                overwrite=args.overwrite,
+            )
 
         if args.command == "prep-constraint":
             hl.init(
@@ -69,7 +74,12 @@ def main(args):
                 csq = NONSENSES
             elif args.prep_synonymous:
                 csq = SYNONYMOUS
-            create_constraint_prep_ht(filter_csq=csq, overwrite=args.overwrite)
+            n_partitions = 150000
+            create_constraint_prep_ht(
+                filter_csq=csq,
+                n_partitions=args.n_partitions if args.n_partitions else n_partitions,
+                overwrite=args.overwrite,
+            )
 
         if args.command == "search-for-single-break":
             hl.init(
@@ -104,8 +114,7 @@ def main(args):
                 else:
                     # Read `constraint_prep` resource HT if this is the first search
                     logger.info("Reading in constraint prep HT...")
-                    # Repartition on read
-                    ht = hl.read_table(constraint_prep.path, _n_partitions=15000)
+                    ht = constraint_prep.ht()
 
             else:
                 logger.info(
@@ -405,18 +414,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         "This script searches for regional missense constraint in gnomAD."
     )
+    # TODO: Make subparsers for prepping for RMC and running RMC
     parser.add_argument(
         "--n-partitions",
-        help="Desired number of partitions for output data.",
+        help="""
+        Desired number of partitions for context Table or constraint prep Table depending on
+        which is being prepared.
+        """,
         type=int,
-        default=40000,
     )
     parser.add_argument(
         "--search-num",
-        help=(
-            "Search iteration number (e.g., second round of searching for single break"
-            " would be 2)."
-        ),
+        help="""
+        Search iteration number (e.g., second round of searching for single break would be 2).
+        """,
         type=int,
     )
     parser.add_argument(

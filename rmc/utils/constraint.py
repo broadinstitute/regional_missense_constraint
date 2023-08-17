@@ -257,7 +257,7 @@ def calculate_exp_from_mu(
 
 
 def create_filtered_context_ht(
-    overwrite_temp: bool = False, overwrite: bool = True
+    n_partitions: int = 30000, overwrite_temp: bool = False, overwrite: bool = True
 ) -> None:
     """
     Create allele-level VEP context Table with constraint annotations including expected variant counts.
@@ -268,6 +268,7 @@ def create_filtered_context_ht(
     transcripts as annotated by VEP. Table is filtered to alleles not found or rare in gnomAD exomes
     at covered sites.
 
+    :param n_partitions: Number of desired partitions for the Table. Default is 30000.
     :param overwrite_temp: Whether to overwrite temporary data. Default is False.
     :param overwrite: Whether to overwrite output Table. Default is True.
     :return: None; writes Table to path.
@@ -283,15 +284,15 @@ def create_filtered_context_ht(
 
     logger.info(
         "Filtering context HT to all covered sites not found or rare in gnomAD"
-        " exomes..."
+        " exomes and checkpointing..."
     )
     ht = filter_context_using_gnomad(ht, "exomes")
-    # Repartition
-    ht.write(
-        f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht", overwrite=overwrite_temp
-    )
-    ht = hl.read_table(
-        f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht", _n_partitions=30000
+    # Reducing number of partitions as the VEP context table has 64k
+    ht = ht.naive_coalsece(n_partitions)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
 
     # TODO: Import models built in gnomad-constraint rather than rebuilding here
@@ -357,7 +358,7 @@ def create_filtered_context_ht(
 
 
 def create_constraint_prep_ht(
-    filter_csq: Set[str] = {MISSENSE}, overwrite: bool = True
+    filter_csq: Set[str] = {MISSENSE}, n_partitions: int = 15000, overwrite: bool = True
 ) -> None:
     """
     Create locus-level constraint prep Table from filtered context Table for all canonical protein-coding transcripts.
@@ -367,6 +368,7 @@ def create_constraint_prep_ht(
     Table can be filtered to variants with specific consequences before aggregation by locus.
 
     :param filter_csq: Whether to filter Table to specific consequences. Default is True.
+    :param n_partitions: Number of desired partitions for the Table. Default is 15000.
     :param csq: Desired consequences. Default is {`MISSENSE`}. Must be specified if filter is True.
     :param overwrite: Whether to overwrite Table. Default is True.
     :return: None; writes Table to path.
@@ -391,6 +393,7 @@ def create_constraint_prep_ht(
     ht = ht.annotate(section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop))
     ht = ht.key_by("locus", "section").drop("start", "stop", "transcript")
 
+    ht = ht.naive_coalesce(n_partitions)
     ht.write(constraint_prep.path, overwrite=overwrite)
 
 
@@ -1174,8 +1177,7 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     :param freeze: RMC data freeze number.
     :return: Table with `oe` annotation.
     """
-    # Repartition on read
-    ht = hl.read_table(constraint_prep.path, _n_partitions=15000).select_globals()
+    ht = constraint_prep.ht().select_globals()
     group_ht = ht.group_by("transcript").aggregate(
         obs=hl.agg.sum(ht.observed),
         exp=hl.agg.sum(ht.expected),
