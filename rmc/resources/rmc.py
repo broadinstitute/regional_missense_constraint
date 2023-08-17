@@ -139,7 +139,7 @@ Schema:
             total: dict<bool, array<float64>>
         }
         'coverage_model': tuple (
-            float64, 
+            float64,
             float64
         )
     }
@@ -171,17 +171,17 @@ Schema:
 Global fields:
     'plateau_models': struct {
         total: dict<bool, array<float64>>
-    } 
+    }
     'plateau_x_models': struct {
         total: dict<bool, array<float64>>
-    } 
+    }
     'plateau_y_models': struct {
         total: dict<bool, array<float64>>
-    } 
+    }
     'coverage_model': tuple (
-        float64, 
+        float64,
         float64
-    ) 
+    )
 ----------------------------------------
 Row fields:
     'locus': locus<GRCh37>
@@ -198,7 +198,7 @@ Row fields:
     'transcript': str
     'expected': float64
     'coverage_correction': float64
-    'observed': int32    
+    'observed': int32
 ----------------------------------------
 Key: ['locus', 'alleles']
 ----------------------------------------
@@ -226,23 +226,23 @@ Schema:
 Global fields:
     'plateau_models': struct {
         total: dict<bool, array<float64>>
-    } 
+    }
     'plateau_x_models': struct {
         total: dict<bool, array<float64>>
-    } 
+    }
     'plateau_y_models': struct {
         total: dict<bool, array<float64>>
-    } 
+    }
     'coverage_model': tuple (
-        float64, 
+        float64,
         float64
-    ) 
+    )
 ----------------------------------------
 Row fields:
     'locus': locus<GRCh37>
     'section': str
-    'observed': int32  
-    'expected': float64 
+    'observed': int32
+    'expected': float64
 ----------------------------------------
 Key: ['locus', 'section']
 ----------------------------------------
