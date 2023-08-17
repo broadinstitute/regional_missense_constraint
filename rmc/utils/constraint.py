@@ -293,6 +293,7 @@ def create_filtered_context_ht(
         overwrite=overwrite_temp,
     )
 
+    # TODO: Import models built in gnomad-constraint rather than rebuilding here
     logger.info("Building plateau and coverage models...")
     coverage_ht = prop_obs_coverage.ht()
     coverage_x_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_x.ht"))
