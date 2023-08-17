@@ -2,7 +2,6 @@
 from gnomad.resources.resource_utils import (
     DataException,
     TableResource,
-    VersionedTableResource,
 )
 
 from rmc.resources.basics import AMINO_ACIDS_PREFIX, RESOURCE_BUILD_PREFIX

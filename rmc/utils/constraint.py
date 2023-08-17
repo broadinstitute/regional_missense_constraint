@@ -19,7 +19,6 @@ from rmc.resources.basics import (
 from rmc.resources.gnomad import constraint_ht, prop_obs_coverage
 from rmc.resources.reference_data import (
     clinvar_plp_mis_haplo,
-    filtered_context,
     gene_model,
     ndd_de_novo,
 )
@@ -34,6 +33,7 @@ from rmc.resources.rmc import (
     context_with_oe,
     context_with_oe_dedup,
     coverage_plateau_models_path,
+    filtered_context,
     no_breaks_he_path,
     oe_bin_counts_tsv,
     rmc_results,
