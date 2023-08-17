@@ -71,8 +71,16 @@ def main(args):
             csq = {MISSENSE}
             if args.prep_nonsense:
                 csq = NONSENSES
+                logger.warning(
+                    "Pipeline is currently set up to run on missenses. Please make sure"
+                    " all missense-relevant files are deleted before running."
+                )
             elif args.prep_synonymous:
                 csq = SYNONYMOUS
+                logger.warning(
+                    "Pipeline is currently set up to run on missenses. Please make sure"
+                    " all missense-relevant files are deleted before running."
+                )
             n_partitions = 150000
             create_constraint_prep_ht(
                 filter_csq=csq,
