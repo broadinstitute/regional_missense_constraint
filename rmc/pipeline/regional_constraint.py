@@ -62,21 +62,14 @@ def main(args):
                 quiet=args.quiet,
             )
             logger.info("Creating constraint prep HT...")
-            if (
-                not args.prep_missense
-                and not args.prep_nonsense
-                and not args.prep_synonymous
-            ):
-                create_constraint_prep_ht(filter_csq=None, overwrite=args.overwrite)
-            else:
-                csq = set()
-                if args.prep_missense:
-                    csq.add(MISSENSE)
-                if args.prep_nonsense:
-                    csq.update(NONSENSES)
-                if args.prep_synonymous:
-                    csq.add(SYNONYMOUS)
-                create_constraint_prep_ht(filter_csq=csq, overwrite=args.overwrite)
+            # Constraint prep HT is filtered to missense variants by default
+            # Use these args to run constraint prep on other variant consequences
+            csq = {MISSENSE}
+            if args.prep_nonsense:
+                csq = NONSENSES
+            elif args.prep_synonymous:
+                csq = SYNONYMOUS
+            create_constraint_prep_ht(filter_csq=csq, overwrite=args.overwrite)
 
         if args.command == "search-for-single-break":
             hl.init(
@@ -488,19 +481,19 @@ if __name__ == "__main__":
         break search.
         """,
     )
-    prep_constraint.add_argument(
-        "--prep-missense",
-        help="Include missense variants in constraint prep Table.",
-        action="store_true",
-    )
-    prep_constraint.add_argument(
+    prep_csq = parser.add_mutually_exclusive_group()
+    prep_csq.add_argument(
         "--prep-nonsense",
-        help="Include nonsense variants in constraint prep Table.",
+        help="""
+        "Filter to nonsense instead of missense variants in constraint prep Table.
+        """,
         action="store_true",
     )
-    prep_constraint.add_argument(
+    prep_csq.add_argument(
         "--prep-synonymous",
-        help="Include synonymous variants in constraint prep Table.",
+        hhelp="""
+        "Filter to synonymous instead of missense variants in constraint prep Table.
+        """,
         action="store_true",
     )
 
