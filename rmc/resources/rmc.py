@@ -129,10 +129,19 @@ Path to HailExpression containing struct for coverage correction model and plate
 
 Schema:
     struct {
-        coverage: Tuple[float, float],
-        plateau_autosomes: DictExpression,
-        plateau_X: DictExpression,
-        plateau_Y: DictExpression
+        'plateau_models': struct {
+            total: dict<bool, array<float64>>
+        }
+        'plateau_x_models': struct {
+            total: dict<bool, array<float64>>
+        }
+        'plateau_y_models': struct {
+            total: dict<bool, array<float64>>
+        }
+        'coverage_model': tuple (
+            float64, 
+            float64
+        )
     }
 
 Used to compute expected variant counts.
