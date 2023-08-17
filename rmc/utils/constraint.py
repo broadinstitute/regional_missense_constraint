@@ -394,29 +394,26 @@ def create_constraint_prep_ht(
 
 
 def get_obs_exp_expr(
-    cond_expr: hl.expr.BooleanExpression,
     obs_expr: hl.expr.Int64Expression,
     exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
     """
     Return observed/expected annotation based on inputs.
 
-    Cap observed/expected (OE) value at 1. This is to avoid pulling out regions that are enriched for missense variation.
-    Code in this pipeline is looking for missense constraint, so regions with an OE >= 1.0 can be grouped together.
+    Cap observed/expected (OE) value at 1. This is to avoid pulling out regions that are
+    enriched for missense variation. Code in this pipeline is looking for missense constraint,
+    so regions with an OE >= 1.0 can be grouped together.
 
-    Function can generate observed/expected values across the entire transcript or section of a transcript depending on inputs.
-    Function can also generate 'forward' (moving from smaller to larger positions") or 'reverse' (moving from larger to smaller positions)
-    section obs/exp values.
+    Function can generate observed/expected values across the entire transcript or
+    section of a transcript depending on inputs.
+    Function can also generate 'forward' (moving from smaller to larger positions") or
+    'reverse' (moving from larger to smaller positions) section obs/exp values.
 
-    .. note::
-        `cond_expr` should vary depending on size/direction of section being annotated.
-
-    :param cond_expr: Condition to check prior to adding obs/exp expression.
     :param obs_expr: Expression containing number of observed variants.
     :param exp_expr: Expression containing number of expected variants.
     :return: Observed/expected expression.
     """
-    return hl.or_missing(cond_expr, hl.min(obs_expr / exp_expr, 1))
+    return hl.min(obs_expr / exp_expr, 1)
 
 
 def get_reverse_cumulative_obs_exp_expr(
@@ -491,13 +488,9 @@ def annotate_fwd_exprs(ht: hl.Table) -> hl.Table:
     )
 
     logger.info("Getting forward observed/expected counts and returning...")
-    # NOTE: Adding `cond_expr` here because `get_obs_exp_expr` expects it
-    # `cond_expr` is necessary for reverse obs/exp, which is why the function has it
     return ht.annotate(
         fwd_oe=get_obs_exp_expr(
-            cond_expr=True,
-            obs_expr=ht.fwd_cumulative_obs,
-            exp_expr=ht.fwd_cumulative_exp,
+            obs_expr=ht.fwd_cumulative_obs, exp_expr=ht.fwd_cumulative_exp
         )
     )
 
@@ -537,15 +530,12 @@ def annotate_reverse_exprs(ht: hl.Table) -> hl.Table:
     # Set reverse o/e to missing if reverse expected value is 0 (to avoid NaNs)
     return ht.annotate(
         reverse_oe=get_obs_exp_expr(
-            (ht.reverse_cumulative_exp != 0),
-            ht.reverse_cumulative_obs,
-            ht.reverse_cumulative_exp,
+            ht.reverse_cumulative_obs, ht.reverse_cumulative_exp
         )
     )
 
 
 def get_dpois_expr(
-    cond_expr: hl.expr.BooleanExpression,
     oe_expr: hl.expr.Float64Expression,
     obs_expr: hl.expr.Int64Expression,
     exp_expr: hl.expr.Float64Expression,
@@ -555,17 +545,13 @@ def get_dpois_expr(
 
     Poisson rate for each region is defined as expected * given observed/expected values.
 
-    :param cond_expr: Conditional expression to check before calculating probability.
     :param oe_expr: Expression of observed/expected value.
     :param obs_expr: Expression containing observed variants count.
     :param exp_expr: Expression containing expected variants count.
     :return: Natural log of the probability density under Poisson model.
     """
     # log_p = True returns the natural logarithm of the probability density
-    return hl.or_missing(
-        cond_expr,
-        hl.dpois(obs_expr, exp_expr * oe_expr, log_p=True),
-    )
+    return hl.dpois(obs_expr, exp_expr * oe_expr, log_p=True)
 
 
 def annotate_max_chisq_per_section(
@@ -662,14 +648,12 @@ def search_for_break(
             # Add forwards section null (going through positions from smaller to larger)
             # section_null = stats.dpois(section_obs, section_exp*overall_obs_exp)[0]
             get_dpois_expr(
-                cond_expr=hl.is_defined(ht.fwd_cumulative_obs),
                 oe_expr=ht.section_oe,
                 obs_expr=ht.fwd_cumulative_obs,
                 exp_expr=ht.fwd_cumulative_exp,
             )
             # Add reverse section null (going through positions from larger to smaller)
             + get_dpois_expr(
-                cond_expr=hl.is_defined(ht.reverse_cumulative_obs),
                 oe_expr=ht.section_oe,
                 obs_expr=ht.reverse_cumulative_obs,
                 exp_expr=ht.reverse_cumulative_exp,
@@ -682,14 +666,12 @@ def search_for_break(
             # Add forward section alt
             # section_alt = stats.dpois(section_obs, section_exp*section_obs_exp)[0]
             get_dpois_expr(
-                cond_expr=hl.is_defined(ht.cumulative_obs),
                 oe_expr=ht.fwd_oe,
                 obs_expr=ht.fwd_cumulative_obs,
                 exp_expr=ht.fwd_cumulative_exp,
             )
             # Add reverse section alt
             + get_dpois_expr(
-                cond_expr=hl.is_defined(ht.reverse_cumulative_obs),
                 oe_expr=ht.reverse_oe,
                 obs_expr=ht.reverse_cumulative_obs,
                 exp_expr=ht.reverse_cumulative_exp,
@@ -748,11 +730,7 @@ def annotate_subsection_exprs(ht: hl.Table) -> hl.Table:
         " subsection..."
     )
     return ht.annotate(
-        section_oe=get_obs_exp_expr(
-            cond_expr=hl.is_defined(ht.section),
-            obs_expr=ht.section_obs,
-            exp_expr=ht.section_exp,
-        )
+        section_oe=get_obs_exp_expr(obs_expr=ht.section_obs, exp_expr=ht.section_exp)
     )
 
 

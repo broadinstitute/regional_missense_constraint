@@ -247,11 +247,8 @@ def calculate_window_chisq(
                     # The missense values for this section are the cumulative values at
                     # one index smaller than index i
                     get_dpois_expr(
-                        cond_expr=True,
                         oe_expr=get_obs_exp_expr(
-                            True,
-                            cum_obs[i - 1],
-                            hl.max(cum_exp[i - 1], 1e-09),
+                            cum_obs[i - 1], hl.max(cum_exp[i - 1], 1e-09)
                         ),
                         obs_expr=cum_obs[i - 1],
                         exp_expr=hl.max(cum_exp[i - 1], 1e-09),
@@ -260,9 +257,7 @@ def calculate_window_chisq(
                     # The missense values for this section are the cumulative values at index j
                     # minus the cumulative values at index i -1
                     + get_dpois_expr(
-                        cond_expr=True,
                         oe_expr=get_obs_exp_expr(
-                            True,
                             (cum_obs[j] - cum_obs[i - 1]),
                             hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
                         ),
@@ -273,9 +268,7 @@ def calculate_window_chisq(
                     # The missense values for this section are the cumulative values at the last index
                     # minus the cumulative values at index j
                     + get_dpois_expr(
-                        cond_expr=True,
                         oe_expr=get_obs_exp_expr(
-                            True,
                             (cum_obs[-1] - cum_obs[j]),
                             hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                         ),
@@ -286,19 +279,16 @@ def calculate_window_chisq(
                 # Create null distribution
                 - (
                     get_dpois_expr(
-                        cond_expr=True,
                         oe_expr=section_oe,
                         obs_expr=cum_obs[i - 1],
                         exp_expr=hl.max(cum_exp[i - 1], 1e-09),
                     )
                     + get_dpois_expr(
-                        cond_expr=True,
                         oe_expr=section_oe,
                         obs_expr=cum_obs[j] - cum_obs[i - 1],
                         exp_expr=hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
                     )
                     + get_dpois_expr(
-                        cond_expr=True,
                         oe_expr=section_oe,
                         obs_expr=cum_obs[-1] - cum_obs[j],
                         exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
