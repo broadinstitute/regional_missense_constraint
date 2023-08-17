@@ -414,7 +414,7 @@ def get_obs_exp_expr(
     :param exp_expr: Expression containing number of expected variants.
     :return: Observed/expected expression.
     """
-    return hl.min(obs_expr / exp_expr, 1)
+    return hl.nanmin(obs_expr / exp_expr, 1)
 
 
 def get_reverse_cumulative_obs_exp_expr(
@@ -442,7 +442,7 @@ def get_reverse_cumulative_obs_exp_expr(
         # Picked 1e-09 here as tiny number that is not 0
         # ExAC code also did not allow reverse exp to be zero, as this breaks the likelihood ratio tests
         reverse_cumulative_obs=section_obs_expr - fwd_cumulative_obs_expr,
-        reverse_cumulative_exp=hl.max(
+        reverse_cumulative_exp=hl.nanmax(
             section_exp_expr - fwd_cumulative_exp_expr, 1e-09
         ),
     )
