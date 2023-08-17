@@ -100,7 +100,6 @@ def main(args):
             freeze=args.freeze,
         )
         for counter, group in enumerate(section_groups):
-
             output_ht_path = f"{raw_path}/simul_break_dataproc_{counter}.ht"
             if file_exists(output_ht_path):
                 raise DataException(

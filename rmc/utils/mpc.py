@@ -477,22 +477,20 @@ def get_min_aic_model(
 
     logger.info("Running joint regression with specific interactions...")
     # Currently hardcoded to be formula from ExAC
-    min_model_formulas[
-        "spec"
-    ] = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
+    min_model_formulas["spec"] = (
+        "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
+    )
     min_models["spec"] = run_glm(df, min_model_formulas["spec"])
 
     min_model_aics = {x: min_models[x].aic for x in model_types}
     overall_min_aic = min(min_model_aics.values())
     logger.info("Lowest model AIC: %f", overall_min_aic)
     if list(min_model_aics.values()).count(overall_min_aic) > 1:
-        logger.warning(
-            """
+        logger.warning("""
             There is a tie for minimum AIC over model types.
             This function will use the first model it finds by default
             (single variable -> no interactions -> all interactions -> specific interactions)!
-            """
-        )
+            """)
     overall_min_model_type = list(min_model_aics.keys())[
         list(min_model_aics.values()).index(overall_min_aic)
     ]
