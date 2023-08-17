@@ -391,7 +391,6 @@ def create_constraint_prep_ht(
     ht = ht.key_by("locus", "section").drop("start", "stop", "transcript")
 
     ht.write(constraint_prep.path, overwrite=overwrite)
-    # TODO: Repartition?
 
 
 def get_obs_exp_expr(
@@ -1196,7 +1195,8 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     :param freeze: RMC data freeze number.
     :return: Table with `oe` annotation.
     """
-    ht = constraint_prep.ht().select_globals()
+    # Repartition on read
+    ht = hl.read_table(constraint_prep.path, _n_partitions=15000).select_globals()
     group_ht = ht.group_by("transcript").aggregate(
         obs=hl.agg.sum(ht.observed),
         exp=hl.agg.sum(ht.expected),

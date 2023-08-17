@@ -111,7 +111,8 @@ def main(args):
                 else:
                     # Read `constraint_prep` resource HT if this is the first search
                     logger.info("Reading in constraint prep HT...")
-                    ht = constraint_prep.ht()
+                    # Repartition on read
+                    ht = hl.read_table(constraint_prep.path, _n_partitions=15000)
 
             else:
                 logger.info(
