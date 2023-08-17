@@ -56,8 +56,7 @@ def main(args):
             n_partitions = 30000
             create_filtered_context_ht(
                 n_partitions=args.n_partitions if args.n_partitions else n_partitions,
-                overwrite_temp=args.overwrite_temp,
-                overwrite=args.overwrite,
+                overwrite=args.overwrite_temp,
             )
 
         if args.command == "prep-constraint":
@@ -460,10 +459,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--overwrite-temp",
-        help="""
-        Overwrite existing intermediate temporary data.
-        Only applicable in creating OE-annotated context table.
-        """,
+        help="Overwrite existing intermediate temporary data.",
         action="store_true",
     )
     parser.add_argument(

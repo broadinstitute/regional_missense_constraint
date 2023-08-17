@@ -241,8 +241,7 @@ def calculate_exp_from_mu(
 def create_filtered_context_ht(
     csq: Set[str] = {MISSENSE, READ_THROUGH, SYNONYMOUS}.union(NONSENSES),
     n_partitions: int = 30000,
-    overwrite_temp: bool = False,
-    overwrite: bool = True,
+    overwrite: bool = False,
 ) -> None:
     """
     Create allele-level VEP context Table with constraint annotations including expected variant counts.
@@ -256,8 +255,7 @@ def create_filtered_context_ht(
     :param csq: Variant consequences to filter Table to.
         Default is the missense, read-through, synonymous, and nonsense consequences.
     :param n_partitions: Number of desired partitions for the Table. Default is 30000.
-    :param overwrite_temp: Whether to overwrite temporary data. Default is False.
-    :param overwrite: Whether to overwrite output Table. Default is True.
+    :param overwrite: Whether to overwrite temporary data. Default is False.
     :return: None; writes Table to path.
     """
     logger.info(
@@ -277,8 +275,8 @@ def create_filtered_context_ht(
     ht = ht.naive_coalsece(n_partitions)
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
     )
 
     # TODO: Import models built in gnomad-constraint rather than rebuilding here
@@ -305,7 +303,7 @@ def create_filtered_context_ht(
             plateau_Y=plateau_y_models,
         ),
         coverage_plateau_models_path,
-        overwrite=overwrite_temp,
+        overwrite=overwrite,
     )
     # Also annotate as HT globals
     ht = ht.annotate_globals(
@@ -326,8 +324,8 @@ def create_filtered_context_ht(
     )
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
     )
 
     logger.info("Removing alleles with negative expected values...")
@@ -340,7 +338,7 @@ def create_filtered_context_ht(
         "Annotating context HT with number of observed variants and writing out..."
     )
     ht = add_obs_annotation(ht)
-    ht.write(filtered_context.path, overwrite=overwrite)
+    ht.write(filtered_context.path, overwrite=True)
 
 
 def create_constraint_prep_ht(
