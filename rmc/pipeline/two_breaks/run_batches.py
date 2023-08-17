@@ -129,7 +129,6 @@ def simul_search_round_bucket_path(
 
 
 def get_obs_exp_expr(
-    cond_expr: hl.expr.BooleanExpression,
     obs_expr: hl.expr.Int64Expression,
     exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
@@ -146,31 +145,26 @@ def get_obs_exp_expr(
     """
     # Cap the o/e ratio at 1 to avoid pulling out regions that are enriched for missense variation
     # Code is looking for missense constraint, so regions with a ratio of >= 1.0 can be grouped together
-    return hl.or_missing(cond_expr, hl.min(obs_expr / exp_expr, 1))
+    return hl.min(obs_expr / exp_expr, 1)
 
 
 def get_dpois_expr(
-    cond_expr: hl.expr.BooleanExpression,
     oe_expr: hl.expr.Float64Expression,
     obs_expr: hl.expr.Int64Expression,
     exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.StructExpression:
     """
-    Calculate probability density (natural log) of the observed values under a Poisson model.
+    Calculate probability densities (natural log) of the observed values under a Poisson model.
 
     Typically imported from `constraint.py`. See `constraint.py` for full docstring.
 
-    :param cond_expr: Conditional expression to check before calculating probability.
     :param oe_expr: Expression of observed/expected value.
     :param obs_expr: Expression containing observed variants count.
     :param exp_expr: Expression containing expected variants count.
-    :return: natural log of the probability under Poisson model.
+    :return: Natural log of the probability density under Poisson model.
     """
     # log_p = True returns the natural logarithm of the probability density
-    return hl.or_missing(
-        cond_expr,
-        hl.dpois(obs_expr, exp_expr * oe_expr, log_p=True),
-    )
+    return hl.dpois(obs_expr, exp_expr * oe_expr, log_p=True)
 
 
 def calculate_window_chisq(
@@ -217,9 +211,7 @@ def calculate_window_chisq(
                     # The missense values for this section are the cumulative values at
                     # one index smaller than index i
                     get_dpois_expr(
-                        cond_expr=True,
                         oe_expr=get_obs_exp_expr(
-                            True,
                             cum_obs[i - 1],
                             hl.max(cum_exp[i - 1], 1e-09),
                         ),
@@ -230,9 +222,7 @@ def calculate_window_chisq(
                     # The missense values for this section are the cumulative values at index j
                     # minus the cumulative values at index i -1
                     + get_dpois_expr(
-                        cond_expr=True,
                         oe_expr=get_obs_exp_expr(
-                            True,
                             (cum_obs[j] - cum_obs[i - 1]),
                             hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
                         ),
@@ -243,9 +233,7 @@ def calculate_window_chisq(
                     # The missense values for this section are the cumulative values at the last index
                     # minus the cumulative values at index j
                     + get_dpois_expr(
-                        cond_expr=True,
                         oe_expr=get_obs_exp_expr(
-                            True,
                             (cum_obs[-1] - cum_obs[j]),
                             hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                         ),
@@ -256,19 +244,16 @@ def calculate_window_chisq(
                 # Create null distribution
                 - (
                     get_dpois_expr(
-                        cond_expr=True,
                         oe_expr=section_oe,
                         obs_expr=cum_obs[i - 1],
                         exp_expr=hl.max(cum_exp[i - 1], 1e-09),
                     )
                     + get_dpois_expr(
-                        cond_expr=True,
                         oe_expr=section_oe,
                         obs_expr=cum_obs[j] - cum_obs[i - 1],
                         exp_expr=hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
                     )
                     + get_dpois_expr(
-                        cond_expr=True,
                         oe_expr=section_oe,
                         obs_expr=cum_obs[-1] - cum_obs[j],
                         exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
