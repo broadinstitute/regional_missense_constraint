@@ -444,8 +444,10 @@ def get_reverse_cumulative_obs_exp_expr(
         # Without this, ran into errors where reverse exp was -5e-14
         # Picked 1e-09 here as tiny number that is not 0
         # ExAC code also did not allow reverse exp to be zero, as this breaks the likelihood ratio tests
-        obs=section_obs_expr - fwd_cumulative_obs_expr,
-        exp=hl.max(section_exp_expr - fwd_cumulative_exp_expr, 1e-09),
+        reverse_cumulative_obs=section_obs_expr - fwd_cumulative_obs_expr,
+        reverse_cumulative_exp=hl.max(
+            section_exp_expr - fwd_cumulative_exp_expr, 1e-09
+        ),
     )
 
 
@@ -525,17 +527,13 @@ def annotate_reverse_exprs(ht: hl.Table) -> hl.Table:
     logger.info("Getting reverse cumulative observed and expected variant counts...")
     # Reverse cumulative value = total value - forward cumulative value
     ht = ht.annotate(
-        _reverse=get_reverse_cumulative_obs_exp_expr(
+        **get_reverse_cumulative_obs_exp_expr(
             section_obs_expr=ht.section_obs,
             section_exp_expr=ht.section_exp,
             fwd_cumulative_obs_expr=ht.fwd_cumulative_obs,
             fwd_cumulative_exp_expr=ht.fwd_cumulative_exp,
         )
     )
-    ht = ht.transmute(
-        reverse_cumulative_obs=ht._reverse.obs, reverse_cumulative_exp=ht._reverse.exp
-    )
-
     logger.info("Getting reverse observed/expected counts and returning...")
     # Set reverse o/e to missing if reverse expected value is 0 (to avoid NaNs)
     return ht.annotate(
