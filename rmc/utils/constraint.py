@@ -239,17 +239,22 @@ def calculate_exp_from_mu(
 
 
 def create_filtered_context_ht(
-    n_partitions: int = 30000, overwrite_temp: bool = False, overwrite: bool = True
+    csq: Set[str] = {MISSENSE, READ_THROUGH, SYNONYMOUS}.union(NONSENSES),
+    n_partitions: int = 30000,
+    overwrite_temp: bool = False,
+    overwrite: bool = True,
 ) -> None:
     """
     Create allele-level VEP context Table with constraint annotations including expected variant counts.
 
     This Table is used to create the constraint prep Table.
 
-    Table contains only missense, nonsense, and synonymous alleles in all canonical protein-coding
-    transcripts as annotated by VEP. Table is filtered to alleles not found or rare in gnomAD exomes
-    at covered sites.
+    Table contains only missense, nonsense, read-through, and synonymous alleles in all canonical
+    protein-coding transcripts as annotated by VEP. Table is filtered to alleles not found
+    or rare in gnomAD exomes at covered sites.
 
+    :param csq: Variant consequences to filter Table to.
+        Default is the missense, read-through, synonymous, and nonsense consequences.
     :param n_partitions: Number of desired partitions for the Table. Default is 30000.
     :param overwrite_temp: Whether to overwrite temporary data. Default is False.
     :param overwrite: Whether to overwrite output Table. Default is True.
@@ -261,7 +266,6 @@ def create_filtered_context_ht(
         " annotations..."
     )
     # NOTE: Constraint outlier transcripts are not removed
-    csq = {MISSENSE, SYNONYMOUS, READ_THROUGH}.union(NONSENSES)
     ht = process_context_ht(filter_csq=csq)
 
     logger.info(
