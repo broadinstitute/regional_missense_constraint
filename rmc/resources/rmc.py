@@ -148,8 +148,9 @@ constraint_prep = VersionedTableResource(
     },
 )
 """
-Locus-level Table used in first step of regional constraint calculation over specific coding variant
-consequences for all canonical protein-coding transcripts.
+Locus-level Table used in first step of regional constraint calculation.
+
+Filtered to only one specific coding variant consequence but contains all canonical, protein-coding transcripts.
 
 Schema:
 ----------------------------------------
