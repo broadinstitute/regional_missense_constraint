@@ -22,7 +22,7 @@ from rmc.resources.reference_data import (
     gene_model,
     ndd_de_novo,
 )
-from rmc.resources.resource_utils import MISSENSE, NONSENSES, READ_THROUGH, SYNONYMOUS
+from rmc.resources.resource_utils import KEEP_CODING_CSQ, MISSENSE
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
     FINAL_ANNOTATIONS,
@@ -239,7 +239,7 @@ def calculate_exp_from_mu(
 
 
 def create_filtered_context_ht(
-    csq: Set[str] = {MISSENSE, READ_THROUGH, SYNONYMOUS}.union(NONSENSES),
+    csq: Set[str] = KEEP_CODING_CSQ,
     n_partitions: int = 30000,
     overwrite: bool = False,
 ) -> None:
@@ -252,8 +252,7 @@ def create_filtered_context_ht(
     protein-coding transcripts as annotated by VEP. Table is filtered to alleles not found
     or rare in gnomAD exomes at covered sites.
 
-    :param csq: Variant consequences to filter Table to.
-        Default is the missense, read-through, synonymous, and nonsense consequences.
+    :param csq: Variant consequences to filter Table to. Default is `KEEP_CODING_CSQ`.
     :param n_partitions: Number of desired partitions for the Table. Default is 30000.
     :param overwrite: Whether to overwrite temporary data. Default is False.
     :return: None; writes Table to path.

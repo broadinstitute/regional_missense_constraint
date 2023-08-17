@@ -21,3 +21,7 @@ SYNONYMOUS = "synonymous_variant"
 """
 String representing synonymous variant VEP annotation.
 """
+KEEP_CODING_CSQ = {MISSENSE, READ_THROUGH, SYNONYMOUS}.union(NONSENSES)
+"""
+Set of variant consequences to keep in filtered context Table.
+"""
