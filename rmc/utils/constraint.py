@@ -238,6 +238,7 @@ def create_filtered_context_ht(
     csq: Set[str] = KEEP_CODING_CSQ,
     n_partitions: int = 30000,
     overwrite: bool = False,
+    build_models_from_scratch: bool = False
 ) -> None:
     """
     Create allele-level VEP context Table with constraint annotations including expected variant counts.
@@ -275,31 +276,34 @@ def create_filtered_context_ht(
     )
 
     # TODO: Import models built in gnomad-constraint rather than rebuilding here
-    logger.info("Building plateau and coverage models...")
-    coverage_ht = prop_obs_coverage.ht()
-    coverage_x_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_x.ht"))
-    coverage_y_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_y.ht"))
-    (
-        coverage_model,
-        plateau_models,
-        plateau_x_models,
-        plateau_y_models,
-    ) = generate_models(
-        coverage_ht,
-        coverage_x_ht,
-        coverage_y_ht,
-    )
-    # Write out models to HailExpression to save
-    hl.experimental.write_expression(
-        hl.struct(
-            coverage=coverage_model,
-            plateau_autosomes=plateau_models,
-            plateau_X=plateau_x_models,
-            plateau_Y=plateau_y_models,
-        ),
-        coverage_plateau_models_path,
-        overwrite=overwrite,
-    )
+    if build_models_from_scratch:
+        logger.info("Building plateau and coverage models...")
+        coverage_ht = prop_obs_coverage.ht()
+        coverage_x_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_x.ht"))
+        coverage_y_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_y.ht"))
+        (
+            coverage_model,
+            plateau_models,
+            plateau_x_models,
+            plateau_y_models,
+        ) = generate_models(
+            coverage_ht,
+            coverage_x_ht,
+            coverage_y_ht,
+        )
+        # Write out models to HailExpression to save
+        hl.experimental.write_expression(
+            hl.struct(
+                coverage=coverage_model,
+                plateau_autosomes=plateau_models,
+                plateau_X=plateau_x_models,
+                plateau_Y=plateau_y_models,
+            ),
+            coverage_plateau_models_path,
+            overwrite=overwrite,
+        )
+    # TODO: Import models built in gnomad-constraint
+    models = hl.experimental.read_expression(coverage_plateau_models_path)
     # Also annotate as HT globals
     ht = ht.annotate_globals(
         plateau_models=plateau_models,
