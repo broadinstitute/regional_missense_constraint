@@ -123,7 +123,7 @@ for each canonical transcript in Gencode v19.
 ####################################################################################
 ## RMC-related resources
 ####################################################################################
-coverage_plateau_models_path = "{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/coverage_plateau_models.he"
+coverage_plateau_models_path = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/coverage_plateau_models.he"
 """
 Path to HailExpression containing struct for coverage correction model and plateau models.
 
