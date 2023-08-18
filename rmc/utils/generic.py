@@ -221,11 +221,6 @@ def process_context_ht(
             add_annotations=True,
         )
 
-        # NOTE: `annotate_exploded_vep_for_constraint_groupings` annotates HT with:
-        # `annotation`, `modifier`, `gene`, `coverage`, `transcript`, and `canonical`
-        # NOTE: `coverage` is a duplicate of `exome_coverage`
-        ht, _ = annotate_exploded_vep_for_constraint_groupings(ht)
-
         ht = ht.select(
             "context",
             "ref",
@@ -464,6 +459,12 @@ def process_vep(
         - pass_filters - Whether the variant passed all variant filters
         - annotations added by `annotate_mutation_type()`, `collapse_strand()`, and
           `add_most_severe_csq_to_tc_within_vep_root()`
+        - annotation
+        - modifier
+        - gene
+        - coverage
+        - transcript
+        - canonical
 
     :param Table ht: Input Table.
     :param Set[str] filter_csq: Specific consequences to keep. Default is None.
@@ -484,18 +485,23 @@ def process_vep(
     ht = filter_vep_to_canonical_transcripts(ht, filter_empty_csq=True)
 
     if add_annotations:
-        # NOTE: `prepare_ht_for_constraint_calculations` includes a call to
-        # `add_most_severe_csq_to_tc_within_vep_root`
         logger.info(
             "Annotating HT with most severe consequence and other annotations..."
         )
+        # NOTE: `prepare_ht_for_constraint_calculations` includes a call to
+        # `add_most_severe_csq_to_tc_within_vep_root`
         ht = prepare_ht_for_constraint_calculations(ht)
+
+        # NOTE: `annotate_exploded_vep_for_constraint_groupings` does the
+        # transmute and explode on `transcript_consequences` and also annotates HT with:
+        # `annotation`, `modifier`, `gene`, `coverage`, `transcript`, and `canonical`
+        # NOTE: `coverage` is a duplicate of `exome_coverage`
+        ht, _ = annotate_exploded_vep_for_constraint_groupings(ht)
     else:
         logger.info("Annotating HT with most severe consequence...")
         ht = add_most_severe_csq_to_tc_within_vep_root(ht)
-
-    ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
-    ht = ht.explode(ht.transcript_consequences)
+        ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
+        ht = ht.explode(ht.transcript_consequences)
 
     if filter_outlier_transcripts:
         logger.info("Filtering to non-outlier transcripts...")
