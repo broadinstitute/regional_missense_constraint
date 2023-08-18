@@ -186,18 +186,26 @@ def process_context_ht(
     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
     ht = vep_context.ht().select_globals()
 
-    logger.info(
-        "Filtering to canonical transcripts and annotating variants with most"
-        " severe consequence...",
-    )
-    ht = process_vep(
-        ht,
-        filter_csq=filter_csq,
-        filter_outlier_transcripts=filter_outlier_transcripts,
-    )
-
-    if add_annotations:
-        logger.info("Adding annotations for constraint calculation...")
+    if not add_annotations:
+        logger.info(
+            (
+                "Filtering to canonical transcripts and annotating variants with most"
+                " severe consequence..."
+            ),
+        )
+        ht = process_vep(
+            ht,
+            filter_csq=filter_csq,
+            filter_outlier_transcripts=filter_outlier_transcripts,
+        )
+    else:
+        logger.info(
+            (
+                "Filtering to canonical transcripts, annotating variants with most"
+                " severe consequence, and adding annotations for constraint"
+                " calculation..."
+            ),
+        )
         # NOTE: `prepare_ht_for_constraint_calculations` annotates HT with:
         # `ref`, `alt`, `methylation_level`, `exome_coverage`, and annotations added by
         # `annotate_mutation_type()`, `collapse_strand()`, and `add_most_severe_csq_to_tc_within_vep_root()`
@@ -206,7 +214,12 @@ def process_context_ht(
         # field was renamed because `variant_type` refers to a different piece of
         # information in the gnomad_methods repo
         # See docstring for `annotate_mutation_type` for more details
-        ht = prepare_ht_for_constraint_calculations(ht)
+        ht = process_vep(
+            ht,
+            filter_csq=filter_csq,
+            filter_outlier_transcripts=filter_outlier_transcripts,
+            add_annotations=True,
+        )
 
         # NOTE: `annotate_exploded_vep_for_constraint_groupings` annotates HT with:
         # `annotation`, `modifier`, `gene`, `coverage`, `transcript`, and `canonical`
@@ -435,16 +448,29 @@ def process_vep(
     ht: hl.Table,
     filter_csq: Set[str] = None,
     filter_outlier_transcripts: bool = False,
+    add_annotations: bool = False,
 ) -> hl.Table:
     """
     Filter input VEP context Table to variants in canonical transcripts and annotate with most severe consequence.
 
-    Option to filter Table to specific variant consequences and remove constraint outlier transcripts.
+    Options to filter Table to specific variant consequences, remove constraint outlier transcripts,
+    or add additional annotations.
+
+    Additional annotations (taken from `prepare_ht_for_constraint_calculations`) are:
+        - ref
+        - alt
+        - methylation
+        - exome_coverage
+        - pass_filters - Whether the variant passed all variant filters
+        - annotations added by `annotate_mutation_type()`, `collapse_strand()`, and
+          `add_most_severe_csq_to_tc_within_vep_root()`
 
     :param Table ht: Input Table.
     :param Set[str] filter_csq: Specific consequences to keep. Default is None.
     :param bool filter_outlier_transcripts: Whether to remove constraint outlier transcripts from Table.
         Default is False.
+    :param bool add_annotations: Whether to add annotations from `prepare_ht_for_constraint_calculations`
+        beyond most severe consequence .Default is False.
     :return: Table filtered to canonical transcripts with option to filter to specific variant consequences
         and remove constraint outlier transcripts.
     :rtype: hl.Table
@@ -457,8 +483,17 @@ def process_vep(
     logger.info("Filtering to canonical transcripts...")
     ht = filter_vep_to_canonical_transcripts(ht, filter_empty_csq=True)
 
-    logger.info("Annotating HT with most severe consequence...")
-    ht = add_most_severe_csq_to_tc_within_vep_root(ht)
+    if add_annotations:
+        # NOTE: `prepare_ht_for_constraint_calculations` includes a call to
+        # `add_most_severe_csq_to_tc_within_vep_root`
+        logger.info(
+            "Annotating HT with most severe consequence and other annotations..."
+        )
+        ht = prepare_ht_for_constraint_calculations(ht)
+    else:
+        logger.info("Annotating HT with most severe consequence...")
+        ht = add_most_severe_csq_to_tc_within_vep_root(ht)
+
     ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
     ht = ht.explode(ht.transcript_consequences)
 
