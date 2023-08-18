@@ -295,21 +295,22 @@ def create_filtered_context_ht(
         hl.experimental.write_expression(
             hl.struct(
                 coverage=coverage_model,
-                plateau_autosomes=plateau_models,
+                plateau_models=plateau_models,
                 plateau_X=plateau_x_models,
                 plateau_Y=plateau_y_models,
             ),
             coverage_plateau_models_path,
             overwrite=overwrite,
         )
-    # TODO: Import models built in gnomad-constraint
+    # TODO: perform a check if models exist and throw exception if they don't
     models = hl.experimental.read_expression(coverage_plateau_models_path)
+    
     # Also annotate as HT globals
     ht = ht.annotate_globals(
-        plateau_models=plateau_models,
-        plateau_x_models=plateau_x_models,
-        plateau_y_models=plateau_y_models,
-        coverage_model=coverage_model,
+        plateau_models=models.plateau_models,
+        plateau_x_models=models.plateau_X,
+        plateau_y_models=models.plateau_Y,
+        coverage_model=models.coverage,
     )
 
     logger.info("Calculating expected values per allele and checkpointing...")
