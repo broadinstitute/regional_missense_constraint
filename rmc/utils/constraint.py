@@ -267,7 +267,7 @@ def create_filtered_context_ht(
     )
     ht = filter_context_using_gnomad(ht, "exomes")
     # Reducing number of partitions as the VEP context table has 62k
-    ht = ht.naive_coalsece(n_partitions)
+    ht = ht.naive_coalesce(n_partitions)
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht",
         _read_if_exists=not overwrite,
