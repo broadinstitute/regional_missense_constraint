@@ -81,7 +81,7 @@ def main(args):
                     "Pipeline is currently set up to run on missenses. Please make sure"
                     " all missense-relevant files are deleted before running."
                 )
-            n_partitions = 150000
+            n_partitions = 15000
             create_constraint_prep_ht(
                 filter_csq=csq,
                 n_partitions=args.n_partitions if args.n_partitions else n_partitions,
