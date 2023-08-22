@@ -238,7 +238,7 @@ def create_filtered_context_ht(
     csq: Set[str] = KEEP_CODING_CSQ,
     n_partitions: int = 30000,
     overwrite: bool = False,
-    build_models_from_scratch: bool = False
+    build_models_from_scratch: bool = False,
 ) -> None:
     """
     Create allele-level VEP context Table with constraint annotations including expected variant counts.
@@ -304,7 +304,7 @@ def create_filtered_context_ht(
         )
     # TODO: perform a check if models exist and throw exception if they don't
     models = hl.experimental.read_expression(coverage_plateau_models_path)
-    
+
     # Also annotate as HT globals
     ht = ht.annotate_globals(
         plateau_models=models.plateau_models,
@@ -752,6 +752,10 @@ def process_sections(
 
     logger.info("Annotating reverse cumulative observed, expected, and obs/exp...")
     ht = annotate_reverse_exprs(ht)
+    tmp_path = (
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/freeze{freeze}_single_search_prep_round{search_num}_chisq{chisq_threshold}.ht",
+    )
+    ht = ht.checkpoint(tmp_path, overwrite=True)
 
     logger.info("Searching for a break in each section and returning...")
     ht = search_for_break(
