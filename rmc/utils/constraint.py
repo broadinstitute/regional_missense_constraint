@@ -752,9 +752,7 @@ def process_sections(
 
     logger.info("Annotating reverse cumulative observed, expected, and obs/exp...")
     ht = annotate_reverse_exprs(ht)
-    tmp_path = (
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/freeze{freeze}_single_search_prep_round{search_num}_chisq{chisq_threshold}.ht",
-    )
+    tmp_path = f"{TEMP_PATH_WITH_FAST_DEL}/rmc/freeze{freeze}_single_search_prep_round{search_num}_chisq{chisq_threshold}.ht"
     ht = ht.checkpoint(tmp_path, overwrite=True)
 
     logger.info("Searching for a break in each section and returning...")
