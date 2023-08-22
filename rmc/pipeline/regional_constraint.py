@@ -126,7 +126,8 @@ def main(args):
                             constraint_prep.path,
                             _n_partitions=args.n_partitions,
                         )
-                    ht = constraint_prep.ht()
+                    else:
+                        ht = constraint_prep.ht()
 
             else:
                 logger.info(
