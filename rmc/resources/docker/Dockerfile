@@ -1,8 +1,9 @@
 FROM 'google/cloud-sdk:slim'
 
 # install packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get -y update && apt-get install -y --no-install-recommends \
     apt-utils \
+    docker-compose \
     g++ \
     gawk \
     less \
@@ -10,7 +11,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcurl4-openssl-dev \
     liblzma-dev \
     libncurses5-dev \
-    liblz4-dev \
     man-db \
     pkg-config \
     python3-venv \
@@ -18,11 +18,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     wget \
     zlib1g-dev \
+    libpq-dev \
+    python-dev\
     && \
-    # clean up apt cache
+	# clean up apt cache
     rm -rf /var/lib/apt/lists/*
 
-#install Java 8 for hail
+# Install Java 8 for hail
 RUN wget -qO - https://adoptopenjdk.jfrog.io/adoptopenjdk/api/gpg/key/public | apt-key add - \
     && add-apt-repository -y https://adoptopenjdk.jfrog.io/adoptopenjdk/deb/ \
     && apt-get update && apt-get install -y adoptopenjdk-8-hotspot
@@ -32,8 +34,8 @@ WORKDIR /tools
 
 # Install python packages
 RUN apt-get update \
-    && apt-get dist-upgrade -y \
-    && apt-get install -y --no-install-recommends\
+	&& apt-get dist-upgrade -y \
+	&& apt-get install -y --no-install-recommends\
     libc6-dev \
     libffi-dev \
     libgdbm-dev \
@@ -45,15 +47,18 @@ RUN apt-get update \
     libsqlite3-dev \
     libssl-dev \
     openssl \
-    python-smbus \
-    python3 \
-    python-pip
+    python3-smbus \
+    python3 python3-pip
 
 # Upgrade pip to latest version
 RUN python3 -m pip install --upgrade pip
 
 # Install hail and other python libraries
-ENV HAIL_VERSION="0.2.100"
+# Install hail and other python libraries
+# Including packages needed for VRS annotation functionality
+# Also include version for ga4gh.vrs-python to be most recent and supporting their new variant schema
+# Please update the constant VRS_VERSION in vrs_annotation_batch.py accordingly when GA4GH_VRS_VERSION is changed
+ENV HAIL_VERSION="0.2.120"
 RUN python3 --version
 RUN python3 -m pip install \
     wheel \
@@ -67,17 +72,12 @@ RUN python3 -m pip install \
     ipython \
     pybedtools \
     dill \
-    gnomad
+    git+https://github.com/broadinstitute/gnomad_methods.git@main \
+    git+https://github.com/broadinstitute/gnomad_qc.git@main
 
 # Install GCS Connector
-RUN export SPARK_HOME=$(find_spark_home.py) && \
-    curl https://storage.googleapis.com/hadoop-lib/gcs/gcs-connector-hadoop2-2.0.1.jar \
-         >$SPARK_HOME/jars/gcs-connector-hadoop2-2.0.1.jar && \
-    mkdir -p $SPARK_HOME/conf && \
-    touch $SPARK_HOME/conf/spark-defaults.conf && \
-    sed -i $SPARK_HOME/conf/spark-defaults.conf \
-        -e 's:spark\.hadoop\.google\.cloud\.auth\.service\.account\.enable.*:spark.hadoop.google.cloud.auth.service.account.enable true:' \
-        -e 's:spark\.hadoop\.google\.cloud\.auth\.service\.account\.json\.keyfile.*:spark\.hadoop\.google\.cloud\.auth\.service\.account\.json\.keyfile /gsa-key/key.json:'
+# Install GCS Connector
+RUN curl -sSL broad.io/install-gcs-connector > install-gcs-connector.py && \
+    python3 install-gcs-connector.py --key-file-path /gsa-key/key.json
 
 WORKDIR /home
-ENV PYSPARK_SUBMIT_ARGS="--driver-memory 8g --executor-memory 8g pyspark-shell"
