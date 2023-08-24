@@ -45,9 +45,9 @@ RUN apt-get update \
     libsqlite3-dev \
     libssl-dev \
     openssl \
-    python-smbus \
+    python3-smbus \
     python3 \
-    python-pip
+    python3-pip
 
 # Upgrade pip to latest version
 RUN python3 -m pip install --upgrade pip
