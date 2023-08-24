@@ -716,7 +716,7 @@ def main(args):
                 freeze=args.freeze,
             )
             count += 1
-    b.run(wait=False)
+    b.run()
 
 
 if __name__ == "__main__":
