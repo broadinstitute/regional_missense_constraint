@@ -70,7 +70,7 @@ RUN python3 -m pip install \
     seaborn \
     ipython \
     pybedtools \
-    dill \
+    dill
 
 # Install GCS Connector
 # Install GCS Connector
