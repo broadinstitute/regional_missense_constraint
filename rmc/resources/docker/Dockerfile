@@ -71,9 +71,7 @@ RUN python3 -m pip install \
     seaborn \
     ipython \
     pybedtools \
-    dill \
-    git+https://github.com/broadinstitute/gnomad_methods.git@main \
-    git+https://github.com/broadinstitute/gnomad_qc.git@main
+    dill
 
 # Install GCS Connector
 # Install GCS Connector
