@@ -1,9 +1,8 @@
 FROM 'google/cloud-sdk:slim'
 
 # install packages
-RUN apt-get -y update && apt-get install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-utils \
-    docker-compose \
     g++ \
     gawk \
     less \
@@ -11,6 +10,7 @@ RUN apt-get -y update && apt-get install -y --no-install-recommends \
     libcurl4-openssl-dev \
     liblzma-dev \
     libncurses5-dev \
+    liblz4-dev \
     man-db \
     pkg-config \
     python3-venv \
@@ -18,10 +18,8 @@ RUN apt-get -y update && apt-get install -y --no-install-recommends \
     unzip \
     wget \
     zlib1g-dev \
-    libpq-dev \
-    python-dev\
     && \
-	# clean up apt cache
+    # clean up apt cache
     rm -rf /var/lib/apt/lists/*
 
 # Install Java 8 for hail
@@ -34,8 +32,8 @@ WORKDIR /tools
 
 # Install python packages
 RUN apt-get update \
-	&& apt-get dist-upgrade -y \
-	&& apt-get install -y --no-install-recommends\
+    && apt-get dist-upgrade -y \
+    && apt-get install -y --no-install-recommends\
     libc6-dev \
     libffi-dev \
     libgdbm-dev \
@@ -47,8 +45,9 @@ RUN apt-get update \
     libsqlite3-dev \
     libssl-dev \
     openssl \
-    python3-smbus \
-    python3 python3-pip
+    python-smbus \
+    python3 \
+    python-pip
 
 # Upgrade pip to latest version
 RUN python3 -m pip install --upgrade pip
@@ -71,7 +70,7 @@ RUN python3 -m pip install \
     seaborn \
     ipython \
     pybedtools \
-    dill
+    dill \
 
 # Install GCS Connector
 # Install GCS Connector
