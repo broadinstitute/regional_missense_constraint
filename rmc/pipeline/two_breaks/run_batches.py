@@ -1,6 +1,8 @@
 """
 This script searches for two simultaneous breaks in groups of transcripts using Hail Batch.
 
+# TODO: Add RMC repo to a docker image and make sure its updated
+
 Note that a couple functions have been copied into this script from `constraint.py`:
 - `get_obs_exp_expr`
 - `get_dpois_expr`
@@ -337,7 +339,7 @@ def search_for_two_breaks(
         )
     )
     group_ht = group_ht.transmute(
-        max_chisq=group_ht.best_break.chisq,
+        chisq=group_ht.best_break.chisq,
         # Adjust breakpoint inclusive/exclusiveness to be consistent with single break breakpoints, i.e.
         # so that the breakpoint site itself is the last site in the left subsection. Thus, the resulting
         # subsections will be divided as follows:
@@ -357,7 +359,7 @@ def search_for_two_breaks(
     group_ht = group_ht.checkpoint(group_ht_path, overwrite=True)
 
     # Remove rows with maximum chi square values below the threshold
-    group_ht = group_ht.filter(group_ht.max_chisq >= chisq_threshold)
+    group_ht = group_ht.filter(group_ht.chisq >= chisq_threshold)
     return group_ht
 
 
@@ -529,7 +531,7 @@ def process_section_group(
                 section_max_chisq=hl.agg.max(ht.max_chisq)
             )
             ht = ht.annotate(section_max_chisq=group_ht[ht.section].section_max_chisq)
-            ht = ht.filter(ht.max_chisq == ht.section_max_chisq)
+            ht = ht.filter(ht.chisq == ht.section_max_chisq)
 
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
     ht = ht.naive_coalesce(output_n_partitions)
@@ -662,20 +664,38 @@ def main(args):
             j.memory(args.batch_memory)
             j.cpu(args.batch_cpu)
             j.storage(args.batch_storage)
+            # j.call(
+            #     process_section_group,
+            #     ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
+            #     section_group=group,
+            #     count=group_num,
+            #     search_num=args.search_num,
+            #     over_threshold=False,
+            #     output_ht_path=f"{raw_path}/simul_break_{job_name}.ht",
+            #     output_n_partitions=args.output_n_partitions,
+            #     chisq_threshold=chisq_threshold,
+            #     split_list_len=args.group_size,
+            #     save_chisq_ht=args.save_chisq_ht,
+            #     google_project=args.google_project,
+            #     freeze=args.freeze,
+            # ) # TODO: Uncomment this once hail bug is fixed and remove the call below
             j.call(
                 process_section_group,
-                ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
-                section_group=group,
-                count=group_num,
-                search_num=args.search_num,
-                over_threshold=False,
-                output_ht_path=f"{raw_path}/simul_break_{job_name}.ht",
-                output_n_partitions=args.output_n_partitions,
-                chisq_threshold=chisq_threshold,
-                split_list_len=args.group_size,
-                save_chisq_ht=args.save_chisq_ht,
-                google_project=args.google_project,
-                freeze=args.freeze,
+                grouped_single_no_break_ht_path(args.search_num, args.freeze),
+                group,
+                group_num,
+                args.search_num,
+                False,
+                f"{raw_path}/simul_break_{job_name}.ht",
+                args.output_n_partitions,
+                chisq_threshold,
+                MIN_EXP_MIS,
+                args.group_size,
+                False,
+                args.save_chisq_ht,
+                RMC_PREFIX,
+                args.google_project,
+                args.freeze,
             )
             count += 1
 
@@ -700,20 +720,38 @@ def main(args):
                 j.memory(args.batch_memory)
                 j.cpu(args.batch_cpu)
                 j.storage(args.batch_storage)
+            # j.call(
+            #     process_section_group,
+            #     ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
+            #     section_group=group,
+            #     count=group_num,
+            #     search_num=args.search_num,
+            #     over_threshold=True,
+            #     output_ht_path=f"{raw_path}/simul_break_{group[0]}.ht",
+            #     output_n_partitions=args.output_n_partitions,
+            #     chisq_threshold=chisq_threshold,
+            #     split_list_len=args.group_size,
+            #     save_chisq_ht=args.save_chisq_ht,
+            #     google_project=args.google_project,
+            #     freeze=args.freeze,
+            # ) # TODO: Uncomment this once hail bug is fixed and remove the call below
             j.call(
                 process_section_group,
-                ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
-                section_group=group,
-                count=group_num,
-                search_num=args.search_num,
-                over_threshold=True,
-                output_ht_path=f"{raw_path}/simul_break_{group[0]}.ht",
-                output_n_partitions=args.output_n_partitions,
-                chisq_threshold=chisq_threshold,
-                split_list_len=args.group_size,
-                save_chisq_ht=args.save_chisq_ht,
-                google_project=args.google_project,
-                freeze=args.freeze,
+                grouped_single_no_break_ht_path(args.search_num, args.freeze),
+                group,
+                group_num,
+                args.search_num,
+                True,
+                f"{raw_path}/simul_break_{group[0]}.ht",
+                args.output_n_partitions,
+                chisq_threshold,
+                MIN_EXP_MIS,
+                args.group_size,
+                False,
+                args.save_chisq_ht,
+                RMC_PREFIX,
+                args.google_project,
+                args.freeze,
             )
             count += 1
     b.run()
