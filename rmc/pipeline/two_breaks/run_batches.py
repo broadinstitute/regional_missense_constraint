@@ -627,7 +627,7 @@ def main(args):
     backend = hb.ServiceBackend(
         billing_project=args.billing_project,
         remote_tmpdir=args.batch_bucket,
-        google_project=args.google_project,
+        gcs_requester_pays_configuration=args.google_project,
     )
     b = hb.Batch(
         name="simul_breaks",
