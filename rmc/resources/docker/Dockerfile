@@ -1,8 +1,10 @@
 FROM 'google/cloud-sdk:slim'
+FROM 'python:3.11-slim'
 
 # install packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-utils \
+    curl \
     g++ \
     gawk \
     less \
@@ -35,16 +37,6 @@ WORKDIR /tools
 RUN apt-get update \
     && apt-get dist-upgrade -y \
     && apt-get install -y --no-install-recommends\
-    libc6-dev \
-    libffi-dev \
-    libgdbm-dev \
-    liblapack-dev \
-    liblapack3 \
-    libncursesw5-dev \
-    libopenblas-base \
-    libopenblas-dev \
-    libsqlite3-dev \
-    libssl-dev \
     openssl \
     python3-smbus \
     python3 python3-pip
