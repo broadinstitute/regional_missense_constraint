@@ -23,9 +23,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     rm -rf /var/lib/apt/lists/*
 
 # Install Java 8 for hail
-RUN wget -qO - https://adoptopenjdk.jfrog.io/adoptopenjdk/api/gpg/key/public | apt-key add - \
-    && add-apt-repository -y https://adoptopenjdk.jfrog.io/adoptopenjdk/deb/ \
-    && apt-get update && apt-get install -y adoptopenjdk-8-hotspot
+RUN mkdir -p /etc/apt/keyrings
+RUN wget -O - https://packages.adoptium.net/artifactory/api/gpg/key/public | tee /etc/apt/keyrings/adoptium.asc \
+    && echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" \
+    | tee /etc/apt/sources.list.d/adoptium.list && apt-get update && apt install -y --no-install-recommends temurin-8-jdk
 
 RUN mkdir tools
 WORKDIR /tools
@@ -46,17 +47,12 @@ RUN apt-get update \
     libssl-dev \
     openssl \
     python3-smbus \
-    python3 \
-    python3-pip
+    python3 python3-pip
 
 # Upgrade pip to latest version
 RUN python3 -m pip install --upgrade pip
 
 # Install hail and other python libraries
-# Install hail and other python libraries
-# Including packages needed for VRS annotation functionality
-# Also include version for ga4gh.vrs-python to be most recent and supporting their new variant schema
-# Please update the constant VRS_VERSION in vrs_annotation_batch.py accordingly when GA4GH_VRS_VERSION is changed
 ENV HAIL_VERSION="0.2.120"
 RUN python3 --version
 RUN python3 -m pip install \
@@ -72,7 +68,6 @@ RUN python3 -m pip install \
     pybedtools \
     dill
 
-# Install GCS Connector
 # Install GCS Connector
 RUN curl -sSL broad.io/install-gcs-connector > install-gcs-connector.py && \
     python3 install-gcs-connector.py --key-file-path /gsa-key/key.json
