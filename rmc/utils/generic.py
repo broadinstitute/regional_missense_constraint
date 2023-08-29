@@ -188,10 +188,8 @@ def process_context_ht(
 
     if not add_annotations:
         logger.info(
-            (
-                "Filtering to canonical transcripts and annotating variants with most"
-                " severe consequence..."
-            ),
+            "Filtering to canonical transcripts and annotating variants with most"
+            " severe consequence...",
         )
         ht = process_vep(
             ht,
@@ -200,11 +198,9 @@ def process_context_ht(
         )
     else:
         logger.info(
-            (
-                "Filtering to canonical transcripts, annotating variants with most"
-                " severe consequence, and adding annotations for constraint"
-                " calculation..."
-            ),
+            "Filtering to canonical transcripts, annotating variants with most"
+            " severe consequence, and adding annotations for constraint"
+            " calculation...",
         )
         # NOTE: `prepare_ht_for_constraint_calculations` annotates HT with:
         # `ref`, `alt`, `methylation_level`, `exome_coverage`, and annotations added by
@@ -279,6 +275,8 @@ def filter_context_using_gnomad(
     """
     Filter VEP context Table to sites that aren't seen in gnomAD or are rare in gnomAD.
 
+    Also filter sites with zero coverage in gnomAD.
+
     :param context_ht: VEP context Table.
     :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
@@ -289,6 +287,7 @@ def filter_context_using_gnomad(
     :return: Filtered VEP context Table.
     """
     gnomad = get_gnomad_public_release(gnomad_data_type, adj_freq_index)
+    gnomad_cov = coverage(gnomad_data_type).ht()
 
     # Filter to sites not seen in gnomAD or to rare sites in gnomAD
     gnomad_join = gnomad[context_ht.key]
@@ -302,6 +301,7 @@ def filter_context_using_gnomad(
             cov_threshold=cov_threshold,
         )
     )
+    context_ht = context_ht.filter(gnomad_cov[context_ht.locus].median > cov_threshold)
     return context_ht
 
 
