@@ -374,7 +374,11 @@ def main(args):
             round_nums = check_break_search_round_nums(args.freeze)
 
             logger.info("Finalizing section-level RMC table...")
-            rmc_ht = merge_rmc_hts(round_nums=round_nums, freeze=args.freeze)
+            rmc_ht = merge_rmc_hts(
+                round_nums=round_nums,
+                freeze=args.freeze,
+                overwrite_temp=args.overwrite_temp,
+            )
             # Drop any unnecessary global fields
             rmc_ht = rmc_ht.select_globals()
             rmc_ht = rmc_ht.checkpoint(

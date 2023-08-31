@@ -1052,12 +1052,19 @@ def calculate_oe_neq_1_chisq(
     return ((obs_expr - exp_expr) ** 2) / exp_expr
 
 
-def merge_rmc_hts(round_nums: List[int], freeze: int) -> hl.Table:
+def merge_rmc_hts(
+    round_nums: List[int],
+    freeze: int,
+    overwrite_temp: bool = False,
+) -> hl.Table:
     """
     Get table of final RMC sections after all break searches are complete.
 
     :param round_nums: List of round numbers to merge results across.
     :param freeze: RMC data freeze number.
+    :param overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
+        If False, will read existing intermediate temporary data rather than overwriting.
+        Default is False.
     :return: Table of final RMC sections. Schema:
         ----------------------------------------
         Row fields:
