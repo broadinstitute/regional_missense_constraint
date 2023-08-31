@@ -1160,6 +1160,8 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     :return: Table with `oe` annotation.
     """
     ht = constraint_prep.ht().select_globals()
+    # Add transcript annotation from section field as this is required for joins to other tables
+    ht = ht.annotate(transcript=ht.section.split("_")[0])
     group_ht = ht.group_by("transcript").aggregate(
         obs=hl.agg.sum(ht.observed),
         exp=hl.agg.sum(ht.expected),
