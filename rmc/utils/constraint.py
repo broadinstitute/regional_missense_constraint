@@ -1167,16 +1167,18 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     :param freeze: RMC data freeze number.
     :return: Table with `oe` annotation.
     """
-    ht = constraint_prep.ht().select_globals()
+    rmc_prep_ht = constraint_prep.ht().select_globals()
     # Add transcript annotation from section field as this is required for joins to other tables
-    ht = ht.annotate(transcript=ht.section.split("_")[0])
-    group_ht = ht.group_by("transcript").aggregate(
-        obs=hl.agg.sum(ht.observed),
-        exp=hl.agg.sum(ht.expected),
+    rmc_prep_ht = rmc_prep_ht.annotate(transcript=rmc_prep_ht.section.split("_")[0])
+    group_rmc_prep_ht = rmc_prep_ht.group_by("transcript").aggregate(
+        obs=hl.agg.sum(rmc_prep_ht.observed),
+        exp=hl.agg.sum(rmc_prep_ht.expected),
     )
     # Recalculating transcript level OE ratio because previous OE ratio (`overall_oe`)
     # is capped at 1 for regional missense constraint calculation purposes
-    group_ht = group_ht.annotate(transcript_oe=group_ht.obs / group_ht.exp)
+    group_rmc_prep_ht = group_rmc_prep_ht.annotate(
+        transcript_oe=group_rmc_prep_ht.obs / group_rmc_prep_ht.exp
+    )
 
     # Read in LoF constraint HT to get OE ratio for five transcripts missing in v2 RMC results
     # # 'ENST00000304270', 'ENST00000344415', 'ENST00000373521', 'ENST00000381708', 'ENST00000596936'
@@ -1185,9 +1187,10 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     # NOTE: LoF HT is keyed by gene and transcript, but `_key_by_assert_sorted` doesn't work here for v2 version
     # Throws this error: hail.utils.java.FatalError: IllegalArgumentException
     lof_ht = constraint_ht.ht().select("oe_mis").key_by("transcript")
+
     ht = ht.annotate(
         gnomad_transcript_oe=lof_ht[ht.transcript].oe_mis,
-        rmc_transcript_oe=group_ht[ht.transcript].transcript_oe,
+        rmc_transcript_oe=group_rmc_prep_ht[ht.transcript].transcript_oe,
     )
     ht = ht.transmute(
         transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe)
