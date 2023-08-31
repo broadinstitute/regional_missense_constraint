@@ -405,13 +405,13 @@ def main(args):
                 p_value = args.p_value
             rmc_ht = rmc_ht.annotate_globals(p_value=p_value)
 
-            logger.info("Writing out RMC results...")
-            rmc_ht.write(
-                rmc_results.versions[args.freeze].path, overwrite=args.overwrite
-            )
+            # logger.info("Writing out RMC results...")
+            # rmc_ht.write(
+            #     rmc_results.versions[args.freeze].path, overwrite=args.overwrite
+            # )
 
-            logger.info("Getting transcripts without evidence of RMC...")
-            create_no_breaks_he(freeze=args.freeze, overwrite=args.overwrite)
+            # logger.info("Getting transcripts without evidence of RMC...")
+            # create_no_breaks_he(freeze=args.freeze, overwrite=args.overwrite)
 
             logger.info("Creating OE-annotated context table...")
             create_context_with_oe(
