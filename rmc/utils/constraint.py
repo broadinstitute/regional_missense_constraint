@@ -1112,7 +1112,8 @@ def merge_rmc_hts(
     rmc_ht = hts[0].union(*hts[1:])
     rmc_ht = rmc_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_search_union.ht",
-        overwrite=True,
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
     # Calculate chi-square value for each section having O/E different from 1
     rmc_ht = rmc_ht.annotate(
