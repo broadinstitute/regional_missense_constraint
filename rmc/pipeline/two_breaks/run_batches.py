@@ -664,6 +664,10 @@ def main(args):
             j.memory(args.batch_memory)
             j.cpu(args.batch_cpu)
             j.storage(args.batch_storage)
+            # NOTE: This section has been commented out due to a Hail bug
+            # The bug makes us unable to pass keyword args to a PythonJob
+            # See: https://hail.zulipchat.com/#narrow/stream/223457-Hail-Batch-support/topic/j.2Ecall.28.29.20ValueError.3A.20too.20many.20values.20to.20unpack.20.28expected.202.29
+            # TODO: Revert to keyword args when the above bug has been fixed
             # j.call(
             #     process_section_group,
             #     ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
