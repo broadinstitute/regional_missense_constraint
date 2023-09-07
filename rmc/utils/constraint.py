@@ -252,7 +252,7 @@ def create_filtered_context_ht(
     :param csq: Variant consequences to filter Table to. Default is `KEEP_CODING_CSQ`.
     :param n_partitions: Number of desired partitions for the Table. Default is 30000.
     :param overwrite: Whether to overwrite temporary data. Default is False.
-    :param build_models_from_scratch: Whether to build plateau and coverage models from scratch. Default is False. 
+    :param build_models_from_scratch: Whether to build plateau and coverage models from scratch. Default is False.
     :return: None; writes Table to path.
     """
     logger.info(
@@ -309,7 +309,8 @@ def create_filtered_context_ht(
         error_if_not_exists_msg=(
             "Coverage and plateau models HailExpression does not exist!"
             " Please double check and/or rerun with"
-            " `build_models_from_scratch` = True"            
+            " `build_models_from_scratch` = True"
+        ),
     )
     models = hl.experimental.read_expression(coverage_plateau_models_path)
 
@@ -631,8 +632,10 @@ def search_for_break(
         " and alt (evidence of domains of missense constraint) probability densities..."
     )
     logger.info(
-        "Skipping breakpoints that create at least one section that has < %i"
-        " expected missense variants...",
+        (
+            "Skipping breakpoints that create at least one section that has < %i"
+            " expected missense variants..."
+        ),
         min_num_exp_mis,
     )
     ht = ht.annotate(
@@ -1037,8 +1040,10 @@ def merge_round_no_break_ht(
         ht = ht.filter(~hl.literal(simul_sections).contains(ht.section))
     else:
         logger.warning(
-            "Simul breaks results HT (round %i) did not exist. Please double check"
-            " that this was expected!",
+            (
+                "Simul breaks results HT (round %i) did not exist. Please double check"
+                " that this was expected!"
+            ),
             search_num,
         )
     return ht
