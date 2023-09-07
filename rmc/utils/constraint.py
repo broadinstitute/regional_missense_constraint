@@ -8,7 +8,7 @@ import scipy
 from gnomad.resources.grch37.gnomad import coverage, public_release
 from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
+from gnomad.utils.file_utils import file_exists, check_file_exists_raise_error
 
 from rmc.resources.basics import (
     SINGLE_BREAK_TEMP_PATH,
