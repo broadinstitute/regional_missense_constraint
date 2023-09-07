@@ -252,6 +252,7 @@ def create_filtered_context_ht(
     :param csq: Variant consequences to filter Table to. Default is `KEEP_CODING_CSQ`.
     :param n_partitions: Number of desired partitions for the Table. Default is 30000.
     :param overwrite: Whether to overwrite temporary data. Default is False.
+    :param build_models_from_scratch: Whether to build plateau and coverage models from scratch. Default is False. 
     :return: None; writes Table to path.
     """
     logger.info(
