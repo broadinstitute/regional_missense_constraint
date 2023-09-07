@@ -146,7 +146,7 @@ def get_obs_exp_expr(
     """
     # Cap the o/e ratio at 1 to avoid pulling out regions that are enriched for missense variation
     # Code is looking for missense constraint, so regions with a ratio of >= 1.0 can be grouped together
-    return hl.min(obs_expr / exp_expr, 1)
+    return hl.nanmin(obs_expr / exp_expr, 1)
 
 
 def get_dpois_expr(
@@ -664,42 +664,24 @@ def main(args):
             j.memory(args.batch_memory)
             j.cpu(args.batch_cpu)
             j.storage(args.batch_storage)
-            # NOTE: This section has been commented out due to a Hail bug
-            # The bug makes us unable to pass keyword args to a PythonJob
+            # NOTE: This section was commented out due to a Hail bug
+            # The bug made us unable to pass keyword args to a PythonJob
             # See: https://hail.zulipchat.com/#narrow/stream/223457-Hail-Batch-support/topic/j.2Ecall.28.29.20ValueError.3A.20too.20many.20values.20to.20unpack.20.28expected.202.29
-            # TODO: Revert to keyword args when the above bug has been fixed
-            # j.call(
-            #     process_section_group,
-            #     ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
-            #     section_group=group,
-            #     count=group_num,
-            #     search_num=args.search_num,
-            #     over_threshold=False,
-            #     output_ht_path=f"{raw_path}/simul_break_{job_name}.ht",
-            #     output_n_partitions=args.output_n_partitions,
-            #     chisq_threshold=chisq_threshold,
-            #     split_list_len=args.group_size,
-            #     save_chisq_ht=args.save_chisq_ht,
-            #     google_project=args.google_project,
-            #     freeze=args.freeze,
-            # ) # TODO: Uncomment this once hail bug is fixed and remove the call below
+            # Revert to keyword args since the above bug is fixed in 0.2.122
             j.call(
                 process_section_group,
-                grouped_single_no_break_ht_path(args.search_num, args.freeze),
-                group,
-                group_num,
-                args.search_num,
-                False,
-                f"{raw_path}/simul_break_{job_name}.ht",
-                args.output_n_partitions,
-                chisq_threshold,
-                MIN_EXP_MIS,
-                args.group_size,
-                False,
-                args.save_chisq_ht,
-                RMC_PREFIX,
-                args.google_project,
-                args.freeze,
+                ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
+                section_group=group,
+                count=group_num,
+                search_num=args.search_num,
+                over_threshold=False,
+                output_ht_path=f"{raw_path}/simul_break_{job_name}.ht",
+                output_n_partitions=args.output_n_partitions,
+                chisq_threshold=chisq_threshold,
+                split_list_len=args.group_size,
+                save_chisq_ht=args.save_chisq_ht,
+                google_project=args.google_project,
+                freeze=args.freeze,
             )
             count += 1
 
@@ -724,39 +706,21 @@ def main(args):
                 j.memory(args.batch_memory)
                 j.cpu(args.batch_cpu)
                 j.storage(args.batch_storage)
-            # See note above
-            # j.call(
-            #     process_section_group,
-            #     ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
-            #     section_group=group,
-            #     count=group_num,
-            #     search_num=args.search_num,
-            #     over_threshold=True,
-            #     output_ht_path=f"{raw_path}/simul_break_{group[0]}.ht",
-            #     output_n_partitions=args.output_n_partitions,
-            #     chisq_threshold=chisq_threshold,
-            #     split_list_len=args.group_size,
-            #     save_chisq_ht=args.save_chisq_ht,
-            #     google_project=args.google_project,
-            #     freeze=args.freeze,
-            # ) # TODO: Uncomment this once hail bug is fixed and remove the call below
+            
             j.call(
                 process_section_group,
-                grouped_single_no_break_ht_path(args.search_num, args.freeze),
-                group,
-                group_num,
-                args.search_num,
-                True,
-                f"{raw_path}/simul_break_{group[0]}.ht",
-                args.output_n_partitions,
-                chisq_threshold,
-                MIN_EXP_MIS,
-                args.group_size,
-                False,
-                args.save_chisq_ht,
-                RMC_PREFIX,
-                args.google_project,
-                args.freeze,
+                ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
+                section_group=group,
+                count=group_num,
+                search_num=args.search_num,
+                over_threshold=True,
+                output_ht_path=f"{raw_path}/simul_break_{group[0]}.ht",
+                output_n_partitions=args.output_n_partitions,
+                chisq_threshold=chisq_threshold,
+                split_list_len=args.group_size,
+                save_chisq_ht=args.save_chisq_ht,
+                google_project=args.google_project,
+                freeze=args.freeze,
             )
             count += 1
     b.run(wait=False)
