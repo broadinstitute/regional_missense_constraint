@@ -452,6 +452,7 @@ def process_vep(
     or add additional annotations.
 
     Additional annotations (taken from `prepare_ht_for_constraint_calculations`) are:
+        - context (will always convert trimer context)
         - ref
         - alt
         - methylation
@@ -471,7 +472,7 @@ def process_vep(
     :param bool filter_outlier_transcripts: Whether to remove constraint outlier transcripts from Table.
         Default is False.
     :param bool add_annotations: Whether to add annotations from `prepare_ht_for_constraint_calculations`
-        beyond most severe consequence .Default is False.
+        beyond most severe consequence. Default is False.
     :return: Table filtered to canonical transcripts with option to filter to specific variant consequences
         and remove constraint outlier transcripts.
     :rtype: hl.Table

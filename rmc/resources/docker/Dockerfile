@@ -1,7 +1,8 @@
 FROM 'google/cloud-sdk:slim'
 FROM 'hailgenetics/python-dill:3.11-slim'
 
-# install packages
+# TODO: Double check if all of these packages are necessary
+# Install packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-utils \
     curl \

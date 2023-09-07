@@ -303,7 +303,14 @@ def create_filtered_context_ht(
             coverage_plateau_models_path,
             overwrite=overwrite,
         )
-    # TODO: perform a check if models exist and throw exception if they don't
+    check_file_exists_raise_error(
+        coverage_plateau_models_path,
+        error_if_not_exists=True,
+        error_if_not_exists_msg=(
+            "Coverage and plateau models HailExpression does not exist!"
+            " Please double check and/or rerun with"
+            " `build_models_from_scratch` = True"            
+    )
     models = hl.experimental.read_expression(coverage_plateau_models_path)
 
     # Also annotate as HT globals
@@ -753,8 +760,8 @@ def process_sections(
 
     logger.info("Annotating reverse cumulative observed, expected, and obs/exp...")
     ht = annotate_reverse_exprs(ht)
-    tmp_path = f"{TEMP_PATH_WITH_FAST_DEL}/rmc/freeze{freeze}_single_search_prep_round{search_num}_chisq{chisq_threshold}.ht"
-    ht = ht.checkpoint(tmp_path, overwrite=True)
+    tmp_obs_exp_annot_path = f"{TEMP_PATH_WITH_FAST_DEL}/rmc/freeze{freeze}_single_search_prep_round{search_num}_chisq{chisq_threshold}.ht"
+    ht = ht.checkpoint(tmp_obs_exp_annot_path, overwrite=True)
 
     logger.info("Searching for a break in each section and returning...")
     ht = search_for_break(
