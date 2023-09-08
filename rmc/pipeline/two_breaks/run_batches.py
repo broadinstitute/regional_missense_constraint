@@ -622,7 +622,8 @@ def main(args):
             )
             # NOTE: Python version on your local machine must match the Python version in this image
             logger.warning(
-                "Using %s image; please make sure Hail and Python versions in image are up to date",
+                "Using %s image; please make sure Hail and Python versions in image are"
+                " up to date",
                 args.docker_image,
             )
 
