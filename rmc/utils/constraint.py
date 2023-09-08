@@ -8,7 +8,7 @@ import scipy
 from gnomad.resources.grch37.gnomad import coverage, public_release
 from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists
+from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
 
 from rmc.resources.basics import (
     SINGLE_BREAK_TEMP_PATH,
@@ -238,6 +238,7 @@ def create_filtered_context_ht(
     csq: Set[str] = KEEP_CODING_CSQ,
     n_partitions: int = 30000,
     overwrite: bool = False,
+    build_models_from_scratch: bool = False,
 ) -> None:
     """
     Create allele-level VEP context Table with constraint annotations including expected variant counts.
@@ -251,6 +252,7 @@ def create_filtered_context_ht(
     :param csq: Variant consequences to filter Table to. Default is `KEEP_CODING_CSQ`.
     :param n_partitions: Number of desired partitions for the Table. Default is 30000.
     :param overwrite: Whether to overwrite temporary data. Default is False.
+    :param build_models_from_scratch: Whether to build plateau and coverage models from scratch. If False, will attempt to read models from resource path. Default is False.
     :return: None; writes Table to path.
     """
     logger.info(
@@ -267,45 +269,57 @@ def create_filtered_context_ht(
     )
     ht = filter_context_using_gnomad(ht, "exomes")
     # Reducing number of partitions as the VEP context table has 62k
-    ht = ht.naive_coalsece(n_partitions)
+    ht = ht.naive_coalesce(n_partitions)
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )
 
-    # TODO: Import models built in gnomad-constraint rather than rebuilding here
-    logger.info("Building plateau and coverage models...")
-    coverage_ht = prop_obs_coverage.ht()
-    coverage_x_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_x.ht"))
-    coverage_y_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_y.ht"))
-    (
-        coverage_model,
-        plateau_models,
-        plateau_x_models,
-        plateau_y_models,
-    ) = generate_models(
-        coverage_ht,
-        coverage_x_ht,
-        coverage_y_ht,
-    )
-    # Write out models to HailExpression to save
-    hl.experimental.write_expression(
-        hl.struct(
-            coverage=coverage_model,
-            plateau_autosomes=plateau_models,
-            plateau_X=plateau_x_models,
-            plateau_Y=plateau_y_models,
-        ),
+    # TODO: Import models built in gnomad-constraint (update models at resource path)
+    if build_models_from_scratch:
+        logger.info("Building plateau and coverage models...")
+        coverage_ht = prop_obs_coverage.ht()
+        coverage_x_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_x.ht"))
+        coverage_y_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_y.ht"))
+        (
+            coverage_model,
+            plateau_models,
+            plateau_x_models,
+            plateau_y_models,
+        ) = generate_models(
+            coverage_ht,
+            coverage_x_ht,
+            coverage_y_ht,
+        )
+        # Write out models to HailExpression to save
+        hl.experimental.write_expression(
+            hl.struct(
+                coverage=coverage_model,
+                plateau_models=plateau_models,
+                plateau_X=plateau_x_models,
+                plateau_Y=plateau_y_models,
+            ),
+            coverage_plateau_models_path,
+            overwrite=overwrite,
+        )
+    check_file_exists_raise_error(
         coverage_plateau_models_path,
-        overwrite=overwrite,
+        error_if_not_exists=True,
+        error_if_not_exists_msg=(
+            "Coverage and plateau models HailExpression does not exist!"
+            " Please double check and/or rerun with"
+            " `build_models_from_scratch` = True"
+        ),
     )
+    models = hl.experimental.read_expression(coverage_plateau_models_path)
+
     # Also annotate as HT globals
     ht = ht.annotate_globals(
-        plateau_models=plateau_models,
-        plateau_x_models=plateau_x_models,
-        plateau_y_models=plateau_y_models,
-        coverage_model=coverage_model,
+        plateau_models=models.plateau_models,
+        plateau_x_models=models.plateau_X,
+        plateau_y_models=models.plateau_Y,
+        coverage_model=models.coverage,
     )
 
     logger.info("Calculating expected values per allele and checkpointing...")
@@ -747,6 +761,8 @@ def process_sections(
 
     logger.info("Annotating reverse cumulative observed, expected, and obs/exp...")
     ht = annotate_reverse_exprs(ht)
+    tmp_obs_exp_annot_path = f"{TEMP_PATH_WITH_FAST_DEL}/rmc/freeze{freeze}_single_search_prep_round{search_num}_chisq{chisq_threshold}.ht"
+    ht = ht.checkpoint(tmp_obs_exp_annot_path, overwrite=True)
 
     logger.info("Searching for a break in each section and returning...")
     ht = search_for_break(
@@ -1045,12 +1061,19 @@ def calculate_oe_neq_1_chisq(
     return ((obs_expr - exp_expr) ** 2) / exp_expr
 
 
-def merge_rmc_hts(round_nums: List[int], freeze: int) -> hl.Table:
+def merge_rmc_hts(
+    round_nums: List[int],
+    freeze: int,
+    overwrite_temp: bool = False,
+) -> hl.Table:
     """
     Get table of final RMC sections after all break searches are complete.
 
     :param round_nums: List of round numbers to merge results across.
     :param freeze: RMC data freeze number.
+    :param overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
+        If False, will read existing intermediate temporary data rather than overwriting.
+        Default is False.
     :return: Table of final RMC sections. Schema:
         ----------------------------------------
         Row fields:
@@ -1098,7 +1121,8 @@ def merge_rmc_hts(round_nums: List[int], freeze: int) -> hl.Table:
     rmc_ht = hts[0].union(*hts[1:])
     rmc_ht = rmc_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_search_union.ht",
-        overwrite=True,
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
     # Calculate chi-square value for each section having O/E different from 1
     rmc_ht = rmc_ht.annotate(
@@ -1152,14 +1176,18 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     :param freeze: RMC data freeze number.
     :return: Table with `oe` annotation.
     """
-    ht = constraint_prep.ht().select_globals()
-    group_ht = ht.group_by("transcript").aggregate(
-        obs=hl.agg.sum(ht.observed),
-        exp=hl.agg.sum(ht.expected),
+    rmc_prep_ht = constraint_prep.ht().select_globals()
+    # Add transcript annotation from section field as this is required for joins to other tables
+    rmc_prep_ht = rmc_prep_ht.annotate(transcript=rmc_prep_ht.section.split("_")[0])
+    group_rmc_prep_ht = rmc_prep_ht.group_by("transcript").aggregate(
+        obs=hl.agg.sum(rmc_prep_ht.observed),
+        exp=hl.agg.sum(rmc_prep_ht.expected),
     )
     # Recalculating transcript level OE ratio because previous OE ratio (`overall_oe`)
     # is capped at 1 for regional missense constraint calculation purposes
-    group_ht = group_ht.annotate(transcript_oe=group_ht.obs / group_ht.exp)
+    group_rmc_prep_ht = group_rmc_prep_ht.annotate(
+        transcript_oe=group_rmc_prep_ht.obs / group_rmc_prep_ht.exp
+    )
 
     # Read in LoF constraint HT to get OE ratio for five transcripts missing in v2 RMC results
     # # 'ENST00000304270', 'ENST00000344415', 'ENST00000373521', 'ENST00000381708', 'ENST00000596936'
@@ -1168,9 +1196,10 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     # NOTE: LoF HT is keyed by gene and transcript, but `_key_by_assert_sorted` doesn't work here for v2 version
     # Throws this error: hail.utils.java.FatalError: IllegalArgumentException
     lof_ht = constraint_ht.ht().select("oe_mis").key_by("transcript")
+
     ht = ht.annotate(
         gnomad_transcript_oe=lof_ht[ht.transcript].oe_mis,
-        rmc_transcript_oe=group_ht[ht.transcript].transcript_oe,
+        rmc_transcript_oe=group_rmc_prep_ht[ht.transcript].transcript_oe,
     )
     ht = ht.transmute(
         transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe)

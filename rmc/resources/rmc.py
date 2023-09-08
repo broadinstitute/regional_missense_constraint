@@ -123,7 +123,7 @@ for each canonical transcript in Gencode v19.
 ####################################################################################
 ## RMC-related resources
 ####################################################################################
-coverage_plateau_models_path = "{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/coverage_plateau_models.he"
+coverage_plateau_models_path = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/coverage_plateau_models.he"
 """
 Path to HailExpression containing struct for coverage correction model and plateau models.
 
@@ -335,13 +335,13 @@ Bucket structure:
                 success_files/
 """
 
-SIMUL_SEARCH_ANNOTATIONS = {"max_chisq", "breakpoints"}
+SIMUL_SEARCH_ANNOTATIONS = {"chisq", "breakpoints"}
 """
 Set of annotations to keep from two simultaneous breaks search.
 
 Used when merging sections found in over and under length threshold search.
 
-`max_chisq`: Chi square value associated with two breaks.
+`chisq`: Chi square value associated with two breaks.
 `breakpoints`: Tuple of breakpoints with adjusted inclusiveness/exclusiveness.
 
 Note that this field will also be kept (`section` is a key field):

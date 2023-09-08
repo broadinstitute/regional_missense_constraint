@@ -81,7 +81,7 @@ def main(args):
                     "Pipeline is currently set up to run on missenses. Please make sure"
                     " all missense-relevant files are deleted before running."
                 )
-            n_partitions = 150000
+            n_partitions = 10000
             create_constraint_prep_ht(
                 filter_csq=csq,
                 n_partitions=args.n_partitions if args.n_partitions else n_partitions,
@@ -121,7 +121,13 @@ def main(args):
                 else:
                     # Read `constraint_prep` resource HT if this is the first search
                     logger.info("Reading in constraint prep HT...")
-                    ht = constraint_prep.ht()
+                    if args.n_partitions:
+                        ht = hl.read_table(
+                            constraint_prep.path,
+                            _n_partitions=args.n_partitions,
+                        )
+                    else:
+                        ht = constraint_prep.ht()
 
             else:
                 logger.info(
@@ -368,7 +374,11 @@ def main(args):
             round_nums = check_break_search_round_nums(args.freeze)
 
             logger.info("Finalizing section-level RMC table...")
-            rmc_ht = merge_rmc_hts(round_nums=round_nums, freeze=args.freeze)
+            rmc_ht = merge_rmc_hts(
+                round_nums=round_nums,
+                freeze=args.freeze,
+                overwrite_temp=args.overwrite_temp,
+            )
             # Drop any unnecessary global fields
             rmc_ht = rmc_ht.select_globals()
             rmc_ht = rmc_ht.checkpoint(

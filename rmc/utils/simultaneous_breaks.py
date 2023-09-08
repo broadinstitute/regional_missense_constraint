@@ -371,7 +371,7 @@ def search_for_two_breaks(
         )
     )
     group_ht = group_ht.transmute(
-        max_chisq=group_ht.best_break.chisq,
+        chisq=group_ht.best_break.chisq,
         # Adjust breakpoint inclusive/exclusiveness to be consistent with single break breakpoints, i.e.
         # so that the breakpoint site itself is the last site in the left subsection. Thus, the resulting
         # subsections will be divided as follows:
@@ -389,7 +389,7 @@ def search_for_two_breaks(
     group_ht = group_ht.checkpoint(group_ht_path, overwrite=True)
 
     # Remove rows with maximum chi square values below the threshold
-    group_ht = group_ht.filter(group_ht.max_chisq >= chisq_threshold)
+    group_ht = group_ht.filter(group_ht.chisq >= chisq_threshold)
     return group_ht
 
 
@@ -542,9 +542,11 @@ def process_section_group(
         # find the one "best" breakpoint (breakpoint with largest chi square value)
         if ht.count() > 0:
             ht = annotate_max_chisq_per_section(ht, freeze)
-            ht = ht.filter(ht.max_chisq == ht.section_max_chisq)
+            ht = ht.filter(ht.chisq == ht.section_max_chisq)
 
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
+    # NOTE: Change `naive_coalesce` to `repartition` below if you run into this Hail bug:
+    # https://discuss.hail.is/t/zip-length-mismatch-error/3548/7
     ht = ht.naive_coalesce(output_n_partitions)
     # TODO: Restructure ht to match locus-level formats from single breaks
     ht.write(output_ht_path, overwrite=True)
