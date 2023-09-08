@@ -706,7 +706,7 @@ def main(args):
                 j.memory(args.batch_memory)
                 j.cpu(args.batch_cpu)
                 j.storage(args.batch_storage)
-            
+
             j.call(
                 process_section_group,
                 ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
