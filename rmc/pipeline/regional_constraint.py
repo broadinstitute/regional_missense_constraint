@@ -291,10 +291,8 @@ def main(args):
             else:
                 simul_exists = False
                 logger.info(
-                    (
-                        "No sections in round %i had breakpoints in simultaneous breaks"
-                        " search."
-                    ),
+                    "No sections in round %i had breakpoints in simultaneous breaks"
+                    " search.",
                     args.search_num,
                 )
 
@@ -357,10 +355,8 @@ def main(args):
                 simul_break_ht.write(merged_path, overwrite=args.overwrite)
             else:
                 logger.info(
-                    (
-                        "No sections in round %i had breakpoints (neither in single nor"
-                        " in simultaneous search)."
-                    ),
+                    "No sections in round %i had breakpoints (neither in single nor"
+                    " in simultaneous search).",
                     args.search_num,
                 )
 

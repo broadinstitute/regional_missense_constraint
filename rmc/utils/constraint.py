@@ -8,7 +8,7 @@ import scipy
 from gnomad.resources.grch37.gnomad import coverage, public_release
 from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.file_utils import file_exists, check_file_exists_raise_error
+from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
 
 from rmc.resources.basics import (
     SINGLE_BREAK_TEMP_PATH,
@@ -632,10 +632,8 @@ def search_for_break(
         " and alt (evidence of domains of missense constraint) probability densities..."
     )
     logger.info(
-        (
-            "Skipping breakpoints that create at least one section that has < %i"
-            " expected missense variants..."
-        ),
+        "Skipping breakpoints that create at least one section that has < %i"
+        " expected missense variants...",
         min_num_exp_mis,
     )
     ht = ht.annotate(
@@ -1040,10 +1038,8 @@ def merge_round_no_break_ht(
         ht = ht.filter(~hl.literal(simul_sections).contains(ht.section))
     else:
         logger.warning(
-            (
-                "Simul breaks results HT (round %i) did not exist. Please double check"
-                " that this was expected!"
-            ),
+            "Simul breaks results HT (round %i) did not exist. Please double check"
+            " that this was expected!",
             search_num,
         )
     return ht
