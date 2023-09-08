@@ -545,7 +545,7 @@ def process_section_group(
             ht = ht.filter(ht.chisq == ht.section_max_chisq)
 
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
-    # NOTE: Change `naive_coalesce` to `repartition` below to fix a Hail bug (see below):
+    # NOTE: Change `naive_coalesce` to `repartition` below if you run into this Hail bug:
     # https://discuss.hail.is/t/zip-length-mismatch-error/3548/7
     ht = ht.naive_coalesce(output_n_partitions)
     # TODO: Restructure ht to match locus-level formats from single breaks

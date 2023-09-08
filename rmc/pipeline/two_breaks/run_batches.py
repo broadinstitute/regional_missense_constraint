@@ -1,7 +1,7 @@
 """
 This script searches for two simultaneous breaks in groups of transcripts using Hail Batch.
 
-# TODO: Add RMC repo to a docker image and make sure its updated
+# TODO: Add RMC repo to docker image and make sure it's up to date
 
 Note that a couple functions have been copied into this script from `constraint.py`:
 - `get_obs_exp_expr`
@@ -612,14 +612,17 @@ def main(args):
         # Use a docker image that specifies spark memory allocation if --use-custom-machine was specified
         if args.use_custom_machine:
             args.docker_image = "gcr.io/broad-mpg-gnomad/rmc:20220930"
+            # Hail versions >= 0.2.119 are no longer backwards compatible
+            # (older Hail versions cannot read data written using version >= 0.2.119)
             raise DataException(f"Hail in {args.docker_image} image is out of date!")
         # Otherwise, use the default docker image
         else:
             args.docker_image = (
                 "us-central1-docker.pkg.dev/broad-mpg-gnomad/images/rmc_simul_search"
             )
+            # NOTE: Python version on your local machine must match the Python version in this image
             logger.warning(
-                "Using %s image; please make sure Hail version in image is up to date",
+                "Using %s image; please make sure Hail and Python versions in image are up to date",
                 args.docker_image,
             )
 
@@ -664,10 +667,8 @@ def main(args):
             j.memory(args.batch_memory)
             j.cpu(args.batch_cpu)
             j.storage(args.batch_storage)
-            # NOTE: This section was commented out due to a Hail bug
-            # The bug made us unable to pass keyword args to a PythonJob
+            # NOTE: There was a Hail bug that prevented passing keyword args to a PythonJob in RMC freeze 7
             # See: https://hail.zulipchat.com/#narrow/stream/223457-Hail-Batch-support/topic/j.2Ecall.28.29.20ValueError.3A.20too.20many.20values.20to.20unpack.20.28expected.202.29
-            # Revert to keyword args since the above bug is fixed in 0.2.122
             j.call(
                 process_section_group,
                 ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
