@@ -1470,7 +1470,11 @@ def fix_transcript_start_stop_aas(
         # Find the closest position with defined AA to the stop coordinate
         closest_stop_pos=hl.bind(
             lambda x: x[
+                # Subtract one here to avoid array index out of bounds error
+                # NOTE: this assumes that the binary search will return
+                # len(pos_ht[miss_start_stop_ht.transcript].positions)
                 hl.binary_search(x, miss_start_stop_ht.stop_coordinate.position)
+                - 1
             ],
             pos_ht[miss_start_stop_ht.transcript].positions,
         ),
