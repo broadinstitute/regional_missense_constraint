@@ -1422,6 +1422,25 @@ def fix_transcript_start_stop_aas(
         (hl.is_missing(ht.start_aa) & ht.is_transcript_start)
         | (hl.is_missing(ht.stop_aa) & ht.is_transcript_stop)
     )
+    # Correct any applicable starts/ends to Met1
+    miss_start_stop_ht = miss_start_stop_ht.annotate(
+        start_aa=hl.or_missing(
+            hl.is_missing(miss_start_stop_ht.start_aa),
+            # Set all missing + strand transcript starts to Met1
+            hl.or_missing(
+                miss_start_stop_ht.strand == "+",
+                "Met1",
+            ),
+        ),
+        stop_aa=hl.or_missing(
+            hl.is_missing(miss_start_stop_ht.stop_aa),
+            hl.or_missing(
+                # Set all missing - strand transcript stops to Met1
+                miss_start_stop_ht.strand == "-",
+                "Met1",
+            ),
+        ),
+    )
     miss_start_stop_ht = miss_start_stop_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/transcript_start_stop_missing_aa.ht",
         _read_if_exists=not overwrite_temp,
@@ -1469,38 +1488,28 @@ def fix_transcript_start_stop_aas(
         overwrite=overwrite_temp,
     )
 
-    # Get amino acid annotations
+    # Fill in amino acid annotations at loci missing annotations
     miss_start_stop_ht = miss_start_stop_ht.annotate(
         start_aa=hl.if_else(
             hl.is_missing(miss_start_stop_ht.start_aa),
-            hl.if_else(
-                # Set all missing + strand transcript starts to Met1
-                miss_start_stop_ht.strand == "+",
-                "Met1",
-                context_ht[
-                    hl.locus(
-                        miss_start_stop_ht.start_coordinate.contig,
-                        miss_start_stop_ht.closest_start_pos,
-                    ),
-                    miss_start_stop_ht.transcript,
-                ].ref_aa,
-            ),
+            context_ht[
+                hl.locus(
+                    miss_start_stop_ht.start_coordinate.contig,
+                    miss_start_stop_ht.closest_start_pos,
+                ),
+                miss_start_stop_ht.transcript,
+            ].ref_aa,
             miss_start_stop_ht.start_aa,
         ),
         stop_aa=hl.if_else(
             hl.is_missing(miss_start_stop_ht.stop_aa),
-            hl.if_else(
-                # Set all missing - strand transcript stops to Met1
-                miss_start_stop_ht.strand == "-",
-                "Met1",
-                context_ht[
-                    hl.locus(
-                        miss_start_stop_ht.stop_coordinate.contig,
-                        miss_start_stop_ht.closest_stop_pos,
-                    ),
-                    miss_start_stop_ht.transcript,
-                ].ref_aa,
-            ),
+            context_ht[
+                hl.locus(
+                    miss_start_stop_ht.stop_coordinate.contig,
+                    miss_start_stop_ht.closest_stop_pos,
+                ),
+                miss_start_stop_ht.transcript,
+            ].ref_aa,
             miss_start_stop_ht.stop_aa,
         ),
     )
