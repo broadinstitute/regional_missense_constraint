@@ -1,9 +1,5 @@
 """Script containing reference resources."""
-from gnomad.resources.resource_utils import (
-    DataException,
-    TableResource,
-    VersionedTableResource,
-)
+from gnomad.resources.resource_utils import DataException, TableResource
 
 from rmc.resources.basics import AMINO_ACIDS_PREFIX, RESOURCE_BUILD_PREFIX
 from rmc.resources.resource_utils import CURRENT_BUILD
@@ -17,25 +13,6 @@ Path to bucket containing reference data resources.
 ####################################################################################
 ## Reference genome related resources
 ####################################################################################
-filtered_context = VersionedTableResource(
-    default_version="v1",
-    versions={
-        "v1": TableResource(
-            path=f"{REF_DATA_PREFIX}/ht/context_fasta_snps_only_vep_v1.ht",
-        )
-    },
-)
-"""
-Context Table filtered to missense variants in canonical protein coding transcripts and annotated with
-probability of mutation for each variant, CpG status, gnomAD exome coverage, and methylation level.
-
-Used to calculate the cumulative observed and expected missense values per locus and
-generate regional missense constraint results.
-
-NOTE: This resource is created with `process_vep`, which now filters to non-outlier transcripts by default.
-However, for v2, this resource contains *all* canonical transcripts (including outliers).
-"""
-
 gene_model = TableResource(path=f"{RESOURCE_BUILD_PREFIX}/browser/b37_transcripts.ht")
 """
 Table containing transcript start and stop positions displayed in the browser.

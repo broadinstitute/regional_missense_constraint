@@ -31,7 +31,7 @@ FREEZES = [1, 2, 3, 4, 5, 6, 7]
 RMC/MPC data versions computed with current gnomAD version.
 """
 
-CURRENT_FREEZE = 5
+CURRENT_FREEZE = 7
 """
 Current RMC/MPC data version.
 """
@@ -123,47 +123,133 @@ for each canonical transcript in Gencode v19.
 ####################################################################################
 ## RMC-related resources
 ####################################################################################
-constraint_prep = VersionedTableResource(
-    default_version=1,
+coverage_plateau_models_path = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/coverage_plateau_models.he"
+"""
+Path to HailExpression containing struct for coverage correction model and plateau models.
+
+Schema:
+    struct {
+        'plateau_models': struct {
+            total: dict<bool, array<float64>>
+        }
+        'plateau_x_models': struct {
+            total: dict<bool, array<float64>>
+        }
+        'plateau_y_models': struct {
+            total: dict<bool, array<float64>>
+        }
+        'coverage_model': tuple (
+            float64,
+            float64
+        )
+    }
+
+Used to compute expected variant counts.
+"""
+
+
+# TODO: Delete current version
+filtered_context = VersionedTableResource(
+    default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/context_obs_exp_annot.ht"
+            path=f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/context_coding_snps_annot.ht"
         )
         for freeze in FREEZES
     },
 )
 """
-Context Table ready for RMC calculations.
+Variant-level VEP context Table filtered to missense, nonsense, read-through and synonymous
+variants in all canonical protein-coding transcripts.
 
-HT is annotated with observed and expected variant counts per base.
+Table contains constraint-related annotations, including observed variant counts,
+expected variant counts, probability of mutation, CpG status, gnomAD exome coverage,
+and methylation level.
+
+Schema:
+----------------------------------------
+Global fields:
+    'plateau_models': struct {
+        total: dict<bool, array<float64>>
+    }
+    'plateau_x_models': struct {
+        total: dict<bool, array<float64>>
+    }
+    'plateau_y_models': struct {
+        total: dict<bool, array<float64>>
+    }
+    'coverage_model': tuple (
+        float64,
+        float64
+    )
+----------------------------------------
+Row fields:
+    'locus': locus<GRCh37>
+    'alleles': array<str>
+    'context': str
+    'ref': str
+    'alt': str
+    'methylation_level': int32
+    'cpg': bool
+    'mutation_type': str
+    'annotation': str
+    'modifier': str
+    'coverage': int32
+    'transcript': str
+    'expected': float64
+    'coverage_correction': float64
+    'observed': int32
+----------------------------------------
+Key: ['locus', 'alleles']
+----------------------------------------
+
+Used to create the constraint prep Table.
 """
 
-CONSTRAINT_ANNOTATIONS = {
-    "mu_snp",
-    "observed",
-    "coverage",
-    "total_exp",
-    "total_mu",
-    "total_obs",
-    "cumulative_obs",
-    "cumulative_exp",
-    "forward_oe",
-    "mu_scan",
-    "section_mu",
-    "section_exp",
-    "section_obs",
-    "section_oe",
-    "reverse",
-    "reverse_obs_exp",
-    "total_null",
-    "total_alt",
-    "chisq",
-    "max_chisq",
-}
-"""
-Set of annotations used to calculate constraint and to hold resulting statistics.
 
-TODO: assess which annotations in this list can be removed
+constraint_prep = VersionedTableResource(
+    default_version=CURRENT_FREEZE,
+    versions={
+        freeze: TableResource(
+            path=f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/constraint_prep.ht"
+        )
+        for freeze in FREEZES
+    },
+)
+"""
+Locus-level Table used in first step of regional constraint calculation.
+
+Filtered to only one specific coding variant consequence but contains all canonical, protein-coding transcripts.
+
+Schema:
+----------------------------------------
+Global fields:
+    'plateau_models': struct {
+        total: dict<bool, array<float64>>
+    }
+    'plateau_x_models': struct {
+        total: dict<bool, array<float64>>
+    }
+    'plateau_y_models': struct {
+        total: dict<bool, array<float64>>
+    }
+    'coverage_model': tuple (
+        float64,
+        float64
+    )
+----------------------------------------
+Row fields:
+    'locus': locus<GRCh37>
+    'section': str
+    'observed': int32
+    'expected': float64
+----------------------------------------
+Key: ['locus', 'section']
+----------------------------------------
+
+NOTE: The content of the freeze 1 HT for RMC is slightly different:
+    - Expected counts were calculated using the workaround method instead of directly from the plateau model.
+    - `mu_snp` contains the coverage-corrected not raw mutation rates.
 """
 
 FINAL_ANNOTATIONS = {
@@ -249,13 +335,13 @@ Bucket structure:
                 success_files/
 """
 
-SIMUL_SEARCH_ANNOTATIONS = {"max_chisq", "breakpoints"}
+SIMUL_SEARCH_ANNOTATIONS = {"chisq", "breakpoints"}
 """
 Set of annotations to keep from two simultaneous breaks search.
 
 Used when merging sections found in over and under length threshold search.
 
-`max_chisq`: Chi square value associated with two breaks.
+`chisq`: Chi square value associated with two breaks.
 `breakpoints`: Tuple of breakpoints with adjusted inclusiveness/exclusiveness.
 
 Note that this field will also be kept (`section` is a key field):

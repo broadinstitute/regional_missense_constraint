@@ -16,8 +16,8 @@ from rmc.resources.rmc import (
     simul_sections_split_by_len_path,
 )
 from rmc.utils.constraint import (
+    annotate_max_chisq_per_section,
     get_dpois_expr,
-    get_max_chisq_per_group,
     get_obs_exp_expr,
 )
 
@@ -32,18 +32,17 @@ logger.setLevel(logging.INFO)
 def group_no_single_break_found_ht(
     ht_path: str,
     out_ht_path: str,
-    group_str: str,
     overwrite: bool,
 ) -> None:
     """
     Group HT containing transcripts/transcript sections that don't have a single significant break and collect annotations into lists.
 
-    Group HT by `group_str` and collect positions, cumulative obs, cumulative exp into lists.
+    Group HT by section and collect positions, cumulative obs, cumulative exp into lists.
 
     This creates the input to the two simultaneous breaks search (`search_for_two_breaks`).
 
     .. note::
-        - Expects that input Table is keyed by locus and `group_str`.
+        - Expects that input Table is keyed by locus and section.
             This is *required*, as the function expects that loci are sorted in the input Table.
         - Expects that input Table is annotated with OE for transcript/transcript section and
             this annotation is named `section_oe`.
@@ -60,19 +59,19 @@ def group_no_single_break_found_ht(
     # Aggregating values into a struct here to force the positions and observed, expected missense values to stay sorted
     # `hl.agg.collect` does not guarantee order: https://hail.is/docs/0.2/aggregators.html#hail.expr.aggregators.collect
     ht = hl.read_table(ht_path)
-    group_ht = ht.group_by(group_str).aggregate(
+    group_ht = ht.group_by("section").aggregate(
         values=hl.sorted(
             hl.agg.collect(
                 hl.struct(
                     locus=ht.locus,
-                    cum_exp=ht.cumulative_exp,
-                    cum_obs=ht.cumulative_obs,
+                    cum_exp=ht.fwd_cumulative_exp,
+                    cum_obs=ht.fwd_cumulative_obs,
                     positions=ht.locus.position,
                 ),
             ),
             key=lambda x: x.locus,
         ),
-        total_oe=hl.agg.take(ht.section_oe, 1)[0],
+        section_oe=hl.agg.take(ht.section_oe, 1)[0],
     )
     group_ht = group_ht.annotate(max_idx=hl.len(group_ht.values.positions) - 1)
     group_ht = group_ht.transmute(
@@ -85,7 +84,6 @@ def group_no_single_break_found_ht(
 
 def split_sections_by_len(
     ht_path: str,
-    group_str: str,
     search_num: int,
     missense_len_threshold: int,
     overwrite: bool,
@@ -98,9 +96,7 @@ def split_sections_by_len(
     take longer to run through `hl.experimental.loop`.
 
     :param ht: Path to input Table (Table written using `group_no_single_break_found_ht`).
-    :param group_str: Field used to group observed and expected values.
-    :param search_num: Search iteration number
-        (e.g., second round of searching for single break would be 2).
+    :param search_num: Search iteration number (e.g., second round of searching for single break would be 2).
     :param missense_len_threshold: Cutoff based on possible number of missense sites in section.
     :param overwrite: Whether to overwrite existing SetExpressions.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
@@ -114,21 +110,21 @@ def split_sections_by_len(
     ht = ht.annotate(missense_list_len=ht.max_idx + 1)
 
     logger.info(
-        "Splitting sections into two categories: list length < %i and list length >="
-        " %i...",
+        "Splitting sections into two categories: list length < %i and list length"
+        " >= %i...",
         missense_len_threshold,
         missense_len_threshold,
     )
     under_threshold = ht.aggregate(
         hl.agg.filter(
             ht.missense_list_len < missense_len_threshold,
-            hl.agg.collect_as_set(ht[group_str]),
+            hl.agg.collect_as_set(ht.section),
         )
     )
     over_threshold = ht.aggregate(
         hl.agg.filter(
             ht.missense_list_len >= missense_len_threshold,
-            hl.agg.collect_as_set(ht[group_str]),
+            hl.agg.collect_as_set(ht.section),
         )
     )
     logger.info(
@@ -211,7 +207,7 @@ def calculate_window_chisq(
     j: hl.expr.Int32Expression,
     cum_obs: hl.expr.ArrayExpression,
     cum_exp: hl.expr.ArrayExpression,
-    total_oe: hl.expr.Float64Expression,
+    section_oe: hl.expr.Float64Expression,
     min_num_exp_mis: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
     """
@@ -226,7 +222,7 @@ def calculate_window_chisq(
     :param hl.expr.Int32Expression j: Larger list index value corresponding to the larger position of the two break window.
     :param hl.expr.ArrayExpression cum_obs: List containing cumulative observed missense values.
     :param hl.expr.ArrayExpression cum_exp: List containing cumulative expected missense values.
-    :param hl.expr.Float64Expression total_oe: Transcript/transcript section overall observed/expected (OE) missense ratio.
+    :param hl.expr.Float64Expression section_oe: Transcript/transcript section overall observed/expected (OE) missense ratio.
     :param hl.expr.Float64Expression min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
     :return: Chi square significance value.
@@ -249,11 +245,8 @@ def calculate_window_chisq(
                     # The missense values for this section are the cumulative values at
                     # one index smaller than index i
                     get_dpois_expr(
-                        cond_expr=True,
-                        section_oe_expr=get_obs_exp_expr(
-                            True,
-                            cum_obs[i - 1],
-                            hl.max(cum_exp[i - 1], 1e-09),
+                        oe_expr=get_obs_exp_expr(
+                            cum_obs[i - 1], hl.max(cum_exp[i - 1], 1e-09)
                         ),
                         obs_expr=cum_obs[i - 1],
                         exp_expr=hl.max(cum_exp[i - 1], 1e-09),
@@ -262,9 +255,7 @@ def calculate_window_chisq(
                     # The missense values for this section are the cumulative values at index j
                     # minus the cumulative values at index i -1
                     + get_dpois_expr(
-                        cond_expr=True,
-                        section_oe_expr=get_obs_exp_expr(
-                            True,
+                        oe_expr=get_obs_exp_expr(
                             (cum_obs[j] - cum_obs[i - 1]),
                             hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
                         ),
@@ -275,9 +266,7 @@ def calculate_window_chisq(
                     # The missense values for this section are the cumulative values at the last index
                     # minus the cumulative values at index j
                     + get_dpois_expr(
-                        cond_expr=True,
-                        section_oe_expr=get_obs_exp_expr(
-                            True,
+                        oe_expr=get_obs_exp_expr(
                             (cum_obs[-1] - cum_obs[j]),
                             hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                         ),
@@ -288,20 +277,17 @@ def calculate_window_chisq(
                 # Create null distribution
                 - (
                     get_dpois_expr(
-                        cond_expr=True,
-                        section_oe_expr=total_oe,
+                        oe_expr=section_oe,
                         obs_expr=cum_obs[i - 1],
                         exp_expr=hl.max(cum_exp[i - 1], 1e-09),
                     )
                     + get_dpois_expr(
-                        cond_expr=True,
-                        section_oe_expr=total_oe,
+                        oe_expr=section_oe,
                         obs_expr=cum_obs[j] - cum_obs[i - 1],
                         exp_expr=hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
                     )
                     + get_dpois_expr(
-                        cond_expr=True,
-                        section_oe_expr=total_oe,
+                        oe_expr=section_oe,
                         obs_expr=cum_obs[-1] - cum_obs[j],
                         exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                     )
@@ -363,7 +349,7 @@ def search_for_two_breaks(
                         j,
                         group_ht.cum_obs,
                         group_ht.cum_exp,
-                        group_ht.total_oe,
+                        group_ht.section_oe,
                         min_num_exp_mis,
                     ),
                     -1,
@@ -385,7 +371,7 @@ def search_for_two_breaks(
         )
     )
     group_ht = group_ht.transmute(
-        max_chisq=group_ht.best_break.chisq,
+        chisq=group_ht.best_break.chisq,
         # Adjust breakpoint inclusive/exclusiveness to be consistent with single break breakpoints, i.e.
         # so that the breakpoint site itself is the last site in the left subsection. Thus, the resulting
         # subsections will be divided as follows:
@@ -403,7 +389,7 @@ def search_for_two_breaks(
     group_ht = group_ht.checkpoint(group_ht_path, overwrite=True)
 
     # Remove rows with maximum chi square values below the threshold
-    group_ht = group_ht.filter(group_ht.max_chisq >= chisq_threshold)
+    group_ht = group_ht.filter(group_ht.chisq >= chisq_threshold)
     return group_ht
 
 
@@ -521,8 +507,8 @@ def process_section_group(
         )
         ht = ht.checkpoint(
             f"{prep_path}/{section_group[0]}.ht",
-            overwrite=not read_if_exists,
             _read_if_exists=read_if_exists,
+            overwrite=not read_if_exists,
         )
     else:
         # Add start_idx struct with i_start, j_start, i_max_idx, j_max_idx annotations
@@ -555,10 +541,12 @@ def process_section_group(
         # If any rows had a significant breakpoint,
         # find the one "best" breakpoint (breakpoint with largest chi square value)
         if ht.count() > 0:
-            ht = get_max_chisq_per_group(ht, "section", "max_chisq", freeze)
-            ht = ht.filter(ht.max_chisq == ht.section_max_chisq)
+            ht = annotate_max_chisq_per_section(ht, freeze)
+            ht = ht.filter(ht.chisq == ht.section_max_chisq)
 
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
+    # NOTE: Change `naive_coalesce` to `repartition` below if you run into this Hail bug:
+    # https://discuss.hail.is/t/zip-length-mismatch-error/3548/7
     ht = ht.naive_coalesce(output_n_partitions)
     # TODO: Restructure ht to match locus-level formats from single breaks
     ht.write(output_ht_path, overwrite=True)

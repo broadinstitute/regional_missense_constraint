@@ -1,6 +1,8 @@
 """
 This script searches for two simultaneous breaks in groups of transcripts using Hail Batch.
 
+# TODO: Add RMC repo to docker image and make sure it's up to date
+
 Note that a couple functions have been copied into this script from `constraint.py`:
 - `get_obs_exp_expr`
 - `get_dpois_expr`
@@ -18,7 +20,7 @@ This script should be run locally because it submits jobs to the Hail Batch serv
 """
 import argparse
 import logging
-from typing import Dict, List, Optional, Set, Union
+from typing import List, Optional, Set
 
 import hail as hl
 import hailtop.batch as hb
@@ -129,7 +131,6 @@ def simul_search_round_bucket_path(
 
 
 def get_obs_exp_expr(
-    cond_expr: hl.expr.BooleanExpression,
     obs_expr: hl.expr.Int64Expression,
     exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
@@ -138,7 +139,6 @@ def get_obs_exp_expr(
 
     Typically imported from `constraint.py`. See `constraint.py` for full docstring.
 
-    :param hl.expr.BooleanExpression cond_expr: Condition to check prior to adding obs/exp expression.
     :param hl.expr.Int64Expression obs_expr: Expression containing number of observed variants.
     :param hl.expr.Float64Expression exp_expr: Expression containing number of expected variants.
     :return: Observed/expected expression.
@@ -146,35 +146,26 @@ def get_obs_exp_expr(
     """
     # Cap the o/e ratio at 1 to avoid pulling out regions that are enriched for missense variation
     # Code is looking for missense constraint, so regions with a ratio of >= 1.0 can be grouped together
-    return hl.or_missing(cond_expr, hl.min(obs_expr / exp_expr, 1))
+    return hl.nanmin(obs_expr / exp_expr, 1)
 
 
 def get_dpois_expr(
-    cond_expr: hl.expr.BooleanExpression,
-    section_oe_expr: hl.expr.Float64Expression,
-    obs_expr: Union[
-        Dict[hl.expr.StringExpression, hl.expr.Int64Expression], hl.expr.Int64Expression
-    ],
-    exp_expr: Union[
-        Dict[hl.expr.StringExpression, hl.expr.Float64Expression],
-        hl.expr.Float64Expression,
-    ],
+    oe_expr: hl.expr.Float64Expression,
+    obs_expr: hl.expr.Int64Expression,
+    exp_expr: hl.expr.Float64Expression,
 ) -> hl.expr.StructExpression:
     """
-    Calculate probabilities (natural log) of the observed values under a Poisson model.
+    Calculate probability densities (natural log) of the observed values under a Poisson model.
 
     Typically imported from `constraint.py`. See `constraint.py` for full docstring.
 
-    :param cond_expr: Conditional expression to check before calculating probability.
-    :param section_oe_expr: Expression of section observed/expected value.
+    :param oe_expr: Expression of observed/expected value.
     :param obs_expr: Expression containing observed variants count.
     :param exp_expr: Expression containing expected variants count.
-    :return: natural log of the probability under Poisson model.
+    :return: Natural log of the probability density under Poisson model.
     """
     # log_p = True returns the natural logarithm of the probability density
-    return hl.or_missing(
-        cond_expr, hl.dpois(obs_expr, exp_expr * section_oe_expr, log_p=True)
-    )
+    return hl.dpois(obs_expr, exp_expr * oe_expr, log_p=True)
 
 
 def calculate_window_chisq(
@@ -183,7 +174,7 @@ def calculate_window_chisq(
     j: hl.expr.Int32Expression,
     cum_obs: hl.expr.ArrayExpression,
     cum_exp: hl.expr.ArrayExpression,
-    total_oe: hl.expr.Float64Expression,
+    section_oe: hl.expr.Float64Expression,
     min_num_exp_mis: hl.expr.Float64Expression,
 ) -> hl.expr.Float64Expression:
     """
@@ -198,7 +189,7 @@ def calculate_window_chisq(
     :param hl.expr.Int32Expression j: Larger list index value corresponding to the larger position of the two break window.
     :param hl.expr.ArrayExpression cum_obs: List containing cumulative observed missense values.
     :param hl.expr.ArrayExpression cum_exp: List containing cumulative expected missense values.
-    :param hl.expr.Float64Expression total_oe: Transcript/transcript section overall observed/expected (OE) missense ratio.
+    :param hl.expr.Float64Expression section_oe: Transcript/transcript section overall observed/expected (OE) missense ratio.
     :param hl.expr.Float64Expression min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
     :return: Chi square significance value.
@@ -221,9 +212,7 @@ def calculate_window_chisq(
                     # The missense values for this section are the cumulative values at
                     # one index smaller than index i
                     get_dpois_expr(
-                        cond_expr=True,
-                        section_oe_expr=get_obs_exp_expr(
-                            True,
+                        oe_expr=get_obs_exp_expr(
                             cum_obs[i - 1],
                             hl.max(cum_exp[i - 1], 1e-09),
                         ),
@@ -234,9 +223,7 @@ def calculate_window_chisq(
                     # The missense values for this section are the cumulative values at index j
                     # minus the cumulative values at index i -1
                     + get_dpois_expr(
-                        cond_expr=True,
-                        section_oe_expr=get_obs_exp_expr(
-                            True,
+                        oe_expr=get_obs_exp_expr(
                             (cum_obs[j] - cum_obs[i - 1]),
                             hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
                         ),
@@ -247,9 +234,7 @@ def calculate_window_chisq(
                     # The missense values for this section are the cumulative values at the last index
                     # minus the cumulative values at index j
                     + get_dpois_expr(
-                        cond_expr=True,
-                        section_oe_expr=get_obs_exp_expr(
-                            True,
+                        oe_expr=get_obs_exp_expr(
                             (cum_obs[-1] - cum_obs[j]),
                             hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                         ),
@@ -260,20 +245,17 @@ def calculate_window_chisq(
                 # Create null distribution
                 - (
                     get_dpois_expr(
-                        cond_expr=True,
-                        section_oe_expr=total_oe,
+                        oe_expr=section_oe,
                         obs_expr=cum_obs[i - 1],
                         exp_expr=hl.max(cum_exp[i - 1], 1e-09),
                     )
                     + get_dpois_expr(
-                        cond_expr=True,
-                        section_oe_expr=total_oe,
+                        oe_expr=section_oe,
                         obs_expr=cum_obs[j] - cum_obs[i - 1],
                         exp_expr=hl.max(cum_exp[j] - cum_exp[i - 1], 1e-09),
                     )
                     + get_dpois_expr(
-                        cond_expr=True,
-                        section_oe_expr=total_oe,
+                        oe_expr=section_oe,
                         obs_expr=cum_obs[-1] - cum_obs[j],
                         exp_expr=hl.max(cum_exp[-1] - cum_exp[j], 1e-09),
                     )
@@ -302,7 +284,7 @@ def search_for_two_breaks(
         a single significant breakpoint.
     :param count: Which transcript group is being run (based on counter generated in `main`).
     :param chisq_threshold: Chi-square significance threshold. Default is
-        scipy.stats.chi2.ppf(1 - P_VALUE, 2).
+        `scipy.stats.chi2.ppf(1 - P_VALUE, 2)`.
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001
         with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
@@ -313,7 +295,7 @@ def search_for_two_breaks(
         which corresponds to a p-value of 0.025 with 2 degrees of freedom.
     :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
         (as long as chi square value is >= min_chisq_threshold).
-        This saves a lot of extra data and should only occur once.
+        This saves a lot of extra data and should only occur during the initial search round.
         Default is False.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: Table filtered to transcript/sections with significant simultaneous breakpoints
@@ -335,7 +317,7 @@ def search_for_two_breaks(
                         j,
                         group_ht.cum_obs,
                         group_ht.cum_exp,
-                        group_ht.total_oe,
+                        group_ht.section_oe,
                         min_num_exp_mis,
                     ),
                     -1,
@@ -357,7 +339,7 @@ def search_for_two_breaks(
         )
     )
     group_ht = group_ht.transmute(
-        max_chisq=group_ht.best_break.chisq,
+        chisq=group_ht.best_break.chisq,
         # Adjust breakpoint inclusive/exclusiveness to be consistent with single break breakpoints, i.e.
         # so that the breakpoint site itself is the last site in the left subsection. Thus, the resulting
         # subsections will be divided as follows:
@@ -377,7 +359,7 @@ def search_for_two_breaks(
     group_ht = group_ht.checkpoint(group_ht_path, overwrite=True)
 
     # Remove rows with maximum chi square values below the threshold
-    group_ht = group_ht.filter(group_ht.max_chisq >= chisq_threshold)
+    group_ht = group_ht.filter(group_ht.chisq >= chisq_threshold)
     return group_ht
 
 
@@ -403,28 +385,29 @@ def process_section_group(
 
     Designed for use with Hail Batch.
 
-    :param str ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
-    :param List[str] section_group: List of transcripts or transcript sections to process.
-    :param count: Which transcript group is being run (based on counter generated in `main`).
+    :param ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
+    :param section_group: List of transcripts or transcript sections to process.
+    :param count: Which transcript or transcript section group is being run (based on counter generated in `main`).
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
-    :param bool over_threshold: Whether input transcript/sections have more
+    :param over_threshold: Whether input transcript/sections have more
         possible missense sites than threshold specified in `run_simultaneous_breaks`.
-    :param str output_ht_path: Path to output results Table.
+    :param output_ht_path: Path to output results Table.
     :param output_n_partitions: Desired number of partitions for output Table.
         Default is 10.
     :param chisq_threshold: Chi-square significance threshold. Default is
-        scipy.stats.chi2.ppf(1 - P_VALUE, 2).
+        `scipy.stats.chi2.ppf(1 - P_VALUE, 2)`.
         Default value used in ExAC was 13.8, which corresponds to a p-value of 0.001
         with 2 degrees of freedom.
         (https://www.itl.nist.gov/div898/handbook/eda/section3/eda3674.htm)
-    :param float min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
+    :param min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
-    :param int split_list_len: Max length to divide transcript/sections observed or expected missense and position lists into.
+        Default is MIN_EXP_MIS.
+    :param split_list_len: Max length to divide transcript/sections observed or expected missense and position lists into.
         E.g., if split_list_len is 500, and the list lengths are 998, then the transcript/section will be
         split into two rows with lists of length 500 and 498.
         Only used if over_threshold is True. Default is 500.
-    :param bool read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
+    :param read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
         Only applies to Table that is input to `search_for_two_breaks`
         (`f"{temp_ht_path}/{transcript_group[0]}_prep.ht"`).
         Default is False.
@@ -432,7 +415,10 @@ def process_section_group(
         (as long as chi square value is >= min_chisq_threshold).
         This saves a lot of extra data and should only occur once.
         Default is False.
+    :param requester_pays_bucket: Requester-pays bucket to initialize hail configuration with.
+        Default is `RMC_PREFIX`.
     :param google_project: Google project used to read and write data to requester-pays bucket.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: None; processes Table and writes to path. Also writes success TSV to path.
     """
     # Initialize hail to read from requester-pays correctly
@@ -507,8 +493,8 @@ def process_section_group(
         )
         ht = ht.checkpoint(
             f"{prep_path}/{section_group[0]}.ht",
-            overwrite=not read_if_exists,
             _read_if_exists=read_if_exists,
+            overwrite=not read_if_exists,
         )
     else:
         # Add start_idx struct with i_start, j_start, i_max_idx, j_max_idx annotations
@@ -545,7 +531,7 @@ def process_section_group(
                 section_max_chisq=hl.agg.max(ht.max_chisq)
             )
             ht = ht.annotate(section_max_chisq=group_ht[ht.section].section_max_chisq)
-            ht = ht.filter(ht.max_chisq == ht.section_max_chisq)
+            ht = ht.filter(ht.chisq == ht.section_max_chisq)
 
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
     ht = ht.naive_coalesce(output_n_partitions)
@@ -626,15 +612,18 @@ def main(args):
         # Use a docker image that specifies spark memory allocation if --use-custom-machine was specified
         if args.use_custom_machine:
             args.docker_image = "gcr.io/broad-mpg-gnomad/rmc:20220930"
-            logger.warning(
-                "Using %s image; please make sure Hail version in image is up to date",
-                args.docker_image,
-            )
+            # Hail versions >= 0.2.119 are no longer backwards compatible
+            # (older Hail versions cannot read data written using version >= 0.2.119)
+            raise DataException(f"Hail in {args.docker_image} image is out of date!")
         # Otherwise, use the default docker image
         else:
-            args.docker_image = "gcr.io/broad-mpg-gnomad/tgg-methods-vm:20230123"
+            args.docker_image = (
+                "us-central1-docker.pkg.dev/broad-mpg-gnomad/images/rmc_simul_search"
+            )
+            # NOTE: Python version on your local machine must match the Python version in this image
             logger.warning(
-                "Using %s image; please make sure Hail version in image is up to date",
+                "Using %s image; please make sure Hail and Python versions in image are"
+                " up to date",
                 args.docker_image,
             )
 
@@ -642,7 +631,7 @@ def main(args):
     backend = hb.ServiceBackend(
         billing_project=args.billing_project,
         remote_tmpdir=args.batch_bucket,
-        google_project=args.google_project,
+        gcs_requester_pays_configuration=args.google_project,
     )
     b = hb.Batch(
         name="simul_breaks",
@@ -679,6 +668,8 @@ def main(args):
             j.memory(args.batch_memory)
             j.cpu(args.batch_cpu)
             j.storage(args.batch_storage)
+            # NOTE: There was a Hail bug that prevented passing keyword args to a PythonJob in RMC freeze 7
+            # See: https://hail.zulipchat.com/#narrow/stream/223457-Hail-Batch-support/topic/j.2Ecall.28.29.20ValueError.3A.20too.20many.20values.20to.20unpack.20.28expected.202.29
             j.call(
                 process_section_group,
                 ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
@@ -717,6 +708,7 @@ def main(args):
                 j.memory(args.batch_memory)
                 j.cpu(args.batch_cpu)
                 j.storage(args.batch_storage)
+
             j.call(
                 process_section_group,
                 ht_path=grouped_single_no_break_ht_path(args.search_num, args.freeze),
@@ -876,7 +868,7 @@ if __name__ == "__main__":
         "--docker-image",
         help="""
         Docker image to provide to hail Batch. Must have dill, hail, and python installed.
-        Suggested image: gcr.io/broad-mpg-gnomad/tgg-methods-vm:20230123.
+        Suggested image: us-central1-docker.pkg.dev/broad-mpg-gnomad/images/rmc_simul_search.
 
         If running with --use-custom-machine, Docker image must also contain this line:
         `ENV PYSPARK_SUBMIT_ARGS="--driver-memory 8g --executor-memory 8g pyspark-shell"`
