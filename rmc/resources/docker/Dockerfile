@@ -1,8 +1,11 @@
 FROM 'google/cloud-sdk:slim'
+FROM 'hailgenetics/python-dill:3.11-slim'
 
-# install packages
+# TODO: Double check if all of these packages are necessary
+# Install packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
     apt-utils \
+    curl \
     g++ \
     gawk \
     less \
@@ -22,62 +25,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # clean up apt cache
     rm -rf /var/lib/apt/lists/*
 
-#install Java 8 for hail
-RUN wget -qO - https://adoptopenjdk.jfrog.io/adoptopenjdk/api/gpg/key/public | apt-key add - \
-    && add-apt-repository -y https://adoptopenjdk.jfrog.io/adoptopenjdk/deb/ \
-    && apt-get update && apt-get install -y adoptopenjdk-8-hotspot
+# Install Java 8 for hail
+RUN mkdir -p /etc/apt/keyrings
+RUN wget -O - https://packages.adoptium.net/artifactory/api/gpg/key/public | tee /etc/apt/keyrings/adoptium.asc && echo "deb [signed-by=/etc/apt/keyrings/adoptium.asc] https://packages.adoptium.net/artifactory/deb $(awk -F= '/^VERSION_CODENAME/{print$2}' /etc/os-release) main" | tee /etc/apt/sources.list.d/adoptium.list && apt-get update && apt install -y --no-install-recommends temurin-8-jdk
 
-RUN mkdir tools
-WORKDIR /tools
-
-# Install python packages
-RUN apt-get update \
-    && apt-get dist-upgrade -y \
-    && apt-get install -y --no-install-recommends\
-    libc6-dev \
-    libffi-dev \
-    libgdbm-dev \
-    liblapack-dev \
-    liblapack3 \
-    libncursesw5-dev \
-    libopenblas-base \
-    libopenblas-dev \
-    libsqlite3-dev \
-    libssl-dev \
-    openssl \
-    python-smbus \
-    python3 \
-    python-pip
-
-# Upgrade pip to latest version
-RUN python3 -m pip install --upgrade pip
-
-# Install hail and other python libraries
-ENV HAIL_VERSION="0.2.100"
+# Intall Hail
+ENV HAIL_VERSION="0.2.120"
 RUN python3 --version
-RUN python3 -m pip install \
-    wheel \
-    pypandoc \
-    hail==${HAIL_VERSION} \
-    scipy \
-    numpy \
-    pandas \
-    matplotlib \
-    seaborn \
-    ipython \
-    pybedtools \
-    dill \
-    gnomad
+RUN python3 -m pip install hail==${HAIL_VERSION}
 
 # Install GCS Connector
-RUN export SPARK_HOME=$(find_spark_home.py) && \
-    curl https://storage.googleapis.com/hadoop-lib/gcs/gcs-connector-hadoop2-2.0.1.jar \
-         >$SPARK_HOME/jars/gcs-connector-hadoop2-2.0.1.jar && \
-    mkdir -p $SPARK_HOME/conf && \
-    touch $SPARK_HOME/conf/spark-defaults.conf && \
-    sed -i $SPARK_HOME/conf/spark-defaults.conf \
-        -e 's:spark\.hadoop\.google\.cloud\.auth\.service\.account\.enable.*:spark.hadoop.google.cloud.auth.service.account.enable true:' \
-        -e 's:spark\.hadoop\.google\.cloud\.auth\.service\.account\.json\.keyfile.*:spark\.hadoop\.google\.cloud\.auth\.service\.account\.json\.keyfile /gsa-key/key.json:'
+RUN curl -sSL broad.io/install-gcs-connector > install-gcs-connector.py && \
+    python3 install-gcs-connector.py --key-file-path /gsa-key/key.json
 
 WORKDIR /home
-ENV PYSPARK_SUBMIT_ARGS="--driver-memory 8g --executor-memory 8g pyspark-shell"

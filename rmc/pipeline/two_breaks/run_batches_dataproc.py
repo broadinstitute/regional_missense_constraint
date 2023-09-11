@@ -51,6 +51,7 @@ def main(args):
             chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 2))
 
         if args.run_sections_over_threshold:
+            over_threshold = True
             sections_to_run = list(
                 hl.eval(
                     hl.experimental.read_expression(
@@ -64,6 +65,7 @@ def main(args):
             )
 
         if args.run_sections_under_threshold:
+            over_threshold = False
             sections_to_run = list(
                 hl.eval(
                     hl.experimental.read_expression(
@@ -100,8 +102,11 @@ def main(args):
             freeze=args.freeze,
         )
         for counter, group in enumerate(section_groups):
-
-            output_ht_path = f"{raw_path}/simul_break_dataproc_{counter}.ht"
+            output_ht_path = (
+                f"{raw_path}/simul_break_dataproc_{counter}.ht"
+                if over_threshold
+                else f"{raw_path}/simul_break_dataproc_under_{counter}.ht"
+            )
             if file_exists(output_ht_path):
                 raise DataException(
                     f"Output already exists at {output_ht_path}! Double check before"

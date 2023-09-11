@@ -6,11 +6,9 @@
 #
 astroid==2.15.6
     # via pylint
-attrs==23.1.0
-    # via pytest
 autopep8==2.0.2
     # via -r requirements-dev.in
-black==22.3.0
+black==23.7.0
     # via -r requirements-dev.in
 cfgv==3.3.1
     # via pre-commit
@@ -43,7 +41,9 @@ mypy-extensions==1.0.0
 nodeenv==1.8.0
     # via pre-commit
 packaging==23.1
-    # via pytest
+    # via
+    #   black
+    #   pytest
 pathspec==0.11.1
     # via black
 platformdirs==3.8.1
@@ -55,24 +55,20 @@ pluggy==0.13.1
     # via pytest
 pre-commit==2.10.1
     # via -r requirements-dev.in
-py==1.11.0
-    # via pytest
 pycodestyle==2.10.0
     # via autopep8
 pydocstyle==6.1.1
     # via -r requirements-dev.in
 pylint==2.17.4
     # via -r requirements-dev.in
-pytest==6.2.3
+pytest==7.4.0
     # via -r requirements-dev.in
 pyyaml==6.0
     # via pre-commit
 snowballstemmer==2.2.0
     # via pydocstyle
 toml==0.10.2
-    # via
-    #   pre-commit
-    #   pytest
+    # via pre-commit
 tomlkit==0.11.8
     # via pylint
 typing-extensions==4.7.1
