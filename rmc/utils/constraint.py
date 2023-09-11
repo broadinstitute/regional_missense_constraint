@@ -389,9 +389,16 @@ def create_constraint_prep_ht(
     )
 
     logger.info("Adding section annotation...")
-    # Add transcript start and stop positions from browser HT
-    transcript_ht = gene_model.ht().select("start", "stop")
-    ht = ht.annotate(**transcript_ht[ht.transcript])
+    # Add transcript start and stop CDS positions
+    # NOTE: RMC freezes 1-7 used `gene_model` resource to get transcript start and stops
+    # rather than CDS
+    transcript_ht = (
+        transcript_ref.ht().ht().select("gnomad_cds_start", "gnomad_cds_end")
+    )
+    ht = ht.annotate(
+        start=transcript_ht[ht.transcript].gnomad_cds_start,
+        stop=transcript_ht[ht.transcript].gnomad_cds_end,
+    )
     ht = ht.annotate(section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop))
     ht = ht.key_by("locus", "section").drop("start", "stop", "transcript")
 
