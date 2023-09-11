@@ -30,7 +30,6 @@ from rmc.utils.constraint import (
     create_filtered_context_ht,
     create_no_breaks_he,
     format_rmc_browser_ht,
-    get_max_chisq_per_group,
     merge_rmc_hts,
     process_sections,
 )
