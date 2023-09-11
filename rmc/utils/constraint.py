@@ -1,7 +1,7 @@
 import logging
 import re
 import subprocess
-from typing import List, Set
+from typing import List, Set, Union
 
 import hail as hl
 import scipy
@@ -24,7 +24,7 @@ from rmc.resources.reference_data import (
     transcript_cds,
     transcript_ref,
 )
-from rmc.resources.resource_utils import MISSENSE
+from rmc.resources.resource_utils import KEEP_CODING_CSQ, MISSENSE
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
     FINAL_ANNOTATIONS,

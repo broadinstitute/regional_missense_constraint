@@ -261,7 +261,7 @@ def get_aa_from_context(
     )
     # Drop globals and select only VEP transcript consequences field
     ht = process_context_ht(
-        filter_to_missense=False, add_annotations=False
+        filter_outlier_transcripts=True, add_annotations=False
     ).select_globals()
     ht = ht.select("transcript_consequences")
     ht = ht.filter(
@@ -355,8 +355,8 @@ def get_ref_aa(
     )
     if protein_num_check != 0:
         raise DataException(
-            f"{protein_num_check} sites had different amino acid numbers at start and end --"
-            " please double check!"
+            f"{protein_num_check} sites had different amino acid numbers at start and"
+            " end -- please double check!"
         )
     # Reformat reference AA to have both the 3 letter code and number
     ht = ht.annotate(
@@ -391,7 +391,8 @@ def get_ref_aa(
     )
     if missing_aa_check != 0:
         logger.warning(
-            "%i locus-transcript combinations had missing AA info for at least 1 allele!"
+            "%i locus-transcript combinations had missing AA info for at least 1"
+            " allele!"
         )
     return ht.transmute(ref_aa=ht.aa_info[0].ref_aa)
 
