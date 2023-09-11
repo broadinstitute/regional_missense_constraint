@@ -1782,6 +1782,7 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
     Desired schema:
     ----------------------------------------
     Global fields:
+        'p_value': float64
         'transcripts_not_searched': set<str>
         'transcripts_no_rmc': set<str>
         'outlier_transcripts': set<str>
@@ -1796,7 +1797,8 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
             obs: int64,
             exp: float64,
             oe: float64,
-            chisq: float64
+            chisq: float64,
+            p: float64
         }>
     ----------------------------------------
     Key: ['transcript']
