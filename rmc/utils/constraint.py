@@ -1821,6 +1821,14 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
     # Annotate amino acids
     ht = annot_rmc_with_aa(ht, overwrite_temp)
 
+    # Remove missense O/E cap of 1
+    # (Missense O/E capped for RMC search, but
+    # it shouldn't be capped when displayed in the browser)
+    ht = ht.annotate(section_oe=ht.obs / ht.exp)
+
+    # Convert chi square to p-value
+    ht = ht.annotate(section_p_value=hl.dchisq(ht.section_chisq, 1))
+
     # Add region struct
     ht = ht.annotate(
         region=hl.struct(
@@ -1832,6 +1840,7 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
             exp=ht.section_exp,
             oe=ht.section_oe,
             chisq=ht.section_chisq,
+            p=ht.section_p_value,
         )
     )
     # Group Table by transcript
