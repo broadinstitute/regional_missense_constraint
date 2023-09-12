@@ -101,7 +101,9 @@ def prepare_amino_acid_ht(
     else:
         loftee_lof_agg = context_ht.aggregate(hl.agg.counter(context_ht.lof))
         hl.experimental.write_expression(
-            hl.literal(loftee_lof_agg), loftee_lof_agg_path
+            hl.literal(loftee_lof_agg),
+            loftee_lof_agg_path,
+            overwrite=overwrite_temp,
         )
         loftee_lof_flag_agg = context_ht.aggregate(
             hl.agg.filter(
@@ -109,7 +111,9 @@ def prepare_amino_acid_ht(
             )
         )
         hl.experimental.write_expression(
-            hl.literal(loftee_lof_flag_agg), loftee_lof_flag_agg_path
+            hl.literal(loftee_lof_flag_agg),
+            loftee_lof_flag_agg_path,
+            overwrite=overwrite_temp,
         )
     logger.info("Variant counts by LOFTEE LoF label: %s", loftee_lof_agg)
     logger.info("Variant counts by LOFTEE LoF flag label: %s", loftee_lof_flag_agg)
