@@ -104,7 +104,9 @@ def prepare_amino_acid_ht(
             hl.literal(loftee_lof_agg), loftee_lof_agg_path
         )
         loftee_lof_flag_agg = context_ht.aggregate(
-            hl.agg.filter(context_ht.lof, hl.agg.counter(context_ht.lof_flags))
+            hl.agg.filter(
+                context_ht.lof == loftee_hc_str, hl.agg.counter(context_ht.lof_flags)
+            )
         )
         hl.experimental.write_expression(
             hl.literal(loftee_lof_flag_agg), loftee_lof_flag_agg_path
