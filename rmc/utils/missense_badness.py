@@ -362,7 +362,7 @@ def calculate_misbad(
 
         logger.info("Re-joining split HTs to calculate missense badness...")
         mb_ht = oe_hts["high"].join(oe_hts["low"], how="outer")
-        mb_ht = mb_ht.annotate(mut_type=hl.coalesce(ht.mut_type, ht.mut_type_1))
+        mb_ht = mb_ht.transmute(mut_type=hl.coalesce(mb_ht.mut_type, mb_ht.mut_type_1))
         mb_ht = mb_ht.annotate(
             high_low=(
                 (mb_ht.high_obs / mb_ht.high_pos) / (mb_ht.low_obs / mb_ht.low_pos)
