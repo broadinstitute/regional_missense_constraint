@@ -392,7 +392,8 @@ def get_ref_aa(
     if missing_aa_check != 0:
         logger.warning(
             "%i locus-transcript combinations had missing AA info for at least 1"
-            " allele!", missing_aa_check
+            " allele!",
+            missing_aa_check,
         )
     return ht.transmute(ref_aa=ht.aa_info[0].ref_aa)
 
