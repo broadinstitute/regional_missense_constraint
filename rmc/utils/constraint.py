@@ -392,9 +392,7 @@ def create_constraint_prep_ht(
     # Add transcript start and stop CDS positions
     # NOTE: RMC freezes 1-7 used `gene_model` resource to get transcript start and stops
     # rather than CDS
-    transcript_ht = (
-        transcript_ref.ht().ht().select("gnomad_cds_start", "gnomad_cds_end")
-    )
+    transcript_ht = transcript_ref.ht().select("gnomad_cds_start", "gnomad_cds_end")
     ht = ht.annotate(
         start=transcript_ht[ht.transcript].gnomad_cds_start,
         stop=transcript_ht[ht.transcript].gnomad_cds_end,
