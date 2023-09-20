@@ -413,6 +413,9 @@ def main(args):
 
             logger.info("Getting transcripts without evidence of RMC...")
             create_no_breaks_he(freeze=args.freeze, overwrite=args.overwrite)
+            # TODO: Create region-level table that combines `rmc_results` and `no_breaks_he`
+            # (used in RMC assessment plots)
+            # TODO: For the above, also need a transcript-level table with missense total obs and total exp
 
             logger.info("Creating OE-annotated context table...")
             create_context_with_oe(
