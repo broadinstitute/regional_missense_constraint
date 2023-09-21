@@ -1552,9 +1552,10 @@ def fix_region_start_stop_aas(
         :return: CDS HT keyed by either exon start or stop position and transcript.
         """
         if fix_missing_start:
-            # Region starts missing AAs need to get adjusted to use the AA from the previous
-            # exon start
             # Reorder HT so that _prev_nonnull returns the next exon start
+            # Region starts missing AAs need to get adjusted to use the AA from the next
+            # exon start (this will now be from the previous row due to the reorder
+            # and prev nonnull scan)
             checkpoint_path = f"{TEMP_PATH_WITH_FAST_DEL}/cds_start_fix.ht"
             cds_ht = cds_ht.order_by(
                 hl.asc(cds_ht.transcript), hl.desc(cds_ht.exon_start)
