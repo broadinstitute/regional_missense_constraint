@@ -376,7 +376,7 @@ def get_ref_aa(
 
     # Check to see if AA info is defined for all alleles associated with a locus/transcript
     missing_aa_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/missing_aa_check.he"
-    if overwrite_temp:
+    if not file_exists(missing_aa_check_he_path):
         ht = ht.annotate(
             all_aa_def=hl.all(hl.map(lambda x: hl.is_missing(x.ref_aa), ht.aa_info))
         )
