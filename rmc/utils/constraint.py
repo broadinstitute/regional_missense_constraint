@@ -1676,7 +1676,7 @@ def check_and_fix_missing_aa(
         """
         Check input Table for missing amino acid (AA) annotations.
 
-        Function returns Table and number of rows missing amino acid annotations.
+        Function returns Table of rows missing amino acid annotations.
 
         :param ht: Input Table.
         :return: Table with rows missing AA annotation,
@@ -1816,16 +1816,16 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
         stop_coordinate=ht.interval.end,
     )
 
-    # Annotate amino acids
+    # Annotate start and stop amino acids per region
     ht = annot_rmc_with_aa(ht, overwrite_temp)
 
     # Remove missense O/E cap of 1
     # (Missense O/E capped for RMC search, but
     # it shouldn't be capped when displayed in the browser)
-    ht = ht.annotate(section_oe=ht.obs / ht.exp)
+    ht = ht.annotate(section_oe=ht.section_obs / ht.section_exp)
 
     # Convert chi square to p-value
-    ht = ht.annotate(section_p_value=hl.dchisq(ht.section_chisq, 1))
+    ht = ht.annotate(section_p_value=hl.pchisqtail(ht.section_chisq, 1))
 
     # Add region struct
     ht = ht.annotate(

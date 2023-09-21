@@ -17,7 +17,7 @@ gene_model = TableResource(path=f"{RESOURCE_BUILD_PREFIX}/browser/b37_transcript
 """
 Table containing transcript start and stop positions displayed in the browser.
 
-Contains all transcripts displayed in the browser. (Contains more transcripts than `transcript_ref` below).
+Contains all transcripts displayed in the browser (more than `transcript_ref` below).
 """
 
 transcript_ref = TableResource(

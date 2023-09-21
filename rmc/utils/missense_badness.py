@@ -7,7 +7,12 @@ from gnomad.utils.file_utils import file_exists
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.reference_data import FOLD_K, train_val_test_transcripts_path
 from rmc.resources.resource_utils import KEEP_CODING_CSQ
-from rmc.resources.rmc import CURRENT_FREEZE, amino_acids_oe_path, misbad_path
+from rmc.resources.rmc import (
+    CURRENT_FREEZE,
+    amino_acids_oe_path,
+    filtered_context,
+    misbad_path,
+)
 from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
     annotate_and_filter_codons,
@@ -156,9 +161,22 @@ def prepare_amino_acid_ht(
         "oe",
     )
 
-    logger.info("Checkpointing HT before filtering by transcript...")
+    logger.info("Checkpointing HT after annotating OE and rekeying...")
     context_ht = context_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/codons_oe.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+
+    logger.info("Annotating per-allele expected counts...")
+    filtered_context_ht = filtered_context.ht()
+    context_ht = context_ht.annotate(
+        expected=filtered_context_ht[context_ht.locus, context_ht.alleles].expected
+    )
+
+    logger.info("Checkpointing HT before filtering by transcript...")
+    context_ht = context_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/codons_exp.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
