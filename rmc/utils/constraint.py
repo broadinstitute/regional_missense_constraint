@@ -1409,8 +1409,8 @@ def fix_transcript_start_stop_aas(
         - Met1 (if - strand)
 
     :param ht: Input HT. Should be RMC results HT annotated with amino acid information.
-    :param context_ht: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
-        Keys are ["locus", "transcript"].
+    :param context_ht: Table with reference AA identity and number per locus-transcript
+        combination in VEP context HT. Keys are ["locus", "transcript"].
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
@@ -1540,7 +1540,8 @@ def fix_region_start_stop_aas(
         - Function adds amino acid from previous exon stop to fix missing AA annotation
 
     :param ht: Input HT. Should be RMC results HT annotated with amino acid information.
-    :param context_ht: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
+    :param context_ht: Table with reference AA identity and number per locus-transcript
+        combination in VEP context HT. Keys are ["locus", "transcript"].
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
@@ -1665,7 +1666,8 @@ def check_and_fix_missing_aa(
     Check for and fix any missing amino acid information in RMC results HT.
 
     :param ht: Input Table. Should be RMC results HT annotated with amino acid information.
-    :param context_ht: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
+    :param context_ht: Table with reference AA identity and number per locus-transcript
+        combination in VEP context HT. Keys are ["locus", "transcript"].
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
