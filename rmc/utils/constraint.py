@@ -1402,10 +1402,10 @@ def fix_transcript_start_stop_aas(
 
     Fix for transcript starts missing amino acid annotations:
         - Met1 (if + strand)
-        - Closest amino acid (if - strand)
+        - Largest amino acid (if - strand)
 
     Fix for transcript ends missing amino acid annotations:
-        - Closest amino acid (if + strand)
+        - Largest amino acid (if + strand)
         - Met1 (if - strand)
 
     :param ht: Input HT. Should be RMC results HT annotated with amino acid information.
@@ -1447,44 +1447,36 @@ def fix_transcript_start_stop_aas(
         overwrite=overwrite_temp,
     )
 
-    # Get all positions with defined amino acids in context HT
+    # Get largest defined amino acids present in context HT for each
+    # transcript that is missing an amino acid at its CDS start or end
     miss_start_stop_transcripts = miss_start_stop_ht.aggregate(
         hl.agg.collect_as_set(miss_start_stop_ht.transcript)
     )
     context_ht = context_ht.filter(
         hl.literal(miss_start_stop_transcripts).contains(context_ht.transcript)
     )
-    # Keep only key fields: locus and transcript
-    pos_ht = context_ht.select()
-    pos_ht = pos_ht.group_by("transcript").aggregate(
-        positions=hl.sorted(hl.agg.collect(pos_ht.locus.position))
+
+    # Keep amino acid + amino acid number and drop irrelevant annotations
+    max_aa_ht = context_ht.select("ref_aa", aa_num=hl.int(context_ht.ref_aa[3:]))
+
+    # Get the largest amino acid number per transcript
+    max_aa_grp_ht = max_aa_ht.group_by("transcript").aggregate(
+        largest_aa=hl.agg.max(max_aa_ht.aa_num)
     )
-    pos_ht = pos_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/pos_per_transcript.ht",
+    max_aa_grp_ht = max_aa_grp_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/max_aa_per_transcript_group.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
-    miss_start_stop_ht = miss_start_stop_ht.annotate(
-        # Find the closest position with defined AA to the start coordinate
-        closest_start_pos=hl.bind(
-            lambda x: x[
-                hl.binary_search(x, miss_start_stop_ht.start_coordinate.position)
-            ],
-            pos_ht[miss_start_stop_ht.transcript].positions,
-        ),
-        # Find the closest position with defined AA to the stop coordinate
-        # NOTE: taking last index of positions array here because assuming
-        # `hl.binary_search(
-        # pos_ht[miss_start_stop_ht.transcript].positions
-        # miss_start_stop_ht.stop_coordinate.position
-        # )`
-        # will return
-        # len(pos_ht[miss_start_stop_ht.transcript].positions)
-        # Therefore taking the last index of the list and skipping the binary search
-        closest_stop_pos=pos_ht[miss_start_stop_ht.transcript].positions[-1],
+    max_aa_ht = max_aa_ht.annotate(
+        largest_aa=max_aa_grp_ht[max_aa_ht.transcript].largest_aa,
     )
-    # Checkpoint to make sure the binary search/join only runs once,
-    # especially since there is another join immediately afterwards
+    max_aa_ht = max_aa_ht.filter(max_aa_ht.aa_num == max_aa_ht.largest_aa)
+
+    # Annotate largest amino acid back onto original HT
+    miss_start_stop_ht = miss_start_stop_ht.annotate(
+        largest_aa=max_aa_ht[miss_start_stop_ht.transcript].largest_aa,
+    )
     miss_start_stop_ht = miss_start_stop_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/ts_missing_start_stop_pos.ht",
         _read_if_exists=not overwrite_temp,
@@ -1495,24 +1487,12 @@ def fix_transcript_start_stop_aas(
     miss_start_stop_ht = miss_start_stop_ht.annotate(
         start_aa=hl.if_else(
             hl.is_missing(miss_start_stop_ht.start_aa),
-            context_ht[
-                hl.locus(
-                    miss_start_stop_ht.start_coordinate.contig,
-                    miss_start_stop_ht.closest_start_pos,
-                ),
-                miss_start_stop_ht.transcript,
-            ].ref_aa,
+            miss_start_stop_ht.largest_aa,
             miss_start_stop_ht.start_aa,
         ),
         stop_aa=hl.if_else(
             hl.is_missing(miss_start_stop_ht.stop_aa),
-            context_ht[
-                hl.locus(
-                    miss_start_stop_ht.stop_coordinate.contig,
-                    miss_start_stop_ht.closest_stop_pos,
-                ),
-                miss_start_stop_ht.transcript,
-            ].ref_aa,
+            miss_start_stop_ht.largest_aa,
             miss_start_stop_ht.stop_aa,
         ),
     )
@@ -1580,7 +1560,7 @@ def fix_region_start_stop_aas(
         :param cds_ht: CDS HT resource filtered to transcripts missing region start or stop
             AA annotations only.
         :param fix_missing_start: Whether the output HT is designed to fix region starts
-            that are missing AA annotations.            
+            that are missing AA annotations.
             If True, will return the Table keyed by the exon stop and annotated with the next exon start.
             If False, will return the Table keyed by the exon start and annotated with the previous exon stop.
         :param overwrite_temp: Whether to overwrite temporary data.
