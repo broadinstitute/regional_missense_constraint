@@ -1527,11 +1527,13 @@ def fix_region_start_stop_aas(
 
     .. note::
         - This function assumes that all start coordinates missing AA annotations are one position larger than
-            the previous exon stop position. (This was the case in RMC freeze 5.)
+            the previous exon stop position. (This was the case in RMC freeze 7.)
+            This means that the real start coordinate should be at the next exon start.
         - This function assumes that all stop coordinates missing AA annotations are one position smaller than
-            the following exon start position. (This was the case in RMC freeze 5).
-        - See this ticket for more information about RMC freeze 5:
-            https://github.com/broadinstitute/rmc_production/issues/149
+            the following exon start position. (This was the case in RMC freeze 7.)
+            This means that the real start coordinate should be at the previous exon stop.
+        - See this ticket for more information about RMC freeze 7:
+            https://github.com/broadinstitute/rmc_production/issues/120
 
     Fix for region start coordinates missing AA annotations:
         - Function adds amino acid from following exon start to fix missing AA annotation
