@@ -1676,7 +1676,7 @@ def check_and_fix_missing_aa(
         """
         Check input Table for missing amino acid (AA) annotations.
 
-        Function returns Table and number of rows missing amino acid annotations.
+        Function returns Table of rows missing amino acid annotations.
 
         :param ht: Input Table.
         :return: Table with rows missing AA annotation,
