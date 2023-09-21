@@ -1565,6 +1565,10 @@ def fix_region_start_stop_aas(
             )
             cds_ht = cds_ht.key_by(cds_ht.exon_stop, cds_ht.transcript)
         else:
+            # Reorder HT to ensure that the correct exon stop number is returned
+            # (the previous key is interval and transcript)
+            # Region stops missing AAsneed to get adjusted to use the AA from the
+            # previous exon stop
             checkpoint_path = f"{TEMP_PATH_WITH_FAST_DEL}/cds_stop_fix.ht"
             cds_ht = cds_ht.order_by("transcript", "exon_stop")
             cds_ht = cds_ht.annotate(
@@ -1589,7 +1593,7 @@ def fix_region_start_stop_aas(
     missing_ht = missing_ht.annotate(
         next_exon_start=hl.or_missing(
             hl.is_missing(missing_ht.start_aa),
-            stop_fix_ht[
+            start_fix_ht[
                 hl.locus(
                     missing_ht.start_coordinate.contig,
                     missing_ht.start_coordinate.locus - 1,
@@ -1599,7 +1603,7 @@ def fix_region_start_stop_aas(
         ),
         prev_exon_stop=hl.or_missing(
             hl.is_missing(missing_ht.stop_aa),
-            start_fix_ht[
+            stop_fix_ht[
                 hl.locus(
                     missing_ht.stop_coordinate.contig,
                     missing_ht.stop_coordinate.locus + 1,
