@@ -1319,15 +1319,15 @@ def create_context_with_oe(
     logger.info("Output OE-annotated dedup context HT fields: %s", set(ht.row))
 
 
-def annot_rmc_with_aa(ht: hl.Table, overwrite_temp: bool):
+def annot_rmc_with_start_stop_aas(ht: hl.Table, overwrite_temp: bool):
     """
-    Annotate RMC results HT with amino acid information.
+    Annotate RMC regions HT with amino acids at region starts and stops.
 
     :param ht: Input RMC results HT.
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
-    :return: RMC results HT annotated with amino acid information.
+    :return: RMC results HT annotated with amino acid information for region starts and stops.
     """
     logger.info("Getting amino acid information from context HT...")
     rmc_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
@@ -1817,7 +1817,7 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
     )
 
     # Annotate start and stop amino acids per region
-    ht = annot_rmc_with_aa(ht, overwrite_temp)
+    ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp)
 
     # Remove missense O/E cap of 1
     # (Missense O/E capped for RMC search, but
