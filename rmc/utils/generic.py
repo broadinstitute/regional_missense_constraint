@@ -384,9 +384,9 @@ def get_ref_aa(
     missing_aa_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/missing_aa_check.he"
     if not file_exists(missing_aa_check_he_path):
         ht = ht.annotate(
-            all_aa_def=hl.all(hl.map(lambda x: hl.is_missing(x.ref_aa), ht.aa_info))
+            any_aa_missing=hl.any(hl.map(lambda x: hl.is_missing(x.ref_aa), ht.aa_info))
         )
-        missing_aa_check = ht.aggregate(hl.agg.count_where(ht.all_aa_def))
+        missing_aa_check = ht.aggregate(hl.agg.count_where(ht.any_aa_missing))
         missing_aa_check = hl.experimental.write_expression(
             missing_aa_check, missing_aa_check_he_path, overwrite=True
         )
