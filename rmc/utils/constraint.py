@@ -1561,9 +1561,9 @@ def fix_region_start_stop_aas(
     )
 
     # Read in CDS HT resource
+    cds_ht = transcript_cds.ht()
     # Filter CDS and context HT to transcripts with internal missing start or stop AAs
     context_ht = context_ht.filter(missing_transcripts.contains(context_ht.transcript))
-    cds_ht = transcript_cds.ht()
     cds_ht = cds_ht.filter(missing_transcripts.contains(cds_ht.transcript))
     cds_ht = cds_ht.annotate(
         exon_start=cds_ht.interval.start,
