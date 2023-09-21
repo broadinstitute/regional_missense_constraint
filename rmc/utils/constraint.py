@@ -1816,7 +1816,7 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
         stop_coordinate=ht.interval.end,
     )
 
-    # Annotate amino acids
+    # Annotate start and stop amino acids per region
     ht = annot_rmc_with_aa(ht, overwrite_temp)
 
     # Remove missense O/E cap of 1
