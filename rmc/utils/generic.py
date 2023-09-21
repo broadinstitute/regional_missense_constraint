@@ -330,7 +330,10 @@ def get_ref_aa(
 
     # Check if there are any ref amino acids in HT that aren't in `aa_map`
     ref_aa_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/ref_aa_3_letter_check.he"
-    if not file_exists(ref_aa_check_he_path):
+    overwrite_he = (
+        file_exists(ref_aa_check_he_path) if not overwrite_temp else overwrite_temp
+    )
+    if overwrite_he:
         ref_aa_check = ht.aggregate(hl.agg.collect_as_set(ht.ref_aa))
         hl.experimental.write_expression(
             ref_aa_check, ref_aa_check_he_path, overwrite=True
@@ -346,7 +349,10 @@ def get_ref_aa(
 
     # Double check that protein start always equals protein end
     protein_num_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/protein_num_count.he"
-    if not file_exists(protein_num_check_he_path):
+    overwrite_he = (
+        file_exists(protein_num_check_he_path) if not overwrite_temp else overwrite_temp
+    )
+    if overwrite_he:
         protein_num_check = ht.aggregate(
             hl.agg.count_where(ht.aa_start_num != ht.aa_end_num)
         )
@@ -382,7 +388,10 @@ def get_ref_aa(
 
     # Check to see if AA info is defined for all alleles associated with a locus/transcript
     missing_aa_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/missing_aa_check.he"
-    if not file_exists(missing_aa_check_he_path):
+    overwrite_he = (
+        file_exists(missing_aa_check_he_path) if not overwrite_temp else overwrite_temp
+    )
+    if overwrite_he:
         ht = ht.annotate(
             any_aa_missing=hl.any(hl.map(lambda x: hl.is_missing(x.ref_aa), ht.aa_info))
         )
