@@ -1822,7 +1822,7 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
     # Remove missense O/E cap of 1
     # (Missense O/E capped for RMC search, but
     # it shouldn't be capped when displayed in the browser)
-    ht = ht.annotate(section_oe=ht.obs / ht.exp)
+    ht = ht.annotate(section_oe=ht.section_obs / ht.section_exp)
 
     # Convert chi square to p-value
     ht = ht.annotate(section_p_value=hl.dchisq(ht.section_chisq, 1))
