@@ -340,9 +340,7 @@ def get_ref_aa(
 
     # Double check that protein start always equals protein end
     protein_num_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/protein_num_count.he"
-    if overwrite_temp:
-        # Will always overwrite protein num check if overwrite_temp is set
-        # even if file already exists
+    if not file_exists(protein_num_check_he_path):
         protein_num_check = ht.aggregate(
             hl.agg.count_where(ht.aa_start_num != ht.aa_end_num)
         )
@@ -350,6 +348,7 @@ def get_ref_aa(
             protein_num_check, protein_num_check_he_path, overwrite=True
         )
 
+    # Assume file already exists otherwise
     protein_num_check = hl.eval(
         hl.experimental.read_expression(protein_num_check_he_path)
     )
