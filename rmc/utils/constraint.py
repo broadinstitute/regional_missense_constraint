@@ -1825,7 +1825,7 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
     ht = ht.annotate(section_oe=ht.section_obs / ht.section_exp)
 
     # Convert chi square to p-value
-    ht = ht.annotate(section_p_value=hl.dchisq(ht.section_chisq, 1))
+    ht = ht.annotate(section_p_value=hl.pchisqtail(ht.section_chisq, 1))
 
     # Add region struct
     ht = ht.annotate(
