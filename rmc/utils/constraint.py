@@ -1580,7 +1580,9 @@ def fix_region_start_stop_aas(
         :param cds_ht: CDS HT resource filtered to transcripts missing region start or stop
             AA annotations only.
         :param fix_missing_start: Whether the output HT is designed to fix region starts
-            that are missing AA annotations.
+            that are missing AA annotations.            
+            If True, will return the Table keyed by the exon stop and annotated with the next exon start.
+            If False, will return the Table keyed by the exon start and annotated with the previous exon stop.
         :param overwrite_temp: Whether to overwrite temporary data.
             If False, will read existing temp data rather than overwriting.
             If True, will overwrite temp data.
