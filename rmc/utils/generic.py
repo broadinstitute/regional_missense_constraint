@@ -329,7 +329,13 @@ def get_ref_aa(
     )
 
     # Check if there are any ref amino acids in HT that aren't in `aa_map`
-    ref_aa_check = ht.aggregate(hl.agg.collect_as_set(ht.ref_aa))
+    ref_aa_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/ref_aa_3_letter_check.he"
+    if not file_exists(ref_aa_check_he_path):
+        ref_aa_check = ht.aggregate(hl.agg.collect_as_set(ht.ref_aa))
+        hl.experimental.write_expression(
+            ref_aa_check, ref_aa_check_he_path, overwrite=True
+        )
+    ref_aa_check = hl.eval(hl.experimental.read_expression(ref_aa_check_he_path))
     ref_aa_check = ref_aa_check.difference(set(hl.eval(aa_map).values()))
     if len(ref_aa_check) != 0:
         logger.warning(
