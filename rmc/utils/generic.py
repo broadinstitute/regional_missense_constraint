@@ -297,7 +297,7 @@ def get_ref_aa(
     aa_to_remove: Set[str] = {"X"},
 ) -> hl.Table:
     """
-    Filter input HT to keep only reference amino acid information.
+    Filter input HT to keep only reference amino acid information (identity and number).
 
     :param ht: Input Table. Should be HT output from `get_aa_from_context`.
     :param overwrite_temp: Whether to overwrite temporary data.
@@ -307,7 +307,7 @@ def get_ref_aa(
         Designed to capture any amino acids not present in `ACID_NAMES_PATH`.
         Default is {"*": "Ter", "U": "Sec"}.
     :param aa_to_remove: Any amino acid one letter codes to remove. Default is {"X"}.
-    :return: HT with one reference amino acid annotated per locus/transcript.
+    :return: HT with reference AA identity and number annotated for each locus-transcript combination.
     """
     logger.info("Mapping amino acid one letter codes to three letter codes...")
     aa_map = get_aa_map()
