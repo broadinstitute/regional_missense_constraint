@@ -1366,7 +1366,7 @@ def join_and_fix_aa(ht: hl.Table, fix_ht: hl.Table) -> hl.Table:
     """
     return ht.annotate(
         start_aa=hl.if_else(
-            hl.is_missing(ht.start_aa) & ht.is_transcript_start,
+            hl.is_missing(ht.start_aa),
             fix_ht[ht.interval, ht.transcript].start_aa,
             ht.start_aa,
         ),
