@@ -92,24 +92,26 @@ def prepare_amino_acid_ht(
     )
 
     logger.info("Checking LOFTEE LoF information...")
-    loftee_lof_agg_path = f"{TEMP_PATH_WITH_FAST_DEL}/lof_agg.he"
-    loftee_lof_flag_agg_path = f"{TEMP_PATH_WITH_FAST_DEL}/lof_flag_agg.he"
-    if (
-        not overwrite_temp
-        and file_exists(loftee_lof_agg_path)
-        and file_exists(loftee_lof_flag_agg_path)
-    ):
-        loftee_lof_agg = hl.eval(hl.experimental.read_expression(loftee_lof_agg_path))
-        loftee_lof_flag_agg = hl.eval(
-            hl.experimental.read_expression(loftee_lof_flag_agg_path)
-        )
-    else:
+    loftee_lof_agg_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/lof_agg.he"
+    loftee_lof_flag_agg_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/lof_flag_agg.he"
+    overwrite_lof_agg_he = (
+        not file_exists(loftee_lof_agg_he_path)
+        if not overwrite_temp
+        else overwrite_temp
+    )
+    overwrite_lof_flag_agg_he = (
+        not file_exists(loftee_lof_flag_agg_he_path)
+        if not overwrite_temp
+        else overwrite_temp
+    )
+    if overwrite_lof_agg_he:
         loftee_lof_agg = context_ht.aggregate(hl.agg.counter(context_ht.lof))
         hl.experimental.write_expression(
             hl.literal(loftee_lof_agg),
-            loftee_lof_agg_path,
+            loftee_lof_agg_he_path,
             overwrite=overwrite_temp,
         )
+    if overwrite_lof_flag_agg_he:
         loftee_lof_flag_agg = context_ht.aggregate(
             hl.agg.filter(
                 context_ht.lof == loftee_hc_str, hl.agg.counter(context_ht.lof_flags)
@@ -117,9 +119,15 @@ def prepare_amino_acid_ht(
         )
         hl.experimental.write_expression(
             hl.literal(loftee_lof_flag_agg),
-            loftee_lof_flag_agg_path,
+            loftee_lof_flag_agg_he_path,
             overwrite=overwrite_temp,
         )
+
+    loftee_lof_agg = hl.eval(hl.experimental.read_expression(loftee_lof_agg_he_path))
+    loftee_lof_flag_agg = hl.eval(
+        hl.experimental.read_expression(loftee_lof_flag_agg_he_path)
+    )
+
     logger.info("Variant counts by LOFTEE LoF label: %s", loftee_lof_agg)
     logger.info("Variant counts by LOFTEE LoF flag label: %s", loftee_lof_flag_agg)
     logger.info("Filtering to LOFTEE HC pLoF without flags...")
