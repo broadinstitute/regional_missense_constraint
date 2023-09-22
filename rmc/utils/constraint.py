@@ -1323,11 +1323,11 @@ def annot_rmc_with_start_stop_aas(ht: hl.Table, overwrite_temp: bool):
     """
     Annotate RMC regions HT with amino acids at region starts and stops.
 
-    :param ht: Input RMC results HT.
+    :param ht: Input RMC regions HT.
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
-    :return: RMC results HT annotated with amino acid information for region starts and stops.
+    :return: RMC regions HT annotated with amino acid information for region starts and stops.
     """
     logger.info("Getting amino acid information from context HT...")
     rmc_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
@@ -1358,10 +1358,11 @@ def join_and_fix_aa(ht: hl.Table, fix_ht: hl.Table) -> hl.Table:
     """
     Add start and stop amino acid information from fix_ht to ht.
 
-    :param ht: Input HT. Should be RMC results HT annotated with amino acid information.
+    :param ht: Input HT. Should be RMC regions HT annotated with amino acid
+        information for region starts and stops.
     :param fix_ht: HT start and stop amino acids only for RMC regions that were
         previously missing amino acid information.
-    :return: RMC results HT annotated with amino acid information from fix HT.
+    :return: RMC regions HT annotated with amino acid information from fix HT.
     """
     return ht.annotate(
         start_aa=hl.if_else(
@@ -1504,7 +1505,8 @@ def fix_region_start_stop_aas(
     Fix for region stop coordinates missing AA annotations:
         - Function adds amino acid from previous exon stop to fix missing AA annotation
 
-    :param ht: Input HT. Should be RMC results HT annotated with amino acid information.
+    :param ht: Input HT. Should be RMC regions HT annotated with amino acid
+        information for region starts and stops.
     :param context_ht: Table with reference AA identity and number per locus-transcript
         combination in VEP context HT. Keys are ["locus", "transcript"].
     :param overwrite_temp: Whether to overwrite temporary data.
@@ -1638,13 +1640,16 @@ def check_and_fix_missing_aa(
     """
     Check for and fix any missing amino acid information in RMC results HT.
 
-    :param ht: Input Table. Should be RMC results HT annotated with amino acid information.
+    :param ht: Input Table. Should be RMC regions HT annotated with amino acid
+        information for region starts and stops.
     :param context_ht: Table with reference AA identity and number per locus-transcript
         combination in VEP context HT. Keys are ["locus", "transcript"].
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
-    :return: RMC results HT annotated with amino acids for all region start/stops.
+    :return: Fixed RMC regions HT annotated with amino acid information
+        for region starts and stops, including starts and stops that are previously
+        missing annotations.
     """
 
     def _missing_aa_check(ht: hl.Table) -> Union[hl.Table, None]:
@@ -1721,8 +1726,9 @@ def add_globals_rmc_browser(ht: hl.Table) -> hl.Table:
         - transcripts not searched for RMC
         - transcripts without evidence of RMC
         - outlier transcripts
-    :param HT: Input Table. Should be RMC results HT.
-    :return: RMC results HT with updated globals annotations.
+    :param HT: Input Table. Should be RMC regions HT annotated with amino acid
+        information for region starts and stops.
+    :return: RMC regions HT with updated globals annotations.
     """
     # Get transcripts with evidence of RMC
     rmc_transcripts = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.transcript)))
