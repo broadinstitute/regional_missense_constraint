@@ -237,6 +237,185 @@ def process_context_ht(
     return ht
 
 
+def get_aa_from_context(
+    overwrite_temp: bool,
+    keep_transcripts: Set[str] = None,
+    n_partitions: int = 10000,
+) -> hl.Table:
+    """
+    Extract amino acid information from VEP context HT.
+
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
+    :param keep_transcripts: Desired set of transcripts to keep from the context HT.
+        If set, function will filter to keep these trancripts only.
+        Default is None.
+    :param n_partitions: Desired number of partitions for context HT after filtering.
+        Default is 10,000.
+    :return: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
+    """
+    logger.info(
+        "Reading in VEP context HT and filtering to coding effects in non-outlier"
+        " canonical transcripts..."
+    )
+    # Drop globals and select only VEP transcript consequences field
+    ht = process_context_ht(
+        filter_outlier_transcripts=True, add_annotations=False
+    ).select_globals()
+    ht = ht.select("transcript_consequences")
+    ht = ht.filter(
+        ~hl.literal(CSQ_NON_CODING).contains(
+            ht.transcript_consequences.most_severe_consequence
+        )
+    )
+    # Unnest annotations from context HT
+    ht = ht.transmute(
+        transcript=ht.transcript_consequences.transcript_id,
+        aa_start_num=ht.transcript_consequences.protein_start,
+        aa_end_num=ht.transcript_consequences.protein_end,
+        amino_acids=ht.transcript_consequences.amino_acids,
+    )
+
+    if keep_transcripts:
+        logger.info("Filtering to desired transcripts only...")
+        ht = ht.filter(hl.literal(keep_transcripts).contains(ht.transcript))
+
+    ht = ht.naive_coalesce(n_partitions)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/vep_amino_acids.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    return ht
+
+
+def get_ref_aa(
+    ht: hl.Table,
+    overwrite_temp: bool,
+    extra_aa_map: Dict[str, str] = {"*": "Ter", "U": "Sec"},
+    aa_to_remove: Set[str] = {"X"},
+) -> hl.Table:
+    """
+    Filter input HT to keep only reference amino acid information (identity and number).
+
+    :param ht: Input Table. Should be HT output from `get_aa_from_context`.
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
+    :param extra_aa_map: Dictionary mapping any amino acid one letter codes to three letter codes.
+        Designed to capture any amino acids not present in `ACID_NAMES_PATH`.
+        Default is {"*": "Ter", "U": "Sec"}.
+    :param aa_to_remove: Any amino acid one letter codes to remove. Default is {"X"}.
+    :return: HT with reference AA identity and number annotated for each locus-transcript combination.
+    """
+    logger.info("Mapping amino acid one letter codes to three letter codes...")
+    aa_map = get_aa_map()
+    # Add any extra mappings into amino acid mapping dict
+    if extra_aa_map:
+        aa_map.update(extra_aa_map)
+    aa_map = hl.literal(aa_map)
+    ht = ht.annotate(ref_aa_1_letter=ht.amino_acids.split("/")[0])
+    ht = ht.annotate(ref_aa=aa_map.get(ht.ref_aa_1_letter, ht.ref_aa_1_letter))
+    if aa_to_remove:
+        ht = ht.filter(~hl.literal(aa_to_remove).contains(ht.ref_aa))
+
+    # Select fields and checkpoint
+    ht = ht.select("ref_aa", "aa_start_num", "aa_end_num", "transcript")
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/ref_amino_acids.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+
+    # Check if there are any ref amino acids in HT that aren't in `aa_map`
+    ref_aa_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/ref_aa_3_letter_check.he"
+    overwrite_ref_aa_he = (
+        not file_exists(ref_aa_check_he_path) if not overwrite_temp else overwrite_temp
+    )
+    if overwrite_ref_aa_he:
+        ref_aa_check = ht.aggregate(hl.agg.collect_as_set(ht.ref_aa))
+        hl.experimental.write_expression(
+            ref_aa_check, ref_aa_check_he_path, overwrite=True
+        )
+    ref_aa_check = hl.eval(hl.experimental.read_expression(ref_aa_check_he_path))
+    ref_aa_check = ref_aa_check.difference(set(hl.eval(aa_map).values()))
+    if len(ref_aa_check) != 0:
+        logger.warning(
+            "The following reference amino acids were not mapped to three letter"
+            " codes: %s",
+            ref_aa_check,
+        )
+
+    # Double check that protein start always equals protein end
+    protein_num_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/protein_num_count.he"
+    overwrite_protein_num_he = (
+        not file_exists(protein_num_check_he_path)
+        if not overwrite_temp
+        else overwrite_temp
+    )
+    if overwrite_protein_num_he:
+        protein_num_check = ht.aggregate(
+            hl.agg.count_where(ht.aa_start_num != ht.aa_end_num)
+        )
+        hl.experimental.write_expression(
+            protein_num_check, protein_num_check_he_path, overwrite=True
+        )
+    # Assume file already exists otherwise
+    protein_num_check = hl.eval(
+        hl.experimental.read_expression(protein_num_check_he_path)
+    )
+    if protein_num_check != 0:
+        raise DataException(
+            f"{protein_num_check} sites had different amino acid numbers at start and"
+            " end -- please double check!"
+        )
+
+    # Reformat reference AA to have both the 3 letter code and number
+    ht = ht.annotate(
+        ref_aa=hl.or_missing(
+            hl.is_defined(ht.ref_aa) & hl.is_defined(ht.aa_start_num),
+            hl.format("%s%s", ht.ref_aa, ht.aa_start_num),
+        )
+    )
+
+    # Collect by key to collapse AA per locus
+    ht = ht.key_by("locus", "transcript").drop("alleles", "aa_start_num", "aa_end_num")
+    ht = ht.collect_by_key(name="aa_info")
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/ref_aa_collected.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+
+    # Check to see if AA info is defined for all alleles associated with a locus/transcript
+    missing_aa_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/missing_aa_check.he"
+    overwrite_he = (
+        not file_exists(missing_aa_check_he_path)
+        if not overwrite_temp
+        else overwrite_temp
+    )
+    if overwrite_he:
+        ht = ht.annotate(
+            any_aa_missing=hl.any(hl.map(lambda x: hl.is_missing(x.ref_aa), ht.aa_info))
+        )
+        missing_aa_check = ht.aggregate(hl.agg.count_where(ht.any_aa_missing))
+        missing_aa_check = hl.experimental.write_expression(
+            missing_aa_check, missing_aa_check_he_path, overwrite=True
+        )
+
+    missing_aa_check = hl.eval(
+        hl.experimental.read_expression(missing_aa_check_he_path)
+    )
+    if missing_aa_check != 0:
+        logger.warning(
+            "%i locus-transcript combinations had missing AA info for at least 1"
+            " allele!",
+            missing_aa_check,
+        )
+    return ht.transmute(ref_aa=ht.aa_info[0].ref_aa)
+
+
 def get_gnomad_public_release(
     gnomad_data_type: str = "exomes", adj_freq_index: int = 0
 ) -> hl.Table:

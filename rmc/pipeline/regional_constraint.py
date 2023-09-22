@@ -29,6 +29,7 @@ from rmc.utils.constraint import (
     create_context_with_oe,
     create_filtered_context_ht,
     create_no_breaks_he,
+    format_rmc_browser_ht,
     merge_rmc_hts,
     process_sections,
 )
@@ -412,11 +413,17 @@ def main(args):
 
             logger.info("Getting transcripts without evidence of RMC...")
             create_no_breaks_he(freeze=args.freeze, overwrite=args.overwrite)
+            # TODO: Create region-level table that combines `rmc_results` and `no_breaks_he`
+            # (used in RMC assessment plots)
+            # TODO: For the above, also need a transcript-level table with missense total obs and total exp
 
             logger.info("Creating OE-annotated context table...")
             create_context_with_oe(
                 freeze=args.freeze, overwrite_temp=args.overwrite_temp
             )
+
+            logger.info("Reformatting RMC results for browser release...")
+            format_rmc_browser_ht(args.freeze, args.overwrite_temp)
 
     finally:
         logger.info("Copying hail log to logging bucket...")

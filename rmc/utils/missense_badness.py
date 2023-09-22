@@ -7,7 +7,12 @@ from gnomad.utils.file_utils import file_exists
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.reference_data import FOLD_K, train_val_test_transcripts_path
 from rmc.resources.resource_utils import KEEP_CODING_CSQ
-from rmc.resources.rmc import CURRENT_FREEZE, amino_acids_oe_path, misbad_path
+from rmc.resources.rmc import (
+    CURRENT_FREEZE,
+    amino_acids_oe_path,
+    filtered_context,
+    misbad_path,
+)
 from rmc.utils.constraint import add_obs_annotation, get_oe_annotation
 from rmc.utils.generic import (
     annotate_and_filter_codons,
@@ -87,28 +92,42 @@ def prepare_amino_acid_ht(
     )
 
     logger.info("Checking LOFTEE LoF information...")
-    loftee_lof_agg_path = f"{TEMP_PATH_WITH_FAST_DEL}/lof_agg.he"
-    loftee_lof_flag_agg_path = f"{TEMP_PATH_WITH_FAST_DEL}/lof_flag_agg.he"
-    if (
-        not overwrite_temp
-        and file_exists(loftee_lof_agg_path)
-        and file_exists(loftee_lof_flag_agg_path)
-    ):
-        loftee_lof_agg = hl.eval(hl.experimental.read_expression(loftee_lof_agg_path))
-        loftee_lof_flag_agg = hl.eval(
-            hl.experimental.read_expression(loftee_lof_flag_agg_path)
-        )
-    else:
+    loftee_lof_agg_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/lof_agg.he"
+    loftee_lof_flag_agg_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/lof_flag_agg.he"
+    overwrite_lof_agg_he = (
+        not file_exists(loftee_lof_agg_he_path)
+        if not overwrite_temp
+        else overwrite_temp
+    )
+    overwrite_lof_flag_agg_he = (
+        not file_exists(loftee_lof_flag_agg_he_path)
+        if not overwrite_temp
+        else overwrite_temp
+    )
+    if overwrite_lof_agg_he:
         loftee_lof_agg = context_ht.aggregate(hl.agg.counter(context_ht.lof))
         hl.experimental.write_expression(
-            hl.literal(loftee_lof_agg), loftee_lof_agg_path
+            hl.literal(loftee_lof_agg),
+            loftee_lof_agg_he_path,
+            overwrite=overwrite_temp,
         )
+    if overwrite_lof_flag_agg_he:
         loftee_lof_flag_agg = context_ht.aggregate(
-            hl.agg.filter(context_ht.lof, hl.agg.counter(context_ht.lof_flags))
+            hl.agg.filter(
+                context_ht.lof == loftee_hc_str, hl.agg.counter(context_ht.lof_flags)
+            )
         )
         hl.experimental.write_expression(
-            hl.literal(loftee_lof_flag_agg), loftee_lof_flag_agg_path
+            hl.literal(loftee_lof_flag_agg),
+            loftee_lof_flag_agg_he_path,
+            overwrite=overwrite_temp,
         )
+
+    loftee_lof_agg = hl.eval(hl.experimental.read_expression(loftee_lof_agg_he_path))
+    loftee_lof_flag_agg = hl.eval(
+        hl.experimental.read_expression(loftee_lof_flag_agg_he_path)
+    )
+
     logger.info("Variant counts by LOFTEE LoF label: %s", loftee_lof_agg)
     logger.info("Variant counts by LOFTEE LoF flag label: %s", loftee_lof_flag_agg)
     logger.info("Filtering to LOFTEE HC pLoF without flags...")
@@ -150,9 +169,22 @@ def prepare_amino_acid_ht(
         "oe",
     )
 
-    logger.info("Checkpointing HT before filtering by transcript...")
+    logger.info("Checkpointing HT after annotating OE and rekeying...")
     context_ht = context_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/codons_oe.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+
+    logger.info("Annotating per-allele expected counts...")
+    filtered_context_ht = filtered_context.ht()
+    context_ht = context_ht.annotate(
+        expected=filtered_context_ht[context_ht.locus, context_ht.alleles].expected
+    )
+
+    logger.info("Checkpointing HT before filtering by transcript...")
+    context_ht = context_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/codons_exp.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -356,7 +388,7 @@ def calculate_misbad(
 
         logger.info("Re-joining split HTs to calculate missense badness...")
         mb_ht = oe_hts["high"].join(oe_hts["low"], how="outer")
-        mb_ht = mb_ht.transmute(mut_type=hl.coalesce(ht.mut_type, ht.mut_type_1))
+        mb_ht = mb_ht.transmute(mut_type=hl.coalesce(mb_ht.mut_type, mb_ht.mut_type_1))
         mb_ht = mb_ht.annotate(
             high_low=(
                 (mb_ht.high_obs / mb_ht.high_pos) / (mb_ht.low_obs / mb_ht.low_pos)

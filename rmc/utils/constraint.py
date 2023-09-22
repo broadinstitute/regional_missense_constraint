@@ -1,7 +1,7 @@
 import logging
 import re
 import subprocess
-from typing import List, Set
+from typing import List, Set, Union
 
 import hail as hl
 import scipy
@@ -17,7 +17,13 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_SLOW_DEL,
 )
 from rmc.resources.gnomad import constraint_ht, prop_obs_coverage
-from rmc.resources.reference_data import clinvar_plp_mis_haplo, gene_model, ndd_de_novo
+from rmc.resources.reference_data import (
+    clinvar_plp_mis_haplo,
+    gene_model,
+    ndd_de_novo,
+    transcript_cds,
+    transcript_ref,
+)
 from rmc.resources.resource_utils import KEEP_CODING_CSQ, MISSENSE
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
@@ -32,6 +38,7 @@ from rmc.resources.rmc import (
     filtered_context,
     no_breaks_he_path,
     oe_bin_counts_tsv,
+    rmc_browser,
     rmc_results,
     simul_search_bucket_path,
     simul_search_round_bucket_path,
@@ -42,9 +49,11 @@ from rmc.utils.generic import (
     filter_context_using_gnomad,
     filter_to_region_type,
     generate_models,
+    get_aa_from_context,
     get_annotations_from_context_ht_vep,
     get_constraint_transcripts,
     get_coverage_correction_expr,
+    get_ref_aa,
     import_clinvar,
     import_de_novo_variants,
     keep_criteria,
@@ -380,9 +389,14 @@ def create_constraint_prep_ht(
     )
 
     logger.info("Adding section annotation...")
-    # Add transcript start and stop positions from browser HT
-    transcript_ht = gene_model.ht().select("start", "stop")
-    ht = ht.annotate(**transcript_ht[ht.transcript])
+    # Add transcript start and stop CDS positions
+    # NOTE: RMC freezes 1-7 used `gene_model` resource to get transcript start and stops
+    # rather than CDS
+    transcript_ht = transcript_ref.ht().select("gnomad_cds_start", "gnomad_cds_end")
+    ht = ht.annotate(
+        start=transcript_ht[ht.transcript].gnomad_cds_start,
+        stop=transcript_ht[ht.transcript].gnomad_cds_end,
+    )
     ht = ht.annotate(section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop))
     ht = ht.key_by("locus", "section").drop("start", "stop", "transcript")
 
@@ -1305,44 +1319,516 @@ def create_context_with_oe(
     logger.info("Output OE-annotated dedup context HT fields: %s", set(ht.row))
 
 
-def reformat_annotations_for_release(ht: hl.Table) -> hl.Table:
+def annot_rmc_with_start_stop_aas(ht: hl.Table, overwrite_temp: bool):
+    """
+    Annotate RMC regions HT with amino acids at region starts and stops.
+
+    :param ht: Input RMC regions HT.
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
+    :return: RMC regions HT annotated with amino acid information for region starts and stops.
+    """
+    logger.info("Getting amino acid information from context HT...")
+    rmc_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
+    # Get amino acid information from context table for variants in chosen transcripts
+    context_ht = get_aa_from_context(
+        overwrite_temp=overwrite_temp, keep_transcripts=rmc_transcripts
+    )
+    # Get reference AA label for each locus-transcript combination in context HT
+    context_ht = get_ref_aa(
+        ht=context_ht,
+        overwrite_temp=overwrite_temp,
+    )
+    # NOTE: For transcripts on the negative strand, `start_aa` is the larger AA number and
+    # `stop_aa` is the smaller number
+    ht = ht.annotate(
+        start_aa=context_ht[ht.start_coordinate, ht.transcript].ref_aa,
+        stop_aa=context_ht[ht.stop_coordinate, ht.transcript].ref_aa,
+    )
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_aa_annot.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    return check_and_fix_missing_aa(ht, context_ht, overwrite_temp)
+
+
+def join_and_fix_aa(ht: hl.Table, fix_ht: hl.Table) -> hl.Table:
+    """
+    Add start and stop amino acid information from fix_ht to ht.
+
+    :param ht: Input HT. Should be RMC regions HT annotated with amino acid
+        information for region starts and stops.
+    :param fix_ht: HT start and stop amino acids only for RMC regions that were
+        previously missing amino acid information.
+    :return: RMC regions HT annotated with amino acid information from fix HT.
+    """
+    return ht.annotate(
+        start_aa=hl.if_else(
+            hl.is_missing(ht.start_aa),
+            fix_ht[ht.interval, ht.transcript].start_aa,
+            ht.start_aa,
+        ),
+        stop_aa=hl.if_else(
+            hl.is_missing(ht.stop_aa),
+            fix_ht[ht.interval, ht.transcript].stop_aa,
+            ht.stop_aa,
+        ),
+    )
+
+
+def fix_transcript_start_stop_aas(
+    ht: hl.Table, context_ht: hl.Table, overwrite_temp: bool
+) -> hl.Table:
+    """
+    Fix missing start or stop amino acid at transcript start or stop coordinates.
+
+    Fix for transcript starts missing amino acid annotations:
+        - Met1 (if + strand)
+        - Largest amino acid (if - strand)
+
+    Fix for transcript ends missing amino acid annotations:
+        - Largest amino acid (if + strand)
+        - Met1 (if - strand)
+
+    :param ht: Input HT. Should be RMC regions HT annotated with amino acid
+        information for region starts and stops.
+    :param context_ht: Table with reference AA identity and number per locus-transcript
+        combination in VEP context HT. Keys are ["locus", "transcript"].
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
+    :return: HT containing start and stop amino acids only for RMC regions that were
+        previously missing amino acid information at transcript stops/ends.
+    """
+    # Filter to regions missing AA at transcript starts/ends
+    miss_start_stop_ht = ht.filter(
+        (hl.is_missing(ht.start_aa) & ht.is_transcript_start)
+        | (hl.is_missing(ht.stop_aa) & ht.is_transcript_stop)
+    )
+    # Correct any applicable starts/ends to Met1
+    miss_start_stop_ht = miss_start_stop_ht.annotate(
+        start_aa=hl.or_missing(
+            hl.is_missing(miss_start_stop_ht.start_aa),
+            # Set all missing + strand transcript starts to Met1
+            hl.or_missing(
+                miss_start_stop_ht.strand == "+",
+                "Met1",
+            ),
+        ),
+        stop_aa=hl.or_missing(
+            hl.is_missing(miss_start_stop_ht.stop_aa),
+            hl.or_missing(
+                # Set all missing - strand transcript stops to Met1
+                miss_start_stop_ht.strand == "-",
+                "Met1",
+            ),
+        ),
+    )
+    miss_start_stop_ht = miss_start_stop_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/transcript_start_stop_missing_aa.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+
+    # Filter context HT to keep only transcripts missing annotations
+    miss_start_stop_transcripts = miss_start_stop_ht.aggregate(
+        hl.agg.collect_as_set(miss_start_stop_ht.transcript)
+    )
+    context_ht = context_ht.filter(
+        hl.literal(miss_start_stop_transcripts).contains(context_ht.transcript)
+    )
+
+    # Keep amino acid + amino acid number and drop irrelevant annotations
+    max_aa_ht = context_ht.select("ref_aa", aa_num=hl.int(context_ht.ref_aa[3:]))
+
+    # Get largest defined amino acids present in context HT for each
+    # transcript that is missing an amino acid at its CDS start or end
+    max_aa_grp_ht = max_aa_ht.group_by("transcript").aggregate(
+        largest_aa=hl.agg.max(max_aa_ht.aa_num)
+    )
+    max_aa_grp_ht = max_aa_grp_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/max_aa_per_transcript_group.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    max_aa_ht = max_aa_ht.annotate(
+        largest_aa=max_aa_grp_ht[max_aa_ht.transcript].largest_aa,
+    )
+    max_aa_ht = max_aa_ht.filter(max_aa_ht.aa_num == max_aa_ht.largest_aa)
+
+    # Annotate largest amino acid back onto original HT
+    miss_start_stop_ht = miss_start_stop_ht.annotate(
+        largest_aa=max_aa_ht[miss_start_stop_ht.transcript].largest_aa,
+    )
+    miss_start_stop_ht = miss_start_stop_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/ts_missing_start_stop_largest.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+
+    # Fill in amino acid annotations at loci missing annotations
+    miss_start_stop_ht = miss_start_stop_ht.annotate(
+        start_aa=hl.if_else(
+            hl.is_missing(miss_start_stop_ht.start_aa),
+            miss_start_stop_ht.largest_aa,
+            miss_start_stop_ht.start_aa,
+        ),
+        stop_aa=hl.if_else(
+            hl.is_missing(miss_start_stop_ht.stop_aa),
+            miss_start_stop_ht.largest_aa,
+            miss_start_stop_ht.stop_aa,
+        ),
+    )
+    return miss_start_stop_ht.select("start_aa", "stop_aa")
+
+
+def fix_region_start_stop_aas(
+    ht: hl.Table, context_ht: hl.Table, overwrite_temp: bool
+) -> hl.Table:
+    """
+    Fix missing start or stop amino acid information for non-transcript starts and stops.
+
+    .. note::
+        - This function assumes that all start coordinates missing AA annotations are one position larger than
+            the previous exon stop position. (This was the case in RMC freeze 7.)
+            This means that the real start coordinate should be at the next exon start.
+        - This function assumes that all stop coordinates missing AA annotations are one position smaller than
+            the following exon start position. (This was the case in RMC freeze 7.)
+            This means that the real stop coordinate should be at the previous exon stop.
+        - See this ticket for more information about RMC freeze 7:
+            https://github.com/broadinstitute/rmc_production/issues/120
+
+    Fix for region start coordinates missing AA annotations:
+        - Function adds amino acid from following exon start to fix missing AA annotation
+
+    Fix for region stop coordinates missing AA annotations:
+        - Function adds amino acid from previous exon stop to fix missing AA annotation
+
+    :param ht: Input HT. Should be RMC regions HT annotated with amino acid
+        information for region starts and stops.
+    :param context_ht: Table with reference AA identity and number per locus-transcript
+        combination in VEP context HT. Keys are ["locus", "transcript"].
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
+    :return: HT containing start and stop amino acids only for RMC regions that were
+        previously missing amino acid information.
+    """
+    missing_ht = ht.filter(hl.is_missing(ht.start_aa) | hl.is_missing(ht.stop_aa))
+    missing_ht = missing_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/region_start_stop_missing_aa.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    missing_transcripts = hl.literal(
+        missing_ht.aggregate(hl.agg.collect_as_set(missing_ht.transcript))
+    )
+
+    # Read in CDS HT resource
+    cds_ht = transcript_cds.ht()
+    # Filter CDS and context HT to transcripts with internal missing start or stop AAs
+    context_ht = context_ht.filter(missing_transcripts.contains(context_ht.transcript))
+    cds_ht = cds_ht.filter(missing_transcripts.contains(cds_ht.transcript))
+    cds_ht = cds_ht.annotate(
+        exon_start=cds_ht.interval.start,
+        exon_end=cds_ht.interval.end,
+    )
+
+    # Create two versions of CDS HT to fix missing region start and stop AAs
+    def _create_exon_position_ht(
+        cds_ht: hl.Table, fix_missing_start: bool, overwrite_temp: bool
+    ) -> hl.Table:
+        """
+        Create Table keyed by either exon start or stop position.
+
+        :param cds_ht: CDS HT resource filtered to transcripts missing region start or stop
+            AA annotations only.
+        :param fix_missing_start: Whether the output HT is designed to fix region starts
+            that are missing AA annotations.
+            If True, will return the Table keyed by the exon stop and annotated with the next exon start.
+            If False, will return the Table keyed by the exon start and annotated with the previous exon stop.
+        :param overwrite_temp: Whether to overwrite temporary data.
+            If False, will read existing temp data rather than overwriting.
+            If True, will overwrite temp data.
+        :return: CDS HT keyed by either exon start or stop position and transcript.
+        """
+        if fix_missing_start:
+            # Reorder HT so that _prev_nonnull returns the next exon start
+            # Region starts missing AAs need to get adjusted to use the AA from the next
+            # exon start (this will now be from the previous row due to the reorder
+            # and prev nonnull scan)
+            checkpoint_path = f"{TEMP_PATH_WITH_FAST_DEL}/cds_start_fix.ht"
+            cds_ht = cds_ht.order_by(
+                hl.asc(cds_ht.transcript), hl.desc(cds_ht.exon_start)
+            )
+            cds_ht = cds_ht.annotate(
+                next_exon_start=hl.scan._prev_nonnull(cds_ht.exon_start)
+            )
+            cds_ht = cds_ht.key_by(cds_ht.exon_stop, cds_ht.transcript)
+        else:
+            # Reorder HT to ensure that the correct exon stop number is returned
+            # (the previous key is interval and transcript)
+            # Region stops missing AAs need to get adjusted to use the AA from the
+            # previous exon stop
+            checkpoint_path = f"{TEMP_PATH_WITH_FAST_DEL}/cds_stop_fix.ht"
+            cds_ht = cds_ht.order_by("transcript", "exon_stop")
+            cds_ht = cds_ht.annotate(
+                prev_exon_stop=hl.scan._prev_nonnull(cds_ht.exon_stop)
+            )
+            cds_ht = cds_ht.key_by(cds_ht.exon_start, cds_ht.transcript)
+
+        cds_ht = cds_ht.checkpoint(
+            checkpoint_path,
+            _read_if_exists=not overwrite_temp,
+            overwrite=overwrite_temp,
+        )
+        return cds_ht
+
+    # Get relevant exon start and stop positions
+    start_fix_ht = _create_exon_position_ht(
+        cds_ht=cds_ht, fix_missing_start=True, overwrite_temp=overwrite_temp
+    )
+    stop_fix_ht = _create_exon_position_ht(
+        cds_ht=cds_ht, fix_missing_start=False, overwrite_temp=overwrite_temp
+    )
+    missing_ht = missing_ht.annotate(
+        next_exon_start=hl.or_missing(
+            hl.is_missing(missing_ht.start_aa),
+            start_fix_ht[
+                hl.locus(
+                    missing_ht.start_coordinate.contig,
+                    missing_ht.start_coordinate.locus - 1,
+                ),
+                missing_ht.transcript,
+            ].next_exon_start,
+        ),
+        prev_exon_stop=hl.or_missing(
+            hl.is_missing(missing_ht.stop_aa),
+            stop_fix_ht[
+                hl.locus(
+                    missing_ht.stop_coordinate.contig,
+                    missing_ht.stop_coordinate.locus + 1,
+                ),
+                missing_ht.transcript,
+            ].prev_exon_stop,
+        ),
+    )
+    missing_ht = missing_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/region_start_stop_missing_aa_exon_annot.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    missing_ht = missing_ht.annotate(
+        start_aa=hl.if_else(
+            hl.is_missing(missing_ht.start_aa),
+            context_ht[missing_ht.next_exon_start, missing_ht.transcript].ref_aa,
+            missing_ht.start_aa,
+        ),
+        stop_aa=hl.if_else(
+            hl.is_missing(missing_ht.stop_aa),
+            context_ht[missing_ht.prev_exon_stop, missing_ht.transcript].ref_aa,
+            missing_ht.stop_aa,
+        ),
+    )
+    return missing_ht.select("start_aa", "stop_aa")
+
+
+def check_and_fix_missing_aa(
+    ht: hl.Table, context_ht: hl.Table, overwrite_temp: bool
+) -> hl.Table:
+    """
+    Check for and fix any missing amino acid information in RMC regions HT.
+
+    :param ht: Input Table. Should be RMC regions HT annotated with amino acid
+        information for region starts and stops.
+    :param context_ht: Table with reference AA identity and number per locus-transcript
+        combination in VEP context HT. Keys are ["locus", "transcript"].
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
+    :return: Fixed RMC regions HT annotated with amino acid information
+        for region starts and stops, including starts and stops that are previously
+        missing annotations.
+    """
+
+    def _missing_aa_check(ht: hl.Table) -> Union[hl.Table, None]:
+        """
+        Check input Table for missing amino acid (AA) annotations.
+
+        Function returns Table of rows missing amino acid annotations.
+
+        :param ht: Input Table.
+        :return: Table with rows missing AA annotation,
+            otherwise None.
+        """
+        missing_ht = ht.filter(hl.is_missing(ht.start_aa) | hl.is_missing(ht.stop_aa))
+        missing_start_or_stop = missing_ht.count()
+        if missing_start_or_stop != 0:
+            logger.info(
+                "%i regions are missing either their stop or start AA!",
+                missing_start_or_stop,
+            )
+            return missing_ht
+        return None
+
+    missing_ht = _missing_aa_check(ht)
+    if not missing_ht:
+        return ht
+
+    # Get CDS start/stops from CDS HT
+    transcript_ht = transcript_ref.ht().key_by()
+
+    # Annotate whether RMC region is at the beginning or end of the transcript in coordinate space
+    # Also add strand annotation from `transcript_ref`
+    ht = ht.annotate(**transcript_ht[ht.transcript])
+    ht = ht.annotate(
+        # NOTE: This is actually the transcript end for transcripts on the negative strand
+        is_transcript_start=ht.start_coordinate == ht.gnomad_cds_start,
+        is_transcript_stop=ht.stop_coordinate == ht.gnomad_cds_end,
+    )
+    # NOTE: We adjusted transcript starts and stops that were missing AA annotations for gnomAD v2
+    # Some starts and stops had uninformative amino acid information in the VEP context HT:
+    # Amino acid was annotated as "X"
+    # VEP context HT was created using VEP version 85, GENCODE version 19
+    transcript_start_stop_fix_ht = fix_transcript_start_stop_aas(
+        ht, context_ht, overwrite_temp
+    )
+    ht = join_and_fix_aa(ht, transcript_start_stop_fix_ht)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_transcript_start_stop_aa_fix.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    region_fix_ht = fix_region_start_stop_aas(ht, context_ht, overwrite_temp)
+    ht = join_and_fix_aa(ht, region_fix_ht)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_all_aa_fix.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    # Double check that all rows have defined AA annotations
+    missing_ht = _missing_aa_check(ht)
+    if missing_ht:
+        raise DataException(
+            f"{missing_ht.count()} rows still don't have AA annotations! Please double"
+            " check."
+        )
+    return ht
+
+
+def add_globals_rmc_browser(ht: hl.Table) -> hl.Table:
+    """
+    Annotate HT globals with RMC transcript information.
+
+    Function is used when reformatting RMC results for browser release.
+    Annotates:
+        - transcripts not searched for RMC
+        - transcripts without evidence of RMC
+        - outlier transcripts
+    :param HT: Input Table. Should be RMC regions HT annotated with amino acid
+        information for region starts and stops.
+    :return: RMC regions HT with updated globals annotations.
+    """
+    # Get transcripts with evidence of RMC
+    rmc_transcripts = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.transcript)))
+
+    # Get all QC pass transcripts and outlier transcripts
+    qc_pass_transcripts = get_constraint_transcripts(outlier=False)
+    outlier_transcripts = get_constraint_transcripts(outlier=True)
+
+    # Get all transcripts displayed on browser
+    transcript_ht = gene_model.ht()
+    all_transcripts = transcript_ht.aggregate(
+        hl.agg.collect_as_set(transcript_ht.transcript)
+    )
+    transcripts_no_rmc = qc_pass_transcripts.difference(rmc_transcripts)
+    transcripts_not_searched = all_transcripts.difference(qc_pass_transcripts)
+    ht = ht.select_globals()
+    return ht.annotate_globals(
+        transcripts_not_searched=transcripts_not_searched,
+        transcripts_no_rmc=transcripts_no_rmc,
+        outlier_transcripts=outlier_transcripts,
+    )
+
+
+def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
     """
     Reformat annotations in input HT for release.
 
     This reformatting is necessary to load data into the gnomAD browser.
 
     Desired schema:
-    ---------------------------------------
+    ----------------------------------------
+    Global fields:
+        'p_value': float64
+        'transcripts_not_searched': set<str>
+        'transcripts_no_rmc': set<str>
+        'outlier_transcripts': set<str>
+    ----------------------------------------
     Row fields:
-        'transcript_id': str
+        'transcript': str
         'regions': array<struct {
-            'start': int32
-            'stop': int32
-            'observed_missense': int32
-            'expected_missense': float64
-            'chisq': float64
+            start_coordinate: locus<GRCh37>,
+            stop_coordinate: locus<GRCh37>,
+            start_aa: str,
+            stop_aa: str,
+            obs: int64,
+            exp: float64,
+            oe: float64,
+            chisq: float64,
+            p: float64
         }>
-
     ----------------------------------------
-    Key: ['transcript_id']
+    Key: ['transcript']
     ----------------------------------------
 
-    :param ht: Input Table.
-    :return: Table with schema described above.
+    :param freeze: RMC data freeze number.
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
+    :return: None; writes Table with desired schema to resource path.
     """
+    ht = rmc_results.versions[freeze].ht()
+
+    # Annotate start and stop coordinates per region
     ht = ht.annotate(
-        regions=hl.struct(
-            start=ht.section_start,
-            stop=ht.section_end,
-            observed_missense=ht.section_obs,
-            expected_missense=ht.section_exp,
+        start_coordinate=ht.interval.start,
+        stop_coordinate=ht.interval.end,
+    )
+
+    # Annotate start and stop amino acids per region
+    ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp)
+
+    # Remove missense O/E cap of 1
+    # (Missense O/E capped for RMC search, but
+    # it shouldn't be capped when displayed in the browser)
+    ht = ht.annotate(section_oe=ht.section_obs / ht.section_exp)
+
+    # Convert chi square to p-value
+    ht = ht.annotate(section_p_value=hl.pchisqtail(ht.section_chisq, 1))
+
+    # Add region struct
+    ht = ht.annotate(
+        region=hl.struct(
+            start_coordinate=ht.start_coordinate,
+            stop_coordinate=ht.stop_coordinate,
+            start_aa=ht.start_aa,
+            stop_aa=ht.stop_aa,
+            obs=ht.section_obs,
+            exp=ht.section_exp,
+            oe=ht.section_oe,
             chisq=ht.section_chisq,
+            p=ht.section_p_value,
         )
     )
     # Group Table by transcript
-    return ht.group_by(transcript_id=ht.transcript).aggregate(
-        regions=hl.agg.collect(ht.regions)
-    )
+    ht = ht.group_by("transcript").aggregate(regions=hl.agg.collect(ht.region))
+
+    # Annotate globals and write
+    ht = add_globals_rmc_browser(ht)
+    ht.write(rmc_browser.versions[freeze].path, overwrite=True)
 
 
 def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:
@@ -1387,7 +1873,7 @@ def get_oe_bins(ht: hl.Table) -> None:
 
     clinvar_ht = clinvar_plp_mis_haplo.ht()
     dn_ht = ndd_de_novo.ht()
-    transcript_ht = gene_model.ht()
+    transcript_ht = transcript_ref.ht()
 
     # Split de novo HT into two HTs -- one for controls and one for cases
     dn_controls_ht = dn_ht.filter(dn_ht.case_control == "control")
@@ -1396,7 +1882,7 @@ def get_oe_bins(ht: hl.Table) -> None:
     # Get total number of coding base pairs, also ClinVar and DNM variants
     # TODO: use exon field in gene model HT to get only coding bases (rather than using transcript end - start)
     transcript_ht = transcript_ht.annotate(
-        bp=transcript_ht.end_pos - transcript_ht.start_pos
+        bp=transcript_ht.gnomad_cds_end - transcript_ht.gnomad_cds_start
     )
     total_bp = transcript_ht.aggregate(hl.agg.sum(transcript_ht.bp))
     total_clinvar = clinvar_ht.count()
