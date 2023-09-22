@@ -1569,7 +1569,7 @@ def fix_region_start_stop_aas(
         else:
             # Reorder HT to ensure that the correct exon stop number is returned
             # (the previous key is interval and transcript)
-            # Region stops missing AAsneed to get adjusted to use the AA from the
+            # Region stops missing AAs need to get adjusted to use the AA from the
             # previous exon stop
             checkpoint_path = f"{TEMP_PATH_WITH_FAST_DEL}/cds_stop_fix.ht"
             cds_ht = cds_ht.order_by("transcript", "exon_stop")
