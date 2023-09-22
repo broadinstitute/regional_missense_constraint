@@ -1371,7 +1371,7 @@ def join_and_fix_aa(ht: hl.Table, fix_ht: hl.Table) -> hl.Table:
             ht.start_aa,
         ),
         stop_aa=hl.if_else(
-            hl.is_missing(ht.stop_aa) & ht.is_transcript_stop,
+            hl.is_missing(ht.stop_aa),
             fix_ht[ht.interval, ht.transcript].stop_aa,
             ht.stop_aa,
         ),
@@ -1495,7 +1495,7 @@ def fix_region_start_stop_aas(
             This means that the real start coordinate should be at the next exon start.
         - This function assumes that all stop coordinates missing AA annotations are one position smaller than
             the following exon start position. (This was the case in RMC freeze 7.)
-            This means that the real start coordinate should be at the previous exon stop.
+            This means that the real stop coordinate should be at the previous exon stop.
         - See this ticket for more information about RMC freeze 7:
             https://github.com/broadinstitute/rmc_production/issues/120
 
