@@ -1495,7 +1495,7 @@ def fix_region_start_stop_aas(
             This means that the real start coordinate should be at the next exon start.
         - This function assumes that all stop coordinates missing AA annotations are one position smaller than
             the following exon start position. (This was the case in RMC freeze 7.)
-            This means that the real start coordinate should be at the previous exon stop.
+            This means that the real stop coordinate should be at the previous exon stop.
         - See this ticket for more information about RMC freeze 7:
             https://github.com/broadinstitute/rmc_production/issues/120
 
