@@ -1462,7 +1462,7 @@ def fix_transcript_start_stop_aas(
         largest_aa=max_aa_ht[miss_start_stop_ht.transcript].largest_aa,
     )
     miss_start_stop_ht = miss_start_stop_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/ts_missing_start_stop_pos.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/ts_missing_start_stop_largest.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
