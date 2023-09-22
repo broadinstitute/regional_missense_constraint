@@ -1392,7 +1392,8 @@ def fix_transcript_start_stop_aas(
         - Largest amino acid (if + strand)
         - Met1 (if - strand)
 
-    :param ht: Input HT. Should be RMC results HT annotated with amino acid information.
+    :param ht: Input HT. Should be RMC regions HT annotated with amino acid
+        information for region starts and stops.
     :param context_ht: Table with reference AA identity and number per locus-transcript
         combination in VEP context HT. Keys are ["locus", "transcript"].
     :param overwrite_temp: Whether to overwrite temporary data.
@@ -1638,7 +1639,7 @@ def check_and_fix_missing_aa(
     ht: hl.Table, context_ht: hl.Table, overwrite_temp: bool
 ) -> hl.Table:
     """
-    Check for and fix any missing amino acid information in RMC results HT.
+    Check for and fix any missing amino acid information in RMC regions HT.
 
     :param ht: Input Table. Should be RMC regions HT annotated with amino acid
         information for region starts and stops.
