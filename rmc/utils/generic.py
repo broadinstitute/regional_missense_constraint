@@ -283,7 +283,7 @@ def get_aa_from_context(
 
     ht = ht.naive_coalesce(n_partitions)
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/vep_amino_acids.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/vep_amino_acids.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -330,10 +330,10 @@ def get_ref_aa(
 
     # Check if there are any ref amino acids in HT that aren't in `aa_map`
     ref_aa_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/ref_aa_3_letter_check.he"
-    overwrite_he = (
-        file_exists(ref_aa_check_he_path) if not overwrite_temp else overwrite_temp
+    overwrite_ref_aa_he = (
+        not file_exists(ref_aa_check_he_path) if not overwrite_temp else overwrite_temp
     )
-    if overwrite_he:
+    if overwrite_ref_aa_he:
         ref_aa_check = ht.aggregate(hl.agg.collect_as_set(ht.ref_aa))
         hl.experimental.write_expression(
             ref_aa_check, ref_aa_check_he_path, overwrite=True
@@ -349,17 +349,18 @@ def get_ref_aa(
 
     # Double check that protein start always equals protein end
     protein_num_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/protein_num_count.he"
-    overwrite_he = (
-        file_exists(protein_num_check_he_path) if not overwrite_temp else overwrite_temp
+    overwrite_protein_num_he = (
+        not file_exists(protein_num_check_he_path)
+        if not overwrite_temp
+        else overwrite_temp
     )
-    if overwrite_he:
+    if overwrite_protein_num_he:
         protein_num_check = ht.aggregate(
             hl.agg.count_where(ht.aa_start_num != ht.aa_end_num)
         )
         hl.experimental.write_expression(
             protein_num_check, protein_num_check_he_path, overwrite=True
         )
-
     # Assume file already exists otherwise
     protein_num_check = hl.eval(
         hl.experimental.read_expression(protein_num_check_he_path)
@@ -369,6 +370,7 @@ def get_ref_aa(
             f"{protein_num_check} sites had different amino acid numbers at start and"
             " end -- please double check!"
         )
+
     # Reformat reference AA to have both the 3 letter code and number
     ht = ht.annotate(
         ref_aa=hl.or_missing(
@@ -381,7 +383,7 @@ def get_ref_aa(
     ht = ht.key_by("locus", "transcript").drop("alleles", "aa_start_num", "aa_end_num")
     ht = ht.collect_by_key(name="aa_info")
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc/ref_aa_collected.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/ref_aa_collected.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -389,7 +391,9 @@ def get_ref_aa(
     # Check to see if AA info is defined for all alleles associated with a locus/transcript
     missing_aa_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/missing_aa_check.he"
     overwrite_he = (
-        not file_exists(missing_aa_check_he_path) if not overwrite_temp else overwrite_temp
+        not file_exists(missing_aa_check_he_path)
+        if not overwrite_temp
+        else overwrite_temp
     )
     if overwrite_he:
         ht = ht.annotate(
