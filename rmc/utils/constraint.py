@@ -1371,7 +1371,7 @@ def join_and_fix_aa(ht: hl.Table, fix_ht: hl.Table) -> hl.Table:
             ht.start_aa,
         ),
         stop_aa=hl.if_else(
-            hl.is_missing(ht.stop_aa) & ht.is_transcript_stop,
+            hl.is_missing(ht.stop_aa),
             fix_ht[ht.interval, ht.transcript].stop_aa,
             ht.stop_aa,
         ),
