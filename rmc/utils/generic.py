@@ -389,7 +389,7 @@ def get_ref_aa(
     # Check to see if AA info is defined for all alleles associated with a locus/transcript
     missing_aa_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/missing_aa_check.he"
     overwrite_he = (
-        file_exists(missing_aa_check_he_path) if not overwrite_temp else overwrite_temp
+        not file_exists(missing_aa_check_he_path) if not overwrite_temp else overwrite_temp
     )
     if overwrite_he:
         ht = ht.annotate(
