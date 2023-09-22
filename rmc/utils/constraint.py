@@ -1431,8 +1431,7 @@ def fix_transcript_start_stop_aas(
         overwrite=overwrite_temp,
     )
 
-    # Get largest defined amino acids present in context HT for each
-    # transcript that is missing an amino acid at its CDS start or end
+    # Filter context HT to keep only transcripts missing annotations
     miss_start_stop_transcripts = miss_start_stop_ht.aggregate(
         hl.agg.collect_as_set(miss_start_stop_ht.transcript)
     )
@@ -1443,7 +1442,8 @@ def fix_transcript_start_stop_aas(
     # Keep amino acid + amino acid number and drop irrelevant annotations
     max_aa_ht = context_ht.select("ref_aa", aa_num=hl.int(context_ht.ref_aa[3:]))
 
-    # Get the largest amino acid number per transcript
+    # Get largest defined amino acids present in context HT for each
+    # transcript that is missing an amino acid at its CDS start or end
     max_aa_grp_ht = max_aa_ht.group_by("transcript").aggregate(
         largest_aa=hl.agg.max(max_aa_ht.aa_num)
     )
