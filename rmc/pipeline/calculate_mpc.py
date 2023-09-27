@@ -168,7 +168,7 @@ if __name__ == "__main__":
         help=(
             "Comma separated string of variables to include in all logistic regression."
         ),
-        default="oe,misbad,polyphen",
+        default="oe,second_deriv,overall_obs_exp,polyphen",
     )
     run_glm.add_argument(
         "--extra-variables",

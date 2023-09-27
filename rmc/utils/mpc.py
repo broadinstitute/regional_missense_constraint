@@ -321,25 +321,27 @@ def prepare_pop_path_ht(
         :return: None; function writes HT to specified path.
         """
         mb_ht = hl.read_table(misbad_path(fold=fold, freeze=freeze))
-        ht = ht.annotate(misbad=mb_ht[ht.ref, ht.alt].misbad)
+        ht = ht.annotate(**mb_ht[ht.ref, ht.alt])
         filter_transcripts = hl.experimental.read_expression(
             train_val_test_transcripts_path(fold=fold)
         )
         ht = ht.filter(
-            hl.is_defined(ht.misbad) & filter_transcripts.contains(ht.transcript)
+            hl.is_defined(ht.second_deriv)
+            & hl.is_defined(ht.overall_obs_exp)
+            & filter_transcripts.contains(ht.transcript)
         )
         ht.write(joint_clinvar_gnomad_path(fold=fold, freeze=freeze), overwrite=True)
 
     if not do_k_fold_training:
         logger.info(
-            "Adding misbad from training transcripts, filtering transcripts, writing"
-            " out...",
+            "Adding mb second_deriv and overall_obs_exp from training transcripts,"
+            " filtering transcripts, writing out...",
         )
         _add_misbad_and_filter_transcripts(ht=ht)
     else:
         logger.info(
-            "Adding misbad, filtering transcripts, writing out for the %i-fold training"
-            " sets...",
+            "Adding mb second_deriv and overall_obs_exp, filtering transcripts, writing"
+            " out for the %i-fold training sets...",
             FOLD_K,
         )
         for i in range(1, FOLD_K + 1):
@@ -478,7 +480,8 @@ def get_min_aic_model(
     logger.info("Running joint regression with specific interactions...")
     # Currently hardcoded to be formula from ExAC
     min_model_formulas["spec"] = (
-        "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen"
+        "pop_v_path ~ oe + second_deriv + overall_obs_exp +"
+        " oe:second_deriv:overall_obs_exp + polyphen + oe:polyphen"
     )
     min_models["spec"] = run_glm(df, min_model_formulas["spec"])
 
@@ -506,8 +509,8 @@ def get_min_aic_model(
 
 def run_regressions(
     use_model_formula: bool = False,
-    model_formula: str = "pop_v_path ~ oe + misbad + oe:misbad + polyphen + oe:polyphen",
-    variables: List[str] = ["oe", "misbad", "polyphen"],
+    model_formula: str = "pop_v_path ~ oe + second_deriv + overall_obs_exp + oe:second_deriv:overall_obs_exp + polyphen + oe:polyphen",
+    variables: List[str] = ["oe", "second_deriv", "overall_obs_exp", "polyphen"],
     additional_variables: List[str] = ["blosum", "grantham"],
     overwrite_temp: bool = False,
     do_k_fold_training: bool = False,
@@ -654,7 +657,12 @@ def calculate_fitted_scores(
     overwrite_temp: bool = False,
     fold: int = None,
     possible_context_annots: Set[str] = {"oe", "polyphen"},
-    possible_addtl_annots: Set[str] = {"misbad", "blosum", "grantham"},
+    possible_addtl_annots: Set[str] = {
+        "second_deriv",
+        "overall_obs_exp",
+        "blosum",
+        "grantham",
+    },
     interaction_char: str = ":",
     intercept_str: str = "Intercept",
     freeze: int = CURRENT_FREEZE,
@@ -750,11 +758,17 @@ def calculate_fitted_scores(
 
     # Add annotations not in context HT
     logger.info("Annotating HT with remaining variables...")
-    if "misbad" in addtl_annots:
-        logger.info("Annotating HT with missense badness...")
+    if "second_deriv" in addtl_annots:
+        logger.info("Annotating HT with mb second_deriv...")
         mb_ht = hl.read_table(misbad_path(fold=fold, freeze=freeze))
         scores_ht = scores_ht.annotate(
-            misbad=mb_ht[scores_ht.ref, scores_ht.alt].misbad
+            second_deriv=mb_ht[scores_ht.ref, scores_ht.alt].second_deriv
+        )
+    if "overall_obs_exp" in addtl_annots:
+        logger.info("Annotating HT with mb overall_obs_exp...")
+        mb_ht = hl.read_table(misbad_path(fold=fold, freeze=freeze))
+        scores_ht = scores_ht.annotate(
+            overall_obs_exp=mb_ht[scores_ht.ref, scores_ht.alt].overall_obs_exp
         )
     if "blosum" in addtl_annots:
         logger.info("Annotating HT with BLOSUM...")
