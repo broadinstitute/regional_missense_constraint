@@ -321,7 +321,10 @@ def prepare_pop_path_ht(
         :return: None; function writes HT to specified path.
         """
         mb_ht = hl.read_table(misbad_path(fold=fold, freeze=freeze))
-        ht = ht.annotate(**mb_ht[ht.ref, ht.alt])
+        ht = ht.annotate(
+            second_deriv=mb_ht[ht.ref, ht.alt].second_deriv,
+            overall_obs_exp=mb_ht[ht.ref, ht.alt].overall_obs_exp,
+        )
         filter_transcripts = hl.experimental.read_expression(
             train_val_test_transcripts_path(fold=fold)
         )
