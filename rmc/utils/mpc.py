@@ -747,7 +747,7 @@ def calculate_fitted_scores(
     logger.info("Annotating HT with MPC variables from context HT...")
     # Re-key context HT by locus and alleles (original key contains transcript)
     # to enable addition of annotations from each transcript corresponding to a variant
-    context_ht = context_ht.key_by("locus", "alleles").select(context_helper_annots)
+    context_ht = context_ht.key_by("locus", "alleles").select(*context_helper_annots)
     if "polyphen" in context_annots:
         context_ht = context_ht.transmute(polyphen=context_ht.polyphen.score)
     # Add annotations from all transcripts per variant
