@@ -845,6 +845,7 @@ def calculate_fitted_scores(
     min_scores_ht = min_scores_ht.drop("values")
     min_scores_ht = min_scores_ht.key_by("locus", "alleles", "transcript")
     scores_ht = scores_ht.key_by("locus", "alleles", "transcript").join(min_scores_ht)
+    scores_ht = scores_ht.key_by("locus", "alleles")
     scores_ht = scores_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/fitted_scores_dedup{temp_label}.ht",
         _read_if_exists=not overwrite_temp,
