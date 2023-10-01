@@ -9,7 +9,7 @@ from rmc.resources.reference_data import FOLD_K, train_val_test_transcripts_path
 from rmc.resources.resource_utils import KEEP_CODING_CSQ
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
-    amino_acids_oe_path,
+    amino_acids_oe,
     filtered_context,
     misbad_path,
 )
@@ -30,7 +30,6 @@ logger.setLevel(logging.INFO)
 
 def prepare_amino_acid_ht(
     overwrite_temp: bool,
-    do_k_fold_training: bool = False,
     freeze: int = CURRENT_FREEZE,
     gnomad_data_type: str = "exomes",
     loftee_hc_str: str = "HC",
@@ -43,21 +42,17 @@ def prepare_amino_acid_ht(
         (every codon > codon change).
         - Filter Table to rows that aren't present in gnomAD or are rare in gnomAD (using `keep_criteria`).
         - Add observed and OE annotation.
-        - Filter to specified transcript set(s).
-        - Write to `amino_acids_oe_path` resource path(s).
+        - Filter to training transcripts.
+        - Write to `amino_acids_oe` resource path.
 
     :param overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
-    :param do_k_fold_training: Whether to generate k-fold models with the training transcripts.
-        If False, will use all training transcripts in calculation of a single model.
-        If True, will calculate k models corresponding to the k-folds of the training transcripts.
-        Default is False.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
     :param loftee_hc_str: String indicating that a variant is predicted to cause loss-of-function with high confidence by LOFTEE.
-    :return: None; writes amino acid Table(s) to resource path(s).
+    :return: None; writes amino acid Table to resource path.
     """
     logger.info("Reading in VEP context HT...")
     # NOTE: Keeping all variant types here because need synonymous and nonsense variants to calculate missense badness
@@ -189,37 +184,12 @@ def prepare_amino_acid_ht(
         overwrite=overwrite_temp,
     )
 
-    def _filter_transcripts(
-        ht: hl.Table,
-        fold: int = None,
-    ) -> None:
-        """
-        Filter amino acid OE HT to a set of training transcripts and write out.
-
-        :param hl.Table ht: Input table.
-        :param int fold: Fold number in training set to select training transcripts from.
-            If not None, the Table is generated from variants in only training transcripts
-            from the specified fold. If None, the Table is generated from variants in all training transcripts.
-            Default is None.
-        :return: None; function writes HT to specified path.
-        """
-        filter_transcripts = hl.experimental.read_expression(
-            train_val_test_transcripts_path(fold=fold)
-        )
-        ht = ht.filter(filter_transcripts.contains(ht.transcript))
-        ht.write(amino_acids_oe_path(fold=fold, freeze=freeze), overwrite=True)
-
-    if not do_k_fold_training:
-        logger.info("Writing out HT for training transcripts only...")
-        _filter_transcripts(ht=context_ht)
-    else:
-        logger.info(
-            "Writing out amino acid OE HT for each of the %i-fold training sets...",
-            FOLD_K,
-        )
-        for i in range(1, FOLD_K + 1):
-            logger.info("Writing out amino acid OE HT for fold %i...", i)
-            _filter_transcripts(ht=context_ht, fold=i)
+    logger.info("Filtering to training transcripts only and writing out...")
+    train_transcripts = hl.experimental.read_expression(
+        train_val_test_transcripts_path()
+    )
+    context_ht = context_ht.filter(train_transcripts.contains(context_ht.transcript))
+    context_ht.write(amino_acids_oe.versions[freeze].path, overwrite=True)
 
 
 def variant_csq_expr(
@@ -330,23 +300,11 @@ def calculate_misbad(
     :param int freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: None; writes Table(s) with missense badness scores to resource path(s).
     """
-    if not do_k_fold_training:
-        if not file_exists(amino_acids_oe_path(freeze=freeze)):
-            raise DataException(
-                "Table with all amino acid substitutions and missense OE in training"
-                " transcripts doesn't exist!"
-            )
-    else:
-        if not all(
-            [
-                file_exists(amino_acids_oe_path(fold=i, freeze=freeze))
-                for i in range(1, FOLD_K + 1)
-            ]
-        ):
-            raise DataException(
-                "Not all k-fold training tables with all amino acid substitutions and"
-                " missense OE exist!"
-            )
+    if not file_exists(amino_acids_oe.versions[freeze].path):
+        raise DataException(
+            "Table with all amino acid substitutions and missense OE in training"
+            " transcripts doesn't exist!"
+        )
 
     def _create_misbad_model(
         temp_label: str,
@@ -362,7 +320,7 @@ def calculate_misbad(
             Default is None.
         :return: None; writes Table with missense badness scores to resource path.
         """
-        ht = hl.read_table(amino_acids_oe_path(fold=fold, freeze=freeze))
+        ht = amino_acids_oe.versions[freeze].ht()
         if use_exac_oe_cutoffs:
             logger.info("Removing rows with OE greater than 0.6 and less than 0.8...")
             ht = ht.filter((ht.oe <= 0.6) | (ht.oe > 0.8))
