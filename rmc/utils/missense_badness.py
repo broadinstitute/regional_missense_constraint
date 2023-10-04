@@ -35,7 +35,12 @@ def prepare_amino_acid_ht(
     loftee_hc_str: str = "HC",
 ) -> None:
     """
-    Prepare Table(s) with all possible amino acid substitutions and their missense observed to expected (OE) ratio.
+    Prepare Table(s) with amino acid substitutions and their missense observed to expected (OE) ratio.
+
+    Table contains only variants in training transcripts (including variants in both training
+    and test transcripts, if any).
+
+    LoF variants are filtered to high-confidence LoF consequence as determined by LoFTEE.
 
     Steps:
         - Import VEP context Table and filter to keep every possible amino acid substitution
