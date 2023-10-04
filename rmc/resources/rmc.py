@@ -559,21 +559,48 @@ Contains same information as `rmc_results` but has different formatting for gnom
 ####################################################################################
 ## Missense badness related resources
 ####################################################################################
+# TODO: Move out of `train/`
 amino_acids_oe = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/amino_acid_oe.ht"
+            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/train/amino_acid_oe.ht"
         )
         for freeze in FREEZES
     },
 )
-
 """
-Table containing all possible amino acid substitutions and their missense OE ratio.
+Table containing all possible amino acid substitutions and their missense OE ratio in training transcripts.
+
+Table also includes variants in both training and test transcripts, if any.
 
 Input to missense badness calculations.
 """
+
+
+def amino_acids_obs_exp_by_oe_bin_path(
+    fold: int = None,
+    freeze: int = CURRENT_FREEZE,
+) -> str:
+    """
+    Table containing observed and expected counts per OE bin for each amino acid substitution type.
+
+    # TODO: Add differences between LoF, missense, OE bin specification
+
+    :param int fold: Fold number in training set to select training transcripts from.
+        If not None, the Table is generated from variants in only training transcripts
+        from the specified fold of the overall training set. If None, the Table is generated from
+        variants in all training transcripts. Default is None.
+    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
+    :return: Path to Table.
+    """
+    if fold is not None and fold not in range(1, FOLD_K + 1):
+        raise DataException(
+            f"Fold number must be an integer between 1 and {FOLD_K}, inclusive!"
+        )
+    fold_name = f"_fold{fold}" if fold is not None else ""
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/amino_acid_obs_exp_by_oe_bin.ht"
+
 
 def misbad_path(
     fold: int = None,
