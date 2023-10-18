@@ -126,6 +126,16 @@ Path to HailExpression of triplosensitive genes.
 List of triplosensitive genes was determined by filtering to genes with pTriplo >= 0.94.
 """
 
+dd_nonlof_genes_path = f"{REF_DATA_PREFIX}/ht/dd_nonlof_genes.he"
+"""
+Path to HailExpression of DD genes that can act through non-LoF mechanisms.
+
+List of genes was determined by filtering on the Gene2Phenotype DD panel to select genes where:
+1. confidence_category is either definitive or strong evidence,
+2. allelic_requirement was monoallelic,
+and 3. mutation_consequence included altered gene product structure or increased gene product level.
+"""
+
 
 ####################################################################################
 ## Assessment related resources
@@ -153,6 +163,14 @@ clinvar_plp_mis_triplo = TableResource(
 )
 """
 ClinVar pathogenic/likely pathogenic missense variants in triplosensitive (TS) genes.
+"""
+
+clinvar_plp_mis_haplo_dd_nonlof = TableResource(
+    path=f"{REF_DATA_PREFIX}/ht/clinvar_pathogenic_missense_haplo_dd_nonlof.ht",
+)
+"""
+ClinVar pathogenic/likely pathogenic missense variants in HI genes or
+DD genes that can act through non-LoF mechanisms.
 """
 
 ndd_de_novo_2020_tsv_path = (

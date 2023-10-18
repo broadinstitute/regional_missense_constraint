@@ -29,7 +29,9 @@ from rmc.resources.reference_data import (
     autism_de_novo_2022_tsv_path,
     clinvar,
     clinvar_plp_mis_haplo,
+    clinvar_plp_mis_haplo_dd_nonlof,
     clinvar_plp_mis_triplo,
+    dd_nonlof_genes_path,
     dosage_ht,
     dosage_tsv_path,
     haplo_genes_path,
@@ -188,8 +190,10 @@ def process_context_ht(
 
     if not add_annotations:
         logger.info(
-            "Filtering to canonical transcripts and annotating variants with most"
-            " severe consequence...",
+            (
+                "Filtering to canonical transcripts and annotating variants with most"
+                " severe consequence..."
+            ),
         )
         ht = process_vep(
             ht,
@@ -198,9 +202,11 @@ def process_context_ht(
         )
     else:
         logger.info(
-            "Filtering to canonical transcripts, annotating variants with most"
-            " severe consequence, and adding annotations for constraint"
-            " calculation...",
+            (
+                "Filtering to canonical transcripts, annotating variants with most"
+                " severe consequence, and adding annotations for constraint"
+                " calculation..."
+            ),
         )
         # NOTE: `prepare_ht_for_constraint_calculations` annotates HT with:
         # `ref`, `alt`, `methylation_level`, `exome_coverage`, and annotations added by
@@ -342,8 +348,10 @@ def get_ref_aa(
     ref_aa_check = ref_aa_check.difference(set(hl.eval(aa_map).values()))
     if len(ref_aa_check) != 0:
         logger.warning(
-            "The following reference amino acids were not mapped to three letter"
-            " codes: %s",
+            (
+                "The following reference amino acids were not mapped to three letter"
+                " codes: %s"
+            ),
             ref_aa_check,
         )
 
@@ -409,8 +417,10 @@ def get_ref_aa(
     )
     if missing_aa_check != 0:
         logger.warning(
-            "%i locus-transcript combinations had missing AA info for at least 1"
-            " allele!",
+            (
+                "%i locus-transcript combinations had missing AA info for at least 1"
+                " allele!"
+            ),
             missing_aa_check,
         )
     return ht.transmute(ref_aa=ht.aa_info[0].ref_aa)
@@ -926,6 +936,7 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
     """
     if (
         not file_exists(clinvar_plp_mis_haplo.path)
+        or not file_exists(clinvar_plp_mis_haplo_dd_nonlof.path)
         or not file_exists(clinvar_plp_mis_triplo.path)
         or overwrite
     ):
@@ -955,6 +966,24 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
         )
         logger.info(
             "Number of variants after filtering to HI genes: %i", haplo_ht.count()
+        )
+
+        # TODO: Add processing of gene panel download to select genes into the repo
+        logger.info(
+            "Combining with variants in DD genes acting through non-LoF mechanisms..."
+        )
+        dd_nonlof_genes = hl.experimental.read_expression(dd_nonlof_genes_path)
+        haplo_or_dd_nonlof_ht = ht.filter(
+            hi_genes.contains(ht.gene) | dd_nonlof_genes.contains(ht.gene)
+        )
+        haplo_or_dd_nonlof_ht = haplo_or_dd_nonlof_ht.checkpoint(
+            clinvar_plp_mis_haplo_dd_nonlof.path,
+            _read_if_exists=not overwrite,
+            overwrite=overwrite,
+        )
+        logger.info(
+            "Number of variants after filtering to HI or DD non-LoF genes: %i",
+            haplo_or_dd_nonlof_ht.count(),
         )
 
         logger.info("Filtering to variants in triplosensitive genes...")
