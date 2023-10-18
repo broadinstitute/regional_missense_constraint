@@ -166,6 +166,8 @@ Table contains constraint-related annotations, including observed variant counts
 expected variant counts, probability of mutation, CpG status, gnomAD exome coverage,
 and methylation level.
 
+Table is filtered to alleles not found or rare in gnomAD exomes at covered sites.
+
 Schema:
 ----------------------------------------
 Global fields:
