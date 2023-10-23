@@ -29,6 +29,7 @@ from rmc.utils.constraint import (
     create_context_with_oe,
     create_filtered_context_ht,
     create_no_breaks_he,
+    create_rmc_release_downloads,
     format_rmc_browser_ht,
     merge_rmc_hts,
     process_sections,
@@ -425,6 +426,13 @@ def main(args):
             logger.info("Reformatting RMC results for browser release...")
             format_rmc_browser_ht(args.freeze, args.overwrite_temp)
 
+        if args.command == "create-release":
+            logger.info(
+                "Creating versions of files to be publicly released on gnomAD"
+                " browser..."
+            )
+            create_rmc_release_downloads(args.freeze, args.overwrite)
+
     finally:
         logger.info("Copying hail log to logging bucket...")
         hl.copy_log(LOGGING_PATH)
@@ -561,6 +569,10 @@ if __name__ == "__main__":
         help="Remove constraint outlier transcripts from RMC output.",
     )
 
+    create_release = subparsers.add_parser(
+        "create-release",
+        help="Create RMC release files (to be publicly shared on gnomAD browser).",
+    )
     args = parser.parse_args()
 
     if args.slack_channel:
