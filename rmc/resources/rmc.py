@@ -556,20 +556,34 @@ Contains same information as `rmc_results` but has different formatting for gnom
 """
 
 
-def rmc_downloadable_tsv_paths(has_rmc: bool, freeze: int = CURRENT_FREEZE) -> str:
+def rmc_downloads_resource_paths(
+    get_ht_path: bool, has_rmc: bool = True, freeze: int = CURRENT_FREEZE
+) -> str:
     """
-    Return resource path for specified RMC TSV.
+    Return resource path for specified RMC downloadable file.
 
-    These TSVs are intended for release on the gnomAD browser and have two types:
+    Function returns path to file that will get copied to public release bucket
+    .
+    There are three file types:
+    - Hail Table
     - TSV containing transcripts with evidence of RMC
     - TSV containing transcripts that were searched for but did not have evidence of RMC
 
+    :param get_ht_path: Whehter to return path to HT.
+        If False, will return path to one of the two TSV files.
     :param has_rmc: Whether to return path to TSV with RMC results.
         If False, will return path to TSV with transcripts that don't have evidence of RMC.
     :param freeze: RMC data freeze number.
     :return: String of resource TSV path.
     """
-    tsv_name = "transcripts_with_rmc.tsv" if has_rmc else "transcripts_without_rmc.tsv"
+    if get_ht_path:
+        return f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/gnomAD_v2.1.1_rmc.ht"
+
+    tsv_name = (
+        "gnomAD_v2.1.1_transcripts_with_rmc.tsv"
+        if has_rmc
+        else "gnomAD_v2.1.1_rmc_transcripts_without_rmc.tsv"
+    )
     return f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/{tsv_name}"
 
 
