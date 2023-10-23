@@ -556,6 +556,23 @@ Contains same information as `rmc_results` but has different formatting for gnom
 """
 
 
+def rmc_downloadable_tsv_paths(has_rmc: bool, freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Return resource path for specified RMC TSV.
+
+    These TSVs are intended for release on the gnomAD browser and have two types:
+    - TSV containing transcripts with evidence of RMC
+    - TSV containing transcripts that were searched for but did not have evidence of RMC
+
+    :param has_rmc: Whether to return path to TSV with RMC results.
+        If False, will return path to TSV with transcripts that don't have evidence of RMC.
+    :param freeze: RMC data freeze number.
+    :return: String of resource TSV path.
+    """
+    tsv_name = "transcripts_with_rmc.tsv" if has_rmc else "transcripts_without_rmc.tsv"
+    return f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/{tsv_name}"
+
+
 ####################################################################################
 ## Missense badness related resources
 ####################################################################################
