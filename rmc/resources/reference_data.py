@@ -13,6 +13,19 @@ Path to bucket containing reference data resources.
 ####################################################################################
 ## Reference genome related resources
 ####################################################################################
+GENCODE_VERSION = "19"
+"""
+GENCODE version used to annotate variants.
+
+gnomAD v2 used GENCODE v19 and VEP v85.
+See: https://gnomad.broadinstitute.org/help/what-version-of-gencode-was-used-to-annotate-variants.
+"""
+
+VEP_VERSION = "85"
+"""
+VEP version used to annotate variants.
+"""
+
 gene_model = TableResource(path=f"{RESOURCE_BUILD_PREFIX}/browser/b37_transcripts.ht")
 """
 Table containing transcript start and stop positions displayed in the browser.
