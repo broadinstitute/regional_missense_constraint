@@ -1882,8 +1882,8 @@ def create_rmc_release_downloads(
     # Add gene IDs from `transcript_ref` resource
     transcript_ref_ht = transcript_ref.ht()
     ht = ht.annotate(
-        gene_name=transcript_ref[ht.transcript].gnomad_gene,
-        gene_id=transcript_ref[ht.transcript].gencode_gene_id,
+        gene_name=transcript_ref_ht[ht.transcript].gnomad_gene,
+        gene_id=transcript_ref_ht[ht.transcript].gencode_gene_id,
     )
     # Add GENCODE and VEP versions to globals
     ht = ht.annotate_globals(gencode_version=gencode_version, vep_version=vep_version)
