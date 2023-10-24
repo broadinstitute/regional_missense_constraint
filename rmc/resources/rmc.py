@@ -742,9 +742,7 @@ def mpc_features_he_path(
 
 
 def gnomad_fitted_score_path(
-    is_grouped: bool = False,
-    fold: int = None,
-    freeze: int = CURRENT_FREEZE,
+    is_grouped: bool = False, freeze: int = CURRENT_FREEZE
 ) -> str:
     """
     Return path to fitted scores (from MPC model regression) of common (AF > 0.001) gnomAD variants.
@@ -752,20 +750,11 @@ def gnomad_fitted_score_path(
     Table is input to MPC (missense badness, polyphen-2, and constraint) calculations on other datasets.
 
     :param bool is_grouped: Whether the Table is grouped by score. Default is False.
-    :param int fold: Fold number in training set to select training transcripts from.
-        If not None, the Table is generated from variants in only training transcripts
-        from the specified fold of the overall training set. If None, the Table is generated from
-        variants in all training transcripts. Default is None.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to Table.
     """
-    if fold is not None and fold not in range(1, FOLD_K + 1):
-        raise DataException(
-            f"Fold number must be an integer between 1 and {FOLD_K}, inclusive!"
-        )
-    fold_name = f"_fold{fold}" if fold is not None else ""
     group = "_group" if is_grouped else ""
-    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/gnomad_fitted_scores{group}.ht"
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}//gnomad_fitted_scores{group}.ht"
 
 
 mpc_release = VersionedTableResource(
