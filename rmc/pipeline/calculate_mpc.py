@@ -12,9 +12,19 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
-from rmc.resources.rmc import CURRENT_FREEZE, context_with_oe, mpc_release
+from rmc.resources.rmc import (
+    CURRENT_FREEZE,
+    aa_annot,
+    context_dedup_annot,
+    mpc_release,
+)
 from rmc.slack_creds import slack_token
-from rmc.utils.mpc import annotate_mpc, prepare_pop_path_ht, run_regressions
+from rmc.utils.mpc import (
+    annotate_mpc,
+    calculate_common_gnomad_fitted_scores,
+    prepare_pop_path_ht,
+    run_regressions,
+)
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -30,6 +40,7 @@ def main(args):
     try:
         if args.command == "prepare-ht":
             hl.init(log="/write_pop_path_ht.log", tmp_dir=temp_dir)
+            # TODO: Update this
             prepare_pop_path_ht(
                 overwrite_temp=args.overwrite_temp,
                 do_k_fold_training=args.do_k_fold_training,
@@ -38,20 +49,26 @@ def main(args):
 
         if args.command == "run-glm":
             hl.init(log="/run_regressions_using_glm.log", tmp_dir=temp_dir)
+            # TODO: Update this
             run_regressions(
                 use_model_formula=args.use_model_formula,
                 model_formula=args.model_formula,
                 variables=args.variables.split(","),
                 additional_variables=args.extra_variables.split(","),
-                overwrite_temp=args.overwrite_temp,
                 do_k_fold_training=args.do_k_fold_training,
                 freeze=args.freeze,
             )
 
+        if args.command == "fit-to-gnomad-common":
+            hl.init(log="/calculate_common_gnomad_fitted_scores.log", tmp_dir=temp_dir)
+            calculate_common_gnomad_fitted_scores(freeze=args.freeze)
+
         if args.command == "create-mpc-release":
             hl.init(log="/create_mpc_release.log", tmp_dir=temp_dir)
+            ht = context_dedup_annot.versions[args.freeze].ht()
+            ht = ht.annotate(**aa_annot.versions[args.freeze].ht()[ht.ref, ht.alt])
             annotate_mpc(
-                ht=context_with_oe.versions[args.freeze].ht().select(),
+                ht=ht,
                 output_ht_path=mpc_release.versions[args.freeze].path,
                 temp_label="_release",
                 use_release=False,
@@ -72,7 +89,6 @@ def main(args):
                     ht=dd_ht,
                     output_ht_path=f"{mpc_bucket_path}/dd_mpc_annot.ht",
                     temp_label="_dd",
-                    model_train_fold=args.model_train_fold,
                     use_release=args.use_release,
                     overwrite_temp=args.overwrite_temp,
                     freeze=args.freeze,
@@ -83,7 +99,6 @@ def main(args):
                     ht=hl.read_table(args.ht_in_path),
                     output_ht_path=args.ht_out_path,
                     overwrite_temp=args.overwrite_temp,
-                    model_train_fold=args.model_train_fold,
                     use_release=args.use_release,
                     temp_label=args.temp_label,
                     freeze=args.freeze,

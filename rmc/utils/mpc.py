@@ -1,7 +1,7 @@
 import logging
 import pickle
 from itertools import combinations
-from typing import Dict, List, Set, Tuple, Union
+from typing import Dict, List, Tuple, Union
 
 import hail as hl
 import numpy as np
@@ -30,10 +30,18 @@ from rmc.resources.rmc import (
     gnomad_fitted_score_path,
     joint_clinvar_gnomad_path,
     misbad_path,
+    mpc_features_he_path,
+    mpc_feature_imputer_pkl_path,
     mpc_model_pkl_path,
     mpc_release,
+    pop_v_path,
 )
-from rmc.utils.generic import get_aa_map, get_gnomad_public_release, keep_criteria
+from rmc.utils.generic import (
+    get_aa_map,
+    get_constraint_transcripts,
+    get_gnomad_public_release,
+    keep_criteria,
+)
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -166,6 +174,7 @@ def import_grantham():
     ht.write(grantham.path)
 
 
+# TODO: Remove obsolete code
 def prepare_pop_path_ht(
     gnomad_data_type: str = "exomes",
     af_threshold: float = 0.001,
@@ -337,20 +346,25 @@ def prepare_pop_path_ht(
 
     if not do_k_fold_training:
         logger.info(
-            "Adding mb second_deriv and overall_obs_exp from training transcripts,"
-            " filtering transcripts, writing out...",
+            (
+                "Adding mb second_deriv and overall_obs_exp from training transcripts,"
+                " filtering transcripts, writing out..."
+            ),
         )
         _add_misbad_and_filter_transcripts(ht=ht)
     else:
         logger.info(
-            "Adding mb second_deriv and overall_obs_exp, filtering transcripts, writing"
-            " out for the %i-fold training sets...",
+            (
+                "Adding mb second_deriv and overall_obs_exp, filtering transcripts,"
+                " writing out for the %i-fold training sets..."
+            ),
             FOLD_K,
         )
         for i in range(1, FOLD_K + 1):
             _add_misbad_and_filter_transcripts(ht=ht, fold=i)
 
 
+# TODO: Remove obsolete code
 def run_glm(
     df: pd.core.frame.DataFrame,
     formula: str,
@@ -375,6 +389,7 @@ def run_glm(
     return model
 
 
+# TODO: Remove obsolete code
 # TODO: Separate out comparing models with AIC and training regressions from all combinations
 # of a set of variables
 # After merging with model flexibility code changes
@@ -510,12 +525,12 @@ def get_min_aic_model(
     return overall_min_model
 
 
+# TODO: Remove obsolete code
 def run_regressions(
     use_model_formula: bool = False,
     model_formula: str = "pop_v_path ~ oe + second_deriv + overall_obs_exp + oe:second_deriv:overall_obs_exp + polyphen + oe:polyphen",
     variables: List[str] = ["oe", "second_deriv", "overall_obs_exp", "polyphen"],
     additional_variables: List[str] = ["blosum", "grantham"],
-    overwrite_temp: bool = False,
     do_k_fold_training: bool = False,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
@@ -571,7 +586,6 @@ def run_regressions(
         )
 
     def _generate_regression_model(
-        temp_label: str,
         fold: int = None,
     ) -> None:
         """
@@ -625,234 +639,84 @@ def run_regressions(
         with hl.hadoop_open(mpc_model_pkl_path(fold=fold, freeze=freeze), "wb") as p:
             pickle.dump(model, p, protocol=pickle.HIGHEST_PROTOCOL)
 
-        logger.info(
-            "Annotating gnomAD variants with fitted score and writing to"
-            " gnomad_fitted_score path..."
-        )
-        ht = ht.filter(ht.pop_v_path == 1)
-        ht = calculate_fitted_scores(
-            ht=ht,
-            temp_label=temp_label,
-            overwrite_temp=overwrite_temp,
-            fold=fold,
-            freeze=freeze,
-        )
-        ht.write(gnomad_fitted_score_path(fold=fold, freeze=freeze), overwrite=True)
-
     if not do_k_fold_training:
         logger.info(
             "Running regression(s) on training transcripts...",
         )
-        _generate_regression_model(temp_label="_train")
+        _generate_regression_model()
     else:
         logger.info(
             "Running regressions on the %i-fold training sets...",
             FOLD_K,
         )
         for i in range(1, FOLD_K + 1):
-            _generate_regression_model(temp_label=f"_train_fold{i}", fold=i)
+            _generate_regression_model(fold=i)
     # TODO: Make this show/save a table of AICs and model formulas instead of printing every one
 
 
-def calculate_fitted_scores(
-    ht: hl.Table,
-    temp_label: str,
-    overwrite_temp: bool = False,
-    fold: int = None,
-    possible_context_annots: Set[str] = {"oe", "polyphen"},
-    possible_addtl_annots: Set[str] = {
-        "second_deriv",
-        "overall_obs_exp",
-        "blosum",
-        "grantham",
-    },
-    interaction_char: str = ":",
-    intercept_str: str = "Intercept",
-    freeze: int = CURRENT_FREEZE,
-) -> hl.Table:
+def calculate_common_gnomad_fitted_scores(freeze: int = CURRENT_FREEZE):
+    logger.info("Reading in common gnomAD variants...")
+    # NOTE: This table does not have transcript filters
+    ht = pop_v_path.ht()
+    ht = ht.filter(ht.pop_v_path == 1)
+
+    logger.info("Filtering common gnomAD variants to non-outlier transcripts...")
+    keep_transcripts = get_constraint_transcripts(outlier=False)
+    ht = ht.filter(keep_transcripts.contains(ht.transcript))
+
+    logger.info(
+        "Annotating gnomAD variants with fitted score and writing to"
+        " gnomad_fitted_score path..."
+    )
+    calculate_fitted_scores(ht).write(
+        gnomad_fitted_score_path(freeze=freeze), overwrite=True
+    )
+
+
+def calculate_fitted_scores(ht: hl.Table, freeze: int = CURRENT_FREEZE) -> hl.Table:
     """
-    Use MPC model chosen in `run_regressions` to calculate fitted scores for input Table.
+    Use MPC model to calculate fitted scores for input Table.
 
     .. note::
-        - Function will remove any rows with undefined MPC feature annotations from input Table.
-        - Input Table is assumed to be keyed by ['locus', 'alleles'].
-        - If the model uses transcript-specific features (e.g. RMC O/E) and there are variants
-            in the input HT in multiple transcripts, only the most severe fitted score
-            (and the corresponding annotations it was calculated from) per variant
-            will be retained.
+        - Input Table is assumed to be keyed by ['locus', 'alleles'] and to have all feature annotations expected by MPC model.
+        - Input Table is assumed to require no deduplication.
+        - Any missing feature values in input Table will be imputed using a k-nearest neighbors-based model.
 
     :param hl.Table ht: Input Table with variants to be annotated.
     :param str temp_label: Suffix to add to temporary data paths to avoid conflicting names for different models.
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
         Default is False.
-    :param int fold: Fold number in training set to select training transcripts from.
-        If not None, the Table is generated from variants in only training transcripts
-        from the specified fold of the overall training set. If None, the Table is generated from
-        variants in all training transcripts. Default is None.
-    :param Set[str] possible_context_annots: Fields in context Table from which variables for score calculation may be collected.
-        Default is {"oe", "polyphen"}.
-    :param Set[str] possible_addtl_annots: Annotations not in context Table from which variables for score calculation may be collected.
-        Default is {"misbad", "blosum", "grantham"}.
-    :param str interaction_char: Character representing interactions in MPC model. Must be one of "*", ":".
-        Default is ":".
-    :param str intercept_str: Name of intercept variable in MPC model pickle. Default is "Intercept".
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
-    :return: Table annotated with MPC model features and fitted scores, filtered to variants with defined annotations.
+    :return: Input variants annotated with MPC fitted scores.
     """
-    assert interaction_char in {"*", ":"}, "interaction_char must be one of '*' or ':'!"
+    logger.info("Importing MPC model parameters...")
+    # Import trained missing value imputer
+    with hl.hadoop_open(mpc_feature_imputer_pkl_path(freeze=freeze), "wb") as ip:
+        imputer = pickle.load(ip)
+    # Import trained classifier
+    with hl.hadoop_open(mpc_model_pkl_path(freeze=freeze), "wb") as mp:
+        model = pickle.load(mp)
+    # Read in features expected by classifier
+    model_features = hl.eval(hl.experimental.read_expression(mpc_features_he_path))
 
-    logger.info("Extracting MPC model relationships from pickle...")
-    model_path = mpc_model_pkl_path(fold=fold, freeze=freeze)
-    if not file_exists(model_path):
-        raise DataException("Please check that MPC model exists!")
-    with hl.hadoop_open(model_path, "rb") as p:
-        model = pickle.load(p)
-    mpc_vars_rel = model.params.to_dict()
-    try:
-        intercept = mpc_vars_rel.pop(intercept_str)
-    except KeyError:
-        raise DataException(
-            f"{intercept_str} not in model parameters! Please double check and rerun."
-        )
+    # Check for missing model features in input Table
+    missing_features = set(model_features).difference(set(ht.row_value))
+    if len(missing_features) > 0:
+        raise DataException(f"Input Table is missing fields: {missing_features}")
+    # Filter feature columns to those in final MPC model
+    ht = ht.select(*model_features)
 
-    variable_dict = {k: v for k, v in mpc_vars_rel.items() if not interaction_char in k}
-    variables = variable_dict.keys()
-    interaction_dict = {k: v for k, v in mpc_vars_rel.items() if interaction_char in k}
+    logger.info("Converting to pandas dataframe for model prediction...")
+    X = ht.to_pandas().drop(["locus", "alleles"], axis=1)
+    logger.info("Imputing missing values with trained imputation model...")
+    imputer.transform(X)
 
-    # Collect fields from context HT containing annotations to extract
-    # NOTE: `ref` and `alt` fields are also extracted for annotation of missense badness
-    logger.info("Collecting annotations for fitted score calculation...")
-    helper_annots = {"transcript", "ref", "alt"}
-    context_annots = possible_context_annots.intersection(variables)
-    context_helper_annots = context_annots.union(helper_annots)
-    # Check that these annotations are indeed in the context HT
-    context_ht = context_with_oe.versions[freeze].ht()
-    context_annots_check = context_helper_annots - {field for field in context_ht.row}
-    if len(context_annots_check) != 0:
-        raise DataException(f"{context_annots_check} missing from context HT!")
-    logger.info("Context HT annotations collected: %s", context_annots)
-    # Collect remaining annotations
-    addtl_annots = possible_addtl_annots.intersection(variables)
-    logger.info("Remaining annotations collected: %s", addtl_annots)
-
-    # Check that all MPC model variables are accounted for in collected annotations
-    annots = context_annots.union(addtl_annots)
-    variables_check = variables - annots
-    if len(variables_check) != 0:
-        raise DataException(
-            f"{variables_check} from MPC model not in collected annotations!"
-        )
-
-    logger.info("Annotating HT with MPC variables from context HT...")
-    # Re-key context HT by locus and alleles (original key contains transcript)
-    # to enable addition of annotations from each transcript corresponding to a variant
-    context_ht = context_ht.key_by("locus", "alleles").select(*context_helper_annots)
-    if "polyphen" in context_annots:
-        context_ht = context_ht.transmute(polyphen=context_ht.polyphen.score)
-    # Add annotations from all transcripts per variant
-    # This creates separate rows for each transcript a variant is in
-    scores_ht = context_ht.join(ht.select())
-    scores_ht = scores_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_score_annots_context{temp_label}.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
+    logger.info("Predicting classification probabilities and converting back to HT...")
+    # NOTE: The fitted score is the predicted classification probability of being a 'population' variant
+    return hl.Table.from_pandas(
+        pd.DataFrame({"fitted_score": model.predict_proba(X)[:, 1]})
     )
-
-    # Add annotations not in context HT
-    logger.info("Annotating HT with remaining variables...")
-    if "second_deriv" in addtl_annots:
-        logger.info("Annotating HT with mb second_deriv...")
-        mb_ht = hl.read_table(misbad_path(fold=fold, freeze=freeze))
-        scores_ht = scores_ht.annotate(
-            second_deriv=mb_ht[scores_ht.ref, scores_ht.alt].second_deriv
-        )
-    if "overall_obs_exp" in addtl_annots:
-        logger.info("Annotating HT with mb overall_obs_exp...")
-        mb_ht = hl.read_table(misbad_path(fold=fold, freeze=freeze))
-        scores_ht = scores_ht.annotate(
-            overall_obs_exp=mb_ht[scores_ht.ref, scores_ht.alt].overall_obs_exp
-        )
-    if "blosum" in addtl_annots:
-        logger.info("Annotating HT with BLOSUM...")
-        if not file_exists(blosum.path):
-            import_blosum()
-        blosum_ht = blosum.ht()
-        scores_ht = scores_ht.annotate(
-            blosum=blosum_ht[scores_ht.ref, scores_ht.alt].score
-        )
-    if "grantham" in addtl_annots:
-        logger.info("Annotating HT with Grantham...")
-        if not file_exists(grantham.path):
-            import_grantham()
-        grantham_ht = grantham.ht()
-        scores_ht = scores_ht.annotate(
-            grantham=grantham_ht[scores_ht.ref, scores_ht.alt].score
-        )
-
-    logger.info("Checking that all annotations have been added...")
-    annots_check = {field for field in scores_ht.row_value} - helper_annots - variables
-    if len(annots_check) != 0:
-        raise DataException(f"{annots_check} missing from added annotations!")
-
-    logger.info("Filtering to defined annotations...")
-    filter_expr = True
-    for annot in annots:
-        filter_expr &= hl.is_defined(scores_ht[annot])
-    scores_ht = scores_ht.filter(filter_expr)
-    # Checkpoint here to force joins and filter to complete
-    scores_ht = scores_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_score_annots_filtered{temp_label}.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
-
-    logger.info("Calculating fitted scores...")
-    annot_expr = [
-        (scores_ht[variable] * mpc_vars_rel[variable]) for variable in variables
-    ]
-    interaction_annot_expr = []
-    for interaction in interaction_dict.keys():
-        expr = mpc_vars_rel[interaction]
-        for variable in interaction.split(interaction_char):
-            expr *= scores_ht[variable]
-        interaction_annot_expr.append(expr)
-
-    annot_expr.extend(interaction_annot_expr)
-    combined_annot_expr = hl.fold(lambda i, j: i + j, 0, annot_expr)
-
-    logger.info("Computing fitted scores...")
-    scores_ht = scores_ht.annotate(fitted_score=intercept + combined_annot_expr)
-    scores_ht = scores_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_scores_dup{temp_label}.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
-
-    # Deduplicate variants in multiple transcripts by retaining only the most severe score
-    # per variant and corresponding annotations for that transcript
-    logger.info("Filtering to most severe fitted score for each variant...")
-    min_scores_ht = scores_ht.select("transcript", "fitted_score")
-    min_scores_ht = min_scores_ht.collect_by_key()
-    min_scores_ht = min_scores_ht.annotate(
-        fitted_score=hl.nanmin(min_scores_ht.values["fitted_score"])
-    )
-    min_scores_ht = min_scores_ht.annotate(
-        transcript=min_scores_ht.values.find(
-            lambda x: x["fitted_score"] == min_scores_ht["fitted_score"]
-        ).transcript
-    )
-    min_scores_ht = min_scores_ht.drop("values")
-    min_scores_ht = min_scores_ht.key_by("locus", "alleles", "transcript")
-    scores_ht = scores_ht.key_by("locus", "alleles", "transcript").join(min_scores_ht)
-    scores_ht = scores_ht.key_by("locus", "alleles")
-    scores_ht = scores_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/fitted_scores_dedup{temp_label}.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
-    logger.info("Annotating fitted score and model features onto input HT...")
-    return ht.join(scores_ht)
 
 
 def aggregate_gnomad_fitted_scores(
@@ -908,7 +772,6 @@ def annotate_mpc(
     temp_label: str,
     use_release: bool = True,
     overwrite_temp: bool = False,
-    model_train_fold: int = None,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
     # TODO: Should this be `fold` or `all_k_folds`?
@@ -938,11 +801,6 @@ def annotate_mpc(
     :param bool overwrite_temp: Whether to overwrite intermediate temporary data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
         Default is False.
-    :param int model_train_fold: Fold number in training set used to generate MPC model.
-        If not None, MPC model used to generate annotated scores is trained on variants
-        in training transcripts from the specified fold of the overall training set.
-        If None, model is trained on variants in all training transcripts.
-        Default is None.
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: None; function writes Table to resource path.
     """
@@ -959,10 +817,6 @@ def annotate_mpc(
     ), "'locus' must be a LocusExpression, and 'alleles' must be an array of strings!"
 
     if use_release:
-        if model_train_fold is not None:
-            raise DataException(
-                "MPC release is generated only from all training transcripts!"
-            )
         if not file_exists(mpc_release.versions[freeze].path):
             raise DataException("MPC release has not yet been generated!")
 
@@ -974,18 +828,14 @@ def annotate_mpc(
         logger.info("Calculating fitted scores on input variants...")
         scores_ht = calculate_fitted_scores(
             ht=ht.select(),
-            temp_label=temp_label,
-            overwrite_temp=overwrite_temp,
             freeze=freeze,
         )
 
         logger.info("Aggregating fitted scores for gnomAD common variants...")
         # TODO: Add model labels in paths - separate folder for each model
-        fitted_group_path = gnomad_fitted_score_path(
-            is_grouped=True, fold=model_train_fold, freeze=freeze
-        )
+        fitted_group_path = gnomad_fitted_score_path(is_grouped=True, freeze=freeze)
         if not file_exists(fitted_group_path):
-            aggregate_gnomad_fitted_scores(fold=model_train_fold, freeze=freeze)
+            aggregate_gnomad_fitted_scores(freeze=freeze)
         gnomad_ht = hl.read_table(fitted_group_path)
         gnomad_scores = gnomad_ht.aggregate(
             hl.sorted(hl.agg.collect(gnomad_ht.fitted_score))
@@ -994,7 +844,7 @@ def annotate_mpc(
 
         # Get total number of gnomAD common variants
         gnomad_var_count = hl.read_table(
-            gnomad_fitted_score_path(fold=model_train_fold, freeze=freeze)
+            gnomad_fitted_score_path(freeze=freeze)
         ).count()
 
         logger.info("Getting n_less values for input variants...")

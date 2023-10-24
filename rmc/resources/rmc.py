@@ -610,6 +610,37 @@ def misbad_path(
 ####################################################################################
 ## MPC related resources
 ####################################################################################
+context_dedup_annot = VersionedTableResource(
+    default_version=CURRENT_FREEZE,
+    versions={
+        freeze: TableResource(
+            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/experiment/context_dedup_annot.ht"
+        )
+        for freeze in FREEZES
+    },
+)
+"""
+Table containing variant-level annotations for use in MPC modeling.
+
+Contains all deduplicated missense variants in canonical transcripts, i.e. all variants
+in `context_with_oe_dedup`.
+"""
+
+aa_annot = VersionedTableResource(
+    default_version=CURRENT_FREEZE,
+    versions={
+        freeze: TableResource(
+            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/experiment/aa_metric_combined.ht"
+        )
+        for freeze in FREEZES
+    },
+)
+"""
+Table containing amino acid substitution-level annotations for use in MPC modeling.
+"""
+
+
+# TODO: Remove - replace with pop_v_path
 def joint_clinvar_gnomad_path(
     fold: int = None,
     freeze: int = CURRENT_FREEZE,
@@ -636,7 +667,43 @@ def joint_clinvar_gnomad_path(
             f"Fold number must be an integer between 1 and {FOLD_K}, inclusive!"
         )
     fold_name = f"_fold{fold}" if fold is not None else ""
-    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/joint_clinvar_gnomad.ht"
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/experiment/pop_v_path_haplo_dd_nonlof.ht"
+
+
+# TODO: Rewrite table to path not in experimental bucket, filter feature columns to only those needed in final MPC model
+pop_v_path = VersionedTableResource(
+    default_version=CURRENT_FREEZE,
+    versions={
+        freeze: TableResource(
+            path=f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/experiment/pop_v_path_haplo_dd_nonlof.ht"
+        )
+        for freeze in FREEZES
+    },
+)
+"""
+Table containing 'population' and 'pathogenic' missense variants.
+
+Table contains common (AF > 0.001) gnomAD variants ('population') and
+ClinVar pathogenic/likely pathogenic variants in genes likely to be haploinsufficient and
+causative of severe disease based on pHaplo scores or in genes that can act through
+non-LoF mechanisms in association with developmental disorders ('pathogenic')
+with features annotated for use in the MPC model.
+
+Table is input to MPC (missense badness, polyphen-2, and constraint) calculations.
+"""
+
+
+def mpc_feature_imputer_pkl_path(freeze: int = CURRENT_FREEZE) -> str:
+    """
+    Return path to missing value imputation model for MPC features stored as pickle.
+
+    Imputer is a k-nearest neighbor-based model from sklearn KNNImputer.
+    Imputer is trained on the features in the MPC model during MPC model training.
+
+    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
+    :return: Path to imputational model.
+    """
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/mpc_feature_imputer.pkl"
 
 
 def mpc_model_pkl_path(
@@ -644,9 +711,7 @@ def mpc_model_pkl_path(
     freeze: int = CURRENT_FREEZE,
 ) -> str:
     """
-    Return path to model (stored as pickle) that contains relationship of MPC variables.
-
-    Model created using logistic regression.
+    Return path to scikit-learn classifier model stored as pickle used in calculation of MPC scores.
 
     :param int fold: Fold number in training set to select training transcripts from.
         If not None, the model is generated from variants in only training transcripts
@@ -655,14 +720,25 @@ def mpc_model_pkl_path(
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :return: Path to model.
     """
+    # TODO: Remove
     if fold is not None and fold not in range(1, FOLD_K + 1):
         raise DataException(
             f"Fold number must be an integer between 1 and {FOLD_K}, inclusive!"
         )
     fold_name = f"_fold{fold}" if fold is not None else ""
-    return (
-        f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/train{fold_name}/mpc_model.pkl"
-    )
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/mpc_model.pkl"
+
+
+def mpc_features_he_path(
+    freeze: int = CURRENT_FREEZE,
+) -> str:
+    """
+    Return path to feature list for MPC classifier model in the order expected by model, stored as HailExpression.
+
+    :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
+    :return: Path to HailExpression.
+    """
+    return f"{MPC_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/mpc_features.he"
 
 
 def gnomad_fitted_score_path(
