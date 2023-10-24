@@ -692,10 +692,10 @@ def calculate_fitted_scores(ht: hl.Table, freeze: int = CURRENT_FREEZE) -> hl.Ta
     """
     logger.info("Importing MPC model parameters...")
     # Import trained missing value imputer
-    with hl.hadoop_open(mpc_feature_imputer_pkl_path(freeze=freeze), "wb") as ip:
+    with hl.hadoop_open(mpc_feature_imputer_pkl_path(freeze=freeze), "rb") as ip:
         imputer = pickle.load(ip)
     # Import trained classifier
-    with hl.hadoop_open(mpc_model_pkl_path(freeze=freeze), "wb") as mp:
+    with hl.hadoop_open(mpc_model_pkl_path(freeze=freeze), "rb") as mp:
         model = pickle.load(mp)
     # Read in features expected by classifier
     model_features = hl.eval(hl.experimental.read_expression(mpc_features_he_path))
