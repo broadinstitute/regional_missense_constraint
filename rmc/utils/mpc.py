@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import statsmodels
 import statsmodels.api as sm
+import xgboost
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from patsy import dmatrices
@@ -698,7 +699,9 @@ def calculate_fitted_scores(ht: hl.Table, freeze: int = CURRENT_FREEZE) -> hl.Ta
     with hl.hadoop_open(mpc_model_pkl_path(freeze=freeze), "rb") as mp:
         model = pickle.load(mp)
     # Read in features expected by classifier
-    model_features = hl.eval(hl.experimental.read_expression(mpc_features_he_path))
+    model_features = hl.eval(
+        hl.experimental.read_expression(mpc_features_he_path(freeze=freeze))
+    )
 
     # Check for missing model features in input Table
     missing_features = set(model_features).difference(set(ht.row_value))
