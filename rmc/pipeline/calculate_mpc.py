@@ -59,7 +59,7 @@ def main(args):
                 freeze=args.freeze,
             )
 
-        if args.command == "fit-to-gnomad-common":
+        if args.command == "fit-common-gnomad":
             hl.init(log="/calculate_common_gnomad_fitted_scores.log", tmp_dir=temp_dir)
             calculate_common_gnomad_fitted_scores(freeze=args.freeze)
 
@@ -192,6 +192,13 @@ if __name__ == "__main__":
             " variable regressions."
         ),
         default="blosum,grantham",
+    )
+
+    fit_common_gnomad = subparsers.add_parser(
+        "fit-common-gnomad",
+        help="""
+        Calculate fitted scores on common gnomAD variants (AF > 0.001).
+        """,
     )
 
     create_mpc_release = subparsers.add_parser(
