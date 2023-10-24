@@ -828,12 +828,6 @@ def annotate_mpc(
         ht = ht.annotate(mpc=mpc_ht[ht.locus, ht.alleles].mpc)
         ht.write(output_ht_path, overwrite=True)
     else:
-        logger.info("Calculating fitted scores on input variants...")
-        scores_ht = calculate_fitted_scores(
-            ht=ht.select(),
-            freeze=freeze,
-        )
-
         logger.info("Aggregating fitted scores for gnomAD common variants...")
         # TODO: Add model labels in paths - separate folder for each model
         fitted_group_path = gnomad_fitted_score_path(is_grouped=True, freeze=freeze)
@@ -849,6 +843,12 @@ def annotate_mpc(
         gnomad_var_count = hl.read_table(
             gnomad_fitted_score_path(freeze=freeze)
         ).count()
+        
+        logger.info("Calculating fitted scores on input variants...")
+        scores_ht = calculate_fitted_scores(
+            ht=ht,
+            freeze=freeze,
+        )
 
         logger.info("Getting n_less values for input variants...")
         # Annotate HT with sorted array of gnomAD fitted scores
