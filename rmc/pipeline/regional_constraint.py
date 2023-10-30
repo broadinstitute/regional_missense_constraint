@@ -426,7 +426,7 @@ def main(args):
             logger.info("Reformatting RMC results for browser release...")
             format_rmc_browser_ht(args.freeze, args.overwrite_temp)
 
-        if args.command == "create-release":
+        if args.command == "create-rmc-release":
             logger.info(
                 "Creating versions of files to be publicly released on gnomAD"
                 " browser..."
@@ -570,7 +570,7 @@ if __name__ == "__main__":
     )
 
     create_release = subparsers.add_parser(
-        "create-release",
+        "create-rmc-ßrelease",
         help="Create RMC release files (to be publicly shared on gnomAD browser).",
     )
     args = parser.parse_args()
