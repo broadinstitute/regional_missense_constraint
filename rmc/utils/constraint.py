@@ -1907,11 +1907,11 @@ def create_rmc_release_downloads(
     )
 
     # Get transcripts that were searched for but had no evidence of RMC
-    transcripts_no_rmc = ht.transcripts_no_rmc
+    transcripts_no_rmc = hl.eval(ht.transcripts_no_rmc)
     # Filter gene constraint results to keep only transcripts without evidence of RMC
     gene_constraint_ht = constraint_ht.ht().select_globals().key_by("transcript")
     gene_constraint_ht = gene_constraint_ht.filter(
-        transcripts_no_rmc.contains(gene_constraint_ht.transcript)
+        hl.literal(transcripts_no_rmc).contains(gene_constraint_ht.transcript)
     )
     gene_constraint_ht = _annotate_gene_ids(gene_constraint_ht)
     gene_constraint_ht = gene_constraint_ht.select(
