@@ -1897,7 +1897,7 @@ def create_rmc_release_downloads(
     logger.info("Preparing browser-reformatted HT for release...")
     ht = rmc_browser.versions[freeze].ht()
     # Add gene IDs from `transcript_ref` resource
-    ht = _get_gene_ids(ht)
+    ht = _annotate_gene_ids(ht)
     # Add GENCODE and VEP versions to globalsÍ
     ht = ht.annotate_globals(gencode_version=gencode_version, vep_version=vep_version)
     ht = ht.checkpoint(
