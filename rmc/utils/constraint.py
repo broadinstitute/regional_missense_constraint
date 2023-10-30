@@ -18,6 +18,8 @@ from rmc.resources.basics import (
 )
 from rmc.resources.gnomad import constraint_ht, prop_obs_coverage
 from rmc.resources.reference_data import (
+    GENCODE_VERSION,
+    VEP_VERSION,
     clinvar_plp_mis_haplo,
     gene_model,
     ndd_de_novo,
@@ -39,6 +41,7 @@ from rmc.resources.rmc import (
     no_breaks_he_path,
     oe_bin_counts_tsv,
     rmc_browser,
+    rmc_downloads_resource_paths,
     rmc_results,
     simul_search_bucket_path,
     simul_search_round_bucket_path,
@@ -1829,6 +1832,114 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
     # Annotate globals and write
     ht = add_globals_rmc_browser(ht)
     ht.write(rmc_browser.versions[freeze].path, overwrite=True)
+
+
+def create_rmc_release_downloads(
+    freeze: int,
+    overwrite: bool,
+    gencode_version: str = GENCODE_VERSION,
+    vep_version: str = VEP_VERSION,
+) -> None:
+    """
+    Create downloadable files to be publicly released on the gnomAD browser.
+
+    Function adds gene IDs to RMC HT and exports RMC results to TSVs for release.
+
+    The two TSV types are:
+    - TSV with region results for transcripts that had evidence of RMC
+    - TSV listing all transcripts that were searched for but did not have evidence of RMC
+
+    .. note::
+        - Function assumes the global annotation `transcripts_no_rmc` exists
+        in `rmc_browser.ht()`
+        - Function assumes the following fields exist in `regions` struct on `rmc_browser.ht()`:
+            - start_coordinate
+            - stop_coordinate
+            - start_aa
+            - stop_aa
+            - obs
+            - exp
+            - oe
+            - chisq
+            - p
+        - Function assumes the following fields exist on the gene constraint HT:
+            - obs_mis
+            - exp_mis
+            - oe_mis
+            - mis_z
+
+    :param freeze: RMC data freeze number.
+    :param overwrite: Whether to overwrite RMC download HT.
+    :param gencode_version: Version of GENCODE used to annotate variants.
+        Default is `GENCODE_VERSION`.
+    :param vep_version: Version of VEP used to annotate variants.
+        Default is `VEP_VERSION`.
+    :return: None; writes TSVs to resource paths.
+    """
+
+    def _annotate_gene_ids(ht: hl.Table) -> hl.Table:
+        """
+        Annotate input HT with GENCODE gene information using `transcript_ref`.
+
+        .. note::
+            Assumes input HT is annotated with transcript information
+            (assumes `ht.transcript` exists).
+
+        :param ht: Input HT containing transcripts to be annotated.
+        :return: HT with gene IDs and names annotated.
+        """
+        transcript_ref_ht = transcript_ref.ht()
+        return ht.annotate(
+            gene_name=transcript_ref_ht[ht.transcript].gnomad_gene,
+            gene_id=transcript_ref_ht[ht.transcript].gencode_gene_id,
+        )
+
+    logger.info("Preparing browser-reformatted HT for release...")
+    ht = rmc_browser.versions[freeze].ht()
+    # Add gene IDs from `transcript_ref` resource
+    ht = _annotate_gene_ids(ht)
+    # Add GENCODE and VEP versions to globals
+    ht = ht.annotate_globals(gencode_version=gencode_version, vep_version=vep_version)
+    ht = ht.checkpoint(
+        rmc_downloads_resource_paths(get_ht_path=True, freeze=freeze),
+        overwrite=overwrite,
+        _read_if_exists=not overwrite,
+    )
+
+    # Get transcripts that were searched for but had no evidence of RMC
+    transcripts_no_rmc = ht.transcripts_no_rmc
+    # Filter gene constraint results to keep only transcripts without evidence of RMC
+    gene_constraint_ht = constraint_ht.ht().select_globals().key_by("transcript")
+    gene_constraint_ht = gene_constraint_ht.filter(
+        transcripts_no_rmc.contains(gene_constraint_ht.transcript)
+    )
+    gene_constraint_ht = _annotate_gene_ids(gene_constraint_ht)
+    gene_constraint_ht = gene_constraint_ht.select(
+        "gene_name",
+        "gene_id",
+        obs=gene_constraint_ht.obs_mis,
+        exp=gene_constraint_ht.exp_mis,
+        oe=gene_constraint_ht.oe_mis,
+        z_score=gene_constraint_ht.mis_z,
+    )
+    # Export to TSV
+    gene_constraint_ht.export(
+        rmc_downloads_resource_paths(get_ht_path=False, has_rmc=False, freeze=freeze)
+    )
+
+    # Drop globals and explode nested struct to flatten results for TSV export
+    ht = ht.select_globals()
+    ht = ht.explode("regions")
+    # Unnest annotations from region struct to make TSV header more pleasant
+    # (Avoid column headers like `regions.start_coordinate`)
+    ht = ht.transmute(**ht.regions)
+    # Also rename `p` to `p_value` since there are no name conflicts in the TSV
+    # (HT has conflict between row and global annotations)
+    ht = ht.transmute(p_value=ht.p)
+    # Export to TSV
+    ht.export(
+        rmc_downloads_resource_paths(get_ht_path=False, has_rmc=True, freeze=freeze)
+    )
 
 
 def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:
