@@ -1846,7 +1846,7 @@ def create_rmc_release_downloads(
     Function adds gene IDs to RMC HT and exports RMC results to TSVs for release.
 
     The two TSV types are:
-    - TSV with transcripts that had evidence of RMC
+    - TSV with region results for transcripts that had evidence of RMC
     - TSV listing all transcripts that were searched for but did not have evidence of RMC
 
     .. note::
