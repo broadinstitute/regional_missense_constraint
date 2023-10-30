@@ -585,7 +585,10 @@ def rmc_downloads_resource_paths(
     tsv_name = (
         f"gnomAD_v{gnomad_version}_transcripts_with_rmc.tsv"
         if has_rmc
-        else f"gnomAD_v{gnomad_version}_rmc_transcripts_without_rmc.tsv"
+        # NOTE: RMC freeze 7 results were exported as
+        # f"gnomAD_v{gnomad_version}_rmc_transcripts_without_rmc.tsv"
+        # (extra 'rmc' was removed when copying file to public path)
+        else f"gnomAD_v{gnomad_version}_transcripts_without_rmc.tsv"
     )
     return f"{CONSTRAINT_PREFIX}/{gnomad_version}/{freeze}/{tsv_name}"
 
