@@ -1913,7 +1913,7 @@ def create_rmc_release_downloads(
     gene_constraint_ht = gene_constraint_ht.filter(
         transcripts_no_rmc.contains(gene_constraint_ht.transcript)
     )
-    gene_constraint_ht = _get_gene_ids(gene_constraint_ht)
+    gene_constraint_ht = _annotate_gene_ids(gene_constraint_ht)
     gene_constraint_ht = gene_constraint_ht.select(
         "gene_name",
         "gene_id",
