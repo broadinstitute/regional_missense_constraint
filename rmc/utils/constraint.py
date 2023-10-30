@@ -1876,7 +1876,7 @@ def create_rmc_release_downloads(
         Default is `VEP_VERSION`.
     :return: None; writes TSVs to resource paths.
     """
-    logger.info("Preparing browser reformatted HT for release...")
+    logger.info("Preparing browser-reformatted HT for release...")
     ht = rmc_browser.versions[freeze].ht()
 
     # Add gene IDs from `transcript_ref` resource
