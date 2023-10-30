@@ -562,8 +562,7 @@ def rmc_downloads_resource_paths(
     """
     Return resource path for specified RMC downloadable file.
 
-    Function returns path to file that will get copied to public release bucket
-    .
+    Function returns path to file that will get copied to public release bucket.
     There are three file types:
     - Hail Table
     - TSV containing transcripts with evidence of RMC
