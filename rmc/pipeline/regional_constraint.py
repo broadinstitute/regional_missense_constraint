@@ -570,7 +570,7 @@ if __name__ == "__main__":
     )
 
     create_release = subparsers.add_parser(
-        "create-rmc-ßrelease",
+        "create-rmc-release",
         help="Create RMC release files (to be publicly shared on gnomAD browser).",
     )
     args = parser.parse_args()
