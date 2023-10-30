@@ -1877,7 +1877,7 @@ def create_rmc_release_downloads(
     :return: None; writes TSVs to resource paths.
     """
 
-    def _get_gene_ids(ht: hl.Table) -> hl.Table:
+    def _annotate_gene_ids(ht: hl.Table) -> hl.Table:
         """
         Annotate input HT with GENCODE gene information using `transcript_ref`.
 
