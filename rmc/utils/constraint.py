@@ -1876,16 +1876,29 @@ def create_rmc_release_downloads(
         Default is `VEP_VERSION`.
     :return: None; writes TSVs to resource paths.
     """
+
+    def _get_gene_ids(ht: hl.Table) -> hl.Table:
+        """
+        Annotate input HT with GENCODE gene information using `transcript_ref`.
+
+        .. note::
+            Assumes input HT is annotated with transcript information
+            (assumes `ht.transcript` exists).
+
+        :param ht: Input HT containing transcripts to be annotated.
+        :return: HT with gene IDs and names annotated.
+        """
+        transcript_ref_ht = transcript_ref.ht()
+        return ht.annotate(
+            gene_name=transcript_ref_ht[ht.transcript].gnomad_gene,
+            gene_id=transcript_ref_ht[ht.transcript].gencode_gene_id,
+        )
+
     logger.info("Preparing browser-reformatted HT for release...")
     ht = rmc_browser.versions[freeze].ht()
-
     # Add gene IDs from `transcript_ref` resource
-    transcript_ref_ht = transcript_ref.ht()
-    ht = ht.annotate(
-        gene_name=transcript_ref_ht[ht.transcript].gnomad_gene,
-        gene_id=transcript_ref_ht[ht.transcript].gencode_gene_id,
-    )
-    # Add GENCODE and VEP versions to globals
+    ht = _get_gene_ids(ht)
+    # Add GENCODE and VEP versions to globalsÍ
     ht = ht.annotate_globals(gencode_version=gencode_version, vep_version=vep_version)
     ht = ht.checkpoint(
         rmc_downloads_resource_paths(get_ht_path=True, freeze=freeze),
@@ -1900,7 +1913,10 @@ def create_rmc_release_downloads(
     gene_constraint_ht = gene_constraint_ht.filter(
         transcripts_no_rmc.contains(gene_constraint_ht.transcript)
     )
+    gene_constraint_ht = _get_gene_ids(gene_constraint_ht)
     gene_constraint_ht = gene_constraint_ht.select(
+        "gene_name",
+        "gene_id",
         obs=gene_constraint_ht.obs_mis,
         exp=gene_constraint_ht.exp_mis,
         oe=gene_constraint_ht.oe_mis,
