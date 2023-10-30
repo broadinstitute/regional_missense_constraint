@@ -557,7 +557,10 @@ Contains same information as `rmc_results` but has different formatting for gnom
 
 
 def rmc_downloads_resource_paths(
-    get_ht_path: bool, has_rmc: bool = True, freeze: int = CURRENT_FREEZE
+    get_ht_path: bool,
+    has_rmc: bool = True,
+    freeze: int = CURRENT_FREEZE,
+    gnomad_version: str = CURRENT_GNOMAD_VERSION,
 ) -> str:
     """
     Return resource path for specified RMC downloadable file.
@@ -565,25 +568,26 @@ def rmc_downloads_resource_paths(
     Function returns path to file that will get copied to public release bucket.
     There are three file types:
     - Hail Table
-    - TSV containing transcripts with evidence of RMC
-    - TSV containing transcripts that were searched for but did not have evidence of RMC
+    - TSV containing results for transcripts with evidence of RMC
+    - TSV listing all transcripts that were searched for but did not have evidence of RMC
 
-    :param get_ht_path: Whehter to return path to HT.
+    :param get_ht_path: Whether to return path to HT.
         If False, will return path to one of the two TSV files.
     :param has_rmc: Whether to return path to TSV with RMC results.
         If False, will return path to TSV with transcripts that don't have evidence of RMC.
     :param freeze: RMC data freeze number.
-    :return: String of resource TSV path.
+    :param gnomad_version: gnomAD version.ß
+    :return: String of resource path.
     """
     if get_ht_path:
-        return f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/gnomAD_v2.1.1_rmc.ht"
+        return f"{CONSTRAINT_PREFIX}/{gnomad_version}/{freeze}/gnomad_v{gnomad_version}_rmc.ht"
 
     tsv_name = (
-        "gnomAD_v2.1.1_transcripts_with_rmc.tsv"
+        f"gnomAD_v{gnomad_version}_transcripts_with_rmc.tsv"
         if has_rmc
-        else "gnomAD_v2.1.1_rmc_transcripts_without_rmc.tsv"
+        else f"gnomAD_v{gnomad_version}_rmc_transcripts_without_rmc.tsv"
     )
-    return f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/{tsv_name}"
+    return f"{CONSTRAINT_PREFIX}/{gnomad_version}/{freeze}/{tsv_name}"
 
 
 ####################################################################################
