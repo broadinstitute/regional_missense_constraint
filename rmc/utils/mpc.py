@@ -18,7 +18,7 @@ from rmc.resources.reference_data import (
     blosum,
     blosum_txt_path,
     cadd,
-    clinvar_plp_mis_haplo,
+    clinvar_plp_mis_haplo_dd_nonlof,
     grantham,
     grantham_txt_path,
     train_val_test_transcripts_path,
@@ -206,8 +206,7 @@ def prepare_pop_path_ht(
     :return: None; function writes Table(s) to resource path(s).
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
-    clinvar_ht = clinvar_plp_mis_haplo.ht()
-    # TODO: Change severe gene definition? Include TS genes?
+    clinvar_ht = clinvar_plp_mis_haplo_dd_nonlof.ht()
     clinvar_ht = clinvar_ht.annotate(pop_v_path=0)
 
     logger.info(
