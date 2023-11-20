@@ -50,8 +50,14 @@ def main(args):
 
         if args.command == "create-mpc-release":
             hl.init(log="/create_mpc_release.log", tmp_dir=temp_dir)
+            context_ht = (
+                context_with_oe.versions[args.freeze]
+                .ht()
+                .select()
+                .key_by("locus", "alleles")
+            )
             annotate_mpc(
-                ht=context_with_oe.versions[args.freeze].ht().select(),
+                ht=context_ht,
                 output_ht_path=mpc_release.versions[args.freeze].path,
                 temp_label="_release",
                 use_release=False,
