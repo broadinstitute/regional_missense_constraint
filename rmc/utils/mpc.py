@@ -10,6 +10,7 @@ import statsmodels
 import statsmodels.api as sm
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
+from gnomad.utils.liftover import default_lift_data
 from patsy import dmatrices
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
@@ -23,6 +24,7 @@ from rmc.resources.reference_data import (
     grantham_txt_path,
     train_val_test_transcripts_path,
 )
+from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
     context_with_oe,
@@ -30,6 +32,7 @@ from rmc.resources.rmc import (
     gnomad_fitted_score_path,
     joint_clinvar_gnomad_path,
     misbad_path,
+    mpc_liftover_release,
     mpc_model_pkl_path,
     mpc_release,
 )
@@ -1030,3 +1033,34 @@ def annotate_mpc(
         logger.info("Annotating MPC scores to input table and writing out...")
         ht = ht.annotate(mpc=scores_ht[ht.key].mpc)
         ht.write(output_ht_path, overwrite=True)
+
+
+def liftover_mpc(
+    freeze: int = CURRENT_FREEZE,
+    gnomad_version: str = CURRENT_GNOMAD_VERSION,
+    remove_failed_sites: bool = True,
+) -> None:
+    """
+    Liftover MPC release from one genome build to another.
+
+    .. note::
+        - Function will only lift GRCh37 data to GRCh38.
+
+    :param freeze: RMC data freeze number. Default is CURRENT_FREEZE.
+    :param gnomad_version: Current gnomAD version. Default is CURRENT_GNOMAD_VERSION.
+    :param remove_failed_sites: Whether to remove sites that failed to liftover from input Table.
+        Default is True.
+    :return: None; function writes HT to resource path.
+    """
+    logger.warning(
+        "Note that Hail liftover only operates between reference builds 37 and 38 (in"
+        " either direction)!"
+    )
+    if gnomad_version != "2.1.1":
+        raise DataException(
+            "This function was written to only liftover gnomAD v2.1.1 data from GRCh37"
+            " to GRCh38."
+        )
+    ht = hl.read_table(mpc_release.versions[freeze].path)
+    ht = default_lift_data(ht, remove_failed_sites=remove_failed_sites)
+    ht.write(mpc_liftover_release.path, overwrite=True)
