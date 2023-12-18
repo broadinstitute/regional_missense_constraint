@@ -205,7 +205,10 @@ def prepare_pop_path_ht(
     :param int cov_threshold: Coverage threshold used to filter context Table. Default is 0.
     :return: None; function writes Table(s) to resource path(s).
     """
-    logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
+    logger.info(
+        "Reading in ClinVar P/LP missense variants in severe HI genes or non-LoF DD"
+        " genes..."
+    )
     clinvar_ht = clinvar_plp_mis_haplo_dd_nonlof.ht()
     clinvar_ht = clinvar_ht.annotate(pop_v_path=0)
 
