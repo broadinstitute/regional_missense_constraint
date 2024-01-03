@@ -742,7 +742,7 @@ Table containing missense variants in canonical transcripts annotated with MPC.
 This Table contains only one row per each unique locus/alleles combination.
 """
 
-mpc_liftover_release = TableResource(path=f"{MPC_PREFIX}/2.1.1/{CURRENT_FREEZE}/mpc.ht")
+mpc_liftover_release = TableResource(path=f"{MPC_PREFIX}/2.1.1/{CURRENT_FREEZE}/mpc_liftover38.ht")
 """
 Table containing gnomAD v2.1.1 MPC values lifted over to GRCh38.
 
