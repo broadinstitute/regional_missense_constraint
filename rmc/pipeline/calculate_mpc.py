@@ -14,7 +14,12 @@ from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX, TEMP_PATH_WITH_FAST_D
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 from rmc.resources.rmc import CURRENT_FREEZE, context_with_oe, mpc_release
 from rmc.slack_creds import slack_token
-from rmc.utils.mpc import annotate_mpc, prepare_pop_path_ht, run_regressions
+from rmc.utils.mpc import (
+    annotate_mpc,
+    liftover_mpc,
+    prepare_pop_path_ht,
+    run_regressions,
+)
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -88,6 +93,14 @@ def main(args):
                     temp_label=args.temp_label,
                     freeze=args.freeze,
                 )
+
+        if args.command == "liftover":
+            hl.init(log="/liftover_mpc.log", tmp_dir=temp_dir)
+            logger.warning(
+                "Note that this command was built only to lift gnomAD v2.1.1"
+                " data to GRCh38!"
+            )
+            liftover_mpc(args.freeze)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -234,6 +247,10 @@ if __name__ == "__main__":
             "Output path for hail Table after adding MPC annotation. Required if"
             " --specify-ht is set."
         ),
+    )
+
+    liftover = subparsers.add_parser(
+        "liftover", help="Liftover MPC from GRCh37 to GRCh38."
     )
 
     args = parser.parse_args()
