@@ -97,10 +97,10 @@ def main(args):
         if args.command == "liftover":
             hl.init(log="/liftover_mpc.log", tmp_dir=temp_dir)
             logger.warning(
-                "Note that this command was built only to lift gnomAD v2.1.1 freeze 7"
+                "Note that this command was built only to lift gnomAD v2.1.1"
                 " data to GRCh38!"
             )
-            liftover_mpc(7)
+            liftover_mpc(args.freeze)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
