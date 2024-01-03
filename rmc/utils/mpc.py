@@ -1036,7 +1036,7 @@ def annotate_mpc(
 
 
 def liftover_mpc(
-    freeze: int = CURRENT_FREEZE,
+    freeze: int = 7,
     gnomad_version: str = CURRENT_GNOMAD_VERSION,
     remove_failed_sites: bool = True,
 ) -> None:
@@ -1046,7 +1046,7 @@ def liftover_mpc(
     .. note::
         - Function will only lift GRCh37 data to GRCh38.
 
-    :param freeze: RMC data freeze number. Default is CURRENT_FREEZE.
+    :param freeze: RMC data freeze number. Default is 7.
     :param gnomad_version: Current gnomAD version. Default is CURRENT_GNOMAD_VERSION.
     :param remove_failed_sites: Whether to remove sites that failed to liftover from input Table.
         Default is True.
