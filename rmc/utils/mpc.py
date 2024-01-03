@@ -1063,4 +1063,4 @@ def liftover_mpc(
         )
     ht = hl.read_table(mpc_release.versions[freeze].path)
     ht = default_lift_data(ht, remove_failed_sites=remove_failed_sites)
-    ht.write(mpc_liftover_release.versions[freeze]path, overwrite=True)
+    ht.write(mpc_liftover_release.versions[freeze].path, overwrite=True)
