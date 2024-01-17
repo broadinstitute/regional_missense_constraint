@@ -1,7 +1,7 @@
 import logging
 import re
 import subprocess
-from typing import List, Set, Union
+from typing import List, Set, Tuple, Union
 
 import hail as hl
 import scipy
@@ -1239,6 +1239,39 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     return ht.transmute(oe=hl.coalesce(ht.section_oe, ht.transcript_oe))
 
 
+def dedup_annot(
+    ht: hl.Table,
+    annot: str,
+    get_min: bool,
+    keep_transcript: bool,
+    key_fields: Tuple[str, str] = ("locus", "alleles"),
+) -> hl.Table:
+    """
+    Deduplicate annotation within input Table.
+
+    Function will group input Table by `key_fields`, select either the min or max value of
+    `annot`, and optionally retain transcript ID.
+
+    :param ht: Input Table.
+    :param annot: Name of annotation to be deduplicated.
+    :param get_min: Whether to get minimum value of annotation.
+    :param keep_transcript: Whether to retain transcript ID.
+    :param key_fields: Key fields to use for deduplication.
+    """
+    ht = ht.select(annot).key_by(*(key_fields))
+    ht = ht.collect_by_key()
+    if get_min:
+        ht = ht.annotate(**{annot: hl.nanmin(ht.values[annot])})
+    else:
+        ht = ht.annotate(**{annot: hl.nanmax(ht.values[annot])})
+
+    if keep_transcript:
+        ht = ht.annotate(
+            **{"transcript": ht.values.find(lambda x: x[annot] == ht[annot]).transcript}
+        )
+    return ht.drop("values")
+
+
 def create_context_with_oe(
     freeze: int,
     missense_str: str = MISSENSE,
@@ -1308,13 +1341,7 @@ def create_context_with_oe(
     logger.info(
         "Creating dedup context with oe (with oe and transcript annotations only)..."
     )
-    ht = ht.select("oe").key_by("locus", "alleles")
-    ht = ht.collect_by_key()
-    ht = ht.annotate(**{"oe": hl.nanmin(ht.values.oe)})
-    ht = ht.annotate(
-        **{"transcript": ht.values.find(lambda x: x.oe == ht.oe).transcript}
-    )
-    ht = ht.drop("values")
+    ht = dedup_annot(ht, annot="oe", get_min=True, keep_transcript=True)
     ht.write(
         context_with_oe_dedup.versions[freeze].path,
         overwrite=True,
