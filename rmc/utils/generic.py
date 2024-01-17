@@ -416,6 +416,9 @@ def get_ref_aa(
     return ht.transmute(ref_aa=ht.aa_info[0].ref_aa)
 
 
+####################################################################################
+## gnomAD and context HT processing-related utils
+####################################################################################
 def get_gnomad_public_release(
     gnomad_data_type: str = "exomes", adj_freq_index: int = 0
 ) -> hl.Table:
