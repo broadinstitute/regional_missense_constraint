@@ -1243,7 +1243,6 @@ def dedup_annot(
     ht: hl.Table,
     annot: str,
     get_min: bool,
-    keep_transcript: bool,
     key_fields: Tuple[str, str] = ("locus", "alleles"),
 ) -> hl.Table:
     """
@@ -1260,15 +1259,15 @@ def dedup_annot(
     """
     ht = ht.select(annot).key_by(*(key_fields))
     ht = ht.collect_by_key()
+
     if get_min:
         ht = ht.annotate(**{annot: hl.nanmin(ht.values[annot])})
     else:
         ht = ht.annotate(**{annot: hl.nanmax(ht.values[annot])})
 
-    if keep_transcript:
-        ht = ht.annotate(
-            **{"transcript": ht.values.find(lambda x: x[annot] == ht[annot]).transcript}
-        )
+    ht = ht.annotate(
+        **{"transcript": ht.values.find(lambda x: x[annot] == ht[annot]).transcript}
+    )
     return ht.drop("values")
 
 
@@ -1341,7 +1340,7 @@ def create_context_with_oe(
     logger.info(
         "Creating dedup context with oe (with oe and transcript annotations only)..."
     )
-    ht = dedup_annot(ht, annot="oe", get_min=True, keep_transcript=True)
+    ht = dedup_annot(ht, annot="oe", get_min=True)
     ht.write(
         context_with_oe_dedup.versions[freeze].path,
         overwrite=True,
