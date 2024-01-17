@@ -36,6 +36,7 @@ from rmc.resources.rmc import (
     mpc_model_pkl_path,
     mpc_release,
 )
+from rmc.utils.constraint import dedup_annot
 from rmc.utils.generic import get_aa_map, get_gnomad_public_release, keep_criteria
 
 logging.basicConfig(
@@ -1039,6 +1040,7 @@ def liftover_mpc(
     freeze: int = CURRENT_FREEZE,
     gnomad_version: str = CURRENT_GNOMAD_VERSION,
     remove_failed_sites: bool = True,
+    overwrite_temp: bool = False,
 ) -> None:
     """
     Liftover MPC release from one genome build to another.
@@ -1050,6 +1052,9 @@ def liftover_mpc(
     :param gnomad_version: Current gnomAD version. Default is CURRENT_GNOMAD_VERSION.
     :param remove_failed_sites: Whether to remove sites that failed to liftover from input Table.
         Default is True.
+    :param overwrite_temp: Whether to overwrite intermediate HT with deduplicated MPC scores.
+        If False, will read from existing temporary path.
+        Default is False.
     :return: None; function writes HT to resource path.
     """
     logger.warning(
@@ -1062,5 +1067,18 @@ def liftover_mpc(
             " to GRCh38."
         )
     ht = hl.read_table(mpc_release.versions[freeze].path)
+    # Deduplicate MPC annotation by keeping largest MPC value per variant (locus/alleles) combination
+    ht = dedup_annot(ht, annot="mpc", get_min=False)
+    # Rename transcript information
+    ht = ht.transmute(transcript_grch37=ht.transcript)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/mpc_dedup.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+
     ht = default_lift_data(ht, remove_failed_sites=remove_failed_sites)
+    # Drop unnecessary annotation if removing sites that failed liftover
+    if remove_failed_sites:
+        ht = ht.drop("locus_fail_liftover")
     ht.write(mpc_liftover_release.versions[freeze].path, overwrite=True)
