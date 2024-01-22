@@ -1257,7 +1257,8 @@ def dedup_annot(
     :param keep_transcript: Whether to retain transcript ID.
     :param key_fields: Key fields to use for deduplication.
     """
-    ht = ht.key_by(*(key_fields)).select(annot)
+    select_fields = ["transcript", annot]
+    ht = ht.key_by(*(key_fields)).select(*select_fields)
     ht = ht.collect_by_key()
 
     if get_min:
