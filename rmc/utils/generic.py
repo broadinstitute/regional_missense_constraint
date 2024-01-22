@@ -416,6 +416,9 @@ def get_ref_aa(
     return ht.transmute(ref_aa=ht.aa_info[0].ref_aa)
 
 
+####################################################################################
+## gnomAD and context HT processing-related utils
+####################################################################################
 def get_gnomad_public_release(
     gnomad_data_type: str = "exomes", adj_freq_index: int = 0
 ) -> hl.Table:
@@ -518,67 +521,6 @@ def get_annotations_from_context_ht_vep(
     annotations.extend(["codons", "most_severe_consequence", "transcript"])
     ht = ht.select(*annotations)
     return annotate_and_filter_codons(ht)
-
-
-# def filter_context_to_transcript_cds(
-#     context_ht: hl.Table, transcripts: hl.expr.SetExpression
-# ) -> hl.Table:
-#     """
-#     Filter VEP context Table to coding sites in the input transcripts.
-
-#     :param hl.Table context_ht: VEP context Table.
-#     :param hl.expr.SetExpression transcripts: Transcripts to filter to.
-#     :return: VEP context Table with rows filtered to only coding sites in the input transcripts.
-#     """
-#     # Get coordinate intervals of coding sequences of transcripts
-#     cds_ht = transcript_cds.ht()
-#     filter_intervals = cds_ht.aggregate(
-#         hl.agg.filter(
-#             transcripts.contains(cds_ht.transcript),
-#             hl.agg.collect(cds_ht.interval),
-#         ),
-#         _localize=False,
-#     )
-#     # Filter context HT to sites in these intervals
-#     return hl.filter_intervals(context_ht, filter_intervals)
-
-
-####################################################################################
-## Observed and expected-related utils
-####################################################################################
-# def get_exome_bases() -> int:
-#     """
-#     Get number of bases in the exome.
-
-#     Read in context HT (containing all coding bases in the genome), remove outlier transcripts, and filter to median coverage >= 5.
-
-#     :return: Number of bases in the exome.
-#     :rtype: int
-#     """
-#     logger.info("Reading in SNPs-only, VEP-annotated context ht...")
-#     ht = vep_context.ht()
-
-#     logger.info("Filtering to canonical transcripts...")
-#     ht = filter_vep_to_canonical_transcripts(ht, vep_root="vep", filter_empty_csq=True)
-
-#     logger.info("Removing outlier transcripts...")
-#     outlier_transcripts = get_constraint_transcripts(outlier=True)
-#     ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
-#     ht = ht.explode(ht.transcript_consequences)
-#     ht = ht.filter(
-#         ~outlier_transcripts.contains(ht.transcript_consequences.transcript_id)
-#     )
-
-#     logger.info(
-#         "Collecting context HT by key (to make sure each locus only gets counted once)..."
-#     )
-#     ht = ht.key_by("locus").collect_by_key()
-
-#     logger.info("Removing positions with median coverage < 5...")
-#     # Taking just the first value since the coverage should be the same for all entries at a locus
-#     ht = ht.filter(ht.values[0].coverage.exomes.median >= 5)
-#     ht = ht.select()
-#     return ht.count()
 
 
 def keep_criteria(
