@@ -100,7 +100,7 @@ def main(args):
                 "Note that this command was built only to lift gnomAD v2.1.1"
                 " data to GRCh38!"
             )
-            liftover_mpc(args.freeze)
+            liftover_mpc(args.freeze, args.dedup)
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -251,6 +251,11 @@ if __name__ == "__main__":
 
     liftover = subparsers.add_parser(
         "liftover", help="Liftover MPC from GRCh37 to GRCh38."
+    )
+    liftover.add_argument(
+        "--dedup",
+        help="Deduplicate MPC by selecting max score per locus prior to liftover.",
+        action="store_true",
     )
 
     args = parser.parse_args()
