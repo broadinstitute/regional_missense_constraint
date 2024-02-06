@@ -1070,13 +1070,13 @@ def liftover_mpc(
     # Deduplicate MPC annotation by keeping largest MPC value per variant (locus/alleles) combination
     ht = dedup_annot(ht, annot="mpc", get_min=False)
     # Rename transcript information
-    ht = ht.transmute(transcript_grch37=ht.transcript)
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/mpc_dedup.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
 
+    ht = ht.transmute(transcript_grch37=ht.transcript)
     ht = default_lift_data(ht, remove_failed_sites=remove_failed_sites)
     # Drop unnecessary annotation if removing sites that failed liftover
     if remove_failed_sites:
