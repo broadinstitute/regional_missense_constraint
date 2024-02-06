@@ -1042,6 +1042,8 @@ def liftover_mpc(
     remove_failed_sites: bool = True,
     dedup_mpc: bool = False,
     overwrite_temp: bool = False,
+    failed_sites_str: str = "locus_fail_liftover",
+    remove_liftover_annotations: Set[str] = {"new_locus", "new_alleles"},
 ) -> None:
     """
     Liftover MPC release from one genome build to another.
@@ -1060,6 +1062,12 @@ def liftover_mpc(
         Only relevant if dedup_mpc is True.
         If False, will read from existing temporary path.
         Default is False.
+    :param failed_sites_str: Name of the field containing Boolean for whether site failed liftover.
+        Default is 'locus_fail_liftover'.
+    :param remove_liftover_annotations: Set of lifted over annotations to remove.
+        Default is `{"new_locus", "new_alleles"}` as these fields are the lifted over
+        versions of the original loci and alleles and are the new keys of the lifted over
+        table.
     :return: None; function writes HT to resource path.
     """
     logger.warning(
@@ -1087,5 +1095,11 @@ def liftover_mpc(
     ht = default_lift_data(ht, remove_failed_sites=remove_failed_sites)
     # Drop unnecessary annotation if removing sites that failed liftover
     if remove_failed_sites:
-        ht = ht.drop("locus_fail_liftover")
+        ht = ht.drop(failed_sites_str)
+
+    # Drop additional unnecessary annotations if specified
+    # The defaults (`new_locus`, `new_alleles`) are already the new keys
+    # of the lifted over resource
+    if remove_liftover_annotations:
+        ht = ht.drop(*remove_liftover_annotations)
     ht.write(mpc_liftover_release.versions[freeze].path, overwrite=True)
