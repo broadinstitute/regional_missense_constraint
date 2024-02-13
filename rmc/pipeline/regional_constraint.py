@@ -33,6 +33,7 @@ from rmc.utils.constraint import (
     format_rmc_browser_ht,
     merge_rmc_hts,
     process_sections,
+    validate_rmc_release_downloads,
 )
 from rmc.utils.generic import get_constraint_transcripts
 
@@ -433,6 +434,10 @@ def main(args):
             )
             create_rmc_release_downloads(args.freeze, args.overwrite)
 
+        if args.command == "validate-rmc-release":
+            logger.info("Running validity checks on public RMC files...")
+            validate_rmc_release_downloads(args.freeze)
+
     finally:
         logger.info("Copying hail log to logging bucket...")
         hl.copy_log(LOGGING_PATH)
@@ -572,6 +577,10 @@ if __name__ == "__main__":
     create_release = subparsers.add_parser(
         "create-rmc-release",
         help="Create RMC release files (to be publicly shared on gnomAD browser).",
+    )
+    validate_release = subparsers.add_parser(
+        "validate-rmc-release",
+        help="Validity check RMC release files.",
     )
     args = parser.parse_args()
 
