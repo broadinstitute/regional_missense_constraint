@@ -1969,6 +1969,120 @@ def create_rmc_release_downloads(
     )
 
 
+def check_for_overlapping_intervals(interval_ht: hl.Table, coord_ht: hl.Table) -> None:
+    """
+    Check for overlapping intervals within the same transcript.
+
+    :param interval_ht: RMC HT keyed by RMC interval.
+    :param coord_ht: RMC HT keyed by either RMC interval start or end coordinate.
+    :return: None
+    """
+    coord_ht = coord_ht.annotate(
+        interval_matches=interval_ht.index(coord_ht.locus, all_matches=True),
+    )
+    coord_ht = coord_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_coord_check.ht", overwrite=True
+    )
+    coord_ht = coord_ht.filter(hl.len(coord_ht.interval_matches) > 1)
+
+    # Keep only rows where start coordinate was found in two intervals **in the same transcript**
+    coord_ht = coord_ht.annotate(
+        interval_matches=coord_ht.interval_matches.filter(
+            lambda x: x.transcript == coord_ht.transcript
+        )
+    )
+    coord_ht = coord_ht.filter(hl.len(coord_ht.interval_matches) > 1)
+    n_overlap = coord_ht.count()
+    if n_overlap > 0:
+        coord_ht.show()
+        impacted_transcripts = coord_ht.aggregate(
+            hl.agg.collect_as_set(coord_ht.transcript)
+        )
+        logger.info(
+            "Number of transcripts with overlapping regions: %i",
+            len(impacted_transcripts),
+        )
+        logger.info("Transcripts with overlapping regions: %s", impacted_transcripts)
+
+
+def import_tsv_and_agg_transcripts(tsv_path: str) -> Set[str]:
+    """
+    Import TSV from specified path and aggregate transcripts present in TSV.
+
+    .. note ::
+        Function assumes TSV has a header and that the header contains the field 'transcript'.
+
+    :param tsv_path: Path from which to import TSV.
+    :return: Set of transcripts present in TSV.
+    """
+    ht = hl.import_table(tsv_path)
+    return ht.aggregate(hl.agg.collect_as_set(ht.transcript))
+
+
+def validate_rmc_release(freeze: int) -> None:
+    """
+    Run validity checks on RMC downloadable files.
+
+    Function checks that:
+        - There are no overlapping intervals within transcripts
+        - Transcript set in RMC TSV matches transcript set in RMC HT
+        - Transcript set in no-RMC TSV does not match transcript set in RMC HT
+
+    .. note ::
+
+        - Function assumes RMC HT is annotated with an array of struct called `regions`
+        - Function assumes RMC HT is keyed by `transcript`
+
+    :param freeze: RMC data freeze number.
+    :return: None.
+    """
+    logger.info("Checking RMC HT...")
+    ht = hl.read_table(rmc_downloads_resource_paths(get_ht_path=True, freeze=freeze))
+
+    # Drop unnecessary fields from public RMC release
+    ht = ht.select("regions").explode("regions")
+    ht = ht.select(
+        interval=hl.interval(
+            ht.regions.start_coordinate, ht.regions.stop_coordinate, includes_end=True
+        ),
+        start_coordinate=ht.regions.start_coordinate,
+        stop_coordinate=ht.regions.stop_coordinate,
+    )
+
+    # Key one HT by interval, one by start coordinate, and one by end coordinate
+    ht = ht.key_by("interval")
+    start_ht = ht.key_by(locus=ht.start_coordinate)
+    end_ht = ht.key_by(locus=ht.stop_coordinate)
+
+    logger.info("Checking for overlapping intervals...")
+    logger.info("Checking if any start coordinates overlap more than 1 interval...")
+    check_for_overlapping_intervals(ht, start_ht)
+    check_for_overlapping_intervals(ht, end_ht)
+
+    logger.info("Checking transcript sets between TSVs and HT...")
+    rmc_ht_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
+    rmc_tsv_transcripts = import_tsv_and_agg_transcripts(
+        rmc_downloads_resource_paths(get_ht_path=False, has_rmc=True, freeze=freeze)
+    )
+    rmc_transcripts_diff = rmc_tsv_transcripts.difference(rmc_ht_transcripts).union(
+        rmc_ht_transcripts.difference(rmc_tsv_transcripts)
+    )
+    if len(rmc_transcripts_diff) != 0:
+        logger.warning("%i transcripts are different between the RMC HT and TSV!")
+        logger.warning("Transcripts with differences: %s", rmc_transcripts_diff)
+
+    no_rmc_transcripts = import_tsv_and_agg_transcripts(
+        rmc_downloads_resource_paths(get_ht_path=False, has_rmc=False, freeze=freeze)
+    )
+    no_rmc_overlap = no_rmc_transcripts.intersection(rmc_ht_transcripts)
+    if len(no_rmc_overlap) != 0:
+        logger.warning(
+            "%i transcripts are present in both RMC HT and no RMC TSV!", no_rmc_overlap
+        )
+
+    logger.info("Validity checks complete -- please assess output above!")
+
+
 def check_loci_existence(ht1: hl.Table, ht2: hl.Table, annot_str: str) -> hl.Table:
     """
     Check if loci from `ht1` are present in `ht2`.
