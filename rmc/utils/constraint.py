@@ -1713,6 +1713,9 @@ def check_and_fix_missing_aa(
 
     # Annotate whether RMC region is at the beginning or end of the transcript in coordinate space
     # Also add strand annotation from `transcript_ref`
+    # NOTE: this section does not work for gnomAD v2 internal RMC results
+    # The start and stop positions in the current freeze 7 internal table are
+    # transcript start and stop positions, NOT transcript CDS start and end positions
     ht = ht.annotate(**transcript_ht[ht.transcript])
     ht = ht.annotate(
         # NOTE: This is actually the transcript end for transcripts on the negative strand
