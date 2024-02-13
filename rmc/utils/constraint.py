@@ -2019,7 +2019,7 @@ def import_tsv_and_agg_transcripts(tsv_path: str) -> Set[str]:
     return ht.aggregate(hl.agg.collect_as_set(ht.transcript))
 
 
-def validate_rmc_release(freeze: int) -> None:
+def validate_rmc_release_downloads(freeze: int) -> None:
     """
     Run validity checks on RMC downloadable files.
 
