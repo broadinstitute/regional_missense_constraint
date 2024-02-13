@@ -1491,7 +1491,7 @@ def fix_transcript_start_stop_aas(
 
     # Annotate largest amino acid back onto original HT
     miss_start_stop_ht = miss_start_stop_ht.annotate(
-        largest_aa=max_aa_ht[miss_start_stop_ht.transcript].largest_aa,
+        largest_aa=max_aa_ht[miss_start_stop_ht.transcript].ref_aa,
     )
     miss_start_stop_ht = miss_start_stop_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/ts_missing_start_stop_largest.ht",
