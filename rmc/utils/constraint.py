@@ -1629,7 +1629,7 @@ def fix_region_start_stop_aas(
             start_fix_ht[
                 hl.locus(
                     missing_ht.start_coordinate.contig,
-                    missing_ht.start_coordinate.locus - 1,
+                    missing_ht.start_coordinate.position - 1,
                 ),
                 missing_ht.transcript,
             ].next_exon_start,
@@ -1639,7 +1639,7 @@ def fix_region_start_stop_aas(
             stop_fix_ht[
                 hl.locus(
                     missing_ht.stop_coordinate.contig,
-                    missing_ht.stop_coordinate.locus + 1,
+                    missing_ht.stop_coordinate.position + 1,
                 ),
                 missing_ht.transcript,
             ].prev_exon_stop,
