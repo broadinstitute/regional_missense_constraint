@@ -1708,7 +1708,7 @@ def check_and_fix_missing_aa(
         return ht
 
     # Get CDS start/stops from CDS HT
-    transcript_ht = transcript_ref.ht().key_by()
+    transcript_ht = transcript_ref.ht().key_by("transcript")
 
     # Annotate whether RMC region is at the beginning or end of the transcript in coordinate space
     # Also add strand annotation from `transcript_ref`
