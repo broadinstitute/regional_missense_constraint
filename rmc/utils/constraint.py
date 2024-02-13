@@ -1483,6 +1483,7 @@ def fix_transcript_start_stop_aas(
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
+    max_aa_ht = max_aa_ht.key_by("transcript")
     max_aa_ht = max_aa_ht.annotate(
         largest_aa=max_aa_grp_ht[max_aa_ht.transcript].largest_aa,
     )
