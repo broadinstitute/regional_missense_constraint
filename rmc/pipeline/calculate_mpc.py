@@ -4,13 +4,20 @@ This script calculates the MPC score.
 MPC (missense badness, PolyPhen-2, and regional missense constraint) is a composite score
 that predicts the deleteriousness of any given missense variant.
 """
+
 import argparse
 import logging
 
 import hail as hl
 from gnomad.utils.slack import slack_notifications
 
-from rmc.resources.basics import LOGGING_PATH, MPC_PREFIX, TEMP_PATH_WITH_FAST_DEL
+from rmc.resources.basics import (
+    LOGGING_PATH,
+    MPC_PREFIX,
+    TEMP_PATH,
+    TEMP_PATH_WITH_FAST_DEL,
+    TEMP_PATH_WITH_SLOW_DEL,
+)
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 from rmc.resources.rmc import CURRENT_FREEZE, context_with_oe, mpc_release
 from rmc.slack_creds import slack_token
@@ -51,15 +58,14 @@ def main(args):
         if args.command == "create-mpc-release":
             hl.init(log="/create_mpc_release.log", tmp_dir=temp_dir)
             context_ht = (
-                context_with_oe.versions[args.freeze]
-                .ht()
+                hl.read_table(f"{TEMP_PATH_WITH_SLOW_DEL}/context_w_oe_outliers.ht")
                 .select()
                 .key_by("locus", "alleles")
             )
             annotate_mpc(
                 ht=context_ht,
-                output_ht_path=mpc_release.versions[args.freeze].path,
-                temp_label="_release",
+                output_ht_path=f"{TEMP_PATH}/mpc_w_outliers.ht",
+                temp_label="_outliers",
                 use_release=False,
                 overwrite_temp=args.overwrite_temp,
                 freeze=args.freeze,

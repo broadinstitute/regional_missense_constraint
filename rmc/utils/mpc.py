@@ -12,7 +12,7 @@ from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
 from patsy import dmatrices
 
-from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
+from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL, TEMP_PATH_WITH_SLOW_DEL
 from rmc.resources.reference_data import (
     FOLD_K,
     blosum,
@@ -494,11 +494,13 @@ def get_min_aic_model(
     overall_min_aic = min(min_model_aics.values())
     logger.info("Lowest model AIC: %f", overall_min_aic)
     if list(min_model_aics.values()).count(overall_min_aic) > 1:
-        logger.warning("""
+        logger.warning(
+            """
             There is a tie for minimum AIC over model types.
             This function will use the first model it finds by default
             (single variable -> no interactions -> all interactions -> specific interactions)!
-            """)
+            """
+        )
     overall_min_model_type = list(min_model_aics.keys())[
         list(min_model_aics.values()).index(overall_min_aic)
     ]
@@ -729,7 +731,7 @@ def calculate_fitted_scores(
     context_annots = possible_context_annots.intersection(variables)
     context_helper_annots = context_annots.union(helper_annots)
     # Check that these annotations are indeed in the context HT
-    context_ht = context_with_oe.versions[freeze].ht()
+    context_ht = hl.read_table(f"{TEMP_PATH_WITH_SLOW_DEL}/context_w_oe_outliers.ht")
     context_annots_check = context_helper_annots - {field for field in context_ht.row}
     if len(context_annots_check) != 0:
         raise DataException(f"{context_annots_check} missing from context HT!")
