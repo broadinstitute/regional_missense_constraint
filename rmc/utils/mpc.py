@@ -1067,7 +1067,7 @@ def liftover_mpc(
         Only relevant if remove_failed_sites is True.
     :param remove_liftover_annotations: Set of lifted over annotations to remove.
         Default is `{"new_locus", "new_alleles"}` as these fields are the lifted over
-        versions of the original loci and alleles and are the new keys of the lifted over
+        versions of the original loci and alleles and are already copied to the new keys of the lifted over
         table.
     :return: None; function writes HT to resource path.
     """
