@@ -1064,6 +1064,7 @@ def liftover_mpc(
         Default is False.
     :param failed_sites_str: Name of the field containing Boolean for whether site failed liftover.
         Default is 'locus_fail_liftover'.
+        Only relevant if remove_failed_sites is True.
     :param remove_liftover_annotations: Set of lifted over annotations to remove.
         Default is `{"new_locus", "new_alleles"}` as these fields are the lifted over
         versions of the original loci and alleles and are the new keys of the lifted over
