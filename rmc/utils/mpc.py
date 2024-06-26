@@ -1056,7 +1056,7 @@ def liftover_mpc(
     :param remove_failed_sites: Whether to remove sites that failed to liftover from input Table.
         Default is True.
     :param dedup_mpc: Whether to deduplicate MPC scores per duplicate loci prior to liftover.
-        If True, will take the maxmimum MPC per duplicated locus.
+        If True, will take the maximum MPC per duplicated locus.
         Default is False.
     :param overwrite_temp: Whether to overwrite intermediate HT with deduplicated MPC scores.
         Only relevant if dedup_mpc is True.
