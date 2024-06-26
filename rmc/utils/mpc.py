@@ -1099,7 +1099,7 @@ def liftover_mpc(
         ht = ht.drop(failed_sites_str)
 
     # Drop additional unnecessary annotations if specified
-    # The defaults (`new_locus`, `new_alleles`) are already the new keys
+    # The defaults (`new_locus`, `new_alleles`) are already copied to the new keys
     # of the lifted over resource
     if remove_liftover_annotations:
         ht = ht.drop(*remove_liftover_annotations)
