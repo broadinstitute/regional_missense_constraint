@@ -2061,6 +2061,7 @@ def validate_rmc_release_downloads(freeze: int) -> None:
     logger.info("Checking for overlapping intervals...")
     logger.info("Checking if any start coordinates overlap more than 1 interval...")
     check_for_overlapping_intervals(ht, start_ht)
+    logger.info("Checking if any end coordinates overlap more than 1 interval...")
     check_for_overlapping_intervals(ht, end_ht)
 
     logger.info("Checking transcript sets between TSVs and HT...")
