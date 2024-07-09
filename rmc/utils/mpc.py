@@ -1040,7 +1040,10 @@ def liftover_mpc(
     freeze: int = CURRENT_FREEZE,
     gnomad_version: str = CURRENT_GNOMAD_VERSION,
     remove_failed_sites: bool = True,
+    dedup_mpc: bool = False,
     overwrite_temp: bool = False,
+    failed_sites_str: str = "locus_fail_liftover",
+    remove_liftover_annotations: Set[str] = {"new_locus", "new_alleles"},
 ) -> None:
     """
     Liftover MPC release from one genome build to another.
@@ -1052,9 +1055,20 @@ def liftover_mpc(
     :param gnomad_version: Current gnomAD version. Default is CURRENT_GNOMAD_VERSION.
     :param remove_failed_sites: Whether to remove sites that failed to liftover from input Table.
         Default is True.
+    :param dedup_mpc: Whether to deduplicate MPC scores per duplicate loci prior to liftover.
+        If True, will take the maximum MPC per duplicated locus.
+        Default is False.
     :param overwrite_temp: Whether to overwrite intermediate HT with deduplicated MPC scores.
+        Only relevant if dedup_mpc is True.
         If False, will read from existing temporary path.
         Default is False.
+    :param failed_sites_str: Name of the field containing Boolean for whether site failed liftover.
+        Default is 'locus_fail_liftover'.
+        Only relevant if remove_failed_sites is True.
+    :param remove_liftover_annotations: Set of lifted over annotations to remove.
+        Default is `{"new_locus", "new_alleles"}` as these fields are the lifted over
+        versions of the original loci and alleles and are already copied to the new keys of the lifted over
+        table.
     :return: None; function writes HT to resource path.
     """
     logger.warning(
@@ -1067,18 +1081,26 @@ def liftover_mpc(
             " to GRCh38."
         )
     ht = hl.read_table(mpc_release.versions[freeze].path)
-    # Deduplicate MPC annotation by keeping largest MPC value per variant (locus/alleles) combination
-    ht = dedup_annot(ht, annot="mpc", get_min=False)
-    # Rename transcript information
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/mpc_dedup.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
 
+    if dedup_mpc:
+        # Deduplicate MPC annotation by keeping largest MPC value per variant (locus/alleles) combination
+        ht = dedup_annot(ht, annot="mpc", get_min=False)
+        ht = ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/mpc_dedup.ht",
+            _read_if_exists=not overwrite_temp,
+            overwrite=overwrite_temp,
+        )
+
+    # Rename transcript information
     ht = ht.transmute(transcript_grch37=ht.transcript)
     ht = default_lift_data(ht, remove_failed_sites=remove_failed_sites)
     # Drop unnecessary annotation if removing sites that failed liftover
     if remove_failed_sites:
-        ht = ht.drop("locus_fail_liftover")
+        ht = ht.drop(failed_sites_str)
+
+    # Drop additional unnecessary annotations if specified
+    # The defaults (`new_locus`, `new_alleles`) are already copied to the new keys
+    # of the lifted over resource
+    if remove_liftover_annotations:
+        ht = ht.drop(*remove_liftover_annotations)
     ht.write(mpc_liftover_release.versions[freeze].path, overwrite=True)

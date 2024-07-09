@@ -580,7 +580,7 @@ if __name__ == "__main__":
     )
     validate_release = subparsers.add_parser(
         "validate-rmc-release",
-        help="Validity check RMC release files.",
+        help="Check validity of RMC release files.",
     )
     args = parser.parse_args()
 
