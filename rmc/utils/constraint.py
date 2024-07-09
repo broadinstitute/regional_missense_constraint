@@ -1975,7 +1975,7 @@ def create_rmc_release_downloads(
 
 def check_for_overlapping_intervals(interval_ht: hl.Table, coord_ht: hl.Table) -> None:
     """
-    Check for overlapping intervals within the same transcript.
+    Check for overlapping regions/intervals within the same transcript.
 
     :param interval_ht: RMC HT keyed by RMC interval.
     :param coord_ht: RMC HT keyed by either RMC interval start or end coordinate.
