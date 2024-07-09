@@ -1709,7 +1709,7 @@ def check_and_fix_missing_aa(
         return ht
 
     # Get CDS start/stops from CDS HT
-    transcript_ht = transcript_ref.ht().key_by("transcript")
+    transcript_ht = transcript_ref.ht()
 
     # Annotate whether RMC region is at the beginning or end of the transcript in coordinate space
     # Also add strand annotation from `transcript_ref`
@@ -1984,10 +1984,10 @@ def check_for_overlapping_intervals(interval_ht: hl.Table, coord_ht: hl.Table) -
     coord_ht = coord_ht.annotate(
         interval_matches=interval_ht.index(coord_ht.locus, all_matches=True),
     )
+    coord_ht = coord_ht.filter(hl.len(coord_ht.interval_matches) > 1)
     coord_ht = coord_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/rmc_coord_check.ht", overwrite=True
     )
-    coord_ht = coord_ht.filter(hl.len(coord_ht.interval_matches) > 1)
 
     # Keep only rows where start coordinate was found in two intervals **in the same transcript**
     coord_ht = coord_ht.annotate(
