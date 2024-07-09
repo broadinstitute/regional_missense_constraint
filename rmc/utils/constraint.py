@@ -2030,7 +2030,7 @@ def validate_rmc_release_downloads(freeze: int) -> None:
     Function checks that:
         - There are no overlapping intervals within transcripts
         - Transcript set in RMC TSV matches transcript set in RMC HT
-        - Transcript set in no-RMC TSV does not match transcript set in RMC HT
+        - Transcript set in no-RMC TSV has no matches with transcript set in RMC HT
 
     .. note ::
 
