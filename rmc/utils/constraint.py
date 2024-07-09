@@ -2002,11 +2002,11 @@ def check_for_overlapping_intervals(interval_ht: hl.Table, coord_ht: hl.Table) -
         impacted_transcripts = coord_ht.aggregate(
             hl.agg.collect_as_set(coord_ht.transcript)
         )
-        logger.info(
+        logger.warning(
             "Number of transcripts with overlapping regions: %i",
             len(impacted_transcripts),
         )
-        logger.info("Transcripts with overlapping regions: %s", impacted_transcripts)
+        logger.warning("Transcripts with overlapping regions: %s", impacted_transcripts)
 
 
 def import_tsv_and_agg_transcripts(tsv_path: str) -> Set[str]:
