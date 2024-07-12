@@ -2,29 +2,27 @@ import logging
 from typing import Dict, List, Set, Tuple
 
 import hail as hl
-from gnomad.resources.grch37.gnomad import coverage, public_release
-from gnomad.resources.grch37.reference_data import vep_context
+from gnomad.resources.grch38.gnomad import coverage, public_release
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.constraint import (
     annotate_exploded_vep_for_constraint_groupings,
     annotate_with_mu,
-    build_models,
 )
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.filtering import filter_to_clinvar_pathogenic
-from gnomad.utils.vep import (
-    CSQ_NON_CODING,
-    add_most_severe_csq_to_tc_within_vep_root,
-    filter_vep_to_canonical_transcripts,
+from gnomad.utils.liftover import default_lift_data
+from gnomad.utils.vep import CSQ_NON_CODING, filter_vep_transcript_csqs
+from gnomad_constraint.resources.resource_utils import (
+    get_mutation_ht,
+    get_preprocessed_ht,
 )
-from gnomad_constraint.utils.constraint import prepare_ht_for_constraint_calculations
 
 from rmc.resources.basics import (
     ACID_NAMES_PATH,
     CODON_TABLE_PATH,
     TEMP_PATH_WITH_FAST_DEL,
 )
-from rmc.resources.gnomad import constraint_ht, mutation_rate
+from rmc.resources.gnomad import constraint_ht
 from rmc.resources.reference_data import (
     autism_de_novo_2022_tsv_path,
     clinvar,
@@ -38,7 +36,6 @@ from rmc.resources.reference_data import (
     triplo_genes_path,
 )
 from rmc.resources.resource_utils import MISSENSE
-from rmc.resources.rmc import DIVERGENCE_SCORES_TSV_PATH, MUTATION_RATE_TABLE_PATH
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -46,44 +43,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("regional_missense_constraint_generic")
 logger.setLevel(logging.INFO)
-
-
-####################################################################################
-## ExAC mutational model-related utils
-####################################################################################
-def get_mutation_rate() -> Dict[str, Tuple[str, float]]:
-    """
-    Read in mutation rate table and store as dict.
-
-    :return: Dictionary of mutation rate information (key: context, value: (alt, mu_snp)).
-    :rtype: Dict[str, Tuple[str, float]].
-    """
-    mu = {}
-    # from    n_kmer  p_any_snp_given_kmer    mu_kmer to      count_snp       p_snp_given_kmer        mu_snp
-    with hl.hadoop_open(MUTATION_RATE_TABLE_PATH) as m:
-        for line in m:
-            context, _, _, _, new_kmer, _, _, mu_snp = line.strip().split("\t")
-            mu[context] = (new_kmer[1], mu_snp)
-    return mu
-
-
-def get_divergence_scores() -> Dict[str, float]:
-    """
-    Read in divergence score file and store as dict (key: transcript, value: score).
-
-    :return: Divergence score dict.
-    :rtype: Dict[str, float]
-    """
-    div_scores = {}
-    with hl.hadoop_open(DIVERGENCE_SCORES_TSV_PATH) as d:
-        d.readline()
-        for line in d:
-            transcript, score = line.strip().split("\t")
-            try:
-                div_scores[transcript.split(".")[0]] = float(score)
-            except ValueError:
-                continue
-    return div_scores
 
 
 ####################################################################################
@@ -163,9 +122,9 @@ def annotate_and_filter_codons(ht: hl.Table) -> hl.Table:
 ## Reference genome processing-related utils
 ####################################################################################
 def process_context_ht(
+    filter_to_canonical: bool = False,
     filter_csq: Set[str] = None,
-    filter_outlier_transcripts: bool = False,
-    add_annotations: bool = True,
+    mu_ht_partitions: int = 100,
 ) -> hl.Table:
     """
     Get context HT for SNPs annotated with VEP in canonical protein-coding transcripts.
@@ -173,68 +132,68 @@ def process_context_ht(
     This function offers options to filter to specific variant consequences and add annotations
     to prepare for regional missense constraint calculations.
 
-    :param Set[str] filter_csq: Specific consequences to keep. Default is None.
-    :param bool filter_outlier_transcripts: Whether to remove constraint outlier transcripts from Table. Default is False.
-    :param bool add_annotations: Whether to add `context`, `ref`, `alt`, `methylation_level`, `cpg`,
-        `mutation_type`, `annotation`, `modifier`, `coverage`, `transcript`, and `mu_snp` annotations.
-        NOTE: `coverage` replaces `exome_coverage` in name.
-        Default is True.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
+    :param filter_csq: Specific consequences to keep. Default is None.
+    :param mu_ht_partitions: Number of desired partitions for mutation rate HT. Default is 100.
     :return: VEP context HT filtered to canonical transcripts and optionally filtered to variants
         in non-outlier transcripts with specific consequences and annotated with mutation rate etc.
     :rtype: hl.Table
     """
-    logger.info("Reading in SNPs-only, VEP-annotated context ht...")
-    ht = vep_context.ht().select_globals()
+    logger.info("Reading in gene constraint preprocessed context ht...")
+    # Created using
+    # https://github.com/broadinstitute/gnomad-constraint/blob/0acd2815e59c04d642bb705e6d1ca166f5d79e5f/gnomad_constraint/utils/constraint.py#L78
+    ht = get_preprocessed_ht("context").ht().select_globals()
 
-    if not add_annotations:
-        logger.info(
-            "Filtering to canonical transcripts and annotating variants with most"
-            " severe consequence...",
-        )
-        ht = process_vep(
-            ht,
-            filter_csq=filter_csq,
-            filter_outlier_transcripts=filter_outlier_transcripts,
-        )
-    else:
-        logger.info(
-            "Filtering to canonical transcripts, annotating variants with most"
-            " severe consequence, and adding annotations for constraint"
-            " calculation...",
-        )
-        # NOTE: `prepare_ht_for_constraint_calculations` annotates HT with:
-        # `ref`, `alt`, `methylation_level`, `exome_coverage`, and annotations added by
-        # `annotate_mutation_type()`, `collapse_strand()`, and `add_most_severe_csq_to_tc_within_vep_root()`
-        # including `cpg`, `transition`, and `mutation_type`
-        # NOTE: `mutation_type` was initially named `variant_type`, but this
-        # field was renamed because `variant_type` refers to a different piece of
-        # information in the gnomad_methods repo
-        # See docstring for `annotate_mutation_type` for more details
-        ht = process_vep(
-            ht,
-            filter_csq=filter_csq,
-            filter_outlier_transcripts=filter_outlier_transcripts,
-            add_annotations=True,
-        )
+    logger.info("Filtering to ENSEMBL transcripts only...")
+    # Also optionally filter to canonical transcripts and specific consequences
+    ht = filter_vep_transcript_csqs(
+        t=ht,
+        vep_root="vep",
+        synonymous=False,
+        canonical=filter_to_canonical,
+        ensembl_only=True,
+        filter_empty_csq=True,
+        csqs=filter_csq,
+    )
 
-        ht = ht.select(
-            "context",
-            "ref",
-            "alt",
-            "methylation_level",
-            "cpg",
-            "mutation_type",
-            "annotation",
-            "modifier",
-            "coverage",
-            "transcript",
-        )
+    logger.info(
+        "Annotating context HT with annotations needed for constraint groupings..."
+    )
+    # See https://github.com/broadinstitute/gnomad-constraint/blob/0acd2815e59c04d642bb705e6d1ca166f5d79e5f/gnomad_constraint/utils/constraint.py#L78
+    # and
+    # https://github.com/broadinstitute/gnomad_methods/blob/2387430a79068225114c620952275f2f805cb24a/gnomad/utils/constraint.py#L948
+    # for documentation on annotations added
+    ht, _ = annotate_exploded_vep_for_constraint_groupings(
+        ht=ht,
+        vep_annotation="transcript_consequences",
+        include_canonical_group=True,
+        # NOTE: all canonical transcripts are also the MANE select transcript in
+        # GENCODE v39/VEP v105 context HT
+        include_mane_select_group=False,
+    )
 
-        logger.info("Annotating with mutation rate...")
-        # Mutation rate HT is keyed by context, ref, alt, methylation level
-        mu_ht = mutation_rate.ht().select("mu_snp")
-        return annotate_with_mu(ht, mu_ht)
-    return ht
+    # Drop other unnecessary annotations
+    ht = ht.select(
+        "context",
+        "ref",
+        "alt",
+        "methylation_level",
+        "cpg",
+        "mutation_type",
+        "annotation",
+        "modifier",
+        "coverage",
+        "transcript",
+    )
+
+    logger.info("Annotating with mutation rate...")
+    # Mutation rate HT is keyed by context, ref, alt, methylation level
+    # TODO: `annotate_with_mu` triggered new shuffle errors in my tests in June 2024;
+    # keep an eye on this step when re-running on full context HT
+    mu_ht = hl.read_table(
+        get_mutation_ht().path, _n_partitions=mu_ht_partitions
+    ).select("mu_snp")
+    return annotate_with_mu(ht, mu_ht)
 
 
 def get_aa_from_context(
@@ -260,9 +219,7 @@ def get_aa_from_context(
         " canonical transcripts..."
     )
     # Drop globals and select only VEP transcript consequences field
-    ht = process_context_ht(
-        filter_outlier_transcripts=True, add_annotations=False
-    ).select_globals()
+    ht = process_context_ht().select_globals()
     ht = ht.select("transcript_consequences")
     ht = ht.filter(
         ~hl.literal(CSQ_NON_CODING).contains(
@@ -444,7 +401,7 @@ def get_gnomad_public_release(
         "filters",
         ac=gnomad.freq[adj_freq_index].AC,
         af=gnomad.freq[adj_freq_index].AF,
-        gnomad_coverage=gnomad_cov[gnomad.locus].median,
+        gnomad_coverage=gnomad_cov[gnomad.locus].median_approx,
     )
 
 
@@ -560,89 +517,6 @@ def keep_criteria(
     )
 
 
-def process_vep(
-    ht: hl.Table,
-    filter_csq: Set[str] = None,
-    filter_outlier_transcripts: bool = False,
-    add_annotations: bool = False,
-) -> hl.Table:
-    """
-    Filter input VEP context Table to variants in canonical transcripts and annotate with most severe consequence.
-
-    Options to filter Table to specific variant consequences, remove constraint outlier transcripts,
-    or add additional annotations.
-
-    Additional annotations (taken from `prepare_ht_for_constraint_calculations`) are:
-        - context (will always convert trimer context)
-        - ref
-        - alt
-        - methylation
-        - exome_coverage
-        - pass_filters - Whether the variant passed all variant filters
-        - annotations added by `annotate_mutation_type()`, `collapse_strand()`, and
-          `add_most_severe_csq_to_tc_within_vep_root()`
-        - annotation
-        - modifier
-        - gene
-        - coverage
-        - transcript
-        - canonical
-
-    :param Table ht: Input Table.
-    :param Set[str] filter_csq: Specific consequences to keep. Default is None.
-    :param bool filter_outlier_transcripts: Whether to remove constraint outlier transcripts from Table.
-        Default is False.
-    :param bool add_annotations: Whether to add annotations from `prepare_ht_for_constraint_calculations`
-        beyond most severe consequence. Default is False.
-    :return: Table filtered to canonical transcripts with option to filter to specific variant consequences
-        and remove constraint outlier transcripts.
-    :rtype: hl.Table
-    """
-    if "was_split" not in ht.row:
-        logger.info("Splitting multiallelic variants and filtering to SNPs...")
-        ht = hl.split_multi(ht)
-        ht = ht.filter(hl.is_snp(ht.alleles[0], ht.alleles[1]))
-
-    logger.info("Filtering to canonical transcripts...")
-    ht = filter_vep_to_canonical_transcripts(ht, filter_empty_csq=True)
-
-    if add_annotations:
-        logger.info(
-            "Annotating HT with most severe consequence and other annotations..."
-        )
-        # NOTE: `prepare_ht_for_constraint_calculations` includes a call to
-        # `add_most_severe_csq_to_tc_within_vep_root`
-        ht = prepare_ht_for_constraint_calculations(ht)
-
-        # NOTE: `annotate_exploded_vep_for_constraint_groupings` does the
-        # transmute and explode on `transcript_consequences` and also annotates HT with:
-        # `annotation`, `modifier`, `gene`, `coverage`, `transcript`, and `canonical`
-        # NOTE: `coverage` is a duplicate of `exome_coverage`
-        ht, _ = annotate_exploded_vep_for_constraint_groupings(ht)
-    else:
-        logger.info("Annotating HT with most severe consequence...")
-        ht = add_most_severe_csq_to_tc_within_vep_root(ht)
-        ht = ht.transmute(transcript_consequences=ht.vep.transcript_consequences)
-        ht = ht.explode(ht.transcript_consequences)
-
-    if filter_outlier_transcripts:
-        logger.info("Filtering to non-outlier transcripts...")
-        # Keep transcripts used in LoF constraint only (remove all other outlier transcripts)
-        constraint_transcripts = get_constraint_transcripts(outlier=False)
-        ht = ht.filter(
-            constraint_transcripts.contains(ht.transcript_consequences.transcript_id)
-        )
-
-    if filter_csq:
-        logger.info("Filtering to %s...", filter_csq)
-        ht = ht.filter(
-            hl.literal(filter_csq).contains(
-                ht.transcript_consequences.most_severe_consequence
-            )
-        )
-    return ht
-
-
 def filter_to_region_type(ht: hl.Table, region: str) -> hl.Table:
     """
     Filter input Table to autosomes + chrX PAR, chrX non-PAR, or chrY non-PAR.
@@ -659,41 +533,6 @@ def filter_to_region_type(ht: hl.Table, region: str) -> hl.Table:
     else:
         ht = ht.filter(ht.locus.in_autosome() | ht.locus.in_x_par())
     return ht
-
-
-def generate_models(
-    coverage_ht: hl.Table,
-    coverage_x_ht: hl.Table,
-    coverage_y_ht: hl.Table,
-    weighted: bool = True,
-) -> Tuple[
-    Tuple[float, float],
-    hl.expr.DictExpression,
-    hl.expr.DictExpression,
-    hl.expr.DictExpression,
-]:
-    """
-    Call `build_models` from gnomAD LoF repo to generate models used to adjust expected variants count.
-
-    :param hl.Table coverage_ht: Table with proportion of variants observed by coverage (autosomes/PAR only).
-    :param hl.Table coverage_x_ht: Table with proportion of variants observed by coverage (chrX only).
-    :param hl.Table coverage_y_ht: Table with proportion of variants observed by coverage (chrY only).
-    :param bool weighted: Whether to use weighted least squares when building models. Default is True.
-    :return: Coverage model, plateau models for autosomes, plateau models for chrX, plateau models for chrY.
-    :rtype: Tuple[Tuple[float, float], hl.expr.DictExpression, hl.expr.DictExpression, hl.expr.DictExpression]
-    """
-    logger.info("Building autosomes/PAR plateau model and coverage model...")
-    coverage_model, plateau_models = build_models(
-        coverage_ht,
-        weighted=weighted,
-    )
-
-    logger.info("Building plateau models for chrX and chrY...")
-    # TODO: make half_cutoff (for coverage cutoff) True for X/Y?
-    # This would also mean saving new coverage model for allosomes
-    _, plateau_x_models = build_models(coverage_x_ht, weighted=weighted)
-    _, plateau_y_models = build_models(coverage_y_ht, weighted=weighted)
-    return (coverage_model, plateau_models, plateau_x_models, plateau_y_models)
 
 
 def get_coverage_correction_expr(
@@ -913,14 +752,15 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
         )
 
 
-def import_fu_data(overwrite: bool) -> None:
+def import_fu_data(overwrite: bool, liftover: bool = False) -> None:
     """
     Import de novo variants from Fu et al. (2022) paper.
 
     Function imports variants from TSV into HT, removes malformed rows,
-    and lifts data from GRCh38 to GRCh37.
+    and optionally lifts data from GRCh38 to GRCh37.
 
     :param overwrite: Whether to overwrite Table if it exists.
+    :param liftover: Whether to lift data from GRCh38 to GRCh37. Default is False.
     :return: None; Function writes Table to temporary path.
     """
     fu_ht = hl.import_table(
@@ -935,14 +775,6 @@ def import_fu_data(overwrite: bool) -> None:
     # "Supplementary Table 20. The de novo SNV/indel variants used in TADA
     # association analyses from assembled ASD cohorts"
     fu_ht = fu_ht.filter(~hl.is_missing(fu_ht.Role))
-
-    # Prepare to lift dataset back to GRCh37
-    rg37 = hl.get_reference("GRCh37")
-    rg38 = hl.get_reference("GRCh38")
-    rg38.add_liftover(
-        "gs://hail-common/references/grch38_to_grch37.over.chain.gz", rg37
-    )
-
     fu_ht = fu_ht.annotate(
         locus=hl.parse_locus(
             hl.format(
@@ -954,25 +786,10 @@ def import_fu_data(overwrite: bool) -> None:
         ),
         alleles=[fu_ht.Variant.split(":")[2], fu_ht.Variant.split(":")[3]],
     )
-    fu_ht = fu_ht.annotate(
-        new_locus=hl.liftover(fu_ht.locus, "GRCh37", include_strand=True),
-        old_locus=fu_ht.locus,
-    )
-    liftover_stats = fu_ht.aggregate(
-        hl.struct(
-            liftover_fail=hl.agg.count_where(hl.is_missing(fu_ht.new_locus)),
-            flip_strand=hl.agg.count_where(fu_ht.new_locus.is_negative_strand),
-        )
-    )
-    logger.info(
-        "%i variants failed to liftover, and %i variants flipped strands",
-        liftover_stats.liftover_fail,
-        liftover_stats.flip_strand,
-    )
-    fu_ht = fu_ht.filter(
-        hl.is_defined(fu_ht.new_locus) & ~fu_ht.new_locus.is_negative_strand
-    )
-    fu_ht = fu_ht.key_by(locus=fu_ht.new_locus.result, alleles=fu_ht.alleles)
+
+    if liftover:
+        logger.info("Lifting data from b38 to b37...")
+        fu_ht = default_lift_data(fu_ht)
 
     # Rename 'Proband' > 'ASD' and 'Sibling' > 'control'
     fu_ht = fu_ht.transmute(role=hl.if_else(fu_ht.Role == "Proband", "ASD", "control"))
@@ -982,7 +799,7 @@ def import_fu_data(overwrite: bool) -> None:
     fu_ht.write(f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht", overwrite=overwrite)
 
 
-def import_kaplanis_data(overwrite: bool) -> None:
+def import_kaplanis_data(overwrite: bool, liftover: bool = True) -> None:
     """
     Import de novo variants from Kaplanis et al. (2020) paper.
 
@@ -992,6 +809,7 @@ def import_kaplanis_data(overwrite: bool) -> None:
     data from Fu et al. paper and are therefore not retained.
 
     :param overwrite: Whether to overwrite Table if it exists.
+    :param liftover: Whether to liftover data from GRCh37 to GRCh38. Default is True.
     :return: None; Function writes Table to temporary path.
     """
     kap_ht = hl.import_table(ndd_de_novo_2020_tsv_path, impute=True)
@@ -1004,10 +822,15 @@ def import_kaplanis_data(overwrite: bool) -> None:
     kap_ht = kap_ht.group_by("locus", "alleles").aggregate(
         case_control=hl.agg.collect(kap_ht.case_control)
     )
+    if liftover:
+        logger.info("Lifting data from b38 to b37...")
+        kap_ht = default_lift_data(kap_ht)
     kap_ht.write(f"{TEMP_PATH_WITH_FAST_DEL}/kaplanis_dn.ht", overwrite=overwrite)
 
 
-def import_de_novo_variants(overwrite: bool, n_partitions: int = 5000) -> None:
+def import_de_novo_variants(
+    overwrite: bool, n_partitions: int = 5000, liftover_b38: bool = True
+) -> None:
     """
     Import de novo missense variants.
 
@@ -1018,14 +841,17 @@ def import_de_novo_variants(overwrite: bool, n_partitions: int = 5000) -> None:
     :paran n_partitions: Number of partitions for input Tables.
         Used to repartition Tables on read.
         Will also help determine number of partitions in final Table.
+    :param liftover_b38: Whether to lift data from GRCh37 to GRCh38. Default is True.
     :return: None; writes HT to resource path.
     """
     fu_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/fu_dn.ht"
     kaplanis_ht_path = f"{TEMP_PATH_WITH_FAST_DEL}/kaplanis_dn.ht"
     if not file_exists(fu_ht_path) or overwrite:
-        import_fu_data(overwrite=overwrite)
+        # NOTE: Fu data is in GRCh38
+        import_fu_data(overwrite=overwrite, liftover=not liftover_b38)
     if not file_exists(kaplanis_ht_path) or overwrite:
-        import_kaplanis_data(overwrite=overwrite)
+        # NOTE: Kaplanis data is in GRCh37
+        import_kaplanis_data(overwrite=overwrite, liftover=liftover_b38)
 
     fu_ht = hl.read_table(fu_ht_path, _n_partitions=n_partitions)
     kap_ht = hl.read_table(kaplanis_ht_path, _n_partitions=n_partitions)
