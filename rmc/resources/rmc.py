@@ -110,7 +110,29 @@ Table contains constraint-related annotations, including observed variant counts
 expected variant counts, probability of mutation, CpG status, gnomAD exome coverage,
 and methylation level.
 
-v2.1.1 schema:
+v4.1 schema:
+----------------------------------------
+Row fields:
+    'locus': locus<GRCh38>
+    'alleles': array<str>
+    'context': str
+    'ref': str
+    'alt': str
+    'methylation_level': int32
+    'cpg': bool
+    'mutation_type': str
+    'annotation': str
+    'modifier': str
+    'coverage': int32
+    'transcript': str
+    'expected': float64
+    'coverage_correction': float64 # TODO: I'm assuming this will exist; will need to update if not
+    'observed': int32
+----------------------------------------
+Key: ['locus', 'alleles']
+----------------------------------------
+
+v2.1.1 schema: same as above, but in GRCh37 and with the additional global fields:
 ----------------------------------------
 Global fields:
     'plateau_models': struct {
@@ -126,25 +148,6 @@ Global fields:
         float64,
         float64
     )
-----------------------------------------
-Row fields:
-    'locus': locus<GRCh37>
-    'alleles': array<str>
-    'context': str
-    'ref': str
-    'alt': str
-    'methylation_level': int32
-    'cpg': bool
-    'mutation_type': str
-    'annotation': str
-    'modifier': str
-    'coverage': int32
-    'transcript': str
-    'expected': float64
-    'coverage_correction': float64
-    'observed': int32
-----------------------------------------
-Key: ['locus', 'alleles']
 ----------------------------------------
 
 Used to create the constraint prep Table.
@@ -165,30 +168,34 @@ Locus-level Table used in first step of regional constraint calculation.
 
 Filtered to only one specific coding variant consequence but contains all canonical, protein-coding transcripts.
 
-v2.1.1 schema:
+v4.1 schema:
 ----------------------------------------
 Global fields:
     'plateau_models': struct {
         total: dict<bool, array<float64>>
     }
-    'plateau_x_models': struct {
-        total: dict<bool, array<float64>>
-    }
-    'plateau_y_models': struct {
-        total: dict<bool, array<float64>>
-    }
-    'coverage_model': tuple (
+    'coverage_model': tuple ( # TODO: update if this doesn't exist
         float64,
         float64
     )
 ----------------------------------------
 Row fields:
-    'locus': locus<GRCh37>
+    'locus': locus<GRCh38>
     'section': str
     'observed': int32
     'expected': float64
 ----------------------------------------
 Key: ['locus', 'section']
+----------------------------------------
+
+v2.1.1 schema: same as above, but in GRCh37 and with the additional globals
+----------------------------------------
+Global fields:
+    'plateau_x_models': struct {
+        total: dict<bool, array<float64>>
+    }
+    'plateau_y_models': struct {
+        total: dict<bool, array<float64>>
 ----------------------------------------
 
 NOTE: The content of the v2.1.1 freeze 1 HT for RMC is slightly different:
