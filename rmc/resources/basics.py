@@ -29,7 +29,7 @@ LOGGING_PATH = f"{RMC_PREFIX}/logs"
 Path to bucket for hail logs.
 """
 
-TEMP_PATH = f"{RMC_PREFIX}/temp-30day"
+TEMP_PATH = f"{RMC_PREFIX}/temp"
 """
 Path to bucket for temporary files.
 
