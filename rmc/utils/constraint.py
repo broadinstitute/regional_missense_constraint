@@ -5,7 +5,6 @@ from typing import List, Set, Tuple, Union
 
 import hail as hl
 import scipy
-from gnomad.resources.grch37.gnomad import coverage, public_release
 from gnomad.resources.grch37.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
@@ -56,6 +55,7 @@ from rmc.utils.generic import (
     get_annotations_from_context_ht_vep,
     get_constraint_transcripts,
     get_coverage_correction_expr,
+    get_gnomad_public_release,
     get_ref_aa,
     import_clinvar,
     import_de_novo_variants,
@@ -105,14 +105,7 @@ def add_obs_annotation(
     :return: Table with observed variant annotation.
     """
     logger.info("Adding observed annotation...")
-    gnomad_ht = public_release(gnomad_data_type).ht()
-    gnomad_cov = coverage(gnomad_data_type).ht()
-    gnomad_ht = gnomad_ht.select(
-        "filters",
-        ac=gnomad_ht.freq[0].AC,
-        af=gnomad_ht.freq[0].AF,
-        gnomad_coverage=gnomad_cov[gnomad_ht.locus].median,
-    )
+    gnomad_ht = get_gnomad_public_release(gnomad_data_type)
     gnomad_ht = gnomad_ht.filter(
         keep_criteria(
             gnomad_ht.ac, gnomad_ht.af, gnomad_ht.filters, gnomad_ht.gnomad_coverage
