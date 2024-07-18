@@ -5,7 +5,7 @@ from typing import List, Set, Tuple, Union
 
 import hail as hl
 import scipy
-from gnomad.resources.grch37.reference_data import vep_context
+from gnomad.resources.grch38.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.constraint import (
     annotate_with_mu,
