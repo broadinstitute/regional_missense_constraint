@@ -12,9 +12,7 @@ from gnomad.utils.constraint import (
     compute_expected_variants,
     count_variants_by_group,
 )
-from gnomad.utils.file_utils import file_exists
-
-# check_file_exists_raise_error,
+from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
 from gnomad_constraint.resources.resource_utils import get_models, get_mutation_ht
 
 from rmc.resources.basics import (
@@ -1042,10 +1040,13 @@ def merge_round_no_break_ht(
         is_breakpoint_only=False,
         freeze=freeze,
     )
-    if not file_exists(single_no_break_path):
-        raise DataException(
+    check_file_exists_raise_error(
+        single_no_break_path,
+        error_if_not_exists=True,
+        error_if_not_exists_msg=(
             f"No table found at {single_no_break_path}. Please double-check!"
-        )
+        ),
+    )
     ht = hl.read_table(single_no_break_path)
 
     # Check that all fields in `keep_annotations` are in the table
@@ -1236,8 +1237,11 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
         transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe)
     )
 
-    if not file_exists(rmc_results.versions[freeze].path):
-        raise DataException("Merged RMC results table does not exist!")
+    check_file_exists_raise_error(
+        rmc_results.versions[freeze].path,
+        error_if_not_exists=True,
+        error_if_not_exists_msg="Merged RMC results table does not exist!",
+    )
     rmc_ht = rmc_results.versions[freeze].ht().key_by("interval")
     ht = ht.annotate(
         section_oe=rmc_ht.index(ht.locus, all_matches=True)
