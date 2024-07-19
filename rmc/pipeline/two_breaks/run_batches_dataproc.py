@@ -4,9 +4,6 @@ This script searches for two simultaneous breaks in groups of transcripts using 
 This script should be run only on transcripts that are greater than or equal
 to the --transcript-len-threshold specified in `prepare_transcripts.py` if these transcripts are too slow or getting preempted in Hail Batch.
 Transcripts smaller than --transcript-len-threshold  should be run using `run_batches.py` as they run quickly and inexpensively in Hail Batch.
-
-If using this step to run TTN, use a large autoscaling cluster (highmem-8, scales to 100 preemptibles).
-Otherwise, an autoscaling cluster of highmem-8s that scales to 50 preemptibles should suffice.
 """
 import argparse
 import logging
