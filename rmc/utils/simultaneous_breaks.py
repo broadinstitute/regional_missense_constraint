@@ -4,7 +4,7 @@ from typing import List
 
 import hail as hl
 import scipy
-from gnomad.utils.file_utils import file_exists, parallel_file_exists
+from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
@@ -158,7 +158,6 @@ def split_sections_by_len(
 def get_sections_to_run(
     sections: List[str],
     search_num: int,
-    in_parallel: bool = True,
     freeze: int = CURRENT_FREEZE,
 ) -> List[str]:
     """
@@ -170,8 +169,6 @@ def get_sections_to_run(
     :param List[str] sections: List of transcripts/transcript sections to check.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
-    :param bool in_parallel: Whether to check if successful file exist in parallel.
-        If True, must be run locally and not in Dataproc. Default is True.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
     :return: List of transcripts/sections that didn't have success TSVs and therefore still need to be processed.
     """
@@ -186,18 +183,9 @@ def get_sections_to_run(
     for section in sections:
         section_success_map[section] = f"{success_file_path}/{section}.tsv"
 
-    if in_parallel:
-        # Use parallel_file_exists if in_parallel is set to True
-        success_tsvs_exist = parallel_file_exists(list(section_success_map.values()))
-        for section in sections:
-            if not success_tsvs_exist[section_success_map[section]]:
-                sections_to_run.append(section)
-    else:
-        # Otherwise, use `file_exists`
-        for section in sections:
-            if not file_exists(section_success_map[section]):
-                sections_to_run.append(section)
-
+    for section in sections:
+        if not file_exists(section_success_map[section]):
+            sections_to_run.append(section)
     return sections_to_run
 
 
