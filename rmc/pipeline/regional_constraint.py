@@ -7,11 +7,16 @@ from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
     LOGGING_PATH,
-    SINGLE_BREAK_TEMP_PATH,
+    MODEL_PREFIX,
     TEMP_PATH_WITH_FAST_DEL,
     TEMP_PATH_WITH_SLOW_DEL,
 )
-from rmc.resources.resource_utils import MISSENSE, NONSENSES, SYNONYMOUS
+from rmc.resources.resource_utils import (
+    CURRENT_GNOMAD_VERSION,
+    MISSENSE,
+    NONSENSES,
+    SYNONYMOUS,
+)
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
     P_VALUE,
@@ -54,9 +59,8 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
-            logger.warning("Code currently only processes b37 data!")
             logger.info("Creating filtered context HT...")
-            n_partitions = 30000
+            n_partitions = 10000
             create_filtered_context_ht(
                 n_partitions=args.n_partitions if args.n_partitions else n_partitions,
                 overwrite=args.overwrite_temp,
@@ -107,8 +111,7 @@ def main(args):
                 " significant break..."
             )
             if args.search_num == 1:
-                # TODO: Move existing HT to a different path so this can be remade
-                all_loci_chisq_ht_path = f"{SINGLE_BREAK_TEMP_PATH}/all_loci_chisq.ht"
+                all_loci_chisq_ht_path = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{args.freeze}/constraint_prep.ht"
                 if file_exists(all_loci_chisq_ht_path) and not args.save_chisq_ht:
                     logger.info("Reading in all loci chisq HT...")
                     ht = hl.read_table(all_loci_chisq_ht_path)
