@@ -599,9 +599,7 @@ def main(args):
 
     if not args.docker_image:
         logger.info("Picking default docker image...")
-        args.docker_image = (
-            "us-central1-docker.pkg.dev/hailgenetics/hail:0.2.132-py3.10"
-        )
+        args.docker_image = "hailgenetics/hail:0.2.132-py3.11"
         # NOTE: Python version on your local machine must match the Python version in this image
         logger.warning(
             "Using %s image; please make sure Hail and Python versions in image are"
