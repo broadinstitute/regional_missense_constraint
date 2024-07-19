@@ -166,7 +166,7 @@ def get_sections_to_run(
     .. note::
         This step needs to be run locally due to permissions involved with `parallel_file_exists`.
 
-    :param List[str] sections: List of transcripts/transcript sections to check.
+    :param sections: List of transcripts/transcript sections to check.
     :param search_num: Search iteration number
         (e.g., second round of searching for single break would be 2).
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
@@ -205,13 +205,13 @@ def calculate_window_chisq(
 
     Chi square formula: 2 * (hl.log(total_alt) - hl.log(total_null))
 
-    :param hl.expr.Int32Expression max_idx: Largest list index value.
-    :param hl.expr.Int32Expression i: Smaller list index value corresponding to the smaller position of the two break window.
-    :param hl.expr.Int32Expression j: Larger list index value corresponding to the larger position of the two break window.
-    :param hl.expr.ArrayExpression cum_obs: List containing cumulative observed missense values.
-    :param hl.expr.ArrayExpression cum_exp: List containing cumulative expected missense values.
-    :param hl.expr.Float64Expression section_oe: Transcript/transcript section overall observed/expected (OE) missense ratio.
-    :param hl.expr.Float64Expression min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
+    :param max_idx: Largest list index value.
+    :param i: Smaller list index value corresponding to the smaller position of the two break window.
+    :param j: Larger list index value corresponding to the larger position of the two break window.
+    :param cum_obs: List containing cumulative observed missense values.
+    :param cum_exp: List containing cumulative expected missense values.
+    :param section_oe: Transcript/transcript section overall observed/expected (OE) missense ratio.
+    :param min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
     :return: Chi square significance value.
     """
