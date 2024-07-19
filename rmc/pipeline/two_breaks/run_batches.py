@@ -429,6 +429,7 @@ def process_section_group(
         },
         tmp_dir=TEMP_PATH_WITH_FAST_DEL,
     )
+    hl.default_reference("GRCh38")
     ht = hl.read_table(ht_path)
     ht = ht.filter(hl.literal(section_group).contains(ht.section))
 
@@ -556,6 +557,7 @@ def main(args):
         log="search_for_two_breaks_run_batches.log",
         tmp_dir=TEMP_PATH_WITH_FAST_DEL,
     )
+    hl.default_reference("GRCh38")
 
     chisq_threshold = hl.eval(hl.qchisqtail(P_VALUE, 2))
     if args.p_value:

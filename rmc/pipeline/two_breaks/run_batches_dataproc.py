@@ -42,6 +42,7 @@ def main(args):
             ),
             tmp_dir=TEMP_PATH_WITH_FAST_DEL,
         )
+        hl.default_reference("GRCh38")
 
         chisq_threshold = hl.eval(hl.qchisqtail(P_VALUE, 2))
         if args.p_value:

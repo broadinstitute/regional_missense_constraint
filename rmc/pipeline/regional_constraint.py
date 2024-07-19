@@ -59,6 +59,7 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
+            hl.default_reference("GRCh38")
             logger.info("Creating filtered context HT...")
             n_partitions = 10000
             create_filtered_context_ht(
@@ -72,6 +73,7 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
+            hl.default_reference("GRCh38")
             logger.info("Creating constraint prep HT...")
             # Constraint prep HT is filtered to missense variants by default
             # Use these args to run constraint prep on other variant consequences
@@ -101,6 +103,7 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
+            hl.default_reference("GRCh38")
             chisq_threshold = hl.eval(hl.qchisqtail(P_VALUE, 1))
             if args.p_value:
                 chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 1))
@@ -226,6 +229,7 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
+            hl.default_reference("GRCh38")
             # Get locus input to this simultaneous break search round from single search no-break HT
             single_no_break_ht = hl.read_table(
                 single_search_round_ht_path(
@@ -372,6 +376,7 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
+            hl.default_reference("GRCh38")
             logger.info("Checking round paths...")
             round_nums = check_break_search_round_nums(args.freeze)
 
