@@ -16,7 +16,7 @@ from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
 from gnomad_constraint.resources.resource_utils import get_models, get_mutation_ht
 
 from rmc.resources.basics import (
-    SINGLE_BREAK_TEMP_PATH,
+    MODEL_PREFIX,
     TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
     TEMP_PATH_WITH_SLOW_DEL,
@@ -31,7 +31,11 @@ from rmc.resources.reference_data import (
     transcript_cds,
     transcript_ref,
 )
-from rmc.resources.resource_utils import KEEP_CODING_CSQ, MISSENSE
+from rmc.resources.resource_utils import (
+    CURRENT_GNOMAD_VERSION,
+    KEEP_CODING_CSQ,
+    MISSENSE,
+)
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
     FINAL_ANNOTATIONS,
@@ -714,7 +718,9 @@ def search_for_break(
         f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_round{search_num}_all_loci_chisq.ht"
     )
     if save_chisq_ht:
-        all_loci_chisq_ht_path = f"{SINGLE_BREAK_TEMP_PATH}/all_loci_chisq.ht"
+        all_loci_chisq_ht_path = (
+            f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/constraint_prep.ht"
+        )
     ht = ht.checkpoint(all_loci_chisq_ht_path, overwrite=True)
 
     ht = annotate_max_chisq_per_section(ht, freeze)
