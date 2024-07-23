@@ -196,6 +196,7 @@ Global fields:
     }
     'plateau_y_models': struct {
         total: dict<bool, array<float64>>
+}
 'coverage_model': tuple (
          float64,
          float64
