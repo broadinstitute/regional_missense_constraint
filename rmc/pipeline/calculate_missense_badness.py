@@ -28,6 +28,7 @@ def main(args):
     try:
         if args.command == "prepare-ht":
             hl.init(log="/calc_misbad_prep_context_gamma_ht.log", tmp_dir=temp_dir)
+            # TODO: Add support for outlier transcript filtering if desired
             prepare_amino_acid_ht(
                 overwrite_temp=args.overwrite_temp,
                 do_k_fold_training=args.do_k_fold_training,
