@@ -217,9 +217,10 @@ def get_aa_from_context(
     :return: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
     """
     logger.info(
-        "Reading in VEP context HT and filtering to coding effects in non-outlier"
-        " canonical transcripts..."
+        "Reading in VEP context HT and filtering to coding effects in canonical"
+        " transcripts..."
     )
+    # TODO: Add option to filter to non-outliers if still desired
     # Drop globals and select only VEP transcript consequences field
     ht = process_context_ht().select_globals()
     ht = ht.select("transcript_consequences")
