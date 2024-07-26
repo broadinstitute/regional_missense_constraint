@@ -823,7 +823,7 @@ def import_kaplanis_data(overwrite: bool, liftover: bool = True) -> None:
         case_control=hl.agg.collect(kap_ht.case_control)
     )
     if liftover:
-        logger.info("Lifting data from b38 to b37...")
+        logger.info("Lifting data from b37 to b38...")
         kap_ht = default_lift_data(kap_ht)
     kap_ht.write(f"{TEMP_PATH_WITH_FAST_DEL}/kaplanis_dn.ht", overwrite=overwrite)
 
