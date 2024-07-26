@@ -279,7 +279,7 @@ cadd = VersionedTableResource(
     default_version="GRCh37",
     versions={
         "GRCh37": TableResource(
-            path=f"gs://seqr-reference-data/{CURRENT_BUILD}/CADD/CADD_snvs_and_indels.v1.6.ht"
+            path=f"gs://seqr-reference-data/GRCh37/CADD/CADD_snvs_and_indels.v1.6.ht"
         ),
         "GRCh38": TableResource(
             path="gs://gcp-public-data--gnomad/resources/grch38/CADD-v1.6-SNVs.ht"
