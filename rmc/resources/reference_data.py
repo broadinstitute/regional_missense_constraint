@@ -60,15 +60,62 @@ transcript_ref = VersionedTableResource(
         "GRCh37": TableResource(
             path=f"{get_ref_data_prefix('GRCh37')}/ht/canonical_transcripts_genes_coordinates.ht"
         ),
-        # TODO: Add when GRCh38 table has been created
+        "GRCh38": TableResource(
+            path=f"{get_ref_data_prefix('GRCh38')}/ht/canonical_transcripts_genes_coordinates.ht"
+        ),
     },
 )
 """
 Table containing canonical transcripts with key reference info:
 
-gene name from gnomAD annotations, gene name from GENCODE version (v19 for gnomAD v2.1.1),
-Ensembl gene ID, overall and CDS start and end
-coordinates from gnomAD annotations, and transcript strand.
+GRCh38 schema:
+```
+----------------------------------------
+Global fields:
+    'annotations': struct {
+        canonical_transcript: struct {},
+        mane_select_transcript: struct {
+            version: str
+        }
+    }
+----------------------------------------
+Row fields:
+    'transcript': str
+    'chrom': str
+    'transcript_start': int32
+    'transcript_end': int32
+    'cds_start': int32
+    'cds_end': int32
+    'strand': str
+    'gencode_symbol': str
+    'hgnc_symbol': str
+    'transcript_version': str
+----------------------------------------
+Key: ['transcript']
+----------------------------------------
+```
+
+GRCh37 schema:
+```
+----------------------------------------
+Global fields:
+
+----------------------------------------
+Row fields:
+    'transcript': str
+    'gencode_gene': str
+    'gencode_gene_id': str
+    'gnomad_gene': str
+    'chr': str
+    'gnomad_transcript_start': int32
+    'gnomad_transcript_end': int32
+    'gnomad_cds_start': int32
+    'gnomad_cds_end': int32
+    'strand': str
+----------------------------------------
+Key: ['transcript']
+----------------------------------------
+```
 """
 
 transcript_cds = VersionedTableResource(
@@ -77,11 +124,33 @@ transcript_cds = VersionedTableResource(
         "GRCh37": TableResource(
             path=f"{get_ref_data_prefix('GRCh37')}/ht/b37_cds_coords.ht"
         ),
-        # TODO: Add when GRCh38 table has been created
+        "GRCh38": TableResource(
+            path=f"{get_ref_data_prefix('GRCh38')}/ht/b38_cds_coords.ht"
+        ),
     },
 )
 """
 Table containing coordinates for coding parts of transcripts excluding introns and UTRs.
+
+GRCh38 schema:
+```
+----------------------------------------
+File Type: Table
+    Partitions: 1
+    Rows: 195434
+    Empty partitions: 0
+----------------------------------------
+Global fields:
+
+----------------------------------------
+Row fields:
+    'transcript': str
+    'interval': interval<locus<grch38>>
+----------------------------------------
+Key: ['interval', 'transcript']
+----------------------------------------
+```
+GRCh37 schema is the same but with `locus<grch37>`.
 """
 
 
