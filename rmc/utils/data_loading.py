@@ -3,6 +3,7 @@ import logging
 from typing import List
 
 import hail as hl
+from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
 from gnomad.utils.filtering import filter_to_clinvar_pathogenic
 from gnomad.utils.liftover import default_lift_data
@@ -19,6 +20,7 @@ from rmc.resources.reference_data import (
     haplo_genes_path,
     ndd_de_novo,
     ndd_de_novo_2020_tsv_path,
+    transcript_cds,
     transcript_ref,
     triplo_genes_path,
 )
@@ -36,9 +38,78 @@ logger.setLevel(logging.INFO)
 ####################################################################################
 
 
+def create_transcript_cds(
+    ht: hl.Table,
+    build: str = CURRENT_BUILD,
+) -> None:
+    """
+    Create transcript reference Table with CDS annotations.
+
+    .. note ::
+        - This function was written to create the GRCh38 Table only;
+            the GRCh37 HT was created using code in a notebook.
+
+    :param ht: Filtered gene model Table.
+    :param build: Reference genome build. Default is CURRENT_BUILD.
+    :return: None; writes Table to resource path.
+    """
+    ht = ht.transmute(
+        interval=hl.parse_locus_interval(
+            hl.format(
+                "[%s:%s-%s]",
+                ht.chrom,
+                ht.exons.start,
+                ht.exons.stop,
+            ),
+            reference_genome=build,
+        )
+    )
+    ht = ht.key_by("interval", "transcript").select()
+    ht.write(transcript_cds.versions[build].path, overwrite=True)
+
+
+def get_start_end_coords(ht: hl.Table, overwrite: bool = True) -> hl.Table:
+    """
+    Get overall and CDS start/end coordinates for each transcript.
+
+    Function also gets coordinates of each CDS interval and optionally creates
+    `transcript_cds` resource.
+
+    :param ht: Filtered gene model Table.
+    :param overwrite: Whether to overwrite `transcript_cds` resource.
+    :return: Table with transcript and CDS start/end coordinates.
+    """
+    # Drop unnecessary annotations
+    ht = ht.select("start", "stop", "exons")
+
+    # Explode exon annotation to get CDS intervals
+    ht = ht.explode("exons")
+    ht = ht.filter(ht.exons.feature_type == "CDS")
+
+    if not file_exists(transcript_cds.versions[CURRENT_BUILD].path):
+        if not overwrite:
+            raise DataException(
+                "`overwrite` is False, but `transcript_cds` does not exist!"
+            )
+        # Create `transcript_cds` resource with filtered table
+        create_transcript_cds(ht)
+
+    # Group by transcript and aggregate start/end coordinates
+    ht = ht.group_by("transcript").aggregate(
+        transcript_start=hl.agg.take(ht.start, 1)[0],
+        transcript_end=hl.agg.take(ht.stop, 1)[0],
+        cds_start=hl.agg.min(ht.exons.start),
+        cds_end=hl.agg.max(ht.exons.stop),
+    )
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/transcript_coords.ht", overwrite=True
+    )
+    return ht
+
+
 def create_transcript_ref(
     build: str = CURRENT_BUILD,
-    annotations: List[str] = [
+    start_annotations: List[str] = [
         "chrom",
         "start",
         "stop",
@@ -46,9 +117,23 @@ def create_transcript_ref(
         "exons",
         "gencode_symbol",
     ],
+    final_annotations: List[str] = [
+        "chrom",
+        "transcript_start",
+        "transcript_stop",
+        "cds_start",
+        "cds_end",
+        "strand",
+        "gencode_symbol",
+        "hgnc_symbol",
+        "transcript_version",
+    ],
+    overwrite: bool = True,
 ) -> None:
     """
     Create transcript reference Table.
+
+    Function also optionally creates `transcript_cds` resource.
 
     .. note ::
         - This function was written to create the GRCh38 Table only;
@@ -57,8 +142,11 @@ def create_transcript_ref(
             are present at top level of gene model HT.
 
     :param build: Reference genome build. Default is CURRENT_BUILD.
-    :param annotations: List of annotations to include in Table.
+    :param start_annotations: List of non-keyed annotations to select from gene model Table.
         Default is ["chrom", "start", "stop", "strand", "exons", "gencode_symbol", "hgnc_symbol", "transcript_version"].
+    :param final_annotations: List of non-keyed annotations to keep in final Table.
+        Default is ["chrom", "transcript_start", "transcript_stop", "cds_start", "cds_end", "strand", "gencode_symbol", "hgnc_symbol", "transcript_version"].
+    :param overwrite: Whether to overwrite `transcript_ref` resource. Default is True.
     :return: None; writes Table to resource path.
     """
     ht = gene_model.versions[build].ht()
@@ -75,7 +163,16 @@ def create_transcript_ref(
         hgnc_symbol=ht.symbol,
     )
     ht = ht.annotate(transcript_version=ht.transcripts[0].transcript_version)
-    ht = ht.select(*annotations)
+    ht = ht.select(*start_annotations)
+    ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/gene_model_filt.ht", overwrite=True)
+
+    # Remove non-standard contigs
+    contigs = hl.get_reference(build).contigs[:24]
+    ht = ht.filter(contigs.contains(ht.chrom))
+
+    coords_ht = get_start_end_coords(ht, overwrite)
+    ht = ht.annotate(**coords_ht[ht.transcript])
+    ht = ht.select(*final_annotations)
     ht.write(transcript_ref.versions[build].path, overwrite=True)
 
 
