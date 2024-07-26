@@ -182,18 +182,21 @@ List of triplosensitive genes was determined by filtering to genes with pTriplo 
 ## Assessment related resources
 ####################################################################################
 clinvar = VersionedTableResource(
-    default_version="GRCh37",
+    default_version="GRCh38",
     versions={
         "GRCh37": TableResource(
             path=f"{get_ref_data_prefix('GRCh37')}/ht/clinvar.GRCh37.ht"
         ),
-        # TODO: Add when GRCh38 table has been created
+        "GRCh38": TableResource(
+            path="gs://seqr-reference-data/v03/GRCh38/SNV_INDEL/reference_datasets/combined.ht"
+        ),
     },
 )
 """
 Table of ClinVar variants.
 
 GRCh37 HT corresponds to 20230305 ClinVar release.
+GRCh38 HT is maintained by seqr team and is periodically updated.
 """
 
 clinvar_plp_mis_haplo = VersionedTableResource(
