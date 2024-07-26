@@ -1,5 +1,6 @@
 """Utilities for loading resource data."""
 import logging
+from typing import List
 
 import hail as hl
 from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
@@ -14,9 +15,11 @@ from rmc.resources.reference_data import (
     clinvar_plp_mis_triplo,
     dosage_ht,
     dosage_tsv_path,
+    gene_model,
     haplo_genes_path,
     ndd_de_novo,
     ndd_de_novo_2020_tsv_path,
+    transcript_ref,
     triplo_genes_path,
 )
 from rmc.resources.resource_utils import CURRENT_BUILD, MISSENSE
@@ -27,6 +30,53 @@ logging.basicConfig(
 )
 logger = logging.getLogger("data_loading_utils")
 logger.setLevel(logging.INFO)
+
+####################################################################################
+## Transcript utils
+####################################################################################
+
+
+def create_transcript_ref(
+    build: str = CURRENT_BUILD,
+    annotations: List[str] = [
+        "chrom",
+        "start",
+        "stop",
+        "strand",
+        "exons",
+        "gencode_symbol",
+    ],
+) -> None:
+    """
+    Create transcript reference Table.
+
+    .. note ::
+        - This function was written to create the GRCh38 Table only;
+            the GRCh37 HT was created using code in a notebook.
+        - Assumes all `annotations` (except `hgnc_symbol` and `transcript_version`)
+            are present at top level of gene model HT.
+
+    :param build: Reference genome build. Default is CURRENT_BUILD.
+    :param annotations: List of annotations to include in Table.
+        Default is ["chrom", "start", "stop", "strand", "exons", "gencode_symbol", "hgnc_symbol", "transcript_version"].
+    :return: None; writes Table to resource path.
+    """
+    ht = gene_model.versions[build].ht()
+
+    # Key by canonical transcript ID
+    # NOTE: All MANE select transcripts in VEP105/GENCODE39 are canonical
+    # (but not all canonical are MANE select)
+    ht = ht.key_by(transcript=ht.canonical_transcript_id)
+
+    # Filter transcript row annotation to canonical transcripts,
+    # rename symbol to hgnc_symbol, and annotate with transcript version
+    ht = ht.transmute(
+        transcripts=ht.transcripts.filter(lambda x: x.transcript_id == ht.transcript),
+        hgnc_symbol=ht.symbol,
+    )
+    ht = ht.annotate(transcript_version=ht.transcripts[0].transcript_version)
+    ht = ht.select(*annotations)
+    ht.write(transcript_ref.versions[build].path, overwrite=True)
 
 
 ####################################################################################
