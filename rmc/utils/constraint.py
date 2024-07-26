@@ -48,6 +48,7 @@ from rmc.resources.rmc import (
     single_search_bucket_path,
     single_search_round_ht_path,
 )
+from rmc.utils.data_loading import import_clinvar, import_de_novo_variants
 from rmc.utils.generic import (
     filter_context_using_gnomad,
     filter_to_region_type,
@@ -57,8 +58,6 @@ from rmc.utils.generic import (
     get_constraint_transcripts,
     get_coverage_correction_expr,
     get_ref_aa,
-    import_clinvar,
-    import_de_novo_variants,
     keep_criteria,
     process_context_ht,
     process_vep,
