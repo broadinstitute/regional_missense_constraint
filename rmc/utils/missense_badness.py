@@ -61,7 +61,9 @@ def prepare_amino_acid_ht(
     """
     logger.info("Reading in VEP context HT...")
     # NOTE: Keeping all variant types here because need synonymous and nonsense variants to calculate missense badness
-    # Filter to non-outlier transcripts for missense badness calculation
+    # NOTE: v2 filtered to non-outlier transcripts here for missense badness calculation
+    # However, `process_context_ht` no longer supports outlier transcript filtering;
+    # will need to add filtering logic if still desired
     context_ht = process_context_ht(filter_csq=KEEP_CODING_CSQ)
 
     logger.info("Selecting relevant annotations...")
