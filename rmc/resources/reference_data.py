@@ -188,7 +188,6 @@ clinvar = VersionedTableResource(
             path=f"{get_ref_data_prefix('GRCh37')}/ht/clinvar.GRCh37.ht"
         ),
         "GRCh38": TableResource(
-            # TODO: Import ClinVar data when we are ready to do so and write to this path
             path=f"{get_ref_data_prefix('GRCh38')}/ht/clinvar.GRCh38.ht"
         ),
     },
@@ -197,6 +196,7 @@ clinvar = VersionedTableResource(
 Table of ClinVar variants.
 
 GRCh37 HT corresponds to 20230305 ClinVar release.
+# TODO: Add GRCh38 version when HT has been imported.
 ```
 """
 

@@ -2,7 +2,7 @@
 import logging
 
 import hail as hl
-from gnomad.utils.file_utils import file_exists
+from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
 from gnomad.utils.filtering import filter_to_clinvar_pathogenic
 from gnomad.utils.liftover import default_lift_data
 
@@ -19,7 +19,7 @@ from rmc.resources.reference_data import (
     ndd_de_novo_2020_tsv_path,
     triplo_genes_path,
 )
-from rmc.resources.resource_utils import MISSENSE
+from rmc.resources.resource_utils import CURRENT_BUILD, MISSENSE
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -79,7 +79,12 @@ def import_dosage(
     )
 
 
-def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
+def import_clinvar(
+    overwrite: bool,
+    missense_str: str = MISSENSE,
+    build: str = CURRENT_BUILD,
+    min_partitions: int = 1000,
+) -> None:
     """
     Import ClinVar HT and pathogenic/likely pathogenic missense variants.
 
@@ -87,11 +92,15 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
     and triplosensitive genes.
 
     .. note::
-        This function currently only works for build GRCh37.
+        This function assumes that the ClinVar VCF has been added to the path
+        f"{TEMP_PATH_WITH_FAST_DEL}/clinvar.tsv.gz".
 
     :param bool overwrite: Whether to overwrite output data.
     :param missense_str: String that corresponds to missense variant consequence.
         Default is MISSENSE.
+    :param build: Reference genome build. Default is CURRENT_BUILD.
+    :param min_partitions: Number of minimum partitions desired for ClinVar HT. Only used if importing ClinVar data from VCF.
+        Default is 1000.
     :return: None; writes HTs and HEs to resource paths.
     """
     if (
@@ -99,9 +108,25 @@ def import_clinvar(overwrite: bool, missense_str: str = MISSENSE) -> None:
         or not file_exists(clinvar_plp_mis_triplo.path)
         or overwrite
     ):
-        logger.info("Reading in ClinVar HT...")
-        ht = clinvar.ht()
-        logger.info("Filtering to P/LP missense variants...")
+        logger.info("Importing ClinVar VCF and filtering to P/LP missense...")
+        clinvar_vcf_path = f"{TEMP_PATH_WITH_FAST_DEL}/clinvar.tsv.gz"
+        check_file_exists_raise_error(
+            clinvar_vcf_path,
+            error_if_not_exists=True,
+            error_if_not_exists_msg=(
+                f"ClinVar VCF not found at {clinvar_vcf_path}. Please import and try"
+                " again!"
+            ),
+        )
+        ht = hl.import_vcf(
+            clinvar_vcf_path,
+            min_partitions=min_partitions,
+            drop_samples=True,
+            force_bgz=True,
+            reference_genome=build,
+            skip_invalid_loci=True,
+        )
+        ht = ht.checkpoint(clinvar.versions[build].path, overwrite=True)
         ht = filter_to_clinvar_pathogenic(ht)
         ht = ht.annotate(mc=ht.info.MC)
         ht = ht.filter(ht.mc.any(lambda x: x.contains(missense_str)))
