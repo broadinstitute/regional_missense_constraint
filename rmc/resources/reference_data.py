@@ -198,6 +198,30 @@ Table of ClinVar variants.
 GRCh37 HT corresponds to 20230305 ClinVar release.
 GRCh38 HT is maintained by seqr team and is periodically updated. The version is stored in the globals, e.g.:
 `ht.versions.clinvar.show()`
+Current GRCh38 HT schema:
+```
+ht.clinvar.describe()
+--------------------------------------------------------
+Type:
+        struct {
+        alleleId: int32,
+        conflictingPathogenicities: array<struct {
+            pathogenicity_id: int32,
+            count: int32
+        }>,
+        goldStars: int32,
+        submitters: array<str>,
+        conditions: array<str>,
+        pathogenicity_id: int32,
+        assertion_ids: array<int32>
+    }
+--------------------------------------------------------
+Source:
+    <hail.table.Table object at 0x151c28490>
+Index:
+    ['row']
+--------------------------------------------------------
+```
 """
 
 clinvar_plp_mis_haplo = VersionedTableResource(
