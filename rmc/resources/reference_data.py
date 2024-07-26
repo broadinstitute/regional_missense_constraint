@@ -188,7 +188,8 @@ clinvar = VersionedTableResource(
             path=f"{get_ref_data_prefix('GRCh37')}/ht/clinvar.GRCh37.ht"
         ),
         "GRCh38": TableResource(
-            path="gs://seqr-reference-data/v03/GRCh38/SNV_INDEL/reference_datasets/combined.ht"
+            # TODO: Import ClinVar data when we are ready to do so and write to this path
+            path=f"{get_ref_data_prefix('GRCh38')}/ht/clinvar.GRCh38.ht"
         ),
     },
 )
@@ -196,31 +197,6 @@ clinvar = VersionedTableResource(
 Table of ClinVar variants.
 
 GRCh37 HT corresponds to 20230305 ClinVar release.
-GRCh38 HT is maintained by seqr team and is periodically updated. The version is stored in the globals, e.g.:
-`ht.versions.clinvar.show()`
-Current GRCh38 HT schema:
-```
-ht.clinvar.describe()
---------------------------------------------------------
-Type:
-        struct {
-        alleleId: int32,
-        conflictingPathogenicities: array<struct {
-            pathogenicity_id: int32,
-            count: int32
-        }>,
-        goldStars: int32,
-        submitters: array<str>,
-        conditions: array<str>,
-        pathogenicity_id: int32,
-        assertion_ids: array<int32>
-    }
---------------------------------------------------------
-Source:
-    <hail.table.Table object at 0x151c28490>
-Index:
-    ['row']
---------------------------------------------------------
 ```
 """
 
