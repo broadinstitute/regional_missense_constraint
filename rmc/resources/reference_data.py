@@ -196,7 +196,8 @@ clinvar = VersionedTableResource(
 Table of ClinVar variants.
 
 GRCh37 HT corresponds to 20230305 ClinVar release.
-GRCh38 HT is maintained by seqr team and is periodically updated.
+GRCh38 HT is maintained by seqr team and is periodically updated. The version is stored in the globals, e.g.:
+`ht.versions.clinvar.show()`
 """
 
 clinvar_plp_mis_haplo = VersionedTableResource(
