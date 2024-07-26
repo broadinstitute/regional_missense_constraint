@@ -115,6 +115,7 @@ def create_transcript_ref(
         "stop",
         "strand",
         "exons",
+        "gene_id",
         "gencode_symbol",
     ],
     final_annotations: List[str] = [
@@ -124,6 +125,7 @@ def create_transcript_ref(
         "cds_start",
         "cds_end",
         "strand",
+        "gene_id",
         "gencode_symbol",
         "hgnc_symbol",
         "transcript_version",
@@ -145,7 +147,7 @@ def create_transcript_ref(
     :param start_annotations: List of non-keyed annotations to select from gene model Table.
         Default is ["chrom", "start", "stop", "strand", "exons", "gencode_symbol", "hgnc_symbol", "transcript_version"].
     :param final_annotations: List of non-keyed annotations to keep in final Table.
-        Default is ["chrom", "transcript_start", "transcript_stop", "cds_start", "cds_end", "strand", "gencode_symbol", "hgnc_symbol", "transcript_version"].
+        Default is ["chrom", "transcript_start", "transcript_stop", "cds_start", "cds_end", "strand", "gene_id", "gencode_symbol", "hgnc_symbol", "transcript_version"].
     :param overwrite: Whether to overwrite `transcript_ref` resource. Default is True.
     :return: None; writes Table to resource path.
     """

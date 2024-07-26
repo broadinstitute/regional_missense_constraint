@@ -87,6 +87,7 @@ Row fields:
     'cds_start': int32
     'cds_end': int32
     'strand': str
+    'gene_id': str
     'gencode_symbol': str
     'hgnc_symbol': str
     'transcript_version': str
