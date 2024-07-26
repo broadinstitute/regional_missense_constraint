@@ -6,7 +6,7 @@ from gnomad.resources.resource_utils import (
 )
 
 from rmc.resources.basics import AMINO_ACIDS_PREFIX, get_resource_build_prefix
-from rmc.resources.resource_utils import BUILDS, CURRENT_BUILD
+from rmc.resources.resource_utils import CURRENT_BUILD
 
 
 def get_ref_data_prefix(build: str = CURRENT_BUILD) -> str:
@@ -16,8 +16,6 @@ def get_ref_data_prefix(build: str = CURRENT_BUILD) -> str:
     :param build: Reference genome build. Default is `CURRENT_BUILD`.
     :return: Path to bucket for reference data resources.
     """
-    if build not in BUILDS:
-        raise DataException(f"Invalid build: {build}. Must be one of {BUILDS}!")
     return f"{get_resource_build_prefix(build)}/reference_data"
 
 
