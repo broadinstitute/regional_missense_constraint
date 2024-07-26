@@ -197,10 +197,6 @@ Global fields:
     'plateau_y_models': struct {
         total: dict<bool, array<float64>>
     }
-    'coverage_model': tuple (
-        float64,
-        float64
-    )
 ----------------------------------------
 
 NOTE: The content of the v2.1.1 freeze 1 HT for RMC is slightly different:
