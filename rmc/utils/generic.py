@@ -142,8 +142,8 @@ def process_context_ht(
     logger.info("Reading in gene constraint preprocessed context ht...")
     # Created using
     # https://github.com/broadinstitute/gnomad-constraint/blob/0acd2815e59c04d642bb705e6d1ca166f5d79e5f/gnomad_constraint/utils/constraint.py#L78
-    # NOTE: This table is autosome-PAR only
-    # TODO: Add allosomes
+    # NOTE: The v4.1 constraint table currently only contains autosomes
+    # TODO: Add allosomes and PAR
     ht = get_preprocessed_ht("context").ht().select_globals()
 
     logger.info("Filtering to ENSEMBL transcripts only...")
