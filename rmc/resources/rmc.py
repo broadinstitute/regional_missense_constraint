@@ -6,7 +6,6 @@ MPC: Missense badness, Polyphen-2, and Constraint score
 """
 from typing import Set
 
-import hail as hl
 import scipy
 from gnomad.resources.resource_utils import (
     DataException,
@@ -18,7 +17,6 @@ from rmc.resources.basics import (
     CONSTRAINT_PREFIX,
     MODEL_PREFIX,
     MPC_PREFIX,
-    RESOURCE_PREFIX,
     SIMUL_BREAK_TEMP_PATH,
     SINGLE_BREAK_TEMP_PATH,
     TEMP_PATH,
@@ -26,14 +24,18 @@ from rmc.resources.basics import (
 from rmc.resources.reference_data import FOLD_K
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
-FREEZES = [1, 2, 3, 4, 5, 6, 7]
+FREEZES = [1]
 """
 RMC/MPC data versions computed with current gnomAD version.
+
+gnomAD v2.1.1 freezes: [1, 2, 3, 4, 5, 6, 7].
 """
 
-CURRENT_FREEZE = 7
+CURRENT_FREEZE = 1
 """
 Current RMC/MPC data version.
+
+Last gnomAD v2.1.1 freeze: 7.
 """
 
 P_VALUE = 0.001
@@ -88,67 +90,9 @@ simultaneous breaks searches.
 
 
 ####################################################################################
-## Original regional missense constraint resource files
-####################################################################################
-EXAC_PREFIX = f"{RESOURCE_PREFIX}/GRCh37/exac"
-"""
-Path to bucket containing ExAC constraint files.
-"""
-
-MUTATION_RATE_TABLE_PATH = f"{EXAC_PREFIX}/mutation_rate_table.tsv"
-"""
-Path to TSV containing ExAC mutation rates.
-"""
-
-DIVERGENCE_SCORES_TSV_PATH = f"{EXAC_PREFIX}/divsites_gencodev19_all_transcripts.txt"
-"""
-Path to text file with divergence scores per transcript.
-"""
-
-divergence_scores = TableResource(
-    path=f"{EXAC_PREFIX}/ht/div_scores.ht",
-    import_func=hl.import_table,
-    import_args={
-        "path": DIVERGENCE_SCORES_TSV_PATH,
-        "key": "transcript",
-        "min_partitions": 50,
-        "impute": True,
-    },
-)
-"""
-Table with divergence score between humans and macaques
-for each canonical transcript in Gencode v19.
-"""
-
-####################################################################################
 ## RMC-related resources
 ####################################################################################
-coverage_plateau_models_path = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{CURRENT_FREEZE}/coverage_plateau_models.he"
-"""
-Path to HailExpression containing struct for coverage correction model and plateau models.
-
-Schema:
-    struct {
-        'plateau_models': struct {
-            total: dict<bool, array<float64>>
-        }
-        'plateau_x_models': struct {
-            total: dict<bool, array<float64>>
-        }
-        'plateau_y_models': struct {
-            total: dict<bool, array<float64>>
-        }
-        'coverage_model': tuple (
-            float64,
-            float64
-        )
-    }
-
-Used to compute expected variant counts.
-"""
-
-
-# TODO: Delete current version
+# TODO: Delete v2 freeze 7 filtered context
 filtered_context = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
@@ -166,7 +110,29 @@ Table contains constraint-related annotations, including observed variant counts
 expected variant counts, probability of mutation, CpG status, gnomAD exome coverage,
 and methylation level.
 
-Schema:
+v4.1 schema:
+----------------------------------------
+Row fields:
+    'locus': locus<GRCh38>
+    'alleles': array<str>
+    'context': str
+    'ref': str
+    'alt': str
+    'methylation_level': int32
+    'cpg': bool
+    'mutation_type': str
+    'annotation': str
+    'modifier': str
+    'coverage': int32
+    'transcript': str
+    'expected': float64
+    'coverage_correction': float64 # TODO: I'm assuming this will exist; will need to update if not
+    'observed': int32
+----------------------------------------
+Key: ['locus', 'alleles']
+----------------------------------------
+
+v2.1.1 schema: same as above, but in GRCh37 and with the additional global fields:
 ----------------------------------------
 Global fields:
     'plateau_models': struct {
@@ -182,25 +148,6 @@ Global fields:
         float64,
         float64
     )
-----------------------------------------
-Row fields:
-    'locus': locus<GRCh37>
-    'alleles': array<str>
-    'context': str
-    'ref': str
-    'alt': str
-    'methylation_level': int32
-    'cpg': bool
-    'mutation_type': str
-    'annotation': str
-    'modifier': str
-    'coverage': int32
-    'transcript': str
-    'expected': float64
-    'coverage_correction': float64
-    'observed': int32
-----------------------------------------
-Key: ['locus', 'alleles']
 ----------------------------------------
 
 Used to create the constraint prep Table.
@@ -221,25 +168,19 @@ Locus-level Table used in first step of regional constraint calculation.
 
 Filtered to only one specific coding variant consequence but contains all canonical, protein-coding transcripts.
 
-Schema:
+v4.1 schema:
 ----------------------------------------
 Global fields:
     'plateau_models': struct {
         total: dict<bool, array<float64>>
     }
-    'plateau_x_models': struct {
-        total: dict<bool, array<float64>>
-    }
-    'plateau_y_models': struct {
-        total: dict<bool, array<float64>>
-    }
-    'coverage_model': tuple (
+    'coverage_model': tuple ( # TODO: update if this doesn't exist
         float64,
         float64
     )
 ----------------------------------------
 Row fields:
-    'locus': locus<GRCh37>
+    'locus': locus<GRCh38>
     'section': str
     'observed': int32
     'expected': float64
@@ -247,7 +188,18 @@ Row fields:
 Key: ['locus', 'section']
 ----------------------------------------
 
-NOTE: The content of the freeze 1 HT for RMC is slightly different:
+v2.1.1 schema: same as above, but in GRCh37 and with the additional globals
+----------------------------------------
+Global fields:
+    'plateau_x_models': struct {
+        total: dict<bool, array<float64>>
+    }
+    'plateau_y_models': struct {
+        total: dict<bool, array<float64>>
+    }
+----------------------------------------
+
+NOTE: The content of the v2.1.1 freeze 1 HT for RMC is slightly different:
     - Expected counts were calculated using the workaround method instead of directly from the plateau model.
     - `mu_snp` contains the coverage-corrected not raw mutation rates.
 """
@@ -751,6 +703,8 @@ mpc_liftover_release = VersionedTableResource(
 )
 """
 Table containing gnomAD v2.1.1 MPC values lifted over to GRCh38.
+
+Only applies to gnomAD v2.1.1 MPC (we will not lift v4.1 MPC back to GRCh37).
 """
 
 ####################################################################################
@@ -765,4 +719,6 @@ TSV with RMC regions grouped by obs/exp (OE) bin.
 Annotated with proportion coding base pairs, proportion de novo missense (controls),
 proportion de novo missense (case), and proportion ClinVar pathogenic/likely pathogenic
 severe haploinsufficient missense.
+
+Currently only exists for gnomAD v2.1.1 RMC.
 """
