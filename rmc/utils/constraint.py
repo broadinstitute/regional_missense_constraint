@@ -179,6 +179,7 @@ def adjust_fwd_cumulative_count_expr(
 
 def calculate_exp_from_mu(
     context_ht: hl.Table,
+    possible_ht: hl.Table,
     locus_type: str,
     groupings: List[str] = GROUPINGS,
     overwrite: bool = False,
@@ -198,6 +199,8 @@ def calculate_exp_from_mu(
         - Adds `expected` annotation.
 
     :param context_ht: Variant-level input context Table.
+    :param possible_ht: Table containing the number of possible and predicted proportion observed
+        (precursor to expected variant count) variants per variant type.
     :param locus_type: Locus type of input Table. One of "X", "Y", or "autosomes".
         NOTE: Will treat any input other than "X" or "Y" as autosomes.
     :param groupings: List of Table fields used to group Table to adjust mutation rate.
@@ -206,17 +209,17 @@ def calculate_exp_from_mu(
     :param n_partitions: Number of desired partitions for temporary grouped context Table. Default is 5000.
     :return: Table annotated with per-variant expected counts.
     """
-    mu_expr = context_ht.mu_snp
+    mu_expr = possible_ht.mu_snp
     cov_corr_expr = get_coverage_correction_expr(
-        context_ht.coverage, context_ht.coverage_model
+        possible_ht.coverage, possible_ht.coverage_model
     )
 
     if locus_type == "X":
-        plateau_model = context_ht.plateau_x_models
+        plateau_model = possible_ht.plateau_x_models
     elif locus_type == "Y":
-        plateau_model = context_ht.plateau_y_models
+        plateau_model = possible_ht.plateau_y_models
     else:
-        plateau_model = context_ht.plateau_models
+        plateau_model = possible_ht.plateau_models
 
     agg_expr = {
         "mu": hl.agg.sum(mu_expr * cov_corr_expr),
@@ -224,19 +227,19 @@ def calculate_exp_from_mu(
     }
     agg_expr.update(
         compute_expected_variants(
-            ht=context_ht,
+            ht=possible_ht,
             plateau_models_expr=plateau_model,
             mu_expr=mu_expr,
             cov_corr_expr=cov_corr_expr,
-            possible_variants_expr=context_ht.possible_variants,
-            cpg_expr=context_ht.cpg,
+            possible_variants_expr=possible_ht.possible_variants,
+            cpg_expr=possible_ht.cpg,
         )
     )
 
     logger.info(
         "Grouping by %s and computing expected counts per grouping...", groupings
     )
-    group_ht = context_ht.group_by(*groupings).aggregate(**agg_expr)
+    group_ht = possible_ht.group_by(*groupings).aggregate(**agg_expr)
     group_ht = group_ht.checkpoint(
         f"{TEMP_PATH_WITH_SLOW_DEL}/context_exp_group.ht",
         _read_if_exists=not overwrite,
@@ -257,6 +260,69 @@ def calculate_exp_from_mu(
         **group_ht.index(*[context_ht[g] for g in groupings])
     )
     return context_ht
+
+
+def create_possible_hts(
+    ht: hl.Table,
+    locus_type: str = "autosomes",
+    additional_grouping: List[str] = [
+        "annotation",
+        "modifier",
+        "transcript",
+        "coverage",
+    ],
+    mu_ht_partitions: int = 100,
+    overwrite: bool = False,
+) -> hl.Table:
+    """
+    Create Table with possible variants per variant type for each locus type.
+
+    Region types are:
+        - autosome/PAR
+        - chrX nonPAR
+        - chrY nonPAR
+
+    :param ht: Context Table.
+    :param locus_type: Locus type to filter to. One of "autosomes", "chrX", or "chrY".
+        Default is "autosomes".
+    :param additional_grouping: Additional fields to group by when calculating possible variants.
+        These fields are added on top of the context, ref, alt, and methylation level grouping.
+        Default is ["annotation", "modifier", "transcript", "coverage"].
+    :param mu_ht_partitions: Number of desired partitions for mutation rate HT. Default is 100.
+    :param overwrite: Whether to overwrite temporary data. Default is False.
+    """
+    logger.info("Filtering to region: %s", locus_type)
+    ht = filter_to_region_type(ht, locus_type)
+
+    logger.info(
+        "Counting number of possible variants by variant type + transcript grouping..."
+    )
+    possible_ht = count_variants_by_group(
+        ht,
+        additional_grouping=additional_grouping,
+        use_table_group_by=True,
+    )
+    mu_ht = hl.read_table(
+        get_mutation_ht().path, _n_partitions=mu_ht_partitions
+    ).select("mu_snp")
+    possible_ht = annotate_with_mu(possible_ht, mu_ht)
+    possible_ht = possible_ht.transmute(possible_variants=possible_ht.variant_count)
+
+    # Annotate HT globals with models
+    # Need to annotate globals with models to use in `calculate_exp_from_mu`
+    possible_ht = possible_ht.annotate_globals(
+        plateau_models=get_models(model_type="plateau").he(),
+        # TODO: Uncomment lines below when chrX/chrY, coverage models are ready
+        # plateau_x_models=get_models(model_type="plateau", genomic_region="chrx_non_par").he(),
+        # plateau_y_models=get_models(model_type="plateau", genomic_region="chry_non_par").he(),
+        # coverage_model=plateau_x_models=get_models(model_type="coverage").he(),,
+    )
+    possible_ht = possible_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/{locus_type}_possible_variants.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
+    )
+    return possible_ht
 
 
 def create_filtered_context_ht(
@@ -285,6 +351,7 @@ def create_filtered_context_ht(
     :param overwrite: Whether to overwrite temporary data. Default is False.
     :param additional_grouping: Additional fields to group by when calculating possible variants.
         These fields are added on top of the context, ref, alt, and methylation level grouping.
+        Default is ["annotation", "modifier", "transcript", "coverage"].
     :param mu_ht_partitions: Number of desired partitions for mutation rate HT. Default is 100.
     :return: None; writes Table to path.
     """
@@ -309,42 +376,44 @@ def create_filtered_context_ht(
         overwrite=overwrite,
     )
 
-    logger.info(
-        "Counting number of possible variants by variant type + transcript grouping..."
-    )
-    possible_ht = count_variants_by_group(
-        ht,
-        additional_grouping=additional_grouping,
-        use_table_group_by=True,
-    )
-    mu_ht = hl.read_table(
-        get_mutation_ht().path, _n_partitions=mu_ht_partitions
-    ).select("mu_snp")
-    possible_ht = annotate_with_mu(possible_ht, mu_ht)
-    possible_ht = possible_ht.transmute(possible_variants=possible_ht.variant_count)
-    possible_ht = possible_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/possible_variants.ht",
-        _read_if_exists=not overwrite,
-        overwrite=overwrite,
-    )
-
-    # Annotate HT globals with models
-    ht = ht.annotate_globals(
-        plateau_models=get_models(model_type="plateau").he(),
-        # TODO: Uncomment lines below when chrX/chrY, coverage models are ready
-        # plateau_x_models=get_models(model_type="plateau", genomic_region="chrx_non_par").he(),
-        # plateau_y_models=get_models(model_type="plateau", genomic_region="chry_non_par").he(),
-        # coverage_model=plateau_x_models=get_models(model_type="coverage").he(),,
-    )
-
     logger.info("Calculating expected values per allele and checkpointing...")
     ht = (
         calculate_exp_from_mu(
             filter_to_region_type(ht, "autosomes"),
+            create_possible_hts(
+                ht=ht,
+                locus_type="autosomes",
+                additional_grouping=additional_grouping,
+                mu_ht_partitions=mu_ht_partitions,
+                overwrite=overwrite,
+            ),
             locus_type="autosomes",
         )
-        .union(calculate_exp_from_mu(filter_to_region_type(ht, "chrX"), locus_type="X"))
-        .union(calculate_exp_from_mu(filter_to_region_type(ht, "chrY"), locus_type="Y"))
+        # TODO: Uncomment lines below when chrX/chrY models are ready
+        # .union(calculate_exp_from_mu(
+        #    filter_to_region_type(ht, "chrX"),
+        #    create_possible_hts(
+        #        ht=ht,
+        #        locus_type="chrX",
+        #        additional_grouping=additional_grouping,
+        #        mu_ht_partitions=mu_ht_partitions,
+        #        overwrite=overwrite,
+        #    ),
+        #    locus_type="X",
+        #    )
+        # )
+        # .union(calculate_exp_from_mu(
+        #    filter_to_region_type(ht, "chrY"),
+        #    create_possible_hts(
+        #        ht=ht,
+        #        locus_type="chrY",
+        #        additional_grouping=additional_grouping,
+        #        mu_ht_partitions=mu_ht_partitions,
+        #        overwrite=overwrite,
+        #    ),
+        #    locus_type="Y",
+        #    )
+        # )
     )
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht",
