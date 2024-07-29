@@ -148,7 +148,7 @@ def create_transcript_ref(
         Default is ["chrom", "start", "stop", "strand", "exons", "gencode_symbol", "hgnc_symbol", "transcript_version"].
     :param final_annotations: List of non-keyed annotations to keep in final Table.
         Default is ["chrom", "transcript_start", "transcript_stop", "cds_start", "cds_end", "strand", "gene_id", "gencode_symbol", "hgnc_symbol", "transcript_version"].
-    :param overwrite: Whether to overwrite `transcript_ref` resource. Default is True.
+    :param overwrite: Whether to overwrite `transcript_cds` resource. Default is True.
     :return: None; writes Table to resource path.
     """
     ht = gene_model.versions[build].ht()
