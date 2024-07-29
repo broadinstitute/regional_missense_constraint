@@ -295,6 +295,7 @@ def create_possible_hts(
         Default is ["annotation", "modifier", "transcript", "coverage"].
     :param mu_ht_partitions: Number of desired partitions for mutation rate HT. Default is 100.
     :param overwrite: Whether to overwrite temporary data. Default is False.
+    :return: Table filtered to `locus_type` with possible variants per variant type.
     """
     logger.info("Filtering to region: %s", locus_type)
     ht = filter_to_region_type(ht, locus_type)
