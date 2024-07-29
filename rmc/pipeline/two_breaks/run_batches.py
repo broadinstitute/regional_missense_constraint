@@ -841,7 +841,7 @@ if __name__ == "__main__":
         "--docker-image",
         help="""
         Docker image to provide to hail Batch. Must have dill, hail, and python installed.
-        Suggested image: hailgenetics/hail:0.2.132-py3.10.
+        Suggested image: hailgenetics/hail:0.2.132-py3.11.
         Default is None -- script will select default image if not specified on the command line.
         """,
         default=None,
