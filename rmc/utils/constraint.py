@@ -259,6 +259,11 @@ def calculate_exp_from_mu(
     context_ht = context_ht.annotate(
         **group_ht.index(*[context_ht[g] for g in groupings])
     )
+    context_ht = context_ht.checkpoint(
+        f"{TEMP_PATH_WITH_SLOW_DEL}/{locus_type}_context_exp.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
+    )
     return context_ht
 
 
