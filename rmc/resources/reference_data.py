@@ -1,49 +1,85 @@
 """Script containing reference resources."""
-from gnomad.resources.resource_utils import DataException, TableResource
+from gnomad.resources.resource_utils import (
+    DataException,
+    TableResource,
+    VersionedTableResource,
+)
 
-from rmc.resources.basics import AMINO_ACIDS_PREFIX, RESOURCE_BUILD_PREFIX
+from rmc.resources.basics import AMINO_ACIDS_PREFIX, get_resource_build_prefix
 from rmc.resources.resource_utils import CURRENT_BUILD
 
-REF_DATA_PREFIX = f"{RESOURCE_BUILD_PREFIX}/reference_data"
-"""
-Path to bucket containing reference data resources.
-"""
+
+def get_ref_data_prefix(build: str = CURRENT_BUILD) -> str:
+    """
+    Get the path to the bucket for reference data resources.
+
+    :param build: Reference genome build. Default is `CURRENT_BUILD`.
+    :return: Path to bucket for reference data resources.
+    """
+    return f"{get_resource_build_prefix(build)}/reference_data"
 
 
 ####################################################################################
 ## Reference genome related resources
 ####################################################################################
-GENCODE_VERSION = "19"
+GENCODE_VERSION = "39"
 """
 GENCODE version used to annotate variants.
 
 gnomAD v2 used GENCODE v19 and VEP v85.
+gnomAD v4 used GENCODE v39 and VEP v105.
 See: https://gnomad.broadinstitute.org/help/what-version-of-gencode-was-used-to-annotate-variants.
 """
 
-VEP_VERSION = "85"
+VEP_VERSION = "105"
 """
 VEP version used to annotate variants.
 """
 
-gene_model = TableResource(path=f"{RESOURCE_BUILD_PREFIX}/browser/b37_transcripts.ht")
+gene_model = VersionedTableResource(
+    default_version=CURRENT_BUILD,
+    versions={
+        "GRCh37": TableResource(
+            path=f"{get_resource_build_prefix('GRCh37')}/browser/b37_transcripts.ht"
+        ),
+        # TODO: Update this path when the gene model table is publicly available
+        "GRCh38": TableResource(
+            path="gs://gnomad-v4-data-pipeline/output/genes/genes_grch38_annotated_5.ht"
+        ),
+    },
+)
 """
 Table containing transcript start and stop positions displayed in the browser.
 
 Contains all transcripts displayed in the browser (more than `transcript_ref` below).
 """
 
-transcript_ref = TableResource(
-    path=f"{REF_DATA_PREFIX}/ht/canonical_transcripts_genes_coordinates.ht"
+transcript_ref = VersionedTableResource(
+    default_version="GRCh37",
+    versions={
+        "GRCh37": TableResource(
+            path=f"{get_ref_data_prefix('GRCh37')}/ht/canonical_transcripts_genes_coordinates.ht"
+        ),
+        # TODO: Add when GRCh38 table has been created
+    },
 )
 """
 Table containing canonical transcripts with key reference info:
-gene name from gnomAD annotations, gene name from GENCODE v19,
-Ensembl gene ID in GENCODE v19, overall and CDS start and end
+
+gene name from gnomAD annotations, gene name from GENCODE version (v19 for gnomAD v2.1.1),
+Ensembl gene ID, overall and CDS start and end
 coordinates from gnomAD annotations, and transcript strand.
 """
 
-transcript_cds = TableResource(path=f"{REF_DATA_PREFIX}/ht/b37_cds_coords.ht")
+transcript_cds = VersionedTableResource(
+    default_version="GRCh37",
+    versions={
+        "GRCh37": TableResource(
+            path=f"{get_ref_data_prefix('GRCh37')}/ht/b37_cds_coords.ht"
+        ),
+        # TODO: Add when GRCh38 table has been created
+    },
+)
 """
 Table containing coordinates for coding parts of transcripts excluding introns and UTRs.
 """
@@ -62,6 +98,7 @@ def train_val_test_transcripts_path(
     is_test: bool = False,
     fold: int = None,
     is_val: bool = False,
+    build: str = CURRENT_BUILD,
 ) -> str:
     """
     Return path to HailExpression of transcripts used for model training or testing.
@@ -85,6 +122,7 @@ def train_val_test_transcripts_path(
         If False, training transcripts from the specified fold of the training set will be returned.
         If True, validation transcripts from the specified fold of the training set will be returned.
         Default is False.
+    :param build: Reference genome build. Default is `CURRENT_BUILD`.
     :return: Path to Table.
     """
     if is_test and is_val:
@@ -100,12 +138,10 @@ def train_val_test_transcripts_path(
 
     transcript_type = "test" if is_test else ("val" if is_val else "train")
     fold_name = f"_fold{fold}" if fold is not None else ""
-    return f"{RESOURCE_BUILD_PREFIX}/{transcript_type}_transcripts{fold_name}.he"
+    return f"{get_resource_build_prefix(build)}/{transcript_type}_transcripts{fold_name}.he"
 
 
-dosage_tsv_path = (
-    f"{REF_DATA_PREFIX}/Collins_rCNV_2022.dosage_sensitivity_scores.tsv.gz"
-)
+dosage_tsv_path = f"{get_ref_data_prefix('GRCh37')}/Collins_rCNV_2022.dosage_sensitivity_scores.tsv.gz"
 """
 Path to TSV of genes and dosage sensitivity scores.
 
@@ -118,21 +154,23 @@ Data are from Collins et al. A cross-disorder dosage sensitivity map of the huma
 (2022)
 """
 
-dosage_ht = TableResource(path=f"{REF_DATA_PREFIX}/ht/dosage_sensitivity.ht")
+dosage_ht = TableResource(
+    path=f"{get_ref_data_prefix('GRCh37')}/ht/dosage_sensitivity.ht"
+)
 """
 HT of genes and genes and dosage sensitivity scores.
 
 Imported from TSV at `dosage_tsv_path`.
 """
 
-haplo_genes_path = f"{REF_DATA_PREFIX}/ht/phaplo_genes.he"
+haplo_genes_path = f"{get_ref_data_prefix('GRCh37')}/ht/phaplo_genes.he"
 """
 Path to HailExpression of haploinsufficient genes.
 
 List of HI genes was determined by filtering to genes with pHaplo >= 0.86.
 """
 
-triplo_genes_path = f"{REF_DATA_PREFIX}/ht/ptriplo_genes.he"
+triplo_genes_path = f"{get_ref_data_prefix('GRCh37')}/ht/ptriplo_genes.he"
 """
 Path to HailExpression of triplosensitive genes.
 
@@ -143,34 +181,48 @@ List of triplosensitive genes was determined by filtering to genes with pTriplo 
 ####################################################################################
 ## Assessment related resources
 ####################################################################################
-clinvar = TableResource(
-    path=f"{REF_DATA_PREFIX}/ht/clinvar.GRCh37.ht",
+clinvar = VersionedTableResource(
+    default_version="GRCh37",
+    versions={
+        "GRCh37": TableResource(
+            path=f"{get_ref_data_prefix('GRCh37')}/ht/clinvar.GRCh37.ht"
+        ),
+        # TODO: Add when GRCh38 table has been created
+    },
 )
 """
-
 Table of ClinVar variants.
 
-HT corresponds to 20230305 ClinVar release.
+GRCh37 HT corresponds to 20230305 ClinVar release.
 """
 
-clinvar_plp_mis_haplo = TableResource(
-    path=f"{REF_DATA_PREFIX}/ht/clinvar_pathogenic_missense_haplo.ht",
+clinvar_plp_mis_haplo = VersionedTableResource(
+    default_version="GRCh37",
+    versions={
+        "GRCh37": TableResource(
+            path=f"{get_ref_data_prefix('GRCh37')}/ht/clinvar_pathogenic_missense_haplo.ht"
+        ),
+        # TODO: Add when GRCh38 table has been created
+    },
 )
 """
-ClinVar pathogenic/likely pathogenic missense variants in haploinsufficient (HI)
-genes.
+ClinVar pathogenic/likely pathogenic (P/LP) missense variants in haploinsufficient (HI) genes.
 """
 
-clinvar_plp_mis_triplo = TableResource(
-    path=f"{REF_DATA_PREFIX}/ht/clinvar_pathogenic_missense_triplo.ht",
+clinvar_plp_mis_triplo = VersionedTableResource(
+    default_version="GRCh37",
+    versions={
+        "GRCh37": TableResource(
+            path=f"{get_ref_data_prefix('GRCh37')}/ht/clinvar_pathogenic_missense_triplo.ht"
+        ),
+        # TODO: Add when GRCh38 table has been created
+    },
 )
 """
 ClinVar pathogenic/likely pathogenic missense variants in triplosensitive (TS) genes.
 """
 
-ndd_de_novo_2020_tsv_path = (
-    f"{REF_DATA_PREFIX}/fordist_KES_combined_asc_dd_dnms_2020_04_21_annotated.txt"
-)
+ndd_de_novo_2020_tsv_path = f"{get_ref_data_prefix('GRCh37')}/fordist_KES_combined_asc_dd_dnms_2020_04_21_annotated.txt"
 """
 Path to de novo variants from 39,667 samples.
 
@@ -187,7 +239,7 @@ Satterstrom et al. Large-Scale Exome Sequencing Study Implicates Both Developmen
 and Functional Changes in the Neurobiology of Autism. (2020)
 """
 
-autism_de_novo_2022_tsv_path = f"{REF_DATA_PREFIX}/fu_2022_supp20.txt"
+autism_de_novo_2022_tsv_path = f"{get_ref_data_prefix('GRCh37')}/fu_2022_supp20.txt"
 """
 Path to de novo variants from 20,528 samples.
 
@@ -211,8 +263,14 @@ Fu et al. Rare coding variation provides insight into the genetic architecture
 and phenotypic context of autism (2022)
 """
 
-ndd_de_novo = TableResource(
-    path=f"{REF_DATA_PREFIX}/ht/ndd_de_novo.ht",
+ndd_de_novo = VersionedTableResource(
+    default_version="GRCh37",
+    versions={
+        "GRCh37": TableResource(
+            path=f"{get_ref_data_prefix('GRCh37')}/ht/ndd_de_novo.ht"
+        ),
+        # TODO: Add when GRCh38 table has been created
+    },
 )
 """
 De novo missense variants from 46,094 neurodevelopmental disorder (NDD) cases and 5,492 controls.
@@ -228,8 +286,16 @@ Controls:
 ####################################################################################
 ## MPC related resources
 ####################################################################################
-cadd = TableResource(
-    path=f"gs://seqr-reference-data/{CURRENT_BUILD}/CADD/CADD_snvs_and_indels.v1.6.ht"
+cadd = VersionedTableResource(
+    default_version="GRCh37",
+    versions={
+        "GRCh37": TableResource(
+            path="gs://seqr-reference-data/GRCh37/CADD/CADD_snvs_and_indels.v1.6.ht"
+        ),
+        "GRCh38": TableResource(
+            path="gs://gcp-public-data--gnomad/resources/grch38/CADD-v1.6-SNVs.ht"
+        ),
+    },
 )
 """
 Table with CADD (v1.6) raw and phredd scores.
