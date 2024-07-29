@@ -358,7 +358,7 @@ def create_filtered_context_ht(
 
     # Check for negative expected values
     zero_exp = ht.filter(ht.expected <= 0)
-    negative_exp = zero_exp.filter(ht.expected < 0).count()
+    negative_exp = zero_exp.filter(zero_exp.expected < 0).count()
     if negative_exp > 0:
         # NOTE: in v2, we found negative expected values for a handful of alleles on chrY
         # due to negative coefficient in the model on this chr
