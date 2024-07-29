@@ -719,7 +719,7 @@ def search_for_break(
     )
     if save_chisq_ht:
         all_loci_chisq_ht_path = (
-            f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/constraint_prep.ht"
+            f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/all_loci_chisq.ht"
         )
     ht = ht.checkpoint(all_loci_chisq_ht_path, overwrite=True)
 
