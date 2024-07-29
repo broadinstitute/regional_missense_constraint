@@ -432,17 +432,17 @@ def create_filtered_context_ht(
 
     # Check for negative expected values
     zero_exp = ht.filter(ht.expected <= 0)
-    negative_exp = zero_exp.filter(ht.expected < 0).count()
+    negative_exp = zero_exp.filter(zero_exp.expected < 0).count()
     if negative_exp > 0:
         # NOTE: in v2, we found negative expected values for a handful of alleles on chrY
         # due to negative coefficient in the model on this chr
         # (we decided to remove these sites for v2)
         raise DataException(
-            f"Found {negative_exp} variants with zero or negative expected values!"
+            f"Found {negative_exp} variants with negative expected values!"
         )
     if zero_exp.count() > 0:
         raise DataException(
-            f"Found {zero_exp.count()} variants with zero expected values!"
+            f"Found {zero_exp.count() - negative_exp} variants with zero expected values!"
         )
 
     logger.info(
