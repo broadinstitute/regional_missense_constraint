@@ -6,12 +6,17 @@ from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
+    CONSTRAINT_PREFIX,
     LOGGING_PATH,
-    SINGLE_BREAK_TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
     TEMP_PATH_WITH_SLOW_DEL,
 )
-from rmc.resources.resource_utils import MISSENSE, NONSENSES, SYNONYMOUS
+from rmc.resources.resource_utils import (
+    CURRENT_GNOMAD_VERSION,
+    MISSENSE,
+    NONSENSES,
+    SYNONYMOUS,
+)
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
     P_VALUE,
@@ -54,9 +59,9 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
-            logger.warning("Code currently only processes b37 data!")
+            hl.default_reference("GRCh38")
             logger.info("Creating filtered context HT...")
-            n_partitions = 30000
+            n_partitions = 10000
             create_filtered_context_ht(
                 n_partitions=args.n_partitions if args.n_partitions else n_partitions,
                 overwrite=args.overwrite_temp,
@@ -68,6 +73,7 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
+            hl.default_reference("GRCh38")
             logger.info("Creating constraint prep HT...")
             # Constraint prep HT is filtered to missense variants by default
             # Use these args to run constraint prep on other variant consequences
@@ -97,6 +103,7 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
+            hl.default_reference("GRCh38")
             chisq_threshold = hl.eval(hl.qchisqtail(P_VALUE, 1))
             if args.p_value:
                 chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 1))
@@ -107,8 +114,7 @@ def main(args):
                 " significant break..."
             )
             if args.search_num == 1:
-                # TODO: Move existing HT to a different path so this can be remade
-                all_loci_chisq_ht_path = f"{SINGLE_BREAK_TEMP_PATH}/all_loci_chisq.ht"
+                all_loci_chisq_ht_path = f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{args.freeze}/constraint_prep.ht"
                 if file_exists(all_loci_chisq_ht_path) and not args.save_chisq_ht:
                     logger.info("Reading in all loci chisq HT...")
                     ht = hl.read_table(all_loci_chisq_ht_path)
@@ -185,7 +191,7 @@ def main(args):
                 " checkpointing..."
             )
             ht = ht.annotate(breakpoint=breakpoint_ht[ht.section].locus.position)
-            # Possible checkpoint here if necessary
+
             logger.info(
                 "Splitting at breakpoints and re-annotating section starts, stops, and"
                 " names..."
@@ -223,6 +229,7 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
+            hl.default_reference("GRCh38")
             # Get locus input to this simultaneous break search round from single search no-break HT
             single_no_break_ht = hl.read_table(
                 single_search_round_ht_path(
@@ -240,8 +247,8 @@ def main(args):
                 freeze=args.freeze,
             )
             simul_break_by_section_path = f"{simul_results_path}/merged.ht"
-            if file_exists(simul_break_by_section_path):
-                simul_exists = True
+            simul_exists = file_exists(simul_break_by_section_path)
+            if simul_exists:
                 logger.info(
                     "Converting merged simultaneous breaks HT from section-level to"
                     " locus-level..."
@@ -292,7 +299,6 @@ def main(args):
                     "locus", section=simul_break_ht.section_1
                 ).drop("section_1", "breakpoints")
             else:
-                simul_exists = False
                 logger.info(
                     "No sections in round %i had breakpoints in simultaneous breaks"
                     " search.",
@@ -306,8 +312,8 @@ def main(args):
                 freeze=args.freeze,
             )
 
-            if file_exists(single_break_path):
-                single_exists = True
+            single_exists = file_exists(single_break_path)
+            if single_exists:
                 logger.info(
                     "Annotating single breaks with new sections and re-keying for next"
                     " search..."
@@ -334,7 +340,6 @@ def main(args):
                     "locus", section=single_break_ht.section_1
                 ).drop("section_1", "breakpoint")
             else:
-                single_exists = False
                 logger.info(
                     "No sections in round %i had breakpoints in single search.",
                     args.search_num,
@@ -371,8 +376,7 @@ def main(args):
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
                 quiet=args.quiet,
             )
-            # TODO: Check that all downstream usages of RMC results table filter out
-            # constraint outliers appropriately
+            hl.default_reference("GRCh38")
             logger.info("Checking round paths...")
             round_nums = check_break_search_round_nums(args.freeze)
 
