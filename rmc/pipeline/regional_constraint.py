@@ -6,8 +6,8 @@ from gnomad.utils.file_utils import file_exists
 from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
+    CONSTRAINT_PREFIX,
     LOGGING_PATH,
-    MODEL_PREFIX,
     TEMP_PATH_WITH_FAST_DEL,
     TEMP_PATH_WITH_SLOW_DEL,
 )
@@ -114,7 +114,7 @@ def main(args):
                 " significant break..."
             )
             if args.search_num == 1:
-                all_loci_chisq_ht_path = f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{args.freeze}/constraint_prep.ht"
+                all_loci_chisq_ht_path = f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{args.freeze}/constraint_prep.ht"
                 if file_exists(all_loci_chisq_ht_path) and not args.save_chisq_ht:
                     logger.info("Reading in all loci chisq HT...")
                     ht = hl.read_table(all_loci_chisq_ht_path)
