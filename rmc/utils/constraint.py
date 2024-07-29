@@ -186,17 +186,19 @@ def calculate_exp_from_mu(
     n_partitions: int = 5000,
 ) -> hl.Table:
     """
-    Annotate Table with the per-variant (locus-allele) expected counts based on the per-variant mu.
+    Annotate context Table with the per-variant (locus-allele) expected counts based on the per-variant mu.
 
     .. note::
-        - Assumes that input Table is annotated with all of the fields in `groupings` and that
+        - Assumes that input Tables (context and possible) are annotated with all of the fields in `groupings` and that
             the names match exactly.
         - Assumes that input Table is annotated with `cpg`, `mu_snp` (raw mutation rate probability
             without coverage correction), and `possible_variants`.
         - Assumes that input Table is filtered to autosomes/PAR only, X nonPAR only, or Y nonPAR only.
         - Assumes that input Table contains coverage and plateau models in its global annotations
             (`coverage_model`, `plateau_models`).
-        - Adds `expected` annotation.
+        - Adds `expected` annotation to context Table. Note that the `expected` variant annotation added to `possible_ht`
+            reflects the total proportion of expected variant for a given variant type across the exome. The `expected` annotation
+            added to the context Table reflects the proportion of expected variation for a given variant per transcript.
 
     :param context_ht: Variant-level input context Table.
     :param possible_ht: Table containing the number of possible and predicted proportion observed
