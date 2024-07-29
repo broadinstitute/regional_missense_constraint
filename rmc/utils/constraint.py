@@ -57,6 +57,11 @@ from rmc.resources.rmc import (
     single_search_bucket_path,
     single_search_round_ht_path,
 )
+from rmc.utils.data_loading import (
+    create_transcript_ref,
+    import_clinvar,
+    import_de_novo_variants,
+)
 from rmc.utils.generic import (
     filter_context_using_gnomad,
     filter_to_region_type,
@@ -66,8 +71,6 @@ from rmc.utils.generic import (
     get_coverage_correction_expr,
     get_gnomad_public_release,
     get_ref_aa,
-    import_clinvar,
-    import_de_novo_variants,
     keep_criteria,
     process_context_ht,
 )
@@ -498,10 +501,15 @@ def create_constraint_prep_ht(
     # Add transcript start and stop CDS positions
     # NOTE: RMC freezes 1-7 used `gene_model` resource to get transcript start and stops
     # rather than CDS
-    transcript_ht = transcript_ref.ht().select("gnomad_cds_start", "gnomad_cds_end")
+    build = ht.locus.dtype.reference_genome.name
+    if not file_exists(transcript_ref.versions[build].path):
+        create_transcript_ref(
+            build, overwrite=not file_exists(transcript_cds.versions[build].path)
+        )
+    transcript_ht = transcript_ref.ht().select("cds_start", "cds_end")
     ht = ht.annotate(
-        start=transcript_ht[ht.transcript].gnomad_cds_start,
-        stop=transcript_ht[ht.transcript].gnomad_cds_end,
+        start=transcript_ht[ht.transcript].cds_start,
+        stop=transcript_ht[ht.transcript].cds_end,
     )
     ht = ht.annotate(section=hl.format("%s_%s_%s", ht.transcript, ht.start, ht.stop))
     ht = ht.key_by("locus", "section").drop("start", "stop", "transcript")
@@ -1838,8 +1846,8 @@ def check_and_fix_missing_aa(
     ht = ht.annotate(**transcript_ht[ht.transcript])
     ht = ht.annotate(
         # NOTE: This is actually the transcript end for transcripts on the negative strand
-        is_transcript_start=ht.start_coordinate == ht.gnomad_cds_start,
-        is_transcript_stop=ht.stop_coordinate == ht.gnomad_cds_end,
+        is_transcript_start=ht.start_coordinate == ht.cds_start,
+        is_transcript_stop=ht.stop_coordinate == ht.cds_end,
     )
     # NOTE: We adjusted transcript starts and stops that were missing AA annotations for gnomAD v2
     # Some starts and stops had uninformative amino acid information in the VEP context HT:
@@ -2040,8 +2048,8 @@ def create_rmc_release_downloads(
         """
         transcript_ref_ht = transcript_ref.ht()
         return ht.annotate(
-            gene_name=transcript_ref_ht[ht.transcript].gnomad_gene,
-            gene_id=transcript_ref_ht[ht.transcript].gencode_gene_id,
+            gene_name=transcript_ref_ht[ht.transcript].gencode_symbol,
+            gene_id=transcript_ref_ht[ht.transcript].gene_id,
         )
 
     logger.info("Preparing browser-reformatted HT for release...")
@@ -2258,7 +2266,7 @@ def get_oe_bins(ht: hl.Table) -> None:
     # Get total number of coding base pairs, also ClinVar and DNM variants
     # TODO: use exon field in gene model HT to get only coding bases (rather than using transcript end - start)
     transcript_ht = transcript_ht.annotate(
-        bp=transcript_ht.gnomad_cds_end - transcript_ht.gnomad_cds_start
+        bp=transcript_ht.cds_end - transcript_ht.cds_start
     )
     total_bp = transcript_ht.aggregate(hl.agg.sum(transcript_ht.bp))
     total_clinvar = clinvar_ht.count()
