@@ -1,6 +1,8 @@
 """Script containing generic resources and Google cloud bucket paths."""
 
-from rmc.resources.resource_utils import CURRENT_BUILD
+from gnomad.resources.resource_utils import DataException
+
+from rmc.resources.resource_utils import BUILDS, CURRENT_BUILD
 
 ######################################################################
 ## Google bucket resources
@@ -19,10 +21,18 @@ RESOURCE_PREFIX = f"{RMC_PREFIX}/resources"
 Path to any non-gnomAD or VEP context resource files required for RMC or MPC.
 """
 
-RESOURCE_BUILD_PREFIX = f"{RESOURCE_PREFIX}/{CURRENT_BUILD}"
-"""
-Path to bucket for genome build-specific resource files required for RMC or MPC.
-"""
+
+def get_resource_build_prefix(build: str = CURRENT_BUILD) -> str:
+    """
+    Get the path to the bucket for genome build-specific resource files required for RMC or MPC.
+
+    :param build: Reference genome build; must be one of `BUILDS`.
+    :return: Path to bucket for genome build-specific resource files.
+    """
+    if build not in BUILDS:
+        raise DataException(f"Invalid build: {build}. Must be one of {BUILDS}!")
+    return f"{RESOURCE_PREFIX}/{build}"
+
 
 LOGGING_PATH = f"{RMC_PREFIX}/logs"
 """
