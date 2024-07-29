@@ -5,18 +5,24 @@ from typing import List, Set, Tuple, Union
 
 import hail as hl
 import scipy
-from gnomad.resources.grch37.gnomad import coverage, public_release
-from gnomad.resources.grch37.reference_data import vep_context
+from gnomad.resources.grch38.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
+from gnomad.utils.constraint import (
+    annotate_with_mu,
+    compute_expected_variants,
+    count_variants_by_group,
+)
 from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
+from gnomad.utils.vep import filter_vep_transcript_csqs
+from gnomad_constraint.resources.resource_utils import get_models, get_mutation_ht
 
 from rmc.resources.basics import (
-    SINGLE_BREAK_TEMP_PATH,
+    CONSTRAINT_PREFIX,
     TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
     TEMP_PATH_WITH_SLOW_DEL,
 )
-from rmc.resources.gnomad import constraint_ht, prop_obs_coverage
+from rmc.resources.gnomad import constraint_ht
 from rmc.resources.reference_data import (
     GENCODE_VERSION,
     VEP_VERSION,
@@ -26,7 +32,11 @@ from rmc.resources.reference_data import (
     transcript_cds,
     transcript_ref,
 )
-from rmc.resources.resource_utils import KEEP_CODING_CSQ, MISSENSE
+from rmc.resources.resource_utils import (
+    CURRENT_GNOMAD_VERSION,
+    KEEP_CODING_CSQ,
+    MISSENSE,
+)
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
     FINAL_ANNOTATIONS,
@@ -36,7 +46,6 @@ from rmc.resources.rmc import (
     constraint_prep,
     context_with_oe,
     context_with_oe_dedup,
-    coverage_plateau_models_path,
     filtered_context,
     no_breaks_he_path,
     oe_bin_counts_tsv,
@@ -51,17 +60,16 @@ from rmc.resources.rmc import (
 from rmc.utils.generic import (
     filter_context_using_gnomad,
     filter_to_region_type,
-    generate_models,
     get_aa_from_context,
     get_annotations_from_context_ht_vep,
     get_constraint_transcripts,
     get_coverage_correction_expr,
+    get_gnomad_public_release,
     get_ref_aa,
     import_clinvar,
     import_de_novo_variants,
     keep_criteria,
     process_context_ht,
-    process_vep,
 )
 
 logging.basicConfig(
@@ -105,14 +113,7 @@ def add_obs_annotation(
     :return: Table with observed variant annotation.
     """
     logger.info("Adding observed annotation...")
-    gnomad_ht = public_release(gnomad_data_type).ht()
-    gnomad_cov = coverage(gnomad_data_type).ht()
-    gnomad_ht = gnomad_ht.select(
-        "filters",
-        ac=gnomad_ht.freq[0].AC,
-        af=gnomad_ht.freq[0].AF,
-        gnomad_coverage=gnomad_cov[gnomad_ht.locus].median,
-    )
+    gnomad_ht = get_gnomad_public_release(gnomad_data_type)
     gnomad_ht = gnomad_ht.filter(
         keep_criteria(
             gnomad_ht.ac, gnomad_ht.af, gnomad_ht.filters, gnomad_ht.gnomad_coverage
@@ -178,79 +179,180 @@ def adjust_fwd_cumulative_count_expr(
 
 def calculate_exp_from_mu(
     context_ht: hl.Table,
+    possible_ht: hl.Table,
     locus_type: str,
     groupings: List[str] = GROUPINGS,
+    overwrite: bool = False,
+    n_partitions: int = 5000,
 ) -> hl.Table:
     """
-    Annotate Table with the per-variant (locus-allele) expected counts based on the per-variant mu.
+    Annotate context Table with the per-variant (locus-allele) expected counts based on the per-variant mu.
 
     .. note::
-        - Assumes that input Table is annotated with all of the fields in `groupings` and that
+        - Assumes that input Tables (context and possible) are annotated with all of the fields in `groupings` and that
             the names match exactly.
-        - Assumes that input Table is annotated with `cpg` and `mu_snp` (raw mutation rate probability
-            without coverage correction).
+        - Assumes that input Table is annotated with `cpg`, `mu_snp` (raw mutation rate probability
+            without coverage correction), and `possible_variants`.
         - Assumes that input Table is filtered to autosomes/PAR only, X nonPAR only, or Y nonPAR only.
         - Assumes that input Table contains coverage and plateau models in its global annotations
             (`coverage_model`, `plateau_models`).
-        - Adds `expected` and `coverage_correction` annotations.
+        - Adds `expected` annotation to context Table. Note that the `expected` variant annotation added to `possible_ht`
+            reflects the total proportion of expected variant for a given variant type across the exome. The `expected` annotation
+            added to the context Table reflects the proportion of expected variation for a given variant per transcript.
 
     :param context_ht: Variant-level input context Table.
+    :param possible_ht: Table containing the number of possible and predicted proportion observed
+        (precursor to expected variant count) variants per variant type.
     :param locus_type: Locus type of input Table. One of "X", "Y", or "autosomes".
         NOTE: Will treat any input other than "X" or "Y" as autosomes.
     :param groupings: List of Table fields used to group Table to adjust mutation rate.
         Table must be annotated with these fields. Default is `GROUPINGS`.
-    :return: Table annotated with per-variant expected counts and coverage correction.
+    :param overwrite: Whether to overwrite temporary data. Default is False.
+    :param n_partitions: Number of desired partitions for temporary grouped context Table. Default is 5000.
+    :return: Table annotated with per-variant expected counts.
     """
-    logger.info(
-        "Grouping by %s and aggregating mutation rates within groupings...", groupings
-    )
-    group_ht = context_ht.group_by(*groupings).aggregate(
-        mu_agg=hl.agg.sum(context_ht.mu_snp),
-        n_grouping=hl.agg.count(),
-        # `cpg` is a function of `context`, `ref``, `alt` which are part of `groupings`
-        # so will be the same for all alleles in a grouping
-        cpg=hl.agg.take(context_ht.cpg, 1)[0],
+    mu_expr = possible_ht.mu_snp
+    cov_corr_expr = get_coverage_correction_expr(
+        possible_ht.coverage, possible_ht.coverage_model
     )
 
-    logger.info("Adjusting aggregated mutation rates with plateau model...")
     if locus_type == "X":
-        model = group_ht.plateau_x_models["total"][group_ht.cpg]
+        plateau_model = possible_ht.plateau_x_models
     elif locus_type == "Y":
-        model = group_ht.plateau_y_models["total"][group_ht.cpg]
+        plateau_model = possible_ht.plateau_y_models
     else:
-        model = group_ht.plateau_models["total"][group_ht.cpg]
+        plateau_model = possible_ht.plateau_models
 
-    group_ht = group_ht.annotate(mu_adj=group_ht.mu_agg * model[1] + model[0])
+    agg_expr = {
+        "mu": hl.agg.sum(mu_expr * cov_corr_expr),
+        "mu_agg": hl.agg.sum(mu_expr),
+    }
+    agg_expr.update(
+        compute_expected_variants(
+            ht=possible_ht,
+            plateau_models_expr=plateau_model,
+            mu_expr=mu_expr,
+            cov_corr_expr=cov_corr_expr,
+            possible_variants_expr=possible_ht.possible_variants,
+            cpg_expr=possible_ht.cpg,
+        )
+    )
 
     logger.info(
-        "Adjusting aggregated mutation rates with coverage correction to get expected"
-        " counts for each grouping..."
+        "Grouping by %s and computing expected counts per grouping...", groupings
     )
-    group_ht = group_ht.annotate(
-        coverage_correction=get_coverage_correction_expr(
-            group_ht.coverage, group_ht.coverage_model
-        ),
+    group_ht = possible_ht.group_by(*groupings).aggregate(**agg_expr)
+    group_ht = group_ht.checkpoint(
+        f"{TEMP_PATH_WITH_SLOW_DEL}/context_exp_group.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
     )
-    group_ht = group_ht.annotate(exp_agg=group_ht.mu_adj * group_ht.coverage_correction)
+    group_ht = hl.read_table(
+        f"{TEMP_PATH_WITH_SLOW_DEL}/context_exp_group.ht", _n_partitions=n_partitions
+    )
 
     logger.info(
         "Annotating expected counts per allele by distributing expected counts equally"
         " among all alleles in each grouping..."
     )
     group_ht = group_ht.annotate(
-        expected=group_ht.exp_agg / group_ht.n_grouping
-    ).select("expected", "coverage_correction")
+        expected=group_ht.expected_variants / group_ht.possible_variants
+    ).select("expected")
     context_ht = context_ht.annotate(
         **group_ht.index(*[context_ht[g] for g in groupings])
+    )
+    context_ht = context_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/{locus_type}_context_exp.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
     )
     return context_ht
 
 
+def create_possible_hts(
+    ht: hl.Table,
+    locus_type: str = "autosomes",
+    additional_grouping: List[str] = [
+        "annotation",
+        "modifier",
+        "transcript",
+        "coverage",
+    ],
+    mu_ht_partitions: int = 100,
+    overwrite: bool = False,
+) -> hl.Table:
+    """
+    Create Table with possible variants per variant type for each locus type.
+
+    Function adds the following annotations required for expected variants calculation downstream:
+        - `possible_variants`: Number of possible variants per variant type.
+        - `mu_snp`: Mutation rate.
+        - `cpg`: CpG status.
+        - `predicted_proportion_observed`: Precursor to expected variants annotation.
+            Calculated by multiplying aggregated `mu_snp` against plateau model slope and
+            adding plateau model intercept.
+        - `expected_variants`: Expected number of variants.
+
+    Region types are:
+        - autosome/PAR
+        - chrX nonPAR
+        - chrY nonPAR
+
+    :param ht: Context Table.
+    :param locus_type: Locus type to filter to. One of "autosomes", "chrX", or "chrY".
+        Default is "autosomes".
+    :param additional_grouping: Additional fields to group by when calculating possible variants.
+        These fields are added on top of the context, ref, alt, and methylation level grouping.
+        Default is ["annotation", "modifier", "transcript", "coverage"].
+    :param mu_ht_partitions: Number of desired partitions for mutation rate HT. Default is 100.
+    :param overwrite: Whether to overwrite temporary data. Default is False.
+    :return: Table filtered to `locus_type` with possible variants per variant type.
+    """
+    logger.info("Filtering to region: %s", locus_type)
+    ht = filter_to_region_type(ht, locus_type)
+
+    logger.info(
+        "Counting number of possible variants by variant type + transcript grouping..."
+    )
+    possible_ht = count_variants_by_group(
+        ht,
+        additional_grouping=additional_grouping,
+        use_table_group_by=True,
+    )
+    mu_ht = hl.read_table(
+        get_mutation_ht().path, _n_partitions=mu_ht_partitions
+    ).select("mu_snp")
+    possible_ht = annotate_with_mu(possible_ht, mu_ht)
+    possible_ht = possible_ht.transmute(possible_variants=possible_ht.variant_count)
+
+    # Annotate HT globals with models
+    # Need to annotate globals with models to use in `calculate_exp_from_mu`
+    possible_ht = possible_ht.annotate_globals(
+        plateau_models=get_models(model_type="plateau").he(),
+        # TODO: Uncomment lines below when chrX/chrY, coverage models are ready
+        # plateau_x_models=get_models(model_type="plateau", genomic_region="chrx_non_par").he(),
+        # plateau_y_models=get_models(model_type="plateau", genomic_region="chry_non_par").he(),
+        # coverage_model=plateau_x_models=get_models(model_type="coverage").he(),,
+    )
+    possible_ht = possible_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/{locus_type}_possible_variants.ht",
+        _read_if_exists=not overwrite,
+        overwrite=overwrite,
+    )
+    return possible_ht
+
+
 def create_filtered_context_ht(
     csq: Set[str] = KEEP_CODING_CSQ,
-    n_partitions: int = 30000,
+    n_partitions: int = 10000,
     overwrite: bool = False,
-    build_models_from_scratch: bool = False,
+    additional_grouping: List[str] = [
+        "annotation",
+        "modifier",
+        "transcript",
+        "coverage",
+    ],
+    mu_ht_partitions: int = 100,
 ) -> None:
     """
     Create allele-level VEP context Table with constraint annotations including expected variant counts.
@@ -262,9 +364,12 @@ def create_filtered_context_ht(
     or rare in gnomAD exomes at covered sites.
 
     :param csq: Variant consequences to filter Table to. Default is `KEEP_CODING_CSQ`.
-    :param n_partitions: Number of desired partitions for the Table. Default is 30000.
+    :param n_partitions: Number of desired partitions for the Table. Default is 10000.
     :param overwrite: Whether to overwrite temporary data. Default is False.
-    :param build_models_from_scratch: Whether to build plateau and coverage models from scratch. If False, will attempt to read models from resource path. Default is False.
+    :param additional_grouping: Additional fields to group by when calculating possible variants.
+        These fields are added on top of the context, ref, alt, and methylation level grouping.
+        Default is ["annotation", "modifier", "transcript", "coverage"].
+    :param mu_ht_partitions: Number of desired partitions for mutation rate HT. Default is 100.
     :return: None; writes Table to path.
     """
     logger.info(
@@ -288,72 +393,70 @@ def create_filtered_context_ht(
         overwrite=overwrite,
     )
 
-    # TODO: Import models built in gnomad-constraint (update models at resource path)
-    if build_models_from_scratch:
-        logger.info("Building plateau and coverage models...")
-        coverage_ht = prop_obs_coverage.ht()
-        coverage_x_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_x.ht"))
-        coverage_y_ht = hl.read_table(prop_obs_coverage.path.replace(".ht", "_y.ht"))
-        (
-            coverage_model,
-            plateau_models,
-            plateau_x_models,
-            plateau_y_models,
-        ) = generate_models(
-            coverage_ht,
-            coverage_x_ht,
-            coverage_y_ht,
-        )
-        # Write out models to HailExpression to save
-        hl.experimental.write_expression(
-            hl.struct(
-                coverage=coverage_model,
-                plateau_models=plateau_models,
-                plateau_X=plateau_x_models,
-                plateau_Y=plateau_y_models,
-            ),
-            coverage_plateau_models_path,
-            overwrite=overwrite,
-        )
-    check_file_exists_raise_error(
-        coverage_plateau_models_path,
-        error_if_not_exists=True,
-        error_if_not_exists_msg=(
-            "Coverage and plateau models HailExpression does not exist!"
-            " Please double check and/or rerun with"
-            " `build_models_from_scratch` = True"
-        ),
-    )
-    models = hl.experimental.read_expression(coverage_plateau_models_path)
-
-    # Also annotate as HT globals
-    ht = ht.annotate_globals(
-        plateau_models=models.plateau_models,
-        plateau_x_models=models.plateau_X,
-        plateau_y_models=models.plateau_Y,
-        coverage_model=models.coverage,
-    )
-
     logger.info("Calculating expected values per allele and checkpointing...")
     ht = (
         calculate_exp_from_mu(
             filter_to_region_type(ht, "autosomes"),
+            create_possible_hts(
+                ht=ht,
+                locus_type="autosomes",
+                additional_grouping=additional_grouping,
+                mu_ht_partitions=mu_ht_partitions,
+                overwrite=overwrite,
+            ),
             locus_type="autosomes",
         )
-        .union(calculate_exp_from_mu(filter_to_region_type(ht, "chrX"), locus_type="X"))
-        .union(calculate_exp_from_mu(filter_to_region_type(ht, "chrY"), locus_type="Y"))
+        # TODO: Uncomment lines below when chrX/chrY models are ready
+        # .union(calculate_exp_from_mu(
+        #    filter_to_region_type(ht, "chrX"),
+        #    create_possible_hts(
+        #        ht=ht,
+        #        locus_type="chrX",
+        #        additional_grouping=additional_grouping,
+        #        mu_ht_partitions=mu_ht_partitions,
+        #        overwrite=overwrite,
+        #    ),
+        #    locus_type="X",
+        #    )
+        # )
+        # .union(calculate_exp_from_mu(
+        #    filter_to_region_type(ht, "chrY"),
+        #    create_possible_hts(
+        #        ht=ht,
+        #        locus_type="chrY",
+        #        additional_grouping=additional_grouping,
+        #        mu_ht_partitions=mu_ht_partitions,
+        #        overwrite=overwrite,
+        #    ),
+        #    locus_type="Y",
+        #    )
+        # )
     )
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )
+    # Repartition HT
+    ht = hl.read_table(
+        f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht", _n_partitions=n_partitions
+    )
 
-    logger.info("Removing alleles with negative expected values...")
-    # Negative expected values happen for a handful of alleles on chrY due to
-    # a negative coefficient in the model on this chr
-    # We decided to just remove these sites
-    ht = ht.filter(ht.expected >= 0)
+    # Check for negative expected values
+    zero_exp = ht.filter(ht.expected <= 0)
+    negative_exp = zero_exp.filter(zero_exp.expected < 0).count()
+    if negative_exp > 0:
+        # NOTE: in v2, we found negative expected values for a handful of alleles on chrY
+        # due to negative coefficient in the model on this chr
+        # (we decided to remove these sites for v2)
+        raise DataException(
+            f"Found {negative_exp} variants with negative expected values!"
+        )
+    if zero_exp.count() > 0:
+        raise DataException(
+            f"Found {zero_exp.count() - negative_exp} variants with zero expected"
+            " values!"
+        )
 
     logger.info(
         "Annotating context HT with number of observed variants and writing out..."
@@ -702,7 +805,9 @@ def search_for_break(
         f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_round{search_num}_all_loci_chisq.ht"
     )
     if save_chisq_ht:
-        all_loci_chisq_ht_path = f"{SINGLE_BREAK_TEMP_PATH}/all_loci_chisq.ht"
+        all_loci_chisq_ht_path = (
+            f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/all_loci_chisq.ht"
+        )
     ht = ht.checkpoint(all_loci_chisq_ht_path, overwrite=True)
 
     ht = annotate_max_chisq_per_section(ht, freeze)
@@ -1028,10 +1133,13 @@ def merge_round_no_break_ht(
         is_breakpoint_only=False,
         freeze=freeze,
     )
-    if not file_exists(single_no_break_path):
-        raise DataException(
+    check_file_exists_raise_error(
+        single_no_break_path,
+        error_if_not_exists=True,
+        error_if_not_exists_msg=(
             f"No table found at {single_no_break_path}. Please double-check!"
-        )
+        ),
+    )
     ht = hl.read_table(single_no_break_path)
 
     # Check that all fields in `keep_annotations` are in the table
@@ -1222,8 +1330,11 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
         transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe)
     )
 
-    if not file_exists(rmc_results.versions[freeze].path):
-        raise DataException("Merged RMC results table does not exist!")
+    check_file_exists_raise_error(
+        rmc_results.versions[freeze].path,
+        error_if_not_exists=True,
+        error_if_not_exists_msg="Merged RMC results table does not exist!",
+    )
     rmc_ht = rmc_results.versions[freeze].ht().key_by("interval")
     ht = ht.annotate(
         section_oe=rmc_ht.index(ht.locus, all_matches=True)
@@ -1312,7 +1423,15 @@ def create_context_with_oe(
         .select_globals()
         .select("vep", "was_split")
     )
-    ht = process_vep(ht, filter_csq={missense_str}, filter_outlier_transcripts=True)
+    ht = filter_vep_transcript_csqs(
+        t=ht,
+        vep_root="vep",
+        synonymous=False,
+        canonical=True,
+        ensembl_only=True,
+        filter_empty_csq=True,
+        csqs={missense_str},
+    )
     ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
     ht = get_annotations_from_context_ht_vep(ht)
     # Save context Table to temporary path with specified deletion policy because this is a very large file
