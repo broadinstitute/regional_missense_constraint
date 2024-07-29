@@ -29,6 +29,7 @@ def main(args):
             log=f"/round{args.search_num}_search_for_two_breaks_merge_hts.log",
             tmp_dir=TEMP_PATH_WITH_FAST_DEL,
         )
+        hl.default_reference("GRCh38")
 
         logger.info("Merging all temp HTs...")
         raw_path = simul_search_round_bucket_path(

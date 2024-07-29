@@ -4,7 +4,6 @@ from typing import List
 
 import hail as hl
 import scipy
-from gnomad.utils.file_utils import file_exists, parallel_file_exists
 
 from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
@@ -155,52 +154,6 @@ def split_sections_by_len(
         )
 
 
-def get_sections_to_run(
-    sections: List[str],
-    search_num: int,
-    in_parallel: bool = True,
-    freeze: int = CURRENT_FREEZE,
-) -> List[str]:
-    """
-    Check if any transcripts/sections have been previously searched by searching for success TSV existence.
-
-    .. note::
-        This step needs to be run locally due to permissions involved with `parallel_file_exists`.
-
-    :param List[str] sections: List of transcripts/transcript sections to check.
-    :param search_num: Search iteration number
-        (e.g., second round of searching for single break would be 2).
-    :param bool in_parallel: Whether to check if successful file exist in parallel.
-        If True, must be run locally and not in Dataproc. Default is True.
-    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
-    :return: List of transcripts/sections that didn't have success TSVs and therefore still need to be processed.
-    """
-    logger.info("Checking if any transcripts have already been searched...")
-    success_file_path = simul_search_round_bucket_path(
-        search_num=search_num,
-        bucket_type="success_files",
-        freeze=freeze,
-    )
-    section_success_map = {}
-    sections_to_run = []
-    for section in sections:
-        section_success_map[section] = f"{success_file_path}/{section}.tsv"
-
-    if in_parallel:
-        # Use parallel_file_exists if in_parallel is set to True
-        success_tsvs_exist = parallel_file_exists(list(section_success_map.values()))
-        for section in sections:
-            if not success_tsvs_exist[section_success_map[section]]:
-                sections_to_run.append(section)
-    else:
-        # Otherwise, use `file_exists`
-        for section in sections:
-            if not file_exists(section_success_map[section]):
-                sections_to_run.append(section)
-
-    return sections_to_run
-
-
 def calculate_window_chisq(
     max_idx: hl.expr.Int32Expression,
     i: hl.expr.Int32Expression,
@@ -217,13 +170,13 @@ def calculate_window_chisq(
 
     Chi square formula: 2 * (hl.log(total_alt) - hl.log(total_null))
 
-    :param hl.expr.Int32Expression max_idx: Largest list index value.
-    :param hl.expr.Int32Expression i: Smaller list index value corresponding to the smaller position of the two break window.
-    :param hl.expr.Int32Expression j: Larger list index value corresponding to the larger position of the two break window.
-    :param hl.expr.ArrayExpression cum_obs: List containing cumulative observed missense values.
-    :param hl.expr.ArrayExpression cum_exp: List containing cumulative expected missense values.
-    :param hl.expr.Float64Expression section_oe: Transcript/transcript section overall observed/expected (OE) missense ratio.
-    :param hl.expr.Float64Expression min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
+    :param max_idx: Largest list index value.
+    :param i: Smaller list index value corresponding to the smaller position of the two break window.
+    :param j: Larger list index value corresponding to the larger position of the two break window.
+    :param cum_obs: List containing cumulative observed missense values.
+    :param cum_exp: List containing cumulative expected missense values.
+    :param section_oe: Transcript/transcript section overall observed/expected (OE) missense ratio.
+    :param min_num_exp_mis: Minimum expected missense value for all three windows defined by two possible
         simultaneous breaks.
     :return: Chi square significance value.
     """

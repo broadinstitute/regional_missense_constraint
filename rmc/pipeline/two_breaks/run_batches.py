@@ -1,8 +1,6 @@
 """
 This script searches for two simultaneous breaks in groups of transcripts using Hail Batch.
 
-# TODO: Add RMC repo to docker image and make sure it's up to date
-
 Note that a couple functions have been copied into this script from `constraint.py`:
 - `get_obs_exp_expr`
 - `get_dpois_expr`
@@ -13,8 +11,8 @@ Note also that a few functions have been copied into this script from `simultane
 - `process_section_group`
 
 This is because python imports do not work in Hail Batch PythonJobs unless
-the python scripts are included within the provided Dockerfile, and the scripts within the RMC repo are
-too interdependent (would have to copy the entire repo into the Dockerfile).
+the python scripts are included within the provided Dockerfile, and this
+script currently relies on Hail's docker image.
 
 This script should be run locally because it submits jobs to the Hail Batch service.
 """
@@ -25,7 +23,6 @@ from typing import List, Optional, Set
 import hail as hl
 import hailtop.batch as hb
 import scipy
-from gnomad.resources.resource_utils import DataException
 from gnomad.utils.slack import slack_notifications
 from tqdm import tqdm
 
@@ -432,6 +429,7 @@ def process_section_group(
         },
         tmp_dir=TEMP_PATH_WITH_FAST_DEL,
     )
+    hl.default_reference("GRCh38")
     ht = hl.read_table(ht_path)
     ht = ht.filter(hl.literal(section_group).contains(ht.section))
 
@@ -559,13 +557,7 @@ def main(args):
         log="search_for_two_breaks_run_batches.log",
         tmp_dir=TEMP_PATH_WITH_FAST_DEL,
     )
-
-    # Make sure custom machine wasn't specified with under threshold
-    if args.under_threshold and args.use_custom_machine:
-        raise DataException(
-            "Do not specify --use-custom-machine when transcripts/sections are"
-            " --under-threshold size!"
-        )
+    hl.default_reference("GRCh38")
 
     chisq_threshold = hl.eval(hl.qchisqtail(P_VALUE, 2))
     if args.p_value:
@@ -609,23 +601,13 @@ def main(args):
 
     if not args.docker_image:
         logger.info("Picking default docker image...")
-        # Use a docker image that specifies spark memory allocation if --use-custom-machine was specified
-        if args.use_custom_machine:
-            args.docker_image = "gcr.io/broad-mpg-gnomad/rmc:20220930"
-            # Hail versions >= 0.2.119 are no longer backwards compatible
-            # (older Hail versions cannot read data written using version >= 0.2.119)
-            raise DataException(f"Hail in {args.docker_image} image is out of date!")
-        # Otherwise, use the default docker image
-        else:
-            args.docker_image = (
-                "us-central1-docker.pkg.dev/broad-mpg-gnomad/images/rmc_simul_search"
-            )
-            # NOTE: Python version on your local machine must match the Python version in this image
-            logger.warning(
-                "Using %s image; please make sure Hail and Python versions in image are"
-                " up to date",
-                args.docker_image,
-            )
+        args.docker_image = "hailgenetics/hail:0.2.132-py3.11"
+        # NOTE: Python version on your local machine must match the Python version in this image
+        logger.warning(
+            "Using %s image; please make sure Hail and Python versions in image are"
+            " up to date",
+            args.docker_image,
+        )
 
     logger.info("Setting up Batch parameters...")
     backend = hb.ServiceBackend(
@@ -697,17 +679,11 @@ def main(args):
                 ), "Number of section groups doesn't match specified number of batches!"
             else:
                 group_num = count
-            if args.use_custom_machine:
-                # NOTE: you do not specify memory and cpu when specifying a custom machine
-                j = b.new_python_job(name=job_name)
-                j._machine_type = "n1-highmem-32"
-                j._preemptible = True
-                j.storage("100Gi")
-            else:
-                j = b.new_python_job(name=group[0])
-                j.memory(args.batch_memory)
-                j.cpu(args.batch_cpu)
-                j.storage(args.batch_storage)
+
+            j = b.new_python_job(name=group[0])
+            j.memory(args.batch_memory)
+            j.cpu(args.batch_cpu)
+            j.storage(args.batch_storage)
 
             j.call(
                 process_section_group,
@@ -840,15 +816,6 @@ if __name__ == "__main__":
         default="broad-mpg-gnomad",
     )
     parser.add_argument(
-        "--use-custom-machine",
-        help="""
-        Use custom large machine for hail batch rather than setting batch memory, cpu, and storage.
-        Used when the batch defaults are not enough and jobs run into out of memory errors.
-        Only necessary if --over-threshold.
-        """,
-        action="store_true",
-    )
-    parser.add_argument(
         "--batch-memory",
         help="Amount of memory to request for hail batch jobs.",
         default="standard",
@@ -868,13 +835,7 @@ if __name__ == "__main__":
         "--docker-image",
         help="""
         Docker image to provide to hail Batch. Must have dill, hail, and python installed.
-        Suggested image: us-central1-docker.pkg.dev/broad-mpg-gnomad/images/rmc_simul_search.
-
-        If running with --use-custom-machine, Docker image must also contain this line:
-        `ENV PYSPARK_SUBMIT_ARGS="--driver-memory 8g --executor-memory 8g pyspark-shell"`
-        to make sure the job allocates memory correctly.
-        Example image: gcr.io/broad-mpg-gnomad/rmc:20220930.
-
+        Suggested image: hailgenetics/hail:0.2.132-py3.11.
         Default is None -- script will select default image if not specified on the command line.
         """,
         default=None,

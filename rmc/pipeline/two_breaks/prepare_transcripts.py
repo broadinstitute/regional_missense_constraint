@@ -46,6 +46,7 @@ def main(args):
                 log=f"/round{args.search_num}_search_for_two_breaks_create_grouped_ht.log",
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
             )
+            hl.default_reference("GRCh38")
 
             logger.info(
                 "Creating grouped HT with lists of cumulative observed and expected"
@@ -67,6 +68,7 @@ def main(args):
                 log=f"/round{args.search_num}_search_for_two_breaks_split_sections.log",
                 tmp_dir=TEMP_PATH_WITH_FAST_DEL,
             )
+            hl.default_reference("GRCh38")
             split_sections_by_len(
                 ht_path=grouped_ht_path,
                 search_num=args.search_num,
