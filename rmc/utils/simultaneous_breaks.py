@@ -4,7 +4,6 @@ from typing import List
 
 import hail as hl
 import scipy
-from gnomad.utils.file_utils import file_exists
 
 from rmc.resources.basics import SIMUL_BREAK_TEMP_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
@@ -153,40 +152,6 @@ def split_sections_by_len(
             ),
             overwrite,
         )
-
-
-def get_sections_to_run(
-    sections: List[str],
-    search_num: int,
-    freeze: int = CURRENT_FREEZE,
-) -> List[str]:
-    """
-    Check if any transcripts/sections have been previously searched by searching for success TSV existence.
-
-    .. note::
-        This step needs to be run locally due to permissions involved with `parallel_file_exists`.
-
-    :param sections: List of transcripts/transcript sections to check.
-    :param search_num: Search iteration number
-        (e.g., second round of searching for single break would be 2).
-    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
-    :return: List of transcripts/sections that didn't have success TSVs and therefore still need to be processed.
-    """
-    logger.info("Checking if any transcripts have already been searched...")
-    success_file_path = simul_search_round_bucket_path(
-        search_num=search_num,
-        bucket_type="success_files",
-        freeze=freeze,
-    )
-    section_success_map = {}
-    sections_to_run = []
-    for section in sections:
-        section_success_map[section] = f"{success_file_path}/{section}.tsv"
-
-    for section in sections:
-        if not file_exists(section_success_map[section]):
-            sections_to_run.append(section)
-    return sections_to_run
 
 
 def calculate_window_chisq(
