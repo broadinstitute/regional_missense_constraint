@@ -282,6 +282,15 @@ def create_possible_hts(
     """
     Create Table with possible variants per variant type for each locus type.
 
+    Function adds the following annotations required for expected variants calculation downstream:
+        - `possible_variants`: Number of possible variants per variant type.
+        - `mu_snp`: Mutation rate.
+        - `cpg`: CpG status.
+        - `predicted_proportion_observed`: Precursor to expected variants annotation.
+            Calculated by multiplying aggregated `mu_snp` against plateau model slope and
+            adding plateau model intercept.
+        - `expected_variants`: Expected number of variants.
+
     Region types are:
         - autosome/PAR
         - chrX nonPAR
