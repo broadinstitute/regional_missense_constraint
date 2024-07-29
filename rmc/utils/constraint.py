@@ -364,7 +364,7 @@ def create_filtered_context_ht(
         # due to negative coefficient in the model on this chr
         # (we decided to remove these sites for v2)
         raise DataException(
-            f"Found {negative_exp} variants with zero or negative expected values!"
+            f"Found {negative_exp} variants with negative expected values!"
         )
     if zero_exp.count() > 0:
         raise DataException(
