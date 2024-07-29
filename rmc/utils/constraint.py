@@ -17,7 +17,7 @@ from gnomad.utils.vep import filter_vep_transcript_csqs
 from gnomad_constraint.resources.resource_utils import get_models, get_mutation_ht
 
 from rmc.resources.basics import (
-    MODEL_PREFIX,
+    CONSTRAINT_PREFIX,
     TEMP_PATH,
     TEMP_PATH_WITH_FAST_DEL,
     TEMP_PATH_WITH_SLOW_DEL,
@@ -806,7 +806,7 @@ def search_for_break(
     )
     if save_chisq_ht:
         all_loci_chisq_ht_path = (
-            f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/all_loci_chisq.ht"
+            f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/all_loci_chisq.ht"
         )
     ht = ht.checkpoint(all_loci_chisq_ht_path, overwrite=True)
 
