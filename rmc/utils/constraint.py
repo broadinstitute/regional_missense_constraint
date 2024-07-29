@@ -260,7 +260,7 @@ def calculate_exp_from_mu(
         **group_ht.index(*[context_ht[g] for g in groupings])
     )
     context_ht = context_ht.checkpoint(
-        f"{TEMP_PATH_WITH_SLOW_DEL}/{locus_type}_context_exp.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/{locus_type}_context_exp.ht",
         _read_if_exists=not overwrite,
         overwrite=overwrite,
     )
@@ -442,7 +442,8 @@ def create_filtered_context_ht(
         )
     if zero_exp.count() > 0:
         raise DataException(
-            f"Found {zero_exp.count() - negative_exp} variants with zero expected values!"
+            f"Found {zero_exp.count() - negative_exp} variants with zero expected"
+            " values!"
         )
 
     logger.info(
