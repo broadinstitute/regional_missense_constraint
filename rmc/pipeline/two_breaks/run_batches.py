@@ -679,17 +679,11 @@ def main(args):
                 ), "Number of section groups doesn't match specified number of batches!"
             else:
                 group_num = count
-            if args.use_custom_machine:
-                # NOTE: you do not specify memory and cpu when specifying a custom machine
-                j = b.new_python_job(name=job_name)
-                j._machine_type = "n1-highmem-32"
-                j._preemptible = True
-                j.storage("100Gi")
-            else:
-                j = b.new_python_job(name=group[0])
-                j.memory(args.batch_memory)
-                j.cpu(args.batch_cpu)
-                j.storage(args.batch_storage)
+
+            j = b.new_python_job(name=group[0])
+            j.memory(args.batch_memory)
+            j.cpu(args.batch_cpu)
+            j.storage(args.batch_storage)
 
             j.call(
                 process_section_group,
