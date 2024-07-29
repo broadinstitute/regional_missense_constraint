@@ -190,8 +190,8 @@ def calculate_exp_from_mu(
     .. note::
         - Assumes that input Table is annotated with all of the fields in `groupings` and that
             the names match exactly.
-        - Assumes that input Table is annotated with `cpg` and `mu_snp` (raw mutation rate probability
-            without coverage correction).
+        - Assumes that input Table is annotated with `cpg`, `mu_snp` (raw mutation rate probability
+            without coverage correction), and `possible_variants`.
         - Assumes that input Table is filtered to autosomes/PAR only, X nonPAR only, or Y nonPAR only.
         - Assumes that input Table contains coverage and plateau models in its global annotations
             (`coverage_model`, `plateau_models`).
