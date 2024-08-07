@@ -359,6 +359,7 @@ def create_filtered_context_ht(
     n_partitions: int = 10000,
     overwrite: bool = False,
     additional_grouping: List[str] = [
+        "cpg",
         "annotation",
         "modifier",
         "transcript",
@@ -381,7 +382,7 @@ def create_filtered_context_ht(
     :param overwrite: Whether to overwrite temporary data. Default is False.
     :param additional_grouping: Additional fields to group by when calculating possible variants.
         These fields are added on top of the context, ref, alt, and methylation level grouping.
-        Default is ["annotation", "modifier", "transcript", "coverage"].
+        Default is ["cpg", "annotation", "modifier", "transcript", "coverage"].
     :param mu_ht_partitions: Number of desired partitions for mutation rate HT. Default is 100.
     :param canonical_only: Whether to filter to canonical transcripts only. Default is True.
     :return: None; writes Table to path.
