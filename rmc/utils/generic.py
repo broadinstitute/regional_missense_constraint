@@ -475,7 +475,7 @@ def keep_criteria(
     """
     Return Boolean expression to filter variants in input Table.
 
-    Default values will filter to rare variants (AC > 0, AF < 0.001) that pass filters and have median coverage greater than 0.
+    Default values will filter to rare variants (AC > 0, AF < 0.001) that pass filters.
 
     :param ac_expr: Allele count (AC) Int32Expression.
     :param af_expr: Allele frequency (AF) Float64Expression.

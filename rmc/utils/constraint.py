@@ -119,7 +119,9 @@ def add_obs_annotation(
     gnomad_ht = get_gnomad_public_release(gnomad_data_type)
     gnomad_ht = gnomad_ht.filter(
         keep_criteria(
-            gnomad_ht.ac, gnomad_ht.af, gnomad_ht.filters, gnomad_ht.gnomad_coverage
+            gnomad_ht.ac,
+            gnomad_ht.af,
+            gnomad_ht.filters,
         )
     )
     ht = ht.annotate(_obs=gnomad_ht.index(ht.key))
