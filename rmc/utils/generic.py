@@ -512,30 +512,32 @@ def filter_to_region_type(ht: hl.Table, region: str) -> hl.Table:
 
 
 def get_coverage_correction_expr(
-    coverage: hl.expr.Float64Expression,
+    an_expr: hl.expr.Int32Expression,
     coverage_model: Tuple[float, float],
-    high_cov_cutoff: int = 40,
+    high_AN_cutoff: int = 66,
 ) -> hl.expr.Float64Expression:
     """
-    Get coverage correction for expected variants count.
+    Get 'coverage' correction for expected variants count.
 
     .. note::
-        Default high coverage cutoff taken from gnomAD LoF repo.
+        - As of gnomAD v4, we use allele number (AN) as a proxy for coverage,
+            because coverage in v4 was not computed from CRAMs.
+        - Default high coverage cutoff taken from gnomAD LoF repo.
 
-    :param hl.expr.Float64Expression ht: Input coverage expression. Should be median coverage at position.
-    :param Tuple[float, float] coverage_model: Model to determine coverage correction factor necessary
-         for calculating expected variants at low coverage sites.
-    :param int high_cov_cutoff: Cutoff for high coverage. Default is 40.
+    :param ht: Input AN expression. Should be percent of exome AN defined at each locus.
+    :param coverage_model: Model to determine coverage correction factor necessary
+         for calculating expected variants at low AN sites.
+    :param high_cov_cutoff: Cutoff for high AN value. Default is 66.
     :return: Coverage correction expression.
     :rtype: hl.expr.Float64Expression
     """
     return (
         hl.case()
-        .when(coverage == 0, 0)
-        .when(coverage >= high_cov_cutoff, 1)
+        .when(an_expr == 0, 0)
+        .when(an_expr >= high_AN_cutoff, 1)
         # Use log10 here per
         # https://github.com/broadinstitute/gnomad_lof/blob/master/constraint_utils/constraint_basics.py#L555
-        .default(coverage_model[1] * hl.log10(coverage) + coverage_model[0])
+        .default(coverage_model[1] * hl.log10(an_expr) + coverage_model[0])
     )
 
 
