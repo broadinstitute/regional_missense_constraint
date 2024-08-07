@@ -223,14 +223,20 @@ def calculate_exp_from_mu(
         possible_ht.coverage, possible_ht.coverage_model
     )
 
-    if locus_type == "X":
-        plateau_model = possible_ht.plateau_x_models
-    elif locus_type == "Y":
-        plateau_model = possible_ht.plateau_y_models
-    else:
-        plateau_model = (
-            "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.plateau.autosome_par.he"
-        )
+    # TODO: uncomment when the other models exist
+    # if locus_type == "X":
+    #    plateau_model = (
+    #        get_models(model_type="plateau", genomic_region="chrx_non_par").he(),
+    #    )
+    # elif locus_type == "Y":
+    #    plateau_model = (
+    #        get_models(model_type="plateau", genomic_region="chry_non_par").he(),
+    #    )
+    # else:
+    #    plateau_model = get_models(model_type="plateau").he()
+    plateau_model = (
+        "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.plateau.autosome_par.he"
+    )
 
     agg_expr = {
         "mu": hl.agg.sum(mu_expr * cov_corr_expr),
@@ -338,7 +344,6 @@ def create_possible_hts(
     possible_ht = possible_ht.transmute(possible_variants=possible_ht.variant_count)
 
     # Annotate HT globals with models
-    # Need to annotate globals with models to use in `calculate_exp_from_mu`
     possible_ht = possible_ht.annotate_globals(
         # plateau_models=get_models(model_type="plateau").he(),
         plateau_models=hl.experimental.read_expression(
