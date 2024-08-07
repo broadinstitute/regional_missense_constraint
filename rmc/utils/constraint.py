@@ -415,7 +415,7 @@ def create_filtered_context_ht(
                 locus_type="autosomes",
                 additional_grouping=additional_grouping,
                 mu_ht_partitions=mu_ht_partitions,
-                overwrite=overwrite,
+                overwrite=True,
             ),
             locus_type="autosomes",
         )
