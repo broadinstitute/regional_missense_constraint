@@ -14,7 +14,7 @@ from gnomad.utils.constraint import (
 )
 from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
 from gnomad.utils.vep import filter_vep_transcript_csqs
-from gnomad_constraint.resources.resource_utils import get_models, get_mutation_ht
+from gnomad_constraint.resources.resource_utils import get_mutation_ht
 
 from rmc.resources.basics import (
     CONSTRAINT_PREFIX,
@@ -331,11 +331,17 @@ def create_possible_hts(
     # Annotate HT globals with models
     # Need to annotate globals with models to use in `calculate_exp_from_mu`
     possible_ht = possible_ht.annotate_globals(
-        plateau_models=get_models(model_type="plateau").he(),
+        # plateau_models=get_models(model_type="plateau").he(),
+        plateau_models=hl.experimental.read_expression(
+            "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.plateau.autosome_par.he"
+        ),
         # TODO: Uncomment lines below when chrX/chrY, coverage models are ready
         # plateau_x_models=get_models(model_type="plateau", genomic_region="chrx_non_par").he(),
         # plateau_y_models=get_models(model_type="plateau", genomic_region="chry_non_par").he(),
-        # coverage_model=plateau_x_models=get_models(model_type="coverage").he(),,
+        # coverage_model=plateau_x_models=get_models(model_type="coverage").he(),
+        coverage_model=hl.experimental.read_expression(
+            "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.coverage.autosome_par.he"
+        ),
     )
     possible_ht = possible_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/{locus_type}_possible_variants.ht",

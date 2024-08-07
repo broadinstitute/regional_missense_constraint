@@ -10,9 +10,8 @@ from gnomad.utils.constraint import (
 )
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.vep import CSQ_NON_CODING, filter_vep_transcript_csqs
-from gnomad_constraint.resources.resource_utils import (
+from gnomad_constraint.resources.resource_utils import (  # get_preprocessed_ht,
     get_mutation_ht,
-    get_preprocessed_ht,
 )
 
 from rmc.resources.basics import (
@@ -129,7 +128,10 @@ def process_context_ht(
     # https://github.com/broadinstitute/gnomad-constraint/blob/0acd2815e59c04d642bb705e6d1ca166f5d79e5f/gnomad_constraint/utils/constraint.py#L78
     # NOTE: The v4.1 constraint table currently only contains autosomes
     # TODO: Add allosomes and PAR
-    ht = get_preprocessed_ht("context").ht().select_globals()
+    # ht = get_preprocessed_ht("context").ht().select_globals()
+    ht = hl.read_table(
+        "gs://gnomad/v4.1/constraint_an/preprocessed_data/gnomad.v4.1.context.preprocessed.autosome_par.ht"
+    ).select_globals()
 
     logger.info("Filtering to ENSEMBL transcripts only...")
     # Also optionally filter to canonical transcripts and specific consequences
