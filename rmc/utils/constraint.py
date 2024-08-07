@@ -294,7 +294,7 @@ def create_possible_hts(
         "annotation",
         "modifier",
         "transcript",
-        "coverage",
+        "exomes_AN_percent",
     ],
     mu_ht_partitions: int = 100,
     overwrite: bool = False,
@@ -321,7 +321,7 @@ def create_possible_hts(
         Default is "autosomes".
     :param additional_grouping: Additional fields to group by when calculating possible variants.
         These fields are added on top of the context, ref, alt, and methylation level grouping.
-        Default is ["cpg", "annotation", "modifier", "transcript", "coverage"].
+        Default is ["cpg", "annotation", "modifier", "transcript", "exomes_AN_percent"].
     :param mu_ht_partitions: Number of desired partitions for mutation rate HT. Default is 100.
     :param overwrite: Whether to overwrite temporary data. Default is False.
     :return: Table filtered to `locus_type` with possible variants per variant type.
@@ -374,7 +374,7 @@ def create_filtered_context_ht(
         "annotation",
         "modifier",
         "transcript",
-        "coverage",
+        "exomes_AN_percent",
     ],
     mu_ht_partitions: int = 100,
     canonical_only: bool = True,
@@ -393,7 +393,7 @@ def create_filtered_context_ht(
     :param overwrite: Whether to overwrite temporary data. Default is False.
     :param additional_grouping: Additional fields to group by when calculating possible variants.
         These fields are added on top of the context, ref, alt, and methylation level grouping.
-        Default is ["cpg", "annotation", "modifier", "transcript", "coverage"].
+        Default is ["cpg", "annotation", "modifier", "transcript", "exomes_AN_percent"].
     :param mu_ht_partitions: Number of desired partitions for mutation rate HT. Default is 100.
     :param canonical_only: Whether to filter to canonical transcripts only. Default is True.
     :return: None; writes Table to path.
