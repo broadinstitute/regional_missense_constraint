@@ -427,7 +427,7 @@ def create_filtered_context_ht(
                 locus_type="autosomes",
                 additional_grouping=additional_grouping,
                 mu_ht_partitions=mu_ht_partitions,
-                overwrite=overwrite,
+                overwrite=True,
             ),
             locus_type="autosomes",
         )
@@ -460,7 +460,7 @@ def create_filtered_context_ht(
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht",
         _read_if_exists=not overwrite,
-        overwrite=overwrite,
+        overwrite=True,
     )
     # Repartition HT
     ht = hl.read_table(
