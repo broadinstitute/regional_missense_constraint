@@ -63,6 +63,7 @@ def main(args):
             logger.info("Creating filtered context HT...")
             n_partitions = 10000
             create_filtered_context_ht(
+                canonical_only=args.filter_to_canonical,
                 n_partitions=args.n_partitions if args.n_partitions else n_partitions,
                 overwrite=args.overwrite_temp,
             )
@@ -517,6 +518,13 @@ if __name__ == "__main__":
         help="""
         Process VEP context HT to create allele-level filtered context HT with constraint annotations.
         """,
+    )
+    prep_filtered_context.add_argument(
+        "--filter-to-canonical",
+        help="""
+        Filter context Table to canonical transcripts only.
+        """,
+        action="store_true",
     )
 
     prep_constraint = subparsers.add_parser(

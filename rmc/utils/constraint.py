@@ -356,6 +356,7 @@ def create_filtered_context_ht(
         "coverage",
     ],
     mu_ht_partitions: int = 100,
+    canonical_only: bool = True,
 ) -> None:
     """
     Create allele-level VEP context Table with constraint annotations including expected variant counts.
@@ -373,6 +374,7 @@ def create_filtered_context_ht(
         These fields are added on top of the context, ref, alt, and methylation level grouping.
         Default is ["annotation", "modifier", "transcript", "coverage"].
     :param mu_ht_partitions: Number of desired partitions for mutation rate HT. Default is 100.
+    :param canonical_only: Whether to filter to canonical transcripts only. Default is True.
     :return: None; writes Table to path.
     """
     logger.info(
@@ -381,7 +383,7 @@ def create_filtered_context_ht(
         " annotations..."
     )
     # NOTE: Constraint outlier transcripts are not removed
-    ht = process_context_ht(filter_csq=csq)
+    ht = process_context_ht(filter_to_canonical=canonical_only, filter_csq=csq)
 
     logger.info(
         "Filtering context HT to all covered sites not found or rare in gnomAD"
