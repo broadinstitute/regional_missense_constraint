@@ -2,7 +2,7 @@ import logging
 from typing import Dict, List, Set, Tuple
 
 import hail as hl
-from gnomad.resources.grch38.gnomad import coverage, public_release
+from gnomad.resources.grch38.gnomad import public_release
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.constraint import (
     annotate_exploded_vep_for_constraint_groupings,
@@ -379,7 +379,7 @@ def get_gnomad_public_release(
         - filters
         - gnomad_coverage
 
-    :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
+    :param gnomad_data_type: gnomAD data type. Used to retrieve public release resource.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
     :param adj_freq_index: Index of array that contains allele frequency information calculated on
@@ -387,12 +387,10 @@ def get_gnomad_public_release(
     :return: gnomAD public sites HT annotated with coverage and filtered to select fields.
     """
     gnomad = public_release(gnomad_data_type).ht().select_globals()
-    gnomad_cov = coverage(gnomad_data_type).ht()
     return gnomad.select(
         "filters",
         ac=gnomad.freq[adj_freq_index].AC,
         af=gnomad.freq[adj_freq_index].AF,
-        gnomad_coverage=gnomad_cov[gnomad.locus].median_approx,
     )
 
 
@@ -400,7 +398,7 @@ def filter_context_using_gnomad(
     context_ht: hl.Table,
     gnomad_data_type: str = "exomes",
     adj_freq_index: int = 0,
-    cov_threshold: int = 0,
+    an_threshold: int = 0,
 ) -> hl.Table:
     """
     Filter VEP context Table to sites that aren't seen in gnomAD or are rare in gnomAD.
@@ -408,16 +406,15 @@ def filter_context_using_gnomad(
     Also filter sites with zero coverage in gnomAD.
 
     :param context_ht: VEP context Table.
-    :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
+    :param gnomad_data_type: gnomAD data type. Used to retrieve public release resource.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
     :param adj_freq_index: Index of array that contains allele frequency information calculated on
         high quality (adj) genotypes across genetic ancestry groups. Default is 0.
-    :param cov_threshold: Remove variants at or below this median coverage threshold. Default is 0.
+    :param an_threshold: Remove variants at or below this AN threshold (in gnomAD exomes). Default is 0.
     :return: Filtered VEP context Table.
     """
     gnomad = get_gnomad_public_release(gnomad_data_type, adj_freq_index)
-    gnomad_cov = coverage(gnomad_data_type).ht()
 
     # Filter to sites not seen in gnomAD or to rare sites in gnomAD
     gnomad_join = gnomad[context_ht.key]
@@ -428,13 +425,9 @@ def filter_context_using_gnomad(
             gnomad_join.af,
             gnomad_join.filters,
             gnomad_join.gnomad_coverage,
-            cov_threshold=cov_threshold,
         )
     )
-    context_ht = context_ht.filter(
-        gnomad_cov[context_ht.locus].exomes_AN > cov_threshold
-    )
-    return context_ht
+    return context_ht.filter(context_ht.exomes_AN > an_threshold)
 
 
 def get_annotations_from_context_ht_vep(
