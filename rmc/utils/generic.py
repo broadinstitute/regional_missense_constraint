@@ -377,7 +377,6 @@ def get_gnomad_public_release(
         - ac
         - af
         - filters
-        - gnomad_coverage
 
     :param gnomad_data_type: gnomAD data type. Used to retrieve public release resource.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
@@ -424,7 +423,6 @@ def filter_context_using_gnomad(
             gnomad_join.ac,
             gnomad_join.af,
             gnomad_join.filters,
-            gnomad_join.gnomad_coverage,
         )
     )
     return context_ht.filter(context_ht.exomes_AN > an_threshold)
@@ -470,9 +468,7 @@ def keep_criteria(
     ac_expr: hl.expr.Int32Expression,
     af_expr: hl.expr.Float64Expression,
     filters_expr: hl.expr.SetExpression,
-    cov_expr: hl.expr.Int32Expression,
     af_threshold: float = 0.001,
-    cov_threshold: int = 0,
     filter_to_rare: bool = True,
 ) -> hl.expr.BooleanExpression:
     """
@@ -483,9 +479,7 @@ def keep_criteria(
     :param ac_expr: Allele count (AC) Int32Expression.
     :param af_expr: Allele frequency (AF) Float64Expression.
     :param filters_expr: Filters SetExpression.
-    :param cov_expr: gnomAD median coverage Int32Expression.
     :param af_threshold: AF threshold used for filtering variants in combination with `filter_to_rare`. Default is 0.001.
-    :param cov_threshold: Remove rows at or below this median coverage threshold. Default is 0.
     :param filter_to_rare: Whether to filter to keep rare variants only.
         If True, only variants with AF < `af_threshold` will be kept.
         If False, only variants with AF >= `af_threshold` will be kept.
@@ -495,12 +489,7 @@ def keep_criteria(
     af_filter_expr = (
         (af_expr < af_threshold) if filter_to_rare else (af_expr >= af_threshold)
     )
-    return (
-        (ac_expr > 0)
-        & (af_filter_expr)
-        & (hl.len(filters_expr) == 0)
-        & (cov_expr > cov_threshold)
-    )
+    return (ac_expr > 0) & (af_filter_expr) & (hl.len(filters_expr) == 0)
 
 
 def filter_to_region_type(ht: hl.Table, region: str) -> hl.Table:
