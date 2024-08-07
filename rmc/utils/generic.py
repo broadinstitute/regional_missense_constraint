@@ -133,7 +133,8 @@ def process_context_ht(
         "gs://gnomad/v4.1/constraint_an/preprocessed_data/gnomad.v4.1.context.preprocessed.autosome_par.ht"
     ).select_globals()
 
-    logger.info("Filtering to ENSEMBL transcripts only...")
+    if filter_to_canonical:
+        logger.info("Filtering to canonical transcripts only...")
     # Also optionally filter to canonical transcripts and specific consequences
     ht = filter_vep_transcript_csqs(
         t=ht,
