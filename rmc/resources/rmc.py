@@ -158,7 +158,7 @@ constraint_prep = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/constraint_prep.ht"
+            path=f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/constraint_prep_AN_test.ht"
         )
         for freeze in FREEZES
     },
