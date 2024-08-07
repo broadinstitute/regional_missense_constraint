@@ -379,8 +379,7 @@ def create_filtered_context_ht(
     """
     logger.info(
         "Preprocessing VEP context HT to filter to missense, nonsense, and"
-        " synonymous variants in all canonical transcripts and add constraint"
-        " annotations..."
+        " synonymous variants, and add constraint annotations..."
     )
     # NOTE: Constraint outlier transcripts are not removed
     ht = process_context_ht(filter_to_canonical=canonical_only, filter_csq=csq)
