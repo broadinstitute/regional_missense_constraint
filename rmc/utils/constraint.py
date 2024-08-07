@@ -216,6 +216,8 @@ def calculate_exp_from_mu(
     :param n_partitions: Number of desired partitions for temporary grouped context Table. Default is 5000.
     :return: Table annotated with per-variant expected counts.
     """
+    # NOTE: annotating with dummy observed_variants because `compute_expected_variants` expects it
+    possible_ht = possible_ht.annotate(observed_variants=possible_ht.possible_variants)
     mu_expr = possible_ht.mu_snp
     cov_corr_expr = get_coverage_correction_expr(
         possible_ht.coverage, possible_ht.coverage_model
@@ -226,7 +228,9 @@ def calculate_exp_from_mu(
     elif locus_type == "Y":
         plateau_model = possible_ht.plateau_y_models
     else:
-        plateau_model = possible_ht.plateau_models
+        plateau_model = (
+            "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.plateau.autosome_par.he"
+        )
 
     agg_expr = {
         "mu": hl.agg.sum(mu_expr * cov_corr_expr),
@@ -246,7 +250,9 @@ def calculate_exp_from_mu(
     logger.info(
         "Grouping by %s and computing expected counts per grouping...", groupings
     )
-    group_ht = possible_ht.group_by(*groupings).aggregate(**agg_expr)
+    group_ht = (
+        possible_ht.group_by(*groupings).aggregate(**agg_expr).drop("observed_variants")
+    )
     group_ht = group_ht.checkpoint(
         f"{TEMP_PATH_WITH_SLOW_DEL}/context_exp_group.ht",
         _read_if_exists=not overwrite,
