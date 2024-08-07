@@ -430,7 +430,9 @@ def filter_context_using_gnomad(
             cov_threshold=cov_threshold,
         )
     )
-    context_ht = context_ht.filter(gnomad_cov[context_ht.locus].median > cov_threshold)
+    context_ht = context_ht.filter(
+        gnomad_cov[context_ht.locus].median_approx > cov_threshold
+    )
     return context_ht
 
 
