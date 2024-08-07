@@ -177,7 +177,6 @@ def prepare_pop_path_ht(
     do_k_fold_training: bool = False,
     freeze: int = CURRENT_FREEZE,
     adj_freq_index: int = 0,
-    cov_threshold: int = 0,
 ) -> None:
     """
     Prepare Table(s) with 'population' and 'pathogenic' variants in given set of transcripts.
@@ -206,7 +205,6 @@ def prepare_pop_path_ht(
     :param int freeze: RMC data freeze number. Default is CURRENT_FREEZE.
     :param adj_freq_index: Index of array that contains allele frequency information calculated on
         high quality (adj) genotypes across genetic ancestry groups. Default is 0.
-    :param int cov_threshold: Coverage threshold used to filter context Table. Default is 0.
     :return: None; function writes Table(s) to resource path(s).
     """
     logger.info("Reading in ClinVar P/LP missense variants in severe HI genes...")
@@ -223,9 +221,7 @@ def prepare_pop_path_ht(
             ac_expr=gnomad_ht.ac,
             af_expr=gnomad_ht.af,
             filters_expr=gnomad_ht.filters,
-            cov_expr=gnomad_ht.gnomad_coverage,
             af_threshold=af_threshold,
-            cov_threshold=cov_threshold,
             filter_to_rare=False,
         )
     )
