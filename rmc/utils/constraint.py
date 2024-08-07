@@ -278,6 +278,7 @@ def create_possible_hts(
     ht: hl.Table,
     locus_type: str = "autosomes",
     additional_grouping: List[str] = [
+        "cpg",
         "annotation",
         "modifier",
         "transcript",
@@ -308,7 +309,7 @@ def create_possible_hts(
         Default is "autosomes".
     :param additional_grouping: Additional fields to group by when calculating possible variants.
         These fields are added on top of the context, ref, alt, and methylation level grouping.
-        Default is ["annotation", "modifier", "transcript", "coverage"].
+        Default is ["cpg", "annotation", "modifier", "transcript", "coverage"].
     :param mu_ht_partitions: Number of desired partitions for mutation rate HT. Default is 100.
     :param overwrite: Whether to overwrite temporary data. Default is False.
     :return: Table filtered to `locus_type` with possible variants per variant type.
