@@ -478,9 +478,9 @@ def create_filtered_context_ht(
             f"Found {negative_exp} variants with negative expected values!"
         )
     if zero_exp.count() > 0:
-        raise DataException(
-            f"Found {zero_exp.count() - negative_exp} variants with zero expected"
-            " values!"
+        logger.warning(
+            "Found %d variants with zero expected values!",
+            {zero_exp.count() - negative_exp},
         )
 
     logger.info(
