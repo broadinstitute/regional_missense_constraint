@@ -234,7 +234,7 @@ def calculate_exp_from_mu(
     #    )
     # else:
     #    plateau_model = get_models(model_type="plateau").he()
-    plateau_model = (
+    plateau_model = hl.experimental.read_expression(
         "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.plateau.autosome_par.he"
     )
 
