@@ -91,7 +91,7 @@ GROUPINGS = [
     "annotation",
     "modifier",
     "transcript",
-    "coverage",
+    "exomes_AN_percent",
 ]
 """
 Fields to group by when calculating expected variants per variant type.
