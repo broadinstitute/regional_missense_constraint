@@ -538,7 +538,8 @@ def get_coverage_correction_expr(
         .when(an_expr >= high_AN_cutoff, 1)
         # Use log10 here per
         # https://github.com/broadinstitute/gnomad_lof/blob/master/constraint_utils/constraint_basics.py#L555
-        .default(coverage_model[1] * hl.log10(an_expr) + coverage_model[0])
+        # .default(coverage_model[1] * hl.log10(an_expr) + coverage_model[0])
+        .default(coverage_model[1] * an_expr + coverage_model[0])
     )
 
 
