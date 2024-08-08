@@ -460,7 +460,7 @@ def create_filtered_context_ht(
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht",
         _read_if_exists=not overwrite,
-        overwrite=True,
+        overwrite=overwrite,
     )
     # Repartition HT
     ht = hl.read_table(
