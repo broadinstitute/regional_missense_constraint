@@ -480,7 +480,7 @@ def create_filtered_context_ht(
     if zero_exp.count() > 0:
         logger.warning(
             "Found %d variants with zero expected values!",
-            {zero_exp.count() - negative_exp},
+            zero_exp.count() - negative_exp,
         )
 
     logger.info(
