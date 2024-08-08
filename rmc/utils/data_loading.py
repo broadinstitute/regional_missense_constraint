@@ -169,7 +169,7 @@ def create_transcript_ref(
     ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/gene_model_filt.ht", overwrite=True)
 
     # Remove non-standard contigs
-    contigs = hl.get_reference(build).contigs[:24]
+    contigs = hl.literal(set(hl.get_reference(build).contigs[:24]))
     ht = ht.filter(contigs.contains(ht.chrom))
 
     coords_ht = get_start_end_coords(ht, overwrite)
