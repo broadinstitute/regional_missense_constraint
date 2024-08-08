@@ -175,6 +175,7 @@ def process_context_ht(
         "coverage",
         "transcript",
         "exomes_AN",
+        "exomes_AN_percent",
     )
 
     logger.info("Annotating with mutation rate...")
