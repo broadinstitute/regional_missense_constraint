@@ -220,7 +220,7 @@ def calculate_exp_from_mu(
     possible_ht = possible_ht.annotate(observed_variants=possible_ht.possible_variants)
     mu_expr = possible_ht.mu_snp
     cov_corr_expr = get_coverage_correction_expr(
-        possible_ht.coverage, possible_ht.coverage_model
+        possible_ht.exomes_AN_percent, possible_ht.coverage_model
     )
 
     # TODO: uncomment when the other models exist
