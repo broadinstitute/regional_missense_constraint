@@ -159,12 +159,18 @@ def create_transcript_ref(
     ht = ht.key_by(transcript=ht.canonical_transcript_id)
 
     # Filter transcript row annotation to canonical transcripts,
-    # rename symbol to hgnc_symbol, and annotate with transcript version
+    # rename symbol to hgnc_symbol, annotate with transcript version,
+    # and add 'chr' prefix to chrom if it doesn't exist
     ht = ht.transmute(
         transcripts=ht.transcripts.filter(lambda x: x.transcript_id == ht.transcript),
         hgnc_symbol=ht.symbol,
     )
-    ht = ht.annotate(transcript_version=ht.transcripts[0].transcript_version)
+    ht = ht.annotate(
+        transcript_version=ht.transcripts[0].transcript_version,
+        chrom=hl.if_else(
+            ht.chrom.startswith("chr"), ht.chrom, hl.format("%s%s", "chr", ht.chrom)
+        ),
+    )
     ht = ht.select(*start_annotations)
     ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/gene_model_filt.ht", overwrite=True)
 
