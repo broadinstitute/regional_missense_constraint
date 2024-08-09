@@ -4,15 +4,9 @@ from typing import Dict, List, Set, Tuple
 import hail as hl
 from gnomad.resources.grch38.gnomad import public_release
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.constraint import (
-    annotate_exploded_vep_for_constraint_groupings,
-    annotate_with_mu,
-)
+from gnomad.utils.constraint import annotate_exploded_vep_for_constraint_groupings
 from gnomad.utils.file_utils import file_exists
 from gnomad.utils.vep import CSQ_NON_CODING, filter_vep_transcript_csqs
-from gnomad_constraint.resources.resource_utils import (  # get_preprocessed_ht,
-    get_mutation_ht,
-)
 
 from rmc.resources.basics import (
     ACID_NAMES_PATH,
@@ -108,7 +102,6 @@ def annotate_and_filter_codons(ht: hl.Table) -> hl.Table:
 def process_context_ht(
     filter_to_canonical: bool = False,
     filter_csq: Set[str] = None,
-    mu_ht_partitions: int = 100,
 ) -> hl.Table:
     """
     Get context HT for SNPs annotated with VEP in canonical protein-coding transcripts.
@@ -118,7 +111,6 @@ def process_context_ht(
 
     :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
     :param filter_csq: Specific consequences to keep. Default is None.
-    :param mu_ht_partitions: Number of desired partitions for mutation rate HT. Default is 100.
     :return: VEP context HT filtered to canonical transcripts and optionally filtered to variants
         in non-outlier transcripts with specific consequences and annotated with mutation rate etc.
     :rtype: hl.Table
@@ -163,7 +155,7 @@ def process_context_ht(
     )
 
     # Drop other unnecessary annotations
-    ht = ht.select(
+    return ht.select(
         "context",
         "ref",
         "alt",
@@ -177,15 +169,6 @@ def process_context_ht(
         "exomes_AN",
         "exomes_AN_percent",
     )
-
-    logger.info("Annotating with mutation rate...")
-    # Mutation rate HT is keyed by context, ref, alt, methylation level
-    # TODO: `annotate_with_mu` triggered new shuffle errors in my tests in June 2024;
-    # keep an eye on this step when re-running on full context HT
-    mu_ht = hl.read_table(
-        get_mutation_ht().path, _n_partitions=mu_ht_partitions
-    ).select("mu_snp")
-    return annotate_with_mu(ht, mu_ht)
 
 
 def get_aa_from_context(
