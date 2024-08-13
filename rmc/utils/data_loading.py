@@ -121,7 +121,7 @@ def create_transcript_ref(
     final_annotations: List[str] = [
         "chrom",
         "transcript_start",
-        "transcript_stop",
+        "transcript_end",
         "cds_start",
         "cds_end",
         "strand",
