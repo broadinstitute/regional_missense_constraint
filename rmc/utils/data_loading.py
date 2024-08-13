@@ -117,6 +117,8 @@ def create_transcript_ref(
         "exons",
         "gene_id",
         "gencode_symbol",
+        "hgnc_symbol",
+        "transcript_version",
     ],
     final_annotations: List[str] = [
         "chrom",
