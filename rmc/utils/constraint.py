@@ -491,7 +491,7 @@ def create_filtered_context_ht(
 
 
 def create_constraint_prep_ht(
-    filter_csq: Set[str] = {MISSENSE}, n_partitions: int = 15000, overwrite: bool = True
+    filter_csq: Set[str] = {MISSENSE}, n_partitions: int = 10000, overwrite: bool = True
 ) -> None:
     """
     Create locus-level constraint prep Table from filtered context Table for all canonical protein-coding transcripts.
