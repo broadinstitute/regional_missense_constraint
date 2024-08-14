@@ -11,7 +11,6 @@ from rmc.resources.rmc import (
     MIN_CHISQ_THRESHOLD,
     MIN_EXP_MIS,
     P_VALUE,
-    simul_search_round_bucket_path,
     simul_sections_split_by_len_path,
 )
 from rmc.utils.constraint import (
@@ -350,7 +349,6 @@ def process_section_group(
     ht_path: str,
     section_group: List[str],
     count: int,
-    search_num: int,
     over_threshold: bool,
     output_ht_path: str,
     output_n_partitions: int = 10,
@@ -453,13 +451,8 @@ def process_section_group(
         # keep the desired number of partitions
         # (would sometimes repartition to a lower number of partitions)
         ht = ht.repartition(n_rows)
-        prep_path = simul_search_round_bucket_path(
-            search_num=search_num,
-            bucket_type="prep",
-            freeze=freeze,
-        )
         ht = ht.checkpoint(
-            f"{prep_path}/{section_group[0]}.ht",
+            f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}.ht",
             _read_if_exists=read_if_exists,
             overwrite=not read_if_exists,
         )
@@ -485,12 +478,9 @@ def process_section_group(
 
     # If over threshold, checkpoint HT and check if there were any breaks
     if over_threshold:
-        raw_path = simul_search_round_bucket_path(
-            search_num=search_num,
-            bucket_type="raw_results",
-            freeze=freeze,
+        ht = ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}.ht", overwrite=True
         )
-        ht = ht.checkpoint(f"{raw_path}/{section_group[0]}.ht", overwrite=True)
         # If any rows had a significant breakpoint,
         # find the one "best" breakpoint (breakpoint with largest chi square value)
         if ht.count() > 0:

@@ -118,7 +118,6 @@ def main(args):
                 ),
                 section_group=group,
                 count=counter,
-                search_num=args.search_num,
                 over_threshold=True,
                 output_ht_path=output_ht_path,
                 output_n_partitions=args.output_n_partitions,
