@@ -388,7 +388,7 @@ def process_section_group(
         Only used if over_threshold is True. Default is 500.
     :param read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
         Only applies to Table that is input to `search_for_two_breaks`
-        (`f"{temp_ht_path}/{transcript_group[0]}_prep.ht"`).
+        (`f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}.ht"`).
         Default is False.
     :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
         (as long as chi square value is >= min_chisq_threshold).
