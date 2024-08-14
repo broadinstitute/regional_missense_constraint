@@ -155,10 +155,16 @@ def create_transcript_ref(
     """
     ht = gene_model.versions[build].ht()
 
-    # Key by canonical transcript ID
+    # Remove chrM and transcripts without preferred transcript ID
+    # (transcript field displayed on the browser)
+    # There are 111 transcripts without defined preferred transcript ID,
+    # 37 of which are on chrM
+    ht = ht.filter(~ht.chrom.contains("M") & hl.is_defined(ht.preferred_transcript_id))
+
+    # Key by preferred transcript ID (MANE select or canonical)
     # NOTE: All MANE select transcripts in VEP105/GENCODE39 are canonical
     # (but not all canonical are MANE select)
-    ht = ht.key_by(transcript=ht.canonical_transcript_id)
+    ht = ht.key_by(transcript=ht.preferred_transcript_id)
 
     # Filter transcript row annotation to canonical transcripts,
     # rename symbol to hgnc_symbol, annotate with transcript version,
