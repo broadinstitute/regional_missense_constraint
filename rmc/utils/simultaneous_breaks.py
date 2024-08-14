@@ -500,7 +500,8 @@ def process_section_group(
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
     # NOTE: Change `naive_coalesce` to `repartition` below if you run into this Hail bug:
     # https://discuss.hail.is/t/zip-length-mismatch-error/3548/7
-    ht = ht.naive_coalesce(output_n_partitions)
+    # ht = ht.naive_coalesce(output_n_partitions)
+    ht = ht.repartition(output_n_partitions)
     # TODO: Restructure ht to match locus-level formats from single breaks
     ht.write(output_ht_path, overwrite=True)
     # TODO: Consider whether we want to write out temp information on chisq values for each potential break combination
