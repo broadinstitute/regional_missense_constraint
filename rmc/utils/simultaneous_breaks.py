@@ -506,13 +506,3 @@ def process_section_group(
     ht.write(output_ht_path, overwrite=True)
     # TODO: Consider whether we want to write out temp information on chisq values for each potential break combination
     #   like in single breaks
-
-    success_tsvs_path = simul_search_round_bucket_path(
-        search_num=search_num,
-        bucket_type="success_files",
-        freeze=freeze,
-    )
-    for section in section_group:
-        tsv_path = f"{success_tsvs_path}/{section}.tsv"
-        with hl.hadoop_open(tsv_path, "w") as o:
-            o.write(f"{section}\n")
