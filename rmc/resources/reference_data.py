@@ -55,7 +55,7 @@ Contains all transcripts displayed in the browser (more than `transcript_ref` be
 """
 
 transcript_ref = VersionedTableResource(
-    default_version="GRCh37",
+    default_version=CURRENT_BUILD,
     versions={
         "GRCh37": TableResource(
             path=f"{get_ref_data_prefix('GRCh37')}/ht/canonical_transcripts_genes_coordinates.ht"
@@ -120,7 +120,7 @@ Key: ['transcript']
 """
 
 transcript_cds = VersionedTableResource(
-    default_version="GRCh37",
+    default_version=CURRENT_BUILD,
     versions={
         "GRCh37": TableResource(
             path=f"{get_ref_data_prefix('GRCh37')}/ht/b37_cds_coords.ht"
@@ -252,7 +252,7 @@ List of triplosensitive genes was determined by filtering to genes with pTriplo 
 ## Assessment related resources
 ####################################################################################
 clinvar = VersionedTableResource(
-    default_version="GRCh38",
+    default_version=CURRENT_BUILD,
     versions={
         "GRCh37": TableResource(
             path=f"{get_ref_data_prefix('GRCh37')}/ht/clinvar.GRCh37.ht"
