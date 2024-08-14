@@ -535,16 +535,6 @@ def process_section_group(
     ht = ht.naive_coalesce(output_n_partitions)
     ht.write(output_ht_path, overwrite=True)
 
-    success_tsvs_path = simul_search_round_bucket_path(
-        search_num=search_num,
-        bucket_type="success_files",
-        freeze=freeze,
-    )
-    for section in section_group:
-        tsv_path = f"{success_tsvs_path}/{section}.tsv"
-        with hl.hadoop_open(tsv_path, "w") as o:
-            o.write(f"{section}\n")
-
 
 def main(args):
     """Search for two simultaneous breaks in transcripts without evidence of a single significant break."""
