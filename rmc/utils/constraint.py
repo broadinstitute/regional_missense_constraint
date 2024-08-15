@@ -482,6 +482,8 @@ def create_filtered_context_ht(
             "Found %d variants with zero expected values!",
             zero_exp.count() - negative_exp,
         )
+        # Set zero exp to small number to avoid breaking likelihood ratio tests
+        ht = ht.annotate(expected=hl.if_else(ht.expected == 0, 1e-09, ht.expected))
 
     logger.info(
         "Annotating context HT with number of observed variants and writing out..."
