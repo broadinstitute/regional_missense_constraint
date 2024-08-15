@@ -410,9 +410,9 @@ def filter_context_using_gnomad(
             gnomad_join.filters,
         )
     )
-    # NOTE: Kristen filtered to AN defined in preliminary run rather than AN > 0
-    # TODO: revisit when rerunning prior to release
-    return context_ht.filter(context_ht.exomes_AN > an_threshold)
+    return context_ht.filter(
+        hl.is_defined(context_ht.exomes_AN) & (context_ht.exomes_AN > an_threshold)
+    )
 
 
 def get_annotations_from_context_ht_vep(
