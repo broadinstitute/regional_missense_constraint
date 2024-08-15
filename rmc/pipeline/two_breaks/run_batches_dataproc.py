@@ -19,6 +19,7 @@ from rmc.resources.rmc import (
     P_VALUE,
     grouped_single_no_break_ht_path,
     simul_search_round_bucket_path,
+    simul_sections_path,
     simul_sections_split_by_len_path,
 )
 from rmc.slack_creds import slack_token
@@ -47,6 +48,18 @@ def main(args):
         chisq_threshold = hl.eval(hl.qchisqtail(P_VALUE, 2))
         if args.p_value:
             chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 2))
+
+        if args.run_all_sections:
+            sections_to_run = list(
+                hl.eval(
+                    hl.experimental.read_expression(
+                        simul_sections_path(
+                            search_num=args.search_num,
+                            freeze=args.freeze,
+                        )
+                    )
+                )
+            )
 
         if args.run_sections_over_threshold:
             over_threshold = True
@@ -194,6 +207,11 @@ if __name__ == "__main__":
         default=500,
     )
     section_ids = parser.add_mutually_exclusive_group()
+    section_ids.add_argument(
+        "--run-all-sections",
+        help="Search for simultaneous breaks in all sections (regardless of length).",
+        action="store_true",
+    )
     section_ids.add_argument(
         "--run-sections-over-threshold",
         help="Search for simultaneous breaks in sections that are over length cutoff.",
