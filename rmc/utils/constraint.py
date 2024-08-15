@@ -482,8 +482,6 @@ def create_filtered_context_ht(
             "Found %d variants with zero expected values!",
             zero_exp.count() - negative_exp,
         )
-        # Set zero exp to small number to avoid breaking likelihood ratio tests
-        ht = ht.annotate(expected=hl.if_else(ht.expected == 0, 1e-09, ht.expected))
 
     logger.info(
         "Annotating context HT with number of observed variants and writing out..."
@@ -519,6 +517,30 @@ def create_constraint_prep_ht(
     ht = ht.group_by("locus", "transcript").aggregate(
         observed=hl.agg.sum(ht.observed),
         expected=hl.agg.sum(ht.expected),
+    )
+
+    transcript_group = ht.group_by("transcript").aggregate(
+        observed=hl.agg.sum(ht.observed),
+        expected=hl.agg.sum(ht.expected),
+    )
+    transcript_group = transcript_group.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/transcript_group.ht", overwrite=overwrite
+    )
+    zero_exp = transcript_group.filter(transcript_group.expected == 0)
+    if zero_exp.count() > 0:
+        logger.warning(
+            "Found %d transcripts with zero expected values across the entire"
+            " transcript!",
+            zero_exp.count(),
+        )
+        zero_exp_transcripts = zero_exp.aggregate(
+            hl.agg.collect_as_set(zero_exp.transcript)
+        )
+
+    ht = ht.filter(hl.literal(zero_exp_transcripts.contains(ht.transcript)), keep=False)
+    ht = ht.annotate(expected=hl.if_else(ht.expected == 0, 1e-09, ht.expected))
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/transcripts_nonzero_exp.ht", overwrite=True
     )
 
     logger.info("Adding section annotation...")
