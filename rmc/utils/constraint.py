@@ -536,8 +536,10 @@ def create_constraint_prep_ht(
         zero_exp_transcripts = zero_exp.aggregate(
             hl.agg.collect_as_set(zero_exp.transcript)
         )
+        ht = ht.filter(
+            hl.literal(zero_exp_transcripts.contains(ht.transcript)), keep=False
+        )
 
-    ht = ht.filter(hl.literal(zero_exp_transcripts.contains(ht.transcript)), keep=False)
     ht = ht.annotate(expected=hl.if_else(ht.expected == 0, 1e-09, ht.expected))
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/transcripts_nonzero_exp.ht", overwrite=True
