@@ -11,6 +11,7 @@ from rmc.resources.rmc import (
     MIN_CHISQ_THRESHOLD,
     MIN_EXP_MIS,
     P_VALUE,
+    simul_sections_path,
     simul_sections_split_by_len_path,
 )
 from rmc.utils.constraint import (
@@ -78,6 +79,33 @@ def group_no_single_break_found_ht(
         positions=group_ht.values.positions,
     )
     group_ht.write(out_ht_path, overwrite=overwrite)
+
+
+def get_sections(
+    ht_path: str,
+    search_num: int,
+    overwrite: bool,
+    freeze: int = CURRENT_FREEZE,
+) -> None:
+    """
+    Get all sections to run through simultaneous breaks search, regardless of section length.
+
+    :param ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
+    :param search_num: Search iteration number (e.g., second round of searching for single break would be 2).
+    :param overwrite: Whether to overwrite existing SetExpression.
+    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
+    :return: None; writes SetExpression to resource path.
+    """
+    ht = hl.read_table(ht_path)
+    sections = ht.aggregate(hl.agg.collect_as_set(ht.section))
+    hl.experimental.write_expression(
+        sections,
+        simul_sections_path(
+            search_num=search_num,
+            freeze=freeze,
+        ),
+        overwrite,
+    )
 
 
 def split_sections_by_len(
