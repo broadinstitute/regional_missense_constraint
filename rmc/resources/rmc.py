@@ -370,26 +370,6 @@ def grouped_single_no_break_ht_path(
     return f"{bucket_path}/grouped_single_no_break_found.ht"
 
 
-def simul_sections_path(
-    search_num: int,
-    freeze: int = CURRENT_FREEZE,
-) -> str:
-    """
-    Return path to all transcripts/transcript sections entering a specific round of simultaneous break search.
-
-    :param search_num: Search iteration number
-        (e.g., second round of searching for single break would be 2).
-    :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
-    :return: Path to Table containing all transcripts/transcript sections.
-    """
-    bucket_path = simul_search_round_bucket_path(
-        search_num=search_num,
-        bucket_type="prep",
-        freeze=freeze,
-    )
-    return f"{bucket_path}/sections_to_simul_all.he"
-
-
 def simul_sections_split_by_len_path(
     search_num: int,
     is_over_threshold: bool,

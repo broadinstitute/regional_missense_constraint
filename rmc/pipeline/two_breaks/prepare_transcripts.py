@@ -21,7 +21,6 @@ from rmc.resources.rmc import (
 )
 from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import (
-    get_sections,
     group_no_single_break_found_ht,
     split_sections_by_len,
 )
@@ -62,19 +61,6 @@ def main(args):
                 ),
                 out_ht_path=grouped_ht_path,
                 overwrite=args.overwrite,
-            )
-
-        if args.command == "collect-sections":
-            hl.init(
-                log=f"/round{args.search_num}_search_for_two_breaks_collect_all_sections.log",
-                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
-            )
-            hl.default_reference("GRCh38")
-            get_sections(
-                ht_path=grouped_ht_path,
-                search_num=args.search_num,
-                overwrite=args.overwrite,
-                freeze=args.freeze,
             )
 
         if args.command == "split-sections":

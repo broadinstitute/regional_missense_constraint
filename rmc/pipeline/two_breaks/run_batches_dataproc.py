@@ -19,7 +19,6 @@ from rmc.resources.rmc import (
     P_VALUE,
     grouped_single_no_break_ht_path,
     simul_search_round_bucket_path,
-    simul_sections_path,
     simul_sections_split_by_len_path,
 )
 from rmc.slack_creds import slack_token
@@ -50,10 +49,23 @@ def main(args):
             chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 2))
 
         if args.run_all_sections:
+            over_threshold = None
+            under_threshold = None
             sections_to_run = list(
                 hl.eval(
                     hl.experimental.read_expression(
-                        simul_sections_path(
+                        simul_sections_split_by_len_path(
+                            is_over_threshold=True,
+                            search_num=args.search_num,
+                            freeze=args.freeze,
+                        )
+                    )
+                )
+            ) + list(
+                hl.eval(
+                    hl.experimental.read_expression(
+                        simul_sections_split_by_len_path(
+                            is_over_threshold=False,
                             search_num=args.search_num,
                             freeze=args.freeze,
                         )
@@ -113,11 +125,13 @@ def main(args):
             freeze=args.freeze,
         )
         for counter, group in enumerate(section_groups):
-            output_ht_path = (
-                f"{raw_path}/simul_break_dataproc_{counter}.ht"
-                if over_threshold
-                else f"{raw_path}/simul_break_dataproc_under_{counter}.ht"
-            )
+            if over_threshold:
+                output_ht_path = f"{raw_path}/simul_break_dataproc_{counter}.ht"
+            elif under_threshold:
+                output_ht_path = f"{raw_path}/simul_break_dataproc_under_{counter}.ht"
+            else:
+                output_ht_path = f"{raw_path}/simul_break_dataproc_all_{counter}.ht"
+
             if file_exists(output_ht_path):
                 raise DataException(
                     f"Output already exists at {output_ht_path}! Double check before"
