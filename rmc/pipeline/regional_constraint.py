@@ -242,6 +242,8 @@ def main(args):
             )
 
             logger.info("Checking if simul breaks merged HT exists...")
+            # NOTE: Not checking for row count of zero because am assuming
+            # user didn't run merge step if simul breaks search didn't return any results
             simul_results_path = simul_search_round_bucket_path(
                 search_num=args.search_num,
                 bucket_type="final_results",
