@@ -320,26 +320,30 @@ def main(args):
                     " search..."
                 )
                 single_break_ht = hl.read_table(single_break_path)
-                single_break_ht = single_break_ht.annotate(
-                    section_1=hl.if_else(
-                        single_break_ht.locus.position > single_break_ht.breakpoint,
-                        hl.format(
-                            "%s_%s_%s",
-                            single_break_ht.section.split("_")[0],
-                            single_break_ht.breakpoint + 1,
-                            single_break_ht.section.split("_")[2],
-                        ),
-                        hl.format(
-                            "%s_%s_%s",
-                            single_break_ht.section.split("_")[0],
-                            single_break_ht.section.split("_")[1],
-                            single_break_ht.breakpoint,
-                        ),
+                if single_break_ht.count() > 0:
+                    single_break_ht = single_break_ht.annotate(
+                        section_1=hl.if_else(
+                            single_break_ht.locus.position > single_break_ht.breakpoint,
+                            hl.format(
+                                "%s_%s_%s",
+                                single_break_ht.section.split("_")[0],
+                                single_break_ht.breakpoint + 1,
+                                single_break_ht.section.split("_")[2],
+                            ),
+                            hl.format(
+                                "%s_%s_%s",
+                                single_break_ht.section.split("_")[0],
+                                single_break_ht.section.split("_")[1],
+                                single_break_ht.breakpoint,
+                            ),
+                        )
                     )
-                )
-                single_break_ht = single_break_ht.key_by(
-                    "locus", section=single_break_ht.section_1
-                ).drop("section_1", "breakpoint")
+                    single_break_ht = single_break_ht.key_by(
+                        "locus", section=single_break_ht.section_1
+                    ).drop("section_1", "breakpoint")
+                else:
+                    logger.info("Single break HT had zero rows!")
+                    single_exists = False
             else:
                 logger.info(
                     "No sections in round %i had breakpoints in single search.",
