@@ -591,7 +591,7 @@ def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
     constraint_transcript_ht = constraint_ht.ht().key_by("transcript")
     constraint_transcript_ht = constraint_transcript_ht.filter(
         constraint_transcript_ht.canonical
-    ).select("constraint_flag")
+    ).select("constraint_flags")
     if outlier:
         constraint_transcript_ht = constraint_transcript_ht.filter(
             hl.len(constraint_transcript_ht.constraint_flag) > 0
