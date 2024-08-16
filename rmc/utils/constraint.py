@@ -1444,6 +1444,7 @@ def create_context_with_oe(
     missense_str: str = MISSENSE,
     n_partitions: int = 30000,
     overwrite_temp: bool = False,
+    filter_outliers: bool = False,
 ) -> None:
     """
     Filter VEP context Table to missense variants in canonical transcripts, and add missense observed/expected.
@@ -1456,17 +1457,19 @@ def create_context_with_oe(
         - `context_with_oe_dedup`: Deduplicated version of `context_with_oe` that only contains missense o/e and transcript annotations.
 
     :param freeze: RMC data freeze number.
-    :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
-    :param int n_partitions: Number of desired partitions for the VEP context Table.
+    :param missense_str: String representing missense variant consequence. Default is MISSENSE.
+    :param n_partitions: Number of desired partitions for the VEP context Table.
         Repartition VEP context Table to this number on read.
         Default is 30000.
-    :param bool overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
+    :param overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
         Default is False.
+    :param filter_outliers: Whether to filter out outlier transcripts. Default is False.
     :return: None; function writes Table to resource path.
     """
-    logger.info("Importing set of transcripts to keep...")
-    transcripts = get_constraint_transcripts(outlier=False)
+    if filter_outliers:
+        logger.info("Importing set of transcripts to keep...")
+        transcripts = get_constraint_transcripts(outlier=False)
 
     logger.info(
         "Reading in SNPs-only, VEP-annotated context HT and filtering to missense"
