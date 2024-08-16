@@ -434,7 +434,10 @@ def main(args):
 
             logger.info("Creating OE-annotated context table...")
             create_context_with_oe(
-                freeze=args.freeze, overwrite_temp=args.overwrite_temp
+                freeze=args.freeze,
+                filter_to_canonical=args.filter_to_canonical,
+                overwrite_temp=args.overwrite_temp,
+                filter_outliers=args.filter_outliers,
             )
 
             logger.info("Reformatting RMC results for browser release...")
@@ -592,6 +595,13 @@ if __name__ == "__main__":
     finalize.add_argument(
         "--filter-outliers",
         help="Remove constraint outlier transcripts from RMC output.",
+    )
+    finalize.add_argument(
+        "--filter-to-canonical",
+        help="""
+        Filter context Table to canonical transcripts only.
+        """,
+        action="store_true",
     )
 
     create_release = subparsers.add_parser(

@@ -1441,6 +1441,7 @@ def dedup_annot(
 
 def create_context_with_oe(
     freeze: int,
+    filter_to_canonical: bool = False,
     missense_str: str = MISSENSE,
     n_partitions: int = 30000,
     overwrite_temp: bool = False,
@@ -1457,6 +1458,7 @@ def create_context_with_oe(
         - `context_with_oe_dedup`: Deduplicated version of `context_with_oe` that only contains missense o/e and transcript annotations.
 
     :param freeze: RMC data freeze number.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
     :param missense_str: String representing missense variant consequence. Default is MISSENSE.
     :param n_partitions: Number of desired partitions for the VEP context Table.
         Repartition VEP context Table to this number on read.
@@ -1486,7 +1488,7 @@ def create_context_with_oe(
         t=ht,
         vep_root="vep",
         synonymous=False,
-        canonical=True,
+        canonical=filter_to_canonical,
         ensembl_only=True,
         filter_empty_csq=True,
         csqs={missense_str},
