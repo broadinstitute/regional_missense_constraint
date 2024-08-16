@@ -420,6 +420,8 @@ def main(args):
             rmc_ht = rmc_ht.annotate_globals(p_value=p_value)
 
             logger.info("Writing out RMC results...")
+            n_partitions = args.n_partitions if args.n_partitions else 1000
+            rmc_ht = rmc_ht.naive_coalesce(n_partitions)
             rmc_ht.write(
                 rmc_results.versions[args.freeze].path, overwrite=args.overwrite
             )
