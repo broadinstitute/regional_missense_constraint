@@ -88,6 +88,7 @@ def main(args):
             )
 
         if args.run_sections_under_threshold:
+            under_threshold = True
             over_threshold = False
             sections_to_run = list(
                 hl.eval(
