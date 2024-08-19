@@ -1369,23 +1369,11 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     group_rmc_prep_ht = group_rmc_prep_ht.annotate(
         transcript_oe=group_rmc_prep_ht.obs / group_rmc_prep_ht.exp
     )
-
-    # Read in LoF constraint HT to get OE ratio for five transcripts missing in v2 RMC results
-    # # 'ENST00000304270', 'ENST00000344415', 'ENST00000373521', 'ENST00000381708', 'ENST00000596936'
-    # All 5 of these transcripts have extremely low coverage in gnomAD
-    # Will keep for consistency with v2 LoF results but they look terrible
-    # NOTE: LoF HT is keyed by gene and transcript, but `_key_by_assert_sorted` doesn't work here for v2 version
-    # Throws this error: hail.utils.java.FatalError: IllegalArgumentException
-    lof_ht = constraint_ht.ht().select_globals()
-    lof_ht = lof_ht.key_by("transcript")
-    lof_ht = lof_ht.select(oe_mis=lof_ht.mis.oe)
-
-    ht = ht.annotate(
-        gnomad_transcript_oe=lof_ht[ht.transcript].oe_mis,
-        rmc_transcript_oe=group_rmc_prep_ht[ht.transcript].transcript_oe,
+    group_rmc_prep_ht = group_rmc_prep_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_group_rmc_prep.ht", overwrite=True
     )
-    ht = ht.transmute(
-        transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe)
+    ht = ht.annotate(
+        transcript_oe=group_rmc_prep_ht[ht.transcript].transcript_oe,
     )
 
     check_file_exists_raise_error(
@@ -1394,6 +1382,8 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
         error_if_not_exists_msg="Merged RMC results table does not exist!",
     )
     rmc_ht = rmc_results.versions[freeze].ht().key_by("interval")
+
+    # Annotate with RMC OE
     ht = ht.annotate(
         section_oe=rmc_ht.index(ht.locus, all_matches=True)
         .filter(lambda x: x.transcript == ht.transcript)
@@ -1405,6 +1395,7 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
             ht.section_oe[0],
         ),
     )
+    # Annotate with RMC OE where available, otherwise select transcript OE
     return ht.transmute(oe=hl.coalesce(ht.section_oe, ht.transcript_oe))
 
 
@@ -1508,6 +1499,9 @@ def create_context_with_oe(
         f"{TEMP_PATH_WITH_SLOW_DEL}/vep_context_mis_only_annot.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
+    )
+    ht = hl.read_table(
+        f"{TEMP_PATH_WITH_SLOW_DEL}/vep_context_mis_only_annot.ht",
     )
 
     logger.info(
