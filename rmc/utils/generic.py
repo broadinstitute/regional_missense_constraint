@@ -3,10 +3,15 @@ from typing import Dict, List, Set, Tuple
 
 import hail as hl
 from gnomad.resources.grch38.gnomad import public_release
+from gnomad.resources.grch38.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.constraint import annotate_exploded_vep_for_constraint_groupings
 from gnomad.utils.file_utils import file_exists
-from gnomad.utils.vep import CSQ_NON_CODING, filter_vep_transcript_csqs
+from gnomad.utils.vep import (
+    CSQ_NON_CODING,
+    explode_by_vep_annotation,
+    filter_vep_transcript_csqs,
+)
 
 from rmc.resources.basics import (
     ACID_NAMES_PATH,
@@ -14,6 +19,7 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_FAST_DEL,
 )
 from rmc.resources.gnomad import constraint_ht
+from rmc.resources.resource_utils import MISSENSE
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -175,6 +181,8 @@ def get_aa_from_context(
     overwrite_temp: bool,
     keep_transcripts: Set[str] = None,
     n_partitions: int = 10000,
+    filter_to_canonical: bool = False,
+    missense_str: str = MISSENSE,
 ) -> hl.Table:
     """
     Extract amino acid information from VEP context HT.
@@ -187,6 +195,8 @@ def get_aa_from_context(
         Default is None.
     :param n_partitions: Desired number of partitions for context HT after filtering.
         Default is 10,000.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
+    :param missense_str: Missense consequence string. Default is "missense_variant".
     :return: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
     """
     logger.info(
@@ -195,7 +205,21 @@ def get_aa_from_context(
     )
     # TODO: Add option to filter to non-outliers if still desired
     # Drop globals and select only VEP transcript consequences field
-    ht = process_context_ht().select_globals()
+    ht = (
+        hl.read_table(vep_context.path, _n_partitions=n_partitions)
+        .select_globals()
+        .select("vep", "was_split")
+    )
+    ht = filter_vep_transcript_csqs(
+        t=ht,
+        vep_root="vep",
+        synonymous=False,
+        canonical=filter_to_canonical,
+        ensembl_only=True,
+        filter_empty_csq=True,
+        csqs={missense_str},
+    )
+    ht = explode_by_vep_annotation(ht, "transcript_consequences")
     ht = ht.select("transcript_consequences")
     ht = ht.filter(
         ~hl.literal(CSQ_NON_CODING).contains(

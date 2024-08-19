@@ -1372,8 +1372,15 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     group_rmc_prep_ht = group_rmc_prep_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_group_rmc_prep.ht", overwrite=True
     )
+    group_rmc_prep_ht = hl.read_table(
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_group_rmc_prep.ht"
+    )
     ht = ht.annotate(
         transcript_oe=group_rmc_prep_ht[ht.transcript].transcript_oe,
+    )
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/temp_freeze_{freeze}_transcript_oe_annotated.ht",
+        overwrite=True,
     )
 
     check_file_exists_raise_error(
@@ -1500,9 +1507,6 @@ def create_context_with_oe(
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
-    ht = hl.read_table(
-        f"{TEMP_PATH_WITH_SLOW_DEL}/vep_context_mis_only_annot.ht",
-    )
 
     logger.info(
         "Adding regional missense constraint missense o/e annotation and writing to"
@@ -1527,7 +1531,9 @@ def create_context_with_oe(
     logger.info("Output OE-annotated dedup context HT fields: %s", set(ht.row))
 
 
-def annot_rmc_with_start_stop_aas(ht: hl.Table, overwrite_temp: bool):
+def annot_rmc_with_start_stop_aas(
+    ht: hl.Table, overwrite_temp: bool, filter_to_canonical: bool
+) -> hl.Table:
     """
     Annotate RMC regions HT with amino acids at region starts and stops.
 
@@ -1535,13 +1541,16 @@ def annot_rmc_with_start_stop_aas(ht: hl.Table, overwrite_temp: bool):
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only.
     :return: RMC regions HT annotated with amino acid information for region starts and stops.
     """
     logger.info("Getting amino acid information from context HT...")
     rmc_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
     # Get amino acid information from context table for variants in chosen transcripts
     context_ht = get_aa_from_context(
-        overwrite_temp=overwrite_temp, keep_transcripts=rmc_transcripts
+        overwrite_temp=overwrite_temp,
+        keep_transcripts=rmc_transcripts,
+        filter_to_canonical=filter_to_canonical,
     )
     # Get reference AA label for each locus-transcript combination in context HT
     context_ht = get_ref_aa(
@@ -1965,7 +1974,9 @@ def add_globals_rmc_browser(ht: hl.Table) -> hl.Table:
     )
 
 
-def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
+def format_rmc_browser_ht(
+    freeze: int, overwrite_temp: bool, filter_to_canonical: bool = False
+) -> None:
     """
     Reformat annotations in input HT for release.
 
@@ -2000,6 +2011,7 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only.
     :return: None; writes Table with desired schema to resource path.
     """
     ht = rmc_results.versions[freeze].ht()
@@ -2011,7 +2023,7 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
     )
 
     # Annotate start and stop amino acids per region
-    ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp)
+    ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp, filter_to_canonical)
 
     # Remove missense O/E cap of 1
     # (Missense O/E capped for RMC search, but
