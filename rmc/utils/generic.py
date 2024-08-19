@@ -19,7 +19,6 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_FAST_DEL,
 )
 from rmc.resources.gnomad import constraint_ht
-from rmc.resources.resource_utils import MISSENSE
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -182,7 +181,6 @@ def get_aa_from_context(
     keep_transcripts: Set[str] = None,
     n_partitions: int = 10000,
     filter_to_canonical: bool = False,
-    missense_str: str = MISSENSE,
 ) -> hl.Table:
     """
     Extract amino acid information from VEP context HT.
@@ -195,8 +193,6 @@ def get_aa_from_context(
         Default is None.
     :param n_partitions: Desired number of partitions for context HT after filtering.
         Default is 10,000.
-    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
-    :param missense_str: Missense consequence string. Default is "missense_variant".
     :return: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
     """
     logger.info(
@@ -214,7 +210,6 @@ def get_aa_from_context(
         canonical=filter_to_canonical,
         ensembl_only=True,
         filter_empty_csq=True,
-        csqs={missense_str},
     )
     ht = explode_by_vep_annotation(ht, "transcript_consequences")
     ht = ht.select("transcript_consequences")
