@@ -205,11 +205,8 @@ def get_aa_from_context(
     )
     # TODO: Add option to filter to non-outliers if still desired
     # Drop globals and select only VEP transcript consequences field
-    ht = (
-        hl.read_table(vep_context.path, _n_partitions=n_partitions)
-        .select_globals()
-        .select("vep", "was_split")
-    )
+    ht = hl.read_table(vep_context.path).select_globals().select("vep", "was_split")
+    ht = ht.naive_coalesce(n_partitions)
     ht = filter_vep_transcript_csqs(
         t=ht,
         vep_root="vep",
@@ -238,7 +235,6 @@ def get_aa_from_context(
         logger.info("Filtering to desired transcripts only...")
         ht = ht.filter(hl.literal(keep_transcripts).contains(ht.transcript))
 
-    ht = ht.naive_coalesce(n_partitions)
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/vep_amino_acids.ht",
         _read_if_exists=not overwrite_temp,
