@@ -1376,7 +1376,9 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     # Will keep for consistency with v2 LoF results but they look terrible
     # NOTE: LoF HT is keyed by gene and transcript, but `_key_by_assert_sorted` doesn't work here for v2 version
     # Throws this error: hail.utils.java.FatalError: IllegalArgumentException
-    lof_ht = constraint_ht.ht().select("oe_mis").key_by("transcript")
+    lof_ht = constraint_ht.ht().select_globals()
+    lof_ht = lof_ht.key_by("transcript")
+    lof_ht = lof_ht.select(oe_mis=lof_ht.mis.oe)
 
     ht = ht.annotate(
         gnomad_transcript_oe=lof_ht[ht.transcript].oe_mis,
