@@ -13,7 +13,7 @@ from gnomad.utils.constraint import (
     count_variants_by_group,
 )
 from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
-from gnomad.utils.vep import filter_vep_transcript_csqs
+from gnomad.utils.vep import explode_by_vep_annotation, filter_vep_transcript_csqs
 from gnomad_constraint.resources.resource_utils import get_mutation_ht
 
 from rmc.resources.basics import (
@@ -1494,6 +1494,8 @@ def create_context_with_oe(
         transcripts = get_constraint_transcripts(outlier=False)
         ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
 
+    # Explode VEP and annotate `transcript_consequences` as top level field
+    ht = explode_by_vep_annotation(ht, "transcript_consequences")
     ht = get_annotations_from_context_ht_vep(ht)
     # Save context Table to temporary path with specified deletion policy because this is a very large file
     # and relevant information will be saved at `context_with_oe` (written below)
