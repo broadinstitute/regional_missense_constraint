@@ -1443,7 +1443,7 @@ def create_context_with_oe(
     freeze: int,
     filter_to_canonical: bool = False,
     missense_str: str = MISSENSE,
-    n_partitions: int = 30000,
+    n_partitions: int = 10000,
     overwrite_temp: bool = False,
     filter_outliers: bool = False,
 ) -> None:
