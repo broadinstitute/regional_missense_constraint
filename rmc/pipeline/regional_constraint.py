@@ -432,6 +432,19 @@ def main(args):
             # (used in RMC assessment plots)
             # TODO: For the above, also need a transcript-level table with missense total obs and total exp
 
+            logger.info("Reformatting RMC results for browser release...")
+            format_rmc_browser_ht(
+                args.freeze, args.overwrite_temp, args.filter_to_canonical
+            )
+
+        if args.command == "create-context-with-oe":
+            hl.init(
+                log="/RMC_create_context_with_oe.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
+            )
+            hl.default_reference("GRCh38")
+            # NOTE: This step required highmem machines for v4.1.1
             logger.info("Creating OE-annotated context table...")
             create_context_with_oe(
                 freeze=args.freeze,
@@ -439,9 +452,6 @@ def main(args):
                 overwrite_temp=args.overwrite_temp,
                 filter_outliers=args.filter_outliers,
             )
-
-            logger.info("Reformatting RMC results for browser release...")
-            format_rmc_browser_ht(args.freeze, args.overwrite_temp)
 
         if args.command == "create-rmc-release":
             logger.info(
@@ -521,6 +531,16 @@ if __name__ == "__main__":
         help="Initialize Hail with `quiet=True` to print fewer log messages",
         action="store_true",
     )
+    parser.add_argument(
+        "--filter-outliers",
+        help="Remove constraint outlier transcripts from output.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--filter-to-canonical",
+        help="Filter to canonical transcripts only.",
+        action="store_true",
+    )
 
     subparsers = parser.add_subparsers(title="command", dest="command", required=True)
 
@@ -592,16 +612,10 @@ if __name__ == "__main__":
     finalize = subparsers.add_parser(
         "finalize", help="Combine and reformat (finalize) RMC output."
     )
-    finalize.add_argument(
-        "--filter-outliers",
-        help="Remove constraint outlier transcripts from RMC output.",
-    )
-    finalize.add_argument(
-        "--filter-to-canonical",
-        help="""
-        Filter context Table to canonical transcripts only.
-        """,
-        action="store_true",
+
+    create_oe_context = subparsers.add_parser(
+        "create-context-with-oe",
+        help="Create context Table with observed/expected values for RMC assessment.",
     )
 
     create_release = subparsers.add_parser(
