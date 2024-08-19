@@ -444,7 +444,6 @@ def main(args):
                 quiet=args.quiet,
             )
             hl.default_reference("GRCh38")
-            # NOTE: This step required highmem machines for v4.1.1
             logger.info("Creating OE-annotated context table...")
             create_context_with_oe(
                 freeze=args.freeze,
