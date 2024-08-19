@@ -1906,8 +1906,8 @@ def check_and_fix_missing_aa(
     ht = ht.annotate(**transcript_ht[ht.transcript])
     ht = ht.annotate(
         # NOTE: This is actually the transcript end for transcripts on the negative strand
-        is_transcript_start=ht.start_coordinate == ht.cds_start,
-        is_transcript_stop=ht.stop_coordinate == ht.cds_end,
+        is_transcript_start=ht.start_coordinate.position == ht.cds_start,
+        is_transcript_stop=ht.stop_coordinate.position == ht.cds_end,
     )
     # NOTE: We adjusted transcript starts and stops that were missing AA annotations for gnomAD v2
     # Some starts and stops had uninformative amino acid information in the VEP context HT:
