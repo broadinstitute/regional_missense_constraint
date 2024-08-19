@@ -11,6 +11,7 @@ from gnomad.utils.vep import (
     CSQ_NON_CODING,
     explode_by_vep_annotation,
     filter_vep_transcript_csqs,
+    process_consequences,
 )
 
 from rmc.resources.basics import (
@@ -211,6 +212,7 @@ def get_aa_from_context(
         ensembl_only=True,
         filter_empty_csq=True,
     )
+    ht = process_consequences(ht)
     ht = explode_by_vep_annotation(ht, "transcript_consequences")
     ht = ht.select("transcript_consequences")
     ht = ht.filter(
