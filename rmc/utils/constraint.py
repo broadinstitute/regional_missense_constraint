@@ -1446,6 +1446,7 @@ def create_context_with_oe(
     n_partitions: int = 10000,
     overwrite_temp: bool = False,
     filter_outliers: bool = False,
+    vep_version: str = "105",
 ) -> None:
     """
     Filter VEP context Table to missense variants in canonical transcripts, and add missense observed/expected.
@@ -1467,6 +1468,7 @@ def create_context_with_oe(
         If False, will read existing intermediate temporary data rather than overwriting.
         Default is False.
     :param filter_outliers: Whether to filter out outlier transcripts. Default is False.
+    :param vep_version: VEP version to use. Default is "105".
     :return: None; function writes Table to resource path.
     """
     logger.info(
@@ -1476,10 +1478,11 @@ def create_context_with_oe(
     # Using vep_context.path to read in table with fewer partitions
     # VEP context resource has 62164 partitions
     ht = (
-        hl.read_table(vep_context.path, _n_partitions=n_partitions)
+        hl.read_table(vep_context.versions[vep_version].path)
         .select_globals()
         .select("vep", "was_split")
     )
+    ht = ht.naive_coalesce(n_partitions)
     ht = filter_vep_transcript_csqs(
         t=ht,
         vep_root="vep",
