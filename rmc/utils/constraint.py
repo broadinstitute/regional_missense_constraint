@@ -1469,10 +1469,6 @@ def create_context_with_oe(
     :param filter_outliers: Whether to filter out outlier transcripts. Default is False.
     :return: None; function writes Table to resource path.
     """
-    if filter_outliers:
-        logger.info("Importing set of transcripts to keep...")
-        transcripts = get_constraint_transcripts(outlier=False)
-
     logger.info(
         "Reading in SNPs-only, VEP-annotated context HT and filtering to missense"
         " variants in canonical transcripts..."
@@ -1493,7 +1489,11 @@ def create_context_with_oe(
         filter_empty_csq=True,
         csqs={missense_str},
     )
-    ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
+    if filter_outliers:
+        logger.info("Importing set of transcripts to keep...")
+        transcripts = get_constraint_transcripts(outlier=False)
+        ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
+
     ht = get_annotations_from_context_ht_vep(ht)
     # Save context Table to temporary path with specified deletion policy because this is a very large file
     # and relevant information will be saved at `context_with_oe` (written below)
