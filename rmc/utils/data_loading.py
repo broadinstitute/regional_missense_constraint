@@ -80,7 +80,7 @@ def get_start_end_coords(ht: hl.Table, overwrite: bool = True) -> hl.Table:
     :return: Table with transcript and CDS start/end coordinates.
     """
     # Drop unnecessary annotations
-    ht = ht.select("chrom", "start", "stop", exons=ht.transcripts.exons)
+    ht = ht.select("chrom", "start", "stop", "exons")
 
     # Explode exon annotation to get CDS intervals
     ht = ht.explode("exons")
@@ -179,6 +179,7 @@ def create_transcript_ref(
             ht.chrom.startswith("chr"), ht.chrom, hl.format("%s%s", "chr", ht.chrom)
         ),
     )
+    ht = ht.annotate(exons=ht.transcripts.exons)
     ht = ht.select(*start_annotations)
     ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/gene_model_filt.ht", overwrite=True)
 
