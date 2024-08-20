@@ -1942,7 +1942,7 @@ def check_and_fix_missing_aa(
     return ht
 
 
-def add_globals_rmc_browser(ht: hl.Table) -> hl.Table:
+def add_globals_rmc_browser(ht: hl.Table, keep_outliers: bool = True) -> hl.Table:
     """
     Annotate HT globals with RMC transcript information.
 
@@ -1953,12 +1953,14 @@ def add_globals_rmc_browser(ht: hl.Table) -> hl.Table:
         - outlier transcripts
     :param HT: Input Table. Should be RMC regions HT annotated with amino acid
         information for region starts and stops.
+    :param keep_outliers: Whether to keep outlier transcripts.
+        Default is True.
     :return: RMC regions HT with updated globals annotations.
     """
     # Get transcripts with evidence of RMC
     rmc_transcripts = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.transcript)))
 
-    # Get all QC pass transcripts and outlier transcripts
+    # Get all QC pass transcripts
     qc_pass_transcripts = get_constraint_transcripts(outlier=False)
     outlier_transcripts = get_constraint_transcripts(outlier=True)
 
@@ -1967,8 +1969,13 @@ def add_globals_rmc_browser(ht: hl.Table) -> hl.Table:
     all_transcripts = transcript_ht.aggregate(
         hl.agg.collect_as_set(transcript_ht.transcript)
     )
-    transcripts_no_rmc = qc_pass_transcripts.difference(rmc_transcripts)
-    transcripts_not_searched = all_transcripts.difference(qc_pass_transcripts)
+    if keep_outliers:
+        transcripts_no_rmc = all_transcripts.difference(rmc_transcripts)
+        transcripts_not_searched = []
+    else:
+        transcripts_no_rmc = qc_pass_transcripts.difference(rmc_transcripts)
+        transcripts_not_searched = all_transcripts.difference(qc_pass_transcripts)
+
     ht = ht.select_globals()
     return ht.annotate_globals(
         transcripts_not_searched=transcripts_not_searched,
