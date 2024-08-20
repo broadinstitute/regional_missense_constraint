@@ -1967,7 +1967,7 @@ def add_globals_rmc_browser(ht: hl.Table, keep_outliers: bool = True) -> hl.Tabl
     # Get all transcripts displayed on browser
     transcript_ht = gene_model.ht()
     all_transcripts = transcript_ht.aggregate(
-        hl.agg.collect_as_set(transcript_ht.transcript)
+        hl.agg.collect_as_set(transcript_ht.preferred_transcript_id)
     )
     if keep_outliers:
         transcripts_no_rmc = all_transcripts.difference(rmc_transcripts)
