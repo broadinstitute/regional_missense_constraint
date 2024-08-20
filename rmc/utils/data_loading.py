@@ -174,12 +174,12 @@ def create_transcript_ref(
         hgnc_symbol=ht.symbol,
     )
     ht = ht.annotate(
+        exons=ht.transcripts.exons,
         transcript_version=ht.transcripts[0].transcript_version,
         chrom=hl.if_else(
             ht.chrom.startswith("chr"), ht.chrom, hl.format("%s%s", "chr", ht.chrom)
         ),
     )
-    ht = ht.annotate(exons=ht.transcripts.exons)
     ht = ht.select(*start_annotations)
     ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/gene_model_filt.ht", overwrite=True)
 
