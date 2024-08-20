@@ -40,6 +40,7 @@ from rmc.utils.constraint import (
     process_sections,
     validate_rmc_release_downloads,
 )
+from rmc.utils.data_loading import create_transcript_ref
 from rmc.utils.generic import get_constraint_transcripts
 
 logging.basicConfig(
@@ -53,6 +54,16 @@ logger.setLevel(logging.INFO)
 def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
     try:
+        if args.command == "create-transcript-refs":
+            hl.init(
+                log="/RMC_create_transcript_refs.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
+            )
+            hl.default_reference("GRCh38")
+            logger.info("Creating transcript reference resources...")
+            create_transcript_ref(build="GRCh38", overwrite=args.overwrite)
+
         if args.command == "prep-filtered-context":
             hl.init(
                 log="/RMC_pre_process.log",
@@ -543,6 +554,10 @@ if __name__ == "__main__":
 
     subparsers = parser.add_subparsers(title="command", dest="command", required=True)
 
+    create_transcript_refs = subparsers.add_parser(
+        "create-transcript-refs",
+        help="Create transcript reference resources.",
+    )
     prep_filtered_context = subparsers.add_parser(
         "prep-filtered-context",
         help="""

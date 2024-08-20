@@ -86,11 +86,11 @@ def get_start_end_coords(ht: hl.Table, overwrite: bool = True) -> hl.Table:
     ht = ht.explode("exons")
     ht = ht.filter(ht.exons.feature_type == "CDS")
 
-    if not file_exists(transcript_cds.versions[CURRENT_BUILD].path):
-        if not overwrite:
-            raise DataException(
-                "`overwrite` is False, but `transcript_cds` does not exist!"
-            )
+    if not file_exists(transcript_cds.versions[CURRENT_BUILD].path) and not overwrite:
+        raise DataException(
+            "`overwrite` is False, but `transcript_cds` does not exist!"
+        )
+    if not file_exists(transcript_cds.versions[CURRENT_BUILD].path) or overwrite:
         # Create `transcript_cds` resource with filtered table
         create_transcript_cds(ht)
 
