@@ -173,6 +173,12 @@ def create_transcript_ref(
         transcripts=ht.transcripts.filter(lambda x: x.transcript_id == ht.transcript),
         hgnc_symbol=ht.symbol,
     )
+    transcript_len_check = ht.aggregate(hl.agg.count_where(hl.len(ht.transcripts) != 1))
+    if transcript_len_check > 0:
+        raise DataException(
+            "Transcript array length is not equal to 1 for"
+            f" {transcript_len_check} rows. Please double check!",
+        )
     ht = ht.annotate(
         exons=ht.transcripts[0].exons,
         transcript_version=ht.transcripts[0].transcript_version,
