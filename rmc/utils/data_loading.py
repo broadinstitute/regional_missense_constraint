@@ -174,7 +174,7 @@ def create_transcript_ref(
         hgnc_symbol=ht.symbol,
     )
     ht = ht.annotate(
-        exons=ht.transcripts.exons,
+        exons=ht.transcripts[0].exons,
         transcript_version=ht.transcripts[0].transcript_version,
         chrom=hl.if_else(
             ht.chrom.startswith("chr"), ht.chrom, hl.format("%s%s", "chr", ht.chrom)
