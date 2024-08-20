@@ -1585,6 +1585,16 @@ def join_and_fix_aa(ht: hl.Table, fix_ht: hl.Table) -> hl.Table:
     :return: RMC regions HT annotated with amino acid information from fix HT.
     """
     return ht.annotate(
+        start_coordinate=hl.if_else(
+            hl.is_missing(ht.start_aa),
+            fix_ht[ht.interval, ht.transcript].start_coordinate,
+            ht.start_coordinate,
+        ),
+        stop_coordinate=hl.if_else(
+            hl.is_missing(ht.stop_aa),
+            fix_ht[ht.interval, ht.transcript].stop_coordinate,
+            ht.stop_coordinate,
+        ),
         start_aa=hl.if_else(
             hl.is_missing(ht.start_aa),
             fix_ht[ht.interval, ht.transcript].start_aa,
@@ -1702,7 +1712,9 @@ def fix_transcript_start_stop_aas(
             miss_start_stop_ht.stop_aa,
         ),
     )
-    return miss_start_stop_ht.select("start_aa", "stop_aa")
+    return miss_start_stop_ht.select(
+        "start_aa", "stop_aa", "start_coordinate", "stop_coordinate"
+    )
 
 
 def fix_region_start_stop_aas(
@@ -1852,8 +1864,23 @@ def fix_region_start_stop_aas(
             context_ht[missing_ht.prev_exon_stop, missing_ht.transcript].ref_aa,
             missing_ht.stop_aa,
         ),
+        start_coordinate=hl.if_else(
+            hl.is_defined(missing_ht.next_exon_start),
+            missing_ht.next_exon_start,
+            missing_ht.start_coordinate,
+        ),
+        stop_coordinate=hl.if_else(
+            hl.is_defined(missing_ht.prev_exon_stop),
+            missing_ht.prev_exon_stop,
+            missing_ht.stop_coordinate,
+        ),
     )
-    return missing_ht.select("start_aa", "stop_aa")
+    return missing_ht.select(
+        "start_aa",
+        "stop_aa",
+        "start_coordinate",
+        "stop_coordinate",
+    )
 
 
 def check_and_fix_missing_aa(
