@@ -97,7 +97,7 @@ filtered_context = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/context_coding_snps_annot_AN_test.ht"
+            path=f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/context_coding_snps_annot.ht"
         )
         for freeze in FREEZES
     },
@@ -158,7 +158,7 @@ constraint_prep = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
         freeze: TableResource(
-            path=f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/constraint_prep_AN_test.ht"
+            path=f"{MODEL_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/constraint_prep.ht"
         )
         for freeze in FREEZES
     },
