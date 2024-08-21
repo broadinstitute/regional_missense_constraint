@@ -14,7 +14,7 @@ from gnomad.utils.constraint import (
 )
 from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
 from gnomad.utils.vep import explode_by_vep_annotation, filter_vep_transcript_csqs
-from gnomad_constraint.resources.resource_utils import get_mutation_ht
+from gnomad_constraint.resources.resource_utils import get_models, get_mutation_ht
 
 from rmc.resources.basics import (
     CONSTRAINT_PREFIX,
@@ -224,6 +224,10 @@ def calculate_exp_from_mu(
     )
 
     # TODO: uncomment when the other models exist
+    # Used this for testing:
+    # plateau_model = hl.experimental.read_expression(
+    #    "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.plateau.autosome_par.he"
+    # )
     # if locus_type == "X":
     #    plateau_model = (
     #        get_models(model_type="plateau", genomic_region="chrx_non_par").he(),
@@ -234,9 +238,7 @@ def calculate_exp_from_mu(
     #    )
     # else:
     #    plateau_model = get_models(model_type="plateau").he()
-    plateau_model = hl.experimental.read_expression(
-        "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.plateau.autosome_par.he"
-    )
+    plateau_model = get_models(model_type="plateau").he()
 
     agg_expr = {
         "mu": hl.agg.sum(mu_expr * cov_corr_expr),
@@ -345,17 +347,14 @@ def create_possible_hts(
 
     # Annotate HT globals with models
     possible_ht = possible_ht.annotate_globals(
-        # plateau_models=get_models(model_type="plateau").he(),
-        plateau_models=hl.experimental.read_expression(
-            "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.plateau.autosome_par.he"
-        ),
         # TODO: Uncomment lines below when chrX/chrY, coverage models are ready
         # plateau_x_models=get_models(model_type="plateau", genomic_region="chrx_non_par").he(),
         # plateau_y_models=get_models(model_type="plateau", genomic_region="chry_non_par").he(),
-        # coverage_model=plateau_x_models=get_models(model_type="coverage").he(),
-        coverage_model=hl.experimental.read_expression(
-            "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.coverage.autosome_par.he"
-        ),
+        # Used this for testing
+        # coverage_model=hl.experimental.read_expression(
+        #     "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.coverage.autosome_par.he"
+        # ),
+        coverage_model=get_models(model_type="coverage").he(),
     )
     possible_ht = possible_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/{locus_type}_possible_variants.ht",
