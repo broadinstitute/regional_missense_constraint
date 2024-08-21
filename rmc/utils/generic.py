@@ -592,7 +592,11 @@ def get_plateau_model(
 ####################################################################################
 ## Outlier transcript utils
 ####################################################################################
-def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
+def get_constraint_transcripts(
+    all_transcripts: bool = False,
+    filter_to_canonical: bool = False,
+    outlier: bool = True,
+) -> hl.expr.SetExpression:
     """
     Read in LoF constraint HT results to get set of transcripts.
 
@@ -602,7 +606,9 @@ def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
     Transcripts are removed for the reasons detailed here:
     https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
 
-    :param bool outlier: Whether to filter LoF constraint HT to outlier transcripts (if True),
+    :param all_transcripts: Whether to filter to all transcripts. Default is False.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.s
+    :param outlier: Whether to filter LoF constraint HT to outlier transcripts (if True),
         or QC-pass transcripts (if False). Default is True.
     :return: Set of outlier transcripts or transcript QC pass transcripts.
     :rtype: hl.expr.SetExpression
@@ -618,17 +624,22 @@ def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
     constraint_transcript_ht = constraint_transcript_ht.filter(
         constraint_transcript_ht.transcript.contains("ENST")
     )
-    constraint_transcript_ht = constraint_transcript_ht.filter(
-        constraint_transcript_ht.canonical
-    ).select("constraint_flags")
-    if outlier:
+    if filter_to_canonical:
         constraint_transcript_ht = constraint_transcript_ht.filter(
-            hl.len(constraint_transcript_ht.constraint_flags) > 0
+            constraint_transcript_ht.canonical
         )
-    else:
-        constraint_transcript_ht = constraint_transcript_ht.filter(
-            hl.len(constraint_transcript_ht.constraint_flags) == 0
-        )
+
+    if not all_transcripts:
+        constraint_transcript_ht = constraint_transcript_ht.select("constraint_flags")
+        if outlier:
+            constraint_transcript_ht = constraint_transcript_ht.filter(
+                hl.len(constraint_transcript_ht.constraint_flags) > 0
+            )
+        else:
+            constraint_transcript_ht = constraint_transcript_ht.filter(
+                hl.len(constraint_transcript_ht.constraint_flags) == 0
+            )
+
     return hl.literal(
         constraint_transcript_ht.aggregate(
             hl.agg.collect_as_set(constraint_transcript_ht.transcript)

@@ -27,7 +27,6 @@ from rmc.resources.reference_data import (
     GENCODE_VERSION,
     VEP_VERSION,
     clinvar_plp_mis_haplo,
-    gene_model,
     ndd_de_novo,
     transcript_cds,
     transcript_ref,
@@ -1962,7 +1961,9 @@ def check_and_fix_missing_aa(
     return ht
 
 
-def add_globals_rmc_browser(ht: hl.Table, keep_outliers: bool = True) -> hl.Table:
+def add_globals_rmc_browser(
+    ht: hl.Table, filter_to_canonical: bool, keep_outliers: bool = True
+) -> hl.Table:
     """
     Annotate HT globals with RMC transcript information.
 
@@ -1973,6 +1974,7 @@ def add_globals_rmc_browser(ht: hl.Table, keep_outliers: bool = True) -> hl.Tabl
         - outlier transcripts
     :param HT: Input Table. Should be RMC regions HT annotated with amino acid
         information for region starts and stops.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only.
     :param keep_outliers: Whether to keep outlier transcripts.
         Default is True.
     :return: RMC regions HT with updated globals annotations.
@@ -1981,15 +1983,16 @@ def add_globals_rmc_browser(ht: hl.Table, keep_outliers: bool = True) -> hl.Tabl
     rmc_transcripts = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.transcript)))
 
     # Get all QC pass transcripts
-    qc_pass_transcripts = get_constraint_transcripts(outlier=False)
-    outlier_transcripts = get_constraint_transcripts(outlier=True)
+    qc_pass_transcripts = get_constraint_transcripts(
+        filter_to_canonical=filter_to_canonical, outlier=False
+    )
+    outlier_transcripts = get_constraint_transcripts(
+        filter_to_canonical=filter_to_canonical, outlier=True
+    )
 
-    # Get all transcripts displayed on browser
-    transcript_ht = gene_model.ht()
-    all_transcripts = hl.literal(
-        transcript_ht.aggregate(
-            hl.agg.collect_as_set(transcript_ht.preferred_transcript_id)
-        )
+    # Get all transcripts from constraint HT
+    all_transcripts = get_constraint_transcripts(
+        all_transcripts=True, filter_to_canonical=filter_to_canonical
     )
     if keep_outliers:
         transcripts_no_rmc = all_transcripts.difference(rmc_transcripts)
@@ -2083,7 +2086,7 @@ def format_rmc_browser_ht(
     ht = ht.group_by("transcript").aggregate(regions=hl.agg.collect(ht.region))
 
     # Annotate globals and write
-    ht = add_globals_rmc_browser(ht)
+    ht = add_globals_rmc_browser(ht, filter_to_canonical)
     ht.write(rmc_browser.versions[freeze].path, overwrite=True)
 
 
