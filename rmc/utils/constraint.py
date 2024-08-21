@@ -1859,12 +1859,6 @@ def fix_region_start_stop_aas(
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
-    ht = join_and_fix_aa(ht, missing_ht)
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_region_start_stop_aa_fix.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
     ht = ht.annotate(
         start_coordinate=hl.if_else(
             hl.is_missing(ht.start_aa),
@@ -1889,6 +1883,7 @@ def fix_region_start_stop_aas(
             ht.stop_coordinate,
         ),
     )
+    ht = join_and_fix_aa(ht, missing_ht)
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_all_aa_fix.ht",
         _read_if_exists=not overwrite_temp,
