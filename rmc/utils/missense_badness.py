@@ -70,7 +70,9 @@ def prepare_amino_acid_ht(
 
     # Filter to rows with defined AN; previously filtered to defined coverage
     # but have switched coverage to AN
-    context_ht = context_ht.filter(context_ht.exomes_AN > an_threshold)
+    context_ht = context_ht.filter(
+        hl.is_defined(context_ht.exomes_AN) & (context_ht.exomes_AN > an_threshold)
+    )
 
     logger.info("Selecting relevant annotations...")
     context_ht = context_ht.select(
