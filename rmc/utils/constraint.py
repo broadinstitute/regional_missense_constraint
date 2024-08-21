@@ -1585,16 +1585,6 @@ def join_and_fix_aa(ht: hl.Table, fix_ht: hl.Table) -> hl.Table:
     :return: RMC regions HT annotated with amino acid information from fix HT.
     """
     return ht.annotate(
-        start_coordinate=hl.if_else(
-            hl.is_missing(ht.start_aa),
-            fix_ht[ht.interval, ht.transcript].start_coordinate,
-            ht.start_coordinate,
-        ),
-        stop_coordinate=hl.if_else(
-            hl.is_missing(ht.stop_aa),
-            fix_ht[ht.interval, ht.transcript].stop_coordinate,
-            ht.stop_coordinate,
-        ),
         start_aa=hl.if_else(
             hl.is_missing(ht.start_aa),
             fix_ht[ht.interval, ht.transcript].start_aa,
@@ -1712,9 +1702,13 @@ def fix_transcript_start_stop_aas(
             miss_start_stop_ht.stop_aa,
         ),
     )
-    return miss_start_stop_ht.select(
-        "start_aa", "stop_aa", "start_coordinate", "stop_coordinate"
+    ht = join_and_fix_aa(ht, miss_start_stop_ht)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_transcript_start_stop_aa_fix.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
+    return ht
 
 
 def fix_region_start_stop_aas(
@@ -1864,23 +1858,31 @@ def fix_region_start_stop_aas(
             context_ht[missing_ht.prev_exon_stop, missing_ht.transcript].ref_aa,
             missing_ht.stop_aa,
         ),
+    )
+    ht = join_and_fix_aa(ht, missing_ht)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_region_start_stop_aa_fix.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    ht = ht.annotate(
         start_coordinate=hl.if_else(
-            hl.is_defined(missing_ht.next_exon_start),
-            missing_ht.next_exon_start,
-            missing_ht.start_coordinate,
+            hl.is_missing(ht.start_aa),
+            missing_ht[ht.interval, ht.transcript].next_exon_start,
+            ht.start_coordinate,
         ),
         stop_coordinate=hl.if_else(
-            hl.is_defined(missing_ht.prev_exon_stop),
-            missing_ht.prev_exon_stop,
-            missing_ht.stop_coordinate,
+            hl.is_missing(ht.stop_aa),
+            missing_ht[ht.interval, ht.transcript].prev_exon_stop,
+            ht.stop_coordinate,
         ),
     )
-    return missing_ht.select(
-        "start_aa",
-        "stop_aa",
-        "start_coordinate",
-        "stop_coordinate",
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_all_aa_fix.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
     )
+    return ht
 
 
 def check_and_fix_missing_aa(
@@ -1943,22 +1945,9 @@ def check_and_fix_missing_aa(
     # Some starts and stops had uninformative amino acid information in the VEP context HT:
     # Amino acid was annotated as "X"
     # VEP context HT was created using VEP version 85, GENCODE version 19
-    transcript_start_stop_fix_ht = fix_transcript_start_stop_aas(
-        ht, context_ht, overwrite_temp
-    )
-    ht = join_and_fix_aa(ht, transcript_start_stop_fix_ht)
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_transcript_start_stop_aa_fix.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
-    region_fix_ht = fix_region_start_stop_aas(ht, context_ht, overwrite_temp)
-    ht = join_and_fix_aa(ht, region_fix_ht)
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_all_aa_fix.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
+    ht = fix_transcript_start_stop_aas(ht, context_ht, overwrite_temp)
+    ht = fix_region_start_stop_aas(ht, context_ht, overwrite_temp)
+
     # Double check that all rows have defined AA annotations
     missing_ht = _missing_aa_check(ht)
     if missing_ht:
