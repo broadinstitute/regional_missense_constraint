@@ -1371,9 +1371,7 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     group_rmc_prep_ht = group_rmc_prep_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_group_rmc_prep.ht", overwrite=True
     )
-    group_rmc_prep_ht = hl.read_table(
-        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_group_rmc_prep.ht"
-    )
+
     ht = ht.annotate(
         transcript_oe=group_rmc_prep_ht[ht.transcript].transcript_oe,
     )
