@@ -13,6 +13,7 @@ from gnomad.utils.vep import (
     filter_vep_transcript_csqs,
     process_consequences,
 )
+from gnomad_constraint.resources.resource_utils import get_preprocessed_ht
 
 from rmc.resources.basics import (
     ACID_NAMES_PATH,
@@ -126,10 +127,11 @@ def process_context_ht(
     # https://github.com/broadinstitute/gnomad-constraint/blob/0acd2815e59c04d642bb705e6d1ca166f5d79e5f/gnomad_constraint/utils/constraint.py#L78
     # NOTE: The v4.1 constraint table currently only contains autosomes
     # TODO: Add allosomes and PAR
-    # ht = get_preprocessed_ht("context").ht().select_globals()
-    ht = hl.read_table(
-        "gs://gnomad/v4.1/constraint_an/preprocessed_data/gnomad.v4.1.context.preprocessed.autosome_par.ht"
-    ).select_globals()
+    # Used this table for testing
+    # ht = hl.read_table(
+    #    "gs://gnomad/v4.1/constraint_an/preprocessed_data/gnomad.v4.1.context.preprocessed.autosome_par.ht"
+    # ).select_globals()
+    ht = get_preprocessed_ht("context").ht().select_globals()
 
     if filter_to_canonical:
         logger.info("Filtering to canonical transcripts only...")
