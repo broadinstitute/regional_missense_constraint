@@ -1842,11 +1842,6 @@ def fix_region_start_stop_aas(
             ].prev_exon_stop,
         ),
     )
-    missing_ht = missing_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/region_start_stop_missing_aa_exon_annot.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
     missing_ht = missing_ht.annotate(
         start_aa=hl.if_else(
             hl.is_missing(missing_ht.start_aa),
@@ -1859,6 +1854,11 @@ def fix_region_start_stop_aas(
             missing_ht.stop_aa,
         ),
     )
+    missing_ht = missing_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/region_start_stop_missing_aa_exon_annot.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
     ht = join_and_fix_aa(ht, missing_ht)
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_region_start_stop_aa_fix.ht",
@@ -1868,12 +1868,24 @@ def fix_region_start_stop_aas(
     ht = ht.annotate(
         start_coordinate=hl.if_else(
             hl.is_missing(ht.start_aa),
-            missing_ht[ht.interval, ht.transcript].next_exon_start,
+            start_fix_ht[
+                hl.locus(
+                    ht.start_coordinate.contig,
+                    ht.start_coordinate.position - 1,
+                ),
+                ht.transcript,
+            ].next_exon_start,
             ht.start_coordinate,
         ),
         stop_coordinate=hl.if_else(
             hl.is_missing(ht.stop_aa),
-            missing_ht[ht.interval, ht.transcript].prev_exon_stop,
+            stop_fix_ht[
+                hl.locus(
+                    ht.stop_coordinate.contig,
+                    ht.stop_coordinate.position + 1,
+                ),
+                ht.transcript,
+            ].prev_exon_stop,
             ht.stop_coordinate,
         ),
     )
