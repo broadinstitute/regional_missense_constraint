@@ -141,6 +141,7 @@ def process_context_ht(
         vep_root="vep",
         synonymous=False,
         canonical=filter_to_canonical,
+        protein_coding=True,
         ensembl_only=True,
         filter_empty_csq=True,
         csqs=filter_csq,
@@ -219,6 +220,7 @@ def get_aa_from_context(
         vep_root="vep",
         synonymous=False,
         canonical=filter_to_canonical,
+        protein_coding=True,
         ensembl_only=True,
         filter_empty_csq=True,
     )

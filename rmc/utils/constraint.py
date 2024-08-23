@@ -1484,6 +1484,7 @@ def create_context_with_oe(
         vep_root="vep",
         synonymous=False,
         canonical=filter_to_canonical,
+        protein_coding=True,
         ensembl_only=True,
         filter_empty_csq=True,
         csqs={missense_str},
