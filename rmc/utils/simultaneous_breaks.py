@@ -367,8 +367,6 @@ def process_section_group(
     :param ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param section_group: List of transcripts or transcript sections to process.
     :param count: Which transcript or transcript section group is being run (based on counter generated in `main`).
-    :param search_num: Search iteration number
-        (e.g., second round of searching for single break would be 2).
     :param over_threshold: Whether input transcript/sections have more
         possible missense sites than threshold specified in `run_simultaneous_breaks`.
     :param output_ht_path: Path to output results Table.
