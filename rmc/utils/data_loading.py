@@ -132,6 +132,7 @@ def create_transcript_ref(
         "transcript_version",
     ],
     overwrite: bool = True,
+    filter_to_canonical: bool = False,
 ) -> None:
     """
     Create transcript reference Table.
@@ -143,6 +144,10 @@ def create_transcript_ref(
             the GRCh37 HT was created using code in a notebook.
         - Assumes all `annotations` (except `hgnc_symbol` and `transcript_version`)
             are present in gene model HT.
+        - If `filter_to_canonical` is False, `transcript_ref` will contain all transcripts
+            and will have an additional annotation (`is_preferred_transcript`) to track
+            whether transcript ID is browser preferred ID (MANE select transcript ID
+            where that exists, otherwise canonical transcript ID).
 
     :param build: Reference genome build. Default is CURRENT_BUILD.
     :param start_annotations: List of non-keyed annotations to select from gene model Table.
@@ -150,6 +155,7 @@ def create_transcript_ref(
     :param final_annotations: List of non-keyed annotations to keep in final Table.
         Default is ["chrom", "transcript_start", "transcript_end", "cds_start", "cds_end", "strand", "gene_id", "gencode_symbol", "hgnc_symbol", "transcript_version"].
     :param overwrite: Whether to overwrite `transcript_cds` resource. Default is True.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
     :return: None; writes Table to resource path.
     """
     ht = gene_model.versions[build].ht()
@@ -160,27 +166,51 @@ def create_transcript_ref(
     # 37 of which are on chrM
     ht = ht.filter(~ht.chrom.contains("M") & hl.is_defined(ht.preferred_transcript_id))
 
-    # Key by preferred transcript ID (MANE select or canonical)
-    # NOTE: All MANE select transcripts in VEP105/GENCODE39 are canonical
-    # (but not all canonical are MANE select)
-    ht = ht.key_by(transcript=ht.preferred_transcript_id)
+    if filter_to_canonical:
+        # Key by preferred transcript ID (MANE select or canonical)
+        # NOTE: All MANE select transcripts in VEP105/GENCODE39 are canonical
+        # (but not all canonical are MANE select)
+        ht = ht.key_by(transcript=ht.preferred_transcript_id)
 
-    # Filter transcript row annotation to canonical transcripts,
-    # rename symbol to hgnc_symbol, annotate with transcript version,
-    # and add 'chr' prefix to chrom if it doesn't exist
-    ht = ht.transmute(
-        transcripts=ht.transcripts.filter(lambda x: x.transcript_id == ht.transcript),
-        hgnc_symbol=ht.symbol,
-    )
-    transcript_len_check = ht.aggregate(hl.agg.count_where(hl.len(ht.transcripts) != 1))
-    if transcript_len_check > 0:
-        raise DataException(
-            "Transcript array length is not equal to 1 for"
-            f" {transcript_len_check} rows. Please double check!",
+        # Filter transcript row annotation to canonical transcripts,
+        # rename symbol to hgnc_symbol, annotate with transcript version,
+        # and add 'chr' prefix to chrom if it doesn't exist
+        ht = ht.transmute(
+            transcripts=ht.transcripts.filter(
+                lambda x: x.transcript_id == ht.transcript
+            ),
         )
+        transcript_len_check = ht.aggregate(
+            hl.agg.count_where(hl.len(ht.transcripts) != 1)
+        )
+        if transcript_len_check > 0:
+            raise DataException(
+                "Transcript array length is not equal to 1 for"
+                f" {transcript_len_check} rows. Please double check!",
+            )
+        ht = ht.annotate(
+            exons=ht.transcripts[0].exons,
+            transcript_version=ht.transcripts[0].transcript_version,
+            chrom=ht.transcripts[0].chrom,
+        )
+    else:
+        # Add additional boolean to track whether transcript ID is preferred ID
+        extra_annotation = "is_preferred_transcript"
+        start_annotations.append(extra_annotation)
+        final_annotations.append(extra_annotation)
+
+        # Key by transcript ID
+        ht = ht.explode("transcripts")
+        ht = ht.key_by(transcript=ht.transcripts.transcript_id)
+        ht = ht.annotate(
+            exons=ht.transcripts.exons,
+            transcript_version=ht.transcripts.transcript_version,
+            chrom=ht.transcripts.chrom,
+            is_preferred_transcript=(ht.transcript == ht.preferred_transcript_id),
+        )
+
     ht = ht.annotate(
-        exons=ht.transcripts[0].exons,
-        transcript_version=ht.transcripts[0].transcript_version,
+        hgnc_symbol=ht.symbol,
         chrom=hl.if_else(
             ht.chrom.startswith("chr"), ht.chrom, hl.format("%s%s", "chr", ht.chrom)
         ),
