@@ -142,7 +142,7 @@ def create_transcript_ref(
         - This function was written to create the GRCh38 Table only;
             the GRCh37 HT was created using code in a notebook.
         - Assumes all `annotations` (except `hgnc_symbol` and `transcript_version`)
-            are present at top level of gene model HT.
+            are present in gene model HT.
 
     :param build: Reference genome build. Default is CURRENT_BUILD.
     :param start_annotations: List of non-keyed annotations to select from gene model Table.
