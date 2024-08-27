@@ -50,7 +50,6 @@ def main(args):
 
         if args.run_all_sections:
             over_threshold = None
-            under_threshold = None
             sections_to_run = list(
                 hl.eval(
                     hl.experimental.read_expression(
@@ -88,7 +87,6 @@ def main(args):
             )
 
         if args.run_sections_under_threshold:
-            under_threshold = True
             over_threshold = False
             sections_to_run = list(
                 hl.eval(
@@ -126,9 +124,9 @@ def main(args):
             freeze=args.freeze,
         )
         for counter, group in enumerate(section_groups):
-            if over_threshold:
+            if over_threshold is None:
                 output_ht_path = f"{raw_path}/simul_break_dataproc_{counter}.ht"
-            elif under_threshold:
+            elif over_threshold:
                 output_ht_path = f"{raw_path}/simul_break_dataproc_under_{counter}.ht"
             else:
                 output_ht_path = f"{raw_path}/simul_break_dataproc_all_{counter}.ht"
