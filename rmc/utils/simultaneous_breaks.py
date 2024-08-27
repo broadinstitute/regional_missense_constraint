@@ -452,7 +452,7 @@ def process_section_group(
         # (would sometimes repartition to a lower number of partitions)
         ht = ht.repartition(n_rows)
         ht = ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}.ht",
+            f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}_tmp_repart.ht",
             _read_if_exists=read_if_exists,
             overwrite=not read_if_exists,
         )
