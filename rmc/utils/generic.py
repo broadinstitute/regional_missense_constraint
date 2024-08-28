@@ -545,7 +545,8 @@ def get_coverage_correction_expr(
     :param ht: Input AN expression. Should be percent of exome AN defined at each locus.
     :param coverage_model: Model to determine coverage correction factor necessary
          for calculating expected variants at low AN sites.
-    :param high_cov_cutoff: Cutoff for high AN value. Default is 66.
+    :param high_AN_cutoff: Cutoff for high AN value. Default is 66.
+        NOTE that default should be adjusted based on upstream gene constraint pipeline default.
     :return: Coverage correction expression.
     :rtype: hl.expr.Float64Expression
     """
