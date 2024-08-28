@@ -613,6 +613,10 @@ def get_constraint_transcripts(
     Transcripts are removed for the reasons detailed here:
     https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
 
+    .. note::
+        - Function assumes that LoF constraint HT has been filtered to include only
+            protein-coding transcripts.
+
     :param all_transcripts: Whether to filter to all transcripts. Will only keep
         all transcripts if `filter_to_canonical` is False, otherwise toggles
         between removing or keeping non-outlier transcripts. Default is False.
