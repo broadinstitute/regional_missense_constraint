@@ -567,13 +567,6 @@ if __name__ == "__main__":
         Process VEP context HT to create allele-level filtered context HT with constraint annotations.
         """,
     )
-    prep_filtered_context.add_argument(
-        "--filter-to-canonical",
-        help="""
-        Filter context Table to canonical transcripts only.
-        """,
-        action="store_true",
-    )
 
     prep_constraint = subparsers.add_parser(
         "prep-constraint",
