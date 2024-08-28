@@ -614,7 +614,7 @@ def get_constraint_transcripts(
     https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
 
     :param all_transcripts: Whether to filter to all transcripts. Default is False.
-    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.s
+    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
     :param outlier: Whether to filter LoF constraint HT to outlier transcripts (if True),
         or QC-pass transcripts (if False). Default is True.
     :return: Set of outlier transcripts or transcript QC pass transcripts.
