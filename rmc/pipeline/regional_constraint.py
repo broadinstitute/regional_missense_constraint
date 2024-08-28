@@ -446,6 +446,9 @@ def main(args):
             # TODO: For the above, also need a transcript-level table with missense total obs and total exp
 
             logger.info("Reformatting RMC results for browser release...")
+            # NOTE: `filter_to_canonical` is included here only to make
+            # amino acid annotation with context HT more efficient if
+            # RMC results were filtered to canonical transcripts
             format_rmc_browser_ht(
                 args.freeze, args.overwrite_temp, args.filter_to_canonical
             )
