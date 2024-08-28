@@ -501,7 +501,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         "This script searches for regional missense constraint in gnomAD."
     )
-    # TODO: Make subparsers for prepping for RMC and running RMC
     parser.add_argument(
         "--n-partitions",
         help="""
