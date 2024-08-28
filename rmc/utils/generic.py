@@ -136,6 +136,8 @@ def process_context_ht(
 
     if filter_to_canonical:
         logger.info("Filtering to canonical transcripts only...")
+
+    # Filter to protein-coding ENST transcripts
     # Also optionally filter to canonical transcripts and specific consequences
     ht = filter_vep_transcript_csqs(
         t=ht,
