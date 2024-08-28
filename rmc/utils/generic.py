@@ -203,7 +203,7 @@ def get_aa_from_context(
     :param n_partitions: Desired number of partitions for context HT after filtering.
         Default is 10,000.
     :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
-    :param vep_version: VEP version to use. Default is "105".
+    :param vep_version: VEP version to use. Default is `VEP_VERSION`.
     :return: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
     """
     logger.info(
