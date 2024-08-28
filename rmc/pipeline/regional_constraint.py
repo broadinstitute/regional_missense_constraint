@@ -87,6 +87,7 @@ def main(args):
             )
             hl.default_reference("GRCh38")
             logger.info("Creating constraint prep HT...")
+            # Input to constraint prep step is filtered context HT created above
             # Constraint prep HT is filtered to missense variants by default
             # Use these args to run constraint prep on other variant consequences
             csq = {MISSENSE}

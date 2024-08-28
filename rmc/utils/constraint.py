@@ -492,7 +492,12 @@ def create_constraint_prep_ht(
     filter_csq: Set[str] = {MISSENSE}, n_partitions: int = 10000, overwrite: bool = True
 ) -> None:
     """
-    Create locus-level constraint prep Table from filtered context Table for all canonical protein-coding transcripts.
+    Create locus-level constraint prep Table from filtered context Table.
+
+    Function will remove transcripts with zero expected values transcript-wide
+    but will not do any additional transcript filtering.
+    Transcripts need to be filtered to canonical only if desired in upstream step to
+    create the `filtered_context` Table.
 
     This Table is used in the first step of regional constraint breakpoint search.
 
