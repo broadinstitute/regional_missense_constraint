@@ -125,11 +125,11 @@ def main(args):
         )
         for counter, group in enumerate(section_groups):
             if over_threshold is None:
-                output_ht_path = f"{raw_path}/simul_break_dataproc_{counter}.ht"
-            elif over_threshold:
-                output_ht_path = f"{raw_path}/simul_break_dataproc_under_{counter}.ht"
-            else:
                 output_ht_path = f"{raw_path}/simul_break_dataproc_all_{counter}.ht"
+            elif over_threshold:
+                output_ht_path = f"{raw_path}/simul_break_dataproc_{counter}.ht"
+            else:
+                output_ht_path = f"{raw_path}/simul_break_dataproc_under_{counter}.ht"
 
             if file_exists(output_ht_path):
                 raise DataException(
