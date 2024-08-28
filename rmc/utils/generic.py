@@ -21,6 +21,7 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_FAST_DEL,
 )
 from rmc.resources.gnomad import constraint_ht
+from rmc.resources.reference_data import VEP_VERSION
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -186,7 +187,7 @@ def get_aa_from_context(
     keep_transcripts: Set[str] = None,
     n_partitions: int = 10000,
     filter_to_canonical: bool = False,
-    vep_version: str = "105",
+    vep_version: str = VEP_VERSION,
 ) -> hl.Table:
     """
     Extract amino acid information from VEP context HT.
