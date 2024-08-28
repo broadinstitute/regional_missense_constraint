@@ -375,7 +375,6 @@ def main(args):
                     " writing..."
                 )
                 merged_break_ht = single_break_ht.union(simul_break_ht)
-                # TODO: Change break results bucket structure to have round first, then simul vs. single split
                 merged_break_ht.write(merged_path, overwrite=args.overwrite)
             elif single_exists:
                 single_break_ht.write(merged_path, overwrite=args.overwrite)
