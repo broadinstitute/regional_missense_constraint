@@ -455,7 +455,6 @@ def main(args):
             create_no_breaks_he(freeze=args.freeze, overwrite=args.overwrite)
             # TODO: Create region-level table that combines `rmc_results` and `no_breaks_he`
             # (used in RMC assessment plots)
-            # TODO: For the above, also need a transcript-level table with missense total obs and total exp
 
             logger.info("Reformatting RMC results for browser release...")
             # NOTE: `filter_to_canonical` is included here only to make
