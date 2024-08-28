@@ -554,6 +554,7 @@ def create_constraint_prep_ht(
     # rather than CDS
     build = ht.locus.dtype.reference_genome.name
     if not file_exists(transcript_ref.versions[build].path):
+        logger.warning("Transcript reference resources do not exist -- creating now...")
         create_transcript_ref(
             build, overwrite=not file_exists(transcript_cds.versions[build].path)
         )
