@@ -634,8 +634,9 @@ def get_constraint_transcripts(
         raise DataException("Constraint HT not found!")
 
     constraint_transcript_ht = constraint_ht.ht().key_by("transcript")
+    # NOTE: all protein-coding transcripts are ENST transcripts in constraint HT
     constraint_transcript_ht = constraint_transcript_ht.filter(
-        constraint_transcript_ht.transcript.contains("ENST")
+        constraint_transcript_ht.transcript_type == "protein_coding"
     )
     if filter_to_canonical:
         constraint_transcript_ht = constraint_transcript_ht.filter(
