@@ -414,6 +414,19 @@ def main(args):
                 overwrite=args.overwrite,
             )
 
+            if args.filter_to_canonical:
+                logger.warning("Filtering to canonical transcripts only!")
+                # NOTE: RMC search should be run on only canonical transcripts
+                # rather than filtering to canonical transcripts at this step
+                # for compute efficiency
+                canonical_transcripts = get_constraint_transcripts(
+                    all_transcripts=True,
+                    filter_to_canonical=True,
+                )
+                rmc_ht = rmc_ht.filter(
+                    canonical_transcripts.contains(rmc_ht.transcript)
+                )
+
             if args.filter_outliers:
                 logger.info("Removing outlier transcripts...")
                 constraint_transcripts = get_constraint_transcripts(outlier=False)
