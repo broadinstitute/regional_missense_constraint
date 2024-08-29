@@ -173,9 +173,6 @@ def create_transcript_ref(
         # (but not all canonical are MANE select)
         ht = ht.key_by(transcript=ht.preferred_transcript_id)
 
-        # Filter transcript row annotation to canonical transcripts,
-        # rename symbol to hgnc_symbol, annotate with transcript version,
-        # and add 'chr' prefix to chrom if it doesn't exist
         ht = ht.transmute(
             transcripts=ht.transcripts.filter(
                 lambda x: x.transcript_id == ht.transcript
@@ -189,6 +186,8 @@ def create_transcript_ref(
                 "Transcript array length is not equal to 1 for"
                 f" {transcript_len_check} rows. Please double check!",
             )
+
+        # Filter transcript row annotation to canonical transcripts
         ht = ht.annotate(
             exons=ht.transcripts[0].exons,
             transcript_version=ht.transcripts[0].transcript_version,
@@ -210,6 +209,8 @@ def create_transcript_ref(
             is_preferred_transcript=(ht.transcript == ht.preferred_transcript_id),
         )
 
+    # Rename symbol to hgnc_symbol and add
+    # 'chr' prefix to chrom if it doesn't exist
     ht = ht.annotate(
         hgnc_symbol=ht.symbol,
         chrom=hl.if_else(
