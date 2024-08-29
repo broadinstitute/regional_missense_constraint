@@ -622,7 +622,8 @@ def get_constraint_transcripts(
         between removing or keeping non-outlier transcripts. Default is False.
     :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
     :param outlier: Whether to filter LoF constraint HT to outlier transcripts (if True),
-        or QC-pass transcripts (if False). Default is True.
+        or QC-pass transcripts (if False). Applies only if `all_transcripts` is False.
+        Default is True.
     :return: Set of outlier transcripts or transcript QC pass transcripts.
     :rtype: hl.expr.SetExpression
     """
