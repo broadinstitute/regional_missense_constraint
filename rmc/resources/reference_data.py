@@ -42,9 +42,8 @@ gene_model = VersionedTableResource(
         "GRCh37": TableResource(
             path=f"{get_resource_build_prefix('GRCh37')}/browser/b37_transcripts.ht"
         ),
-        # TODO: Update this path when the gene model table is publicly available
         "GRCh38": TableResource(
-            path="gs://gnomad-v4-data-pipeline/output/genes/genes_grch38_annotated_5.ht"
+            path="gs://gcp-public-data--gnomad/resources/grch38/genes/gnomad.genes.GRCh38.GENCODEv39.ht"
         ),
     },
 )
