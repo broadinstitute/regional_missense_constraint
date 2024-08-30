@@ -41,6 +41,7 @@ logger.setLevel(logging.INFO)
 def create_transcript_cds(
     ht: hl.Table,
     build: str = CURRENT_BUILD,
+    keep_canonical_annotation: bool = False,
 ) -> None:
     """
     Create transcript reference Table with CDS annotations.
@@ -48,6 +49,8 @@ def create_transcript_cds(
     .. note ::
         - This function was written to create the GRCh38 Table only;
             the GRCh37 HT was created using code in a notebook.
+        - Assumes `preferred_transcript_id` is present in input HT
+            if `keep_canonical_annotation` is True.
 
     :param ht: Filtered gene model Table.
     :param build: Reference genome build. Default is CURRENT_BUILD.
@@ -64,7 +67,8 @@ def create_transcript_cds(
             reference_genome=build,
         )
     )
-    ht = ht.key_by("interval", "transcript").select()
+    keep_annotations = ["preferred_transcript_id"] if keep_canonical_annotation else []
+    ht = ht.key_by("interval", "transcript").select(*keep_annotations)
     ht.write(transcript_cds.versions[build].path, overwrite=True)
 
 
@@ -195,6 +199,10 @@ def create_transcript_ref(
         )
     else:
         # Add additional boolean to track whether transcript ID is preferred ID
+        # NOTE: This annotation is added for convenience but is not
+        # currently referenced anywhere in the repo
+        # TODO: add code to filter based on `is_preferred_transcript`
+        # if desired in the future
         extra_annotation = "is_preferred_transcript"
         start_annotations.append(extra_annotation)
         final_annotations.append(extra_annotation)
