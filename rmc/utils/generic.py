@@ -532,7 +532,7 @@ def filter_to_region_type(ht: hl.Table, region: str) -> hl.Table:
 def get_coverage_correction_expr(
     an_expr: hl.expr.Int32Expression,
     coverage_model: Tuple[float, float],
-    high_AN_cutoff: int = 66,
+    high_AN_cutoff: int = 90,
 ) -> hl.expr.Float64Expression:
     """
     Get 'coverage' correction for expected variants count.
@@ -545,7 +545,7 @@ def get_coverage_correction_expr(
     :param ht: Input AN expression. Should be percent of exome AN defined at each locus.
     :param coverage_model: Model to determine coverage correction factor necessary
          for calculating expected variants at low AN sites.
-    :param high_AN_cutoff: Cutoff for high AN value. Default is 66.
+    :param high_AN_cutoff: Cutoff for high AN value. Default is 90.
         NOTE that default should be adjusted based on upstream gene constraint pipeline default.
     :return: Coverage correction expression.
     :rtype: hl.expr.Float64Expression
