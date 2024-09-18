@@ -43,7 +43,7 @@ gene_model = VersionedTableResource(
             path=f"{get_resource_build_prefix('GRCh37')}/browser/b37_transcripts.ht"
         ),
         "GRCh38": TableResource(
-            path="gs://gcp-public-data--gnomad/resources/grch38/genes/gnomad.genes.GRCh38.GENCODEv39.ht"
+            path="gs://gcp-public-data--gnomad/resources/grch38/browser/gnomad.genes.GRCh38.GENCODEv39.ht"
         ),
     },
 )
