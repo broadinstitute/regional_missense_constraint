@@ -40,6 +40,7 @@ from rmc.utils.constraint import (
     process_sections,
     validate_rmc_release_downloads,
 )
+from rmc.utils.data_loading import create_transcript_ref
 from rmc.utils.generic import get_constraint_transcripts
 
 logging.basicConfig(
@@ -53,6 +54,16 @@ logger.setLevel(logging.INFO)
 def main(args):
     """Call functions from `constraint.py` to calculate regional missense constraint."""
     try:
+        if args.command == "create-transcript-refs":
+            hl.init(
+                log="/RMC_create_transcript_refs.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
+            )
+            hl.default_reference("GRCh38")
+            logger.info("Creating transcript reference resources...")
+            create_transcript_ref(build="GRCh38", overwrite=args.overwrite)
+
         if args.command == "prep-filtered-context":
             hl.init(
                 log="/RMC_pre_process.log",
@@ -63,6 +74,7 @@ def main(args):
             logger.info("Creating filtered context HT...")
             n_partitions = 10000
             create_filtered_context_ht(
+                canonical_only=args.filter_to_canonical,
                 n_partitions=args.n_partitions if args.n_partitions else n_partitions,
                 overwrite=args.overwrite_temp,
             )
@@ -75,6 +87,7 @@ def main(args):
             )
             hl.default_reference("GRCh38")
             logger.info("Creating constraint prep HT...")
+            # Input to constraint prep step is filtered context HT created above
             # Constraint prep HT is filtered to missense variants by default
             # Use these args to run constraint prep on other variant consequences
             csq = {MISSENSE}
@@ -241,6 +254,9 @@ def main(args):
             )
 
             logger.info("Checking if simul breaks merged HT exists...")
+            # NOTE: Not checking for row count of zero because am assuming
+            # user didn't run merge step (`merge_hts.py`) if simul breaks search
+            # didn't return any results
             simul_results_path = simul_search_round_bucket_path(
                 search_num=args.search_num,
                 bucket_type="final_results",
@@ -319,26 +335,30 @@ def main(args):
                     " search..."
                 )
                 single_break_ht = hl.read_table(single_break_path)
-                single_break_ht = single_break_ht.annotate(
-                    section_1=hl.if_else(
-                        single_break_ht.locus.position > single_break_ht.breakpoint,
-                        hl.format(
-                            "%s_%s_%s",
-                            single_break_ht.section.split("_")[0],
-                            single_break_ht.breakpoint + 1,
-                            single_break_ht.section.split("_")[2],
-                        ),
-                        hl.format(
-                            "%s_%s_%s",
-                            single_break_ht.section.split("_")[0],
-                            single_break_ht.section.split("_")[1],
-                            single_break_ht.breakpoint,
-                        ),
+                if single_break_ht.count() > 0:
+                    single_break_ht = single_break_ht.annotate(
+                        section_1=hl.if_else(
+                            single_break_ht.locus.position > single_break_ht.breakpoint,
+                            hl.format(
+                                "%s_%s_%s",
+                                single_break_ht.section.split("_")[0],
+                                single_break_ht.breakpoint + 1,
+                                single_break_ht.section.split("_")[2],
+                            ),
+                            hl.format(
+                                "%s_%s_%s",
+                                single_break_ht.section.split("_")[0],
+                                single_break_ht.section.split("_")[1],
+                                single_break_ht.breakpoint,
+                            ),
+                        )
                     )
-                )
-                single_break_ht = single_break_ht.key_by(
-                    "locus", section=single_break_ht.section_1
-                ).drop("section_1", "breakpoint")
+                    single_break_ht = single_break_ht.key_by(
+                        "locus", section=single_break_ht.section_1
+                    ).drop("section_1", "breakpoint")
+                else:
+                    logger.info("Single break HT had zero rows!")
+                    single_exists = False
             else:
                 logger.info(
                     "No sections in round %i had breakpoints in single search.",
@@ -355,7 +375,6 @@ def main(args):
                     " writing..."
                 )
                 merged_break_ht = single_break_ht.union(simul_break_ht)
-                # TODO: Change break results bucket structure to have round first, then simul vs. single split
                 merged_break_ht.write(merged_path, overwrite=args.overwrite)
             elif single_exists:
                 single_break_ht.write(merged_path, overwrite=args.overwrite)
@@ -394,12 +413,16 @@ def main(args):
                 overwrite=args.overwrite,
             )
 
-            if args.filter_outliers:
-                logger.info("Removing outlier transcripts...")
-                constraint_transcripts = get_constraint_transcripts(outlier=False)
-                rmc_ht = rmc_ht.filter(
-                    constraint_transcripts.contains(rmc_ht.transcript)
+            if args.filter_outliers or args.filter_to_canonical:
+                # NOTE: RMC search should be run on only canonical transcripts
+                # rather than filtering to canonical transcripts at this step
+                # for compute efficiency
+                keep_transcripts = get_constraint_transcripts(
+                    all_transcripts=not args.filter_outliers,
+                    filter_to_canonical=args.filter_to_canonical,
+                    outlier=not args.filter_outliers,
                 )
+                rmc_ht = rmc_ht.filter(keep_transcripts.contains(rmc_ht.transcript))
 
             # Add p-value threshold to globals
             if not args.p_value:
@@ -413,6 +436,8 @@ def main(args):
             rmc_ht = rmc_ht.annotate_globals(p_value=p_value)
 
             logger.info("Writing out RMC results...")
+            n_partitions = args.n_partitions if args.n_partitions else 1000
+            rmc_ht = rmc_ht.naive_coalesce(n_partitions)
             rmc_ht.write(
                 rmc_results.versions[args.freeze].path, overwrite=args.overwrite
             )
@@ -421,15 +446,29 @@ def main(args):
             create_no_breaks_he(freeze=args.freeze, overwrite=args.overwrite)
             # TODO: Create region-level table that combines `rmc_results` and `no_breaks_he`
             # (used in RMC assessment plots)
-            # TODO: For the above, also need a transcript-level table with missense total obs and total exp
-
-            logger.info("Creating OE-annotated context table...")
-            create_context_with_oe(
-                freeze=args.freeze, overwrite_temp=args.overwrite_temp
-            )
 
             logger.info("Reformatting RMC results for browser release...")
-            format_rmc_browser_ht(args.freeze, args.overwrite_temp)
+            # NOTE: `filter_to_canonical` is included here only to make
+            # amino acid annotation with context HT more efficient if
+            # RMC results were filtered to canonical transcripts
+            format_rmc_browser_ht(
+                args.freeze, args.overwrite_temp, args.filter_to_canonical
+            )
+
+        if args.command == "create-context-with-oe":
+            hl.init(
+                log="/RMC_create_context_with_oe.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
+            )
+            hl.default_reference("GRCh38")
+            logger.info("Creating OE-annotated context table...")
+            create_context_with_oe(
+                freeze=args.freeze,
+                filter_to_canonical=args.filter_to_canonical,
+                overwrite_temp=args.overwrite_temp,
+                filter_outliers=args.filter_outliers,
+            )
 
         if args.command == "create-rmc-release":
             logger.info(
@@ -451,7 +490,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         "This script searches for regional missense constraint in gnomAD."
     )
-    # TODO: Make subparsers for prepping for RMC and running RMC
     parser.add_argument(
         "--n-partitions",
         help="""
@@ -509,8 +547,23 @@ if __name__ == "__main__":
         help="Initialize Hail with `quiet=True` to print fewer log messages",
         action="store_true",
     )
+    parser.add_argument(
+        "--filter-outliers",
+        help="Remove constraint outlier transcripts from output.",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--filter-to-canonical",
+        help="Filter to canonical transcripts only.",
+        action="store_true",
+    )
 
     subparsers = parser.add_subparsers(title="command", dest="command", required=True)
+
+    create_transcript_refs = subparsers.add_parser(
+        "create-transcript-refs",
+        help="Create transcript reference resources.",
+    )
 
     prep_filtered_context = subparsers.add_parser(
         "prep-filtered-context",
@@ -573,9 +626,10 @@ if __name__ == "__main__":
     finalize = subparsers.add_parser(
         "finalize", help="Combine and reformat (finalize) RMC output."
     )
-    finalize.add_argument(
-        "--filter-outliers",
-        help="Remove constraint outlier transcripts from RMC output.",
+
+    create_oe_context = subparsers.add_parser(
+        "create-context-with-oe",
+        help="Create context Table with observed/expected values for RMC assessment.",
     )
 
     create_release = subparsers.add_parser(

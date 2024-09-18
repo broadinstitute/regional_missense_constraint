@@ -48,6 +48,30 @@ def main(args):
         if args.p_value:
             chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 2))
 
+        if args.run_all_sections:
+            over_threshold = None
+            sections_to_run = list(
+                hl.eval(
+                    hl.experimental.read_expression(
+                        simul_sections_split_by_len_path(
+                            is_over_threshold=True,
+                            search_num=args.search_num,
+                            freeze=args.freeze,
+                        )
+                    )
+                )
+            ) + list(
+                hl.eval(
+                    hl.experimental.read_expression(
+                        simul_sections_split_by_len_path(
+                            is_over_threshold=False,
+                            search_num=args.search_num,
+                            freeze=args.freeze,
+                        )
+                    )
+                )
+            )
+
         if args.run_sections_over_threshold:
             over_threshold = True
             sections_to_run = list(
@@ -100,11 +124,13 @@ def main(args):
             freeze=args.freeze,
         )
         for counter, group in enumerate(section_groups):
-            output_ht_path = (
-                f"{raw_path}/simul_break_dataproc_{counter}.ht"
-                if over_threshold
-                else f"{raw_path}/simul_break_dataproc_under_{counter}.ht"
-            )
+            if over_threshold is None:
+                output_ht_path = f"{raw_path}/simul_break_dataproc_all_{counter}.ht"
+            elif over_threshold:
+                output_ht_path = f"{raw_path}/simul_break_dataproc_{counter}.ht"
+            else:
+                output_ht_path = f"{raw_path}/simul_break_dataproc_under_{counter}.ht"
+
             if file_exists(output_ht_path):
                 raise DataException(
                     f"Output already exists at {output_ht_path}! Double check before"
@@ -118,7 +144,6 @@ def main(args):
                 ),
                 section_group=group,
                 count=counter,
-                search_num=args.search_num,
                 over_threshold=True,
                 output_ht_path=output_ht_path,
                 output_n_partitions=args.output_n_partitions,
@@ -195,6 +220,11 @@ if __name__ == "__main__":
         default=500,
     )
     section_ids = parser.add_mutually_exclusive_group()
+    section_ids.add_argument(
+        "--run-all-sections",
+        help="Search for simultaneous breaks in all sections (regardless of length).",
+        action="store_true",
+    )
     section_ids.add_argument(
         "--run-sections-over-threshold",
         help="Search for simultaneous breaks in sections that are over length cutoff.",

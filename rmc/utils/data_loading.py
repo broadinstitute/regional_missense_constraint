@@ -41,6 +41,7 @@ logger.setLevel(logging.INFO)
 def create_transcript_cds(
     ht: hl.Table,
     build: str = CURRENT_BUILD,
+    keep_canonical_annotation: bool = False,
 ) -> None:
     """
     Create transcript reference Table with CDS annotations.
@@ -48,6 +49,8 @@ def create_transcript_cds(
     .. note ::
         - This function was written to create the GRCh38 Table only;
             the GRCh37 HT was created using code in a notebook.
+        - Assumes `preferred_transcript_id` is present in input HT
+            if `keep_canonical_annotation` is True.
 
     :param ht: Filtered gene model Table.
     :param build: Reference genome build. Default is CURRENT_BUILD.
@@ -64,7 +67,8 @@ def create_transcript_cds(
             reference_genome=build,
         )
     )
-    ht = ht.key_by("interval", "transcript").select()
+    keep_annotations = ["preferred_transcript_id"] if keep_canonical_annotation else []
+    ht = ht.key_by("interval", "transcript").select(*keep_annotations)
     ht.write(transcript_cds.versions[build].path, overwrite=True)
 
 
@@ -80,19 +84,18 @@ def get_start_end_coords(ht: hl.Table, overwrite: bool = True) -> hl.Table:
     :return: Table with transcript and CDS start/end coordinates.
     """
     # Drop unnecessary annotations
-    ht = ht.select("start", "stop", "exons")
+    ht = ht.select("chrom", "start", "stop", "exons")
 
     # Explode exon annotation to get CDS intervals
     ht = ht.explode("exons")
     ht = ht.filter(ht.exons.feature_type == "CDS")
 
-    if not file_exists(transcript_cds.versions[CURRENT_BUILD].path):
-        if not overwrite:
-            raise DataException(
-                "`overwrite` is False, but `transcript_cds` does not exist!"
-            )
+    if not file_exists(transcript_cds.versions[CURRENT_BUILD].path) or overwrite:
         # Create `transcript_cds` resource with filtered table
         create_transcript_cds(ht)
+
+    if not overwrite:
+        logger.warning("Overwrite is False; skipping CDS interval creation...")
 
     # Group by transcript and aggregate start/end coordinates
     ht = ht.group_by("transcript").aggregate(
@@ -117,11 +120,13 @@ def create_transcript_ref(
         "exons",
         "gene_id",
         "gencode_symbol",
+        "hgnc_symbol",
+        "transcript_version",
     ],
     final_annotations: List[str] = [
         "chrom",
         "transcript_start",
-        "transcript_stop",
+        "transcript_end",
         "cds_start",
         "cds_end",
         "strand",
@@ -131,6 +136,7 @@ def create_transcript_ref(
         "transcript_version",
     ],
     overwrite: bool = True,
+    filter_to_canonical: bool = False,
 ) -> None:
     """
     Create transcript reference Table.
@@ -141,35 +147,89 @@ def create_transcript_ref(
         - This function was written to create the GRCh38 Table only;
             the GRCh37 HT was created using code in a notebook.
         - Assumes all `annotations` (except `hgnc_symbol` and `transcript_version`)
-            are present at top level of gene model HT.
+            are present in gene model HT.
+        - If `filter_to_canonical` is False, `transcript_ref` will contain all transcripts
+            and will have an additional annotation (`is_preferred_transcript`) to track
+            whether transcript ID is browser preferred ID (MANE select transcript ID
+            where that exists, otherwise canonical transcript ID).
 
     :param build: Reference genome build. Default is CURRENT_BUILD.
     :param start_annotations: List of non-keyed annotations to select from gene model Table.
         Default is ["chrom", "start", "stop", "strand", "exons", "gencode_symbol", "hgnc_symbol", "transcript_version"].
     :param final_annotations: List of non-keyed annotations to keep in final Table.
-        Default is ["chrom", "transcript_start", "transcript_stop", "cds_start", "cds_end", "strand", "gene_id", "gencode_symbol", "hgnc_symbol", "transcript_version"].
+        Default is ["chrom", "transcript_start", "transcript_end", "cds_start", "cds_end", "strand", "gene_id", "gencode_symbol", "hgnc_symbol", "transcript_version"].
     :param overwrite: Whether to overwrite `transcript_cds` resource. Default is True.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only.
+        Applies to both `transcript_ref` and `transcript_cds` resources. Default is False.
     :return: None; writes Table to resource path.
     """
     ht = gene_model.versions[build].ht()
 
-    # Key by canonical transcript ID
-    # NOTE: All MANE select transcripts in VEP105/GENCODE39 are canonical
-    # (but not all canonical are MANE select)
-    ht = ht.key_by(transcript=ht.canonical_transcript_id)
+    # Remove chrM and transcripts without preferred transcript ID
+    # (transcript field displayed on the browser)
+    # There are 111 transcripts without defined preferred transcript ID,
+    # 37 of which are on chrM
+    ht = ht.filter(~ht.chrom.contains("M") & hl.is_defined(ht.preferred_transcript_id))
 
-    # Filter transcript row annotation to canonical transcripts,
-    # rename symbol to hgnc_symbol, and annotate with transcript version
-    ht = ht.transmute(
-        transcripts=ht.transcripts.filter(lambda x: x.transcript_id == ht.transcript),
+    if filter_to_canonical:
+        # Key by preferred transcript ID (MANE select or canonical)
+        # NOTE: All MANE select transcripts in VEP105/GENCODE39 are canonical
+        # (but not all canonical are MANE select)
+        ht = ht.key_by(transcript=ht.preferred_transcript_id)
+
+        ht = ht.transmute(
+            transcripts=ht.transcripts.filter(
+                lambda x: x.transcript_id == ht.transcript
+            ),
+        )
+        transcript_len_check = ht.aggregate(
+            hl.agg.count_where(hl.len(ht.transcripts) != 1)
+        )
+        if transcript_len_check > 0:
+            raise DataException(
+                "Transcript array length is not equal to 1 for"
+                f" {transcript_len_check} rows. Please double check!",
+            )
+
+        # Filter transcript row annotation to canonical transcripts
+        ht = ht.annotate(
+            exons=ht.transcripts[0].exons,
+            transcript_version=ht.transcripts[0].transcript_version,
+            chrom=ht.transcripts[0].chrom,
+        )
+    else:
+        # Add additional boolean to track whether transcript ID is preferred ID
+        # NOTE: This annotation is added for convenience but is not
+        # currently referenced anywhere in the repo
+        # TODO: add code to filter based on `is_preferred_transcript`
+        # if desired in the future
+        extra_annotation = "is_preferred_transcript"
+        start_annotations.append(extra_annotation)
+        final_annotations.append(extra_annotation)
+
+        # Key by transcript ID
+        ht = ht.explode("transcripts")
+        ht = ht.key_by(transcript=ht.transcripts.transcript_id)
+        ht = ht.annotate(
+            exons=ht.transcripts.exons,
+            transcript_version=ht.transcripts.transcript_version,
+            chrom=ht.transcripts.chrom,
+            is_preferred_transcript=(ht.transcript == ht.preferred_transcript_id),
+        )
+
+    # Rename symbol to hgnc_symbol and add
+    # 'chr' prefix to chrom if it doesn't exist
+    ht = ht.annotate(
         hgnc_symbol=ht.symbol,
+        chrom=hl.if_else(
+            ht.chrom.startswith("chr"), ht.chrom, hl.format("%s%s", "chr", ht.chrom)
+        ),
     )
-    ht = ht.annotate(transcript_version=ht.transcripts[0].transcript_version)
     ht = ht.select(*start_annotations)
     ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/gene_model_filt.ht", overwrite=True)
 
     # Remove non-standard contigs
-    contigs = hl.get_reference(build).contigs[:24]
+    contigs = hl.literal(set(hl.get_reference(build).contigs[:24]))
     ht = ht.filter(contigs.contains(ht.chrom))
 
     coords_ht = get_start_end_coords(ht, overwrite)

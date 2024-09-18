@@ -11,7 +11,6 @@ from rmc.resources.rmc import (
     MIN_CHISQ_THRESHOLD,
     MIN_EXP_MIS,
     P_VALUE,
-    simul_search_round_bucket_path,
     simul_sections_split_by_len_path,
 )
 from rmc.utils.constraint import (
@@ -350,7 +349,6 @@ def process_section_group(
     ht_path: str,
     section_group: List[str],
     count: int,
-    search_num: int,
     over_threshold: bool,
     output_ht_path: str,
     output_n_partitions: int = 10,
@@ -369,8 +367,6 @@ def process_section_group(
     :param ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param section_group: List of transcripts or transcript sections to process.
     :param count: Which transcript or transcript section group is being run (based on counter generated in `main`).
-    :param search_num: Search iteration number
-        (e.g., second round of searching for single break would be 2).
     :param over_threshold: Whether input transcript/sections have more
         possible missense sites than threshold specified in `run_simultaneous_breaks`.
     :param output_ht_path: Path to output results Table.
@@ -390,7 +386,7 @@ def process_section_group(
         Only used if over_threshold is True. Default is 500.
     :param read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
         Only applies to Table that is input to `search_for_two_breaks`
-        (`f"{temp_ht_path}/{transcript_group[0]}_prep.ht"`).
+        (`f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}.ht"`).
         Default is False.
     :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
         (as long as chi square value is >= min_chisq_threshold).
@@ -453,13 +449,8 @@ def process_section_group(
         # keep the desired number of partitions
         # (would sometimes repartition to a lower number of partitions)
         ht = ht.repartition(n_rows)
-        prep_path = simul_search_round_bucket_path(
-            search_num=search_num,
-            bucket_type="prep",
-            freeze=freeze,
-        )
         ht = ht.checkpoint(
-            f"{prep_path}/{section_group[0]}.ht",
+            f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}_tmp_repart.ht",
             _read_if_exists=read_if_exists,
             overwrite=not read_if_exists,
         )
@@ -485,12 +476,9 @@ def process_section_group(
 
     # If over threshold, checkpoint HT and check if there were any breaks
     if over_threshold:
-        raw_path = simul_search_round_bucket_path(
-            search_num=search_num,
-            bucket_type="raw_results",
-            freeze=freeze,
+        ht = ht.checkpoint(
+            f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}.ht", overwrite=True
         )
-        ht = ht.checkpoint(f"{raw_path}/{section_group[0]}.ht", overwrite=True)
         # If any rows had a significant breakpoint,
         # find the one "best" breakpoint (breakpoint with largest chi square value)
         if ht.count() > 0:
@@ -500,18 +488,9 @@ def process_section_group(
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
     # NOTE: Change `naive_coalesce` to `repartition` below if you run into this Hail bug:
     # https://discuss.hail.is/t/zip-length-mismatch-error/3548/7
-    ht = ht.naive_coalesce(output_n_partitions)
+    # ht = ht.naive_coalesce(output_n_partitions)
+    ht = ht.repartition(output_n_partitions)
     # TODO: Restructure ht to match locus-level formats from single breaks
     ht.write(output_ht_path, overwrite=True)
     # TODO: Consider whether we want to write out temp information on chisq values for each potential break combination
     #   like in single breaks
-
-    success_tsvs_path = simul_search_round_bucket_path(
-        search_num=search_num,
-        bucket_type="success_files",
-        freeze=freeze,
-    )
-    for section in section_group:
-        tsv_path = f"{success_tsvs_path}/{section}.tsv"
-        with hl.hadoop_open(tsv_path, "w") as o:
-            o.write(f"{section}\n")

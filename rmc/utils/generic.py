@@ -2,18 +2,18 @@ import logging
 from typing import Dict, List, Set, Tuple
 
 import hail as hl
-from gnomad.resources.grch38.gnomad import coverage, public_release
+from gnomad.resources.grch38.gnomad import public_release
+from gnomad.resources.grch38.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
-from gnomad.utils.constraint import (
-    annotate_exploded_vep_for_constraint_groupings,
-    annotate_with_mu,
-)
+from gnomad.utils.constraint import annotate_exploded_vep_for_constraint_groupings
 from gnomad.utils.file_utils import file_exists
-from gnomad.utils.vep import CSQ_NON_CODING, filter_vep_transcript_csqs
-from gnomad_constraint.resources.resource_utils import (
-    get_mutation_ht,
-    get_preprocessed_ht,
+from gnomad.utils.vep import (
+    CSQ_NON_CODING,
+    explode_by_vep_annotation,
+    filter_vep_transcript_csqs,
+    process_consequences,
 )
+from gnomad_constraint.resources.resource_utils import get_preprocessed_ht
 
 from rmc.resources.basics import (
     ACID_NAMES_PATH,
@@ -21,6 +21,7 @@ from rmc.resources.basics import (
     TEMP_PATH_WITH_FAST_DEL,
 )
 from rmc.resources.gnomad import constraint_ht
+from rmc.resources.reference_data import VEP_VERSION
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -109,7 +110,6 @@ def annotate_and_filter_codons(ht: hl.Table) -> hl.Table:
 def process_context_ht(
     filter_to_canonical: bool = False,
     filter_csq: Set[str] = None,
-    mu_ht_partitions: int = 100,
 ) -> hl.Table:
     """
     Get context HT for SNPs annotated with VEP in canonical protein-coding transcripts.
@@ -119,7 +119,6 @@ def process_context_ht(
 
     :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
     :param filter_csq: Specific consequences to keep. Default is None.
-    :param mu_ht_partitions: Number of desired partitions for mutation rate HT. Default is 100.
     :return: VEP context HT filtered to canonical transcripts and optionally filtered to variants
         in non-outlier transcripts with specific consequences and annotated with mutation rate etc.
     :rtype: hl.Table
@@ -129,15 +128,23 @@ def process_context_ht(
     # https://github.com/broadinstitute/gnomad-constraint/blob/0acd2815e59c04d642bb705e6d1ca166f5d79e5f/gnomad_constraint/utils/constraint.py#L78
     # NOTE: The v4.1 constraint table currently only contains autosomes
     # TODO: Add allosomes and PAR
+    # Used this table for testing
+    # ht = hl.read_table(
+    #    "gs://gnomad/v4.1/constraint_an/preprocessed_data/gnomad.v4.1.context.preprocessed.autosome_par.ht"
+    # ).select_globals()
     ht = get_preprocessed_ht("context").ht().select_globals()
 
-    logger.info("Filtering to ENSEMBL transcripts only...")
+    if filter_to_canonical:
+        logger.info("Filtering to canonical transcripts only...")
+
+    # Filter to protein-coding ENST transcripts
     # Also optionally filter to canonical transcripts and specific consequences
     ht = filter_vep_transcript_csqs(
         t=ht,
         vep_root="vep",
         synonymous=False,
         canonical=filter_to_canonical,
+        protein_coding=True,
         ensembl_only=True,
         filter_empty_csq=True,
         csqs=filter_csq,
@@ -152,6 +159,7 @@ def process_context_ht(
     # for documentation on annotations added
     ht, _ = annotate_exploded_vep_for_constraint_groupings(
         ht=ht,
+        coverage_expr=ht.exomes_AN,
         vep_annotation="transcript_consequences",
         include_canonical_group=True,
         # NOTE: all canonical transcripts are also the MANE select transcript in
@@ -160,7 +168,7 @@ def process_context_ht(
     )
 
     # Drop other unnecessary annotations
-    ht = ht.select(
+    return ht.select(
         "context",
         "ref",
         "alt",
@@ -171,22 +179,17 @@ def process_context_ht(
         "modifier",
         "coverage",
         "transcript",
+        "exomes_AN",
+        "exomes_AN_percent",
     )
-
-    logger.info("Annotating with mutation rate...")
-    # Mutation rate HT is keyed by context, ref, alt, methylation level
-    # TODO: `annotate_with_mu` triggered new shuffle errors in my tests in June 2024;
-    # keep an eye on this step when re-running on full context HT
-    mu_ht = hl.read_table(
-        get_mutation_ht().path, _n_partitions=mu_ht_partitions
-    ).select("mu_snp")
-    return annotate_with_mu(ht, mu_ht)
 
 
 def get_aa_from_context(
     overwrite_temp: bool,
     keep_transcripts: Set[str] = None,
     n_partitions: int = 10000,
+    filter_to_canonical: bool = False,
+    vep_version: str = VEP_VERSION,
 ) -> hl.Table:
     """
     Extract amino acid information from VEP context HT.
@@ -199,6 +202,8 @@ def get_aa_from_context(
         Default is None.
     :param n_partitions: Desired number of partitions for context HT after filtering.
         Default is 10,000.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
+    :param vep_version: VEP version to use. Default is `VEP_VERSION`.
     :return: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
     """
     logger.info(
@@ -207,7 +212,23 @@ def get_aa_from_context(
     )
     # TODO: Add option to filter to non-outliers if still desired
     # Drop globals and select only VEP transcript consequences field
-    ht = process_context_ht().select_globals()
+    ht = (
+        hl.read_table(vep_context.versions[vep_version].path)
+        .select_globals()
+        .select("vep", "was_split")
+    )
+    ht = ht.naive_coalesce(n_partitions)
+    ht = filter_vep_transcript_csqs(
+        t=ht,
+        vep_root="vep",
+        synonymous=False,
+        canonical=filter_to_canonical,
+        protein_coding=True,
+        ensembl_only=True,
+        filter_empty_csq=True,
+    )
+    ht = process_consequences(ht)
+    ht = explode_by_vep_annotation(ht, "transcript_consequences")
     ht = ht.select("transcript_consequences")
     ht = ht.filter(
         ~hl.literal(CSQ_NON_CODING).contains(
@@ -226,7 +247,6 @@ def get_aa_from_context(
         logger.info("Filtering to desired transcripts only...")
         ht = ht.filter(hl.literal(keep_transcripts).contains(ht.transcript))
 
-    ht = ht.naive_coalesce(n_partitions)
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/vep_amino_acids.ht",
         _read_if_exists=not overwrite_temp,
@@ -374,9 +394,8 @@ def get_gnomad_public_release(
         - ac
         - af
         - filters
-        - gnomad_coverage
 
-    :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
+    :param gnomad_data_type: gnomAD data type. Used to retrieve public release resource.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
     :param adj_freq_index: Index of array that contains allele frequency information calculated on
@@ -384,12 +403,10 @@ def get_gnomad_public_release(
     :return: gnomAD public sites HT annotated with coverage and filtered to select fields.
     """
     gnomad = public_release(gnomad_data_type).ht().select_globals()
-    gnomad_cov = coverage(gnomad_data_type).ht()
     return gnomad.select(
         "filters",
         ac=gnomad.freq[adj_freq_index].AC,
         af=gnomad.freq[adj_freq_index].AF,
-        gnomad_coverage=gnomad_cov[gnomad.locus].median_approx,
     )
 
 
@@ -397,7 +414,7 @@ def filter_context_using_gnomad(
     context_ht: hl.Table,
     gnomad_data_type: str = "exomes",
     adj_freq_index: int = 0,
-    cov_threshold: int = 0,
+    an_threshold: int = 0,
 ) -> hl.Table:
     """
     Filter VEP context Table to sites that aren't seen in gnomAD or are rare in gnomAD.
@@ -405,16 +422,15 @@ def filter_context_using_gnomad(
     Also filter sites with zero coverage in gnomAD.
 
     :param context_ht: VEP context Table.
-    :param gnomad_data_type: gnomAD data type. Used to retrieve public release and coverage resources.
+    :param gnomad_data_type: gnomAD data type. Used to retrieve public release resource.
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
     :param adj_freq_index: Index of array that contains allele frequency information calculated on
         high quality (adj) genotypes across genetic ancestry groups. Default is 0.
-    :param cov_threshold: Remove variants at or below this median coverage threshold. Default is 0.
+    :param an_threshold: Remove variants at or below this AN threshold (in gnomAD exomes). Default is 0.
     :return: Filtered VEP context Table.
     """
     gnomad = get_gnomad_public_release(gnomad_data_type, adj_freq_index)
-    gnomad_cov = coverage(gnomad_data_type).ht()
 
     # Filter to sites not seen in gnomAD or to rare sites in gnomAD
     gnomad_join = gnomad[context_ht.key]
@@ -424,12 +440,11 @@ def filter_context_using_gnomad(
             gnomad_join.ac,
             gnomad_join.af,
             gnomad_join.filters,
-            gnomad_join.gnomad_coverage,
-            cov_threshold=cov_threshold,
         )
     )
-    context_ht = context_ht.filter(gnomad_cov[context_ht.locus].median > cov_threshold)
-    return context_ht
+    return context_ht.filter(
+        hl.is_defined(context_ht.exomes_AN) & (context_ht.exomes_AN > an_threshold)
+    )
 
 
 def get_annotations_from_context_ht_vep(
@@ -472,22 +487,18 @@ def keep_criteria(
     ac_expr: hl.expr.Int32Expression,
     af_expr: hl.expr.Float64Expression,
     filters_expr: hl.expr.SetExpression,
-    cov_expr: hl.expr.Int32Expression,
     af_threshold: float = 0.001,
-    cov_threshold: int = 0,
     filter_to_rare: bool = True,
 ) -> hl.expr.BooleanExpression:
     """
     Return Boolean expression to filter variants in input Table.
 
-    Default values will filter to rare variants (AC > 0, AF < 0.001) that pass filters and have median coverage greater than 0.
+    Default values will filter to rare variants (AC > 0, AF < 0.001) that pass filters.
 
     :param ac_expr: Allele count (AC) Int32Expression.
     :param af_expr: Allele frequency (AF) Float64Expression.
     :param filters_expr: Filters SetExpression.
-    :param cov_expr: gnomAD median coverage Int32Expression.
     :param af_threshold: AF threshold used for filtering variants in combination with `filter_to_rare`. Default is 0.001.
-    :param cov_threshold: Remove rows at or below this median coverage threshold. Default is 0.
     :param filter_to_rare: Whether to filter to keep rare variants only.
         If True, only variants with AF < `af_threshold` will be kept.
         If False, only variants with AF >= `af_threshold` will be kept.
@@ -497,12 +508,7 @@ def keep_criteria(
     af_filter_expr = (
         (af_expr < af_threshold) if filter_to_rare else (af_expr >= af_threshold)
     )
-    return (
-        (ac_expr > 0)
-        & (af_filter_expr)
-        & (hl.len(filters_expr) == 0)
-        & (cov_expr > cov_threshold)
-    )
+    return (ac_expr > 0) & (af_filter_expr) & (hl.len(filters_expr) == 0)
 
 
 def filter_to_region_type(ht: hl.Table, region: str) -> hl.Table:
@@ -524,30 +530,34 @@ def filter_to_region_type(ht: hl.Table, region: str) -> hl.Table:
 
 
 def get_coverage_correction_expr(
-    coverage: hl.expr.Float64Expression,
+    an_expr: hl.expr.Int32Expression,
     coverage_model: Tuple[float, float],
-    high_cov_cutoff: int = 40,
+    high_AN_cutoff: int = 90,
 ) -> hl.expr.Float64Expression:
     """
-    Get coverage correction for expected variants count.
+    Get 'coverage' correction for expected variants count.
 
     .. note::
-        Default high coverage cutoff taken from gnomAD LoF repo.
+        - As of gnomAD v4, we use allele number (AN) as a proxy for coverage,
+            because coverage in v4 was not computed from CRAMs.
+        - Default high coverage cutoff taken from gnomAD LoF repo.
 
-    :param hl.expr.Float64Expression ht: Input coverage expression. Should be median coverage at position.
-    :param Tuple[float, float] coverage_model: Model to determine coverage correction factor necessary
-         for calculating expected variants at low coverage sites.
-    :param int high_cov_cutoff: Cutoff for high coverage. Default is 40.
+    :param ht: Input AN expression. Should be percent of exome AN defined at each locus.
+    :param coverage_model: Model to determine coverage correction factor necessary
+         for calculating expected variants at low AN sites.
+    :param high_AN_cutoff: Cutoff for high AN value. Default is 90.
+        NOTE that default should be adjusted based on upstream gene constraint pipeline default.
     :return: Coverage correction expression.
     :rtype: hl.expr.Float64Expression
     """
     return (
         hl.case()
-        .when(coverage == 0, 0)
-        .when(coverage >= high_cov_cutoff, 1)
+        .when(an_expr == 0, 0)
+        .when(an_expr >= high_AN_cutoff, 1)
         # Use log10 here per
         # https://github.com/broadinstitute/gnomad_lof/blob/master/constraint_utils/constraint_basics.py#L555
-        .default(coverage_model[1] * hl.log10(coverage) + coverage_model[0])
+        # .default(coverage_model[1] * hl.log10(an_expr) + coverage_model[0])
+        .default(coverage_model[1] * an_expr + coverage_model[0])
     )
 
 
@@ -589,7 +599,11 @@ def get_plateau_model(
 ####################################################################################
 ## Outlier transcript utils
 ####################################################################################
-def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
+def get_constraint_transcripts(
+    all_transcripts: bool = False,
+    filter_to_canonical: bool = False,
+    outlier: bool = True,
+) -> hl.expr.SetExpression:
     """
     Read in LoF constraint HT results to get set of transcripts.
 
@@ -599,8 +613,17 @@ def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
     Transcripts are removed for the reasons detailed here:
     https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
 
-    :param bool outlier: Whether to filter LoF constraint HT to outlier transcripts (if True),
-        or QC-pass transcripts (if False). Default is True.
+    .. note::
+        - Function assumes that LoF constraint HT has been filtered to include only
+            protein-coding transcripts.
+
+    :param all_transcripts: Whether to filter to all transcripts. Will only keep
+        all transcripts if `filter_to_canonical` is False, otherwise toggles
+        between removing or keeping non-outlier transcripts. Default is False.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
+    :param outlier: Whether to filter LoF constraint HT to outlier transcripts (if True),
+        or QC-pass transcripts (if False). Applies only if `all_transcripts` is False.
+        Default is True.
     :return: Set of outlier transcripts or transcript QC pass transcripts.
     :rtype: hl.expr.SetExpression
     """
@@ -612,17 +635,26 @@ def get_constraint_transcripts(outlier: bool = True) -> hl.expr.SetExpression:
         raise DataException("Constraint HT not found!")
 
     constraint_transcript_ht = constraint_ht.ht().key_by("transcript")
+    # NOTE: all protein-coding transcripts are ENST transcripts in constraint HT
     constraint_transcript_ht = constraint_transcript_ht.filter(
-        constraint_transcript_ht.canonical
-    ).select("constraint_flag")
-    if outlier:
+        constraint_transcript_ht.transcript_type == "protein_coding"
+    )
+    if filter_to_canonical:
         constraint_transcript_ht = constraint_transcript_ht.filter(
-            hl.len(constraint_transcript_ht.constraint_flag) > 0
+            constraint_transcript_ht.canonical
         )
-    else:
-        constraint_transcript_ht = constraint_transcript_ht.filter(
-            hl.len(constraint_transcript_ht.constraint_flag) == 0
-        )
+
+    if not all_transcripts:
+        constraint_transcript_ht = constraint_transcript_ht.select("constraint_flags")
+        if outlier:
+            constraint_transcript_ht = constraint_transcript_ht.filter(
+                hl.len(constraint_transcript_ht.constraint_flags) > 0
+            )
+        else:
+            constraint_transcript_ht = constraint_transcript_ht.filter(
+                hl.len(constraint_transcript_ht.constraint_flags) == 0
+            )
+
     return hl.literal(
         constraint_transcript_ht.aggregate(
             hl.agg.collect_as_set(constraint_transcript_ht.transcript)

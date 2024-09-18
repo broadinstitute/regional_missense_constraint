@@ -13,7 +13,7 @@ from gnomad.utils.constraint import (
     count_variants_by_group,
 )
 from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
-from gnomad.utils.vep import filter_vep_transcript_csqs
+from gnomad.utils.vep import explode_by_vep_annotation, filter_vep_transcript_csqs
 from gnomad_constraint.resources.resource_utils import get_models, get_mutation_ht
 
 from rmc.resources.basics import (
@@ -27,7 +27,6 @@ from rmc.resources.reference_data import (
     GENCODE_VERSION,
     VEP_VERSION,
     clinvar_plp_mis_haplo,
-    gene_model,
     ndd_de_novo,
     transcript_cds,
     transcript_ref,
@@ -91,7 +90,7 @@ GROUPINGS = [
     "annotation",
     "modifier",
     "transcript",
-    "coverage",
+    "exomes_AN_percent",
 ]
 """
 Fields to group by when calculating expected variants per variant type.
@@ -119,7 +118,9 @@ def add_obs_annotation(
     gnomad_ht = get_gnomad_public_release(gnomad_data_type)
     gnomad_ht = gnomad_ht.filter(
         keep_criteria(
-            gnomad_ht.ac, gnomad_ht.af, gnomad_ht.filters, gnomad_ht.gnomad_coverage
+            gnomad_ht.ac,
+            gnomad_ht.af,
+            gnomad_ht.filters,
         )
     )
     ht = ht.annotate(_obs=gnomad_ht.index(ht.key))
@@ -214,17 +215,29 @@ def calculate_exp_from_mu(
     :param n_partitions: Number of desired partitions for temporary grouped context Table. Default is 5000.
     :return: Table annotated with per-variant expected counts.
     """
+    # NOTE: annotating with dummy observed_variants because `compute_expected_variants` expects it
+    possible_ht = possible_ht.annotate(observed_variants=possible_ht.possible_variants)
     mu_expr = possible_ht.mu_snp
     cov_corr_expr = get_coverage_correction_expr(
-        possible_ht.coverage, possible_ht.coverage_model
+        possible_ht.exomes_AN_percent, possible_ht.coverage_model
     )
 
-    if locus_type == "X":
-        plateau_model = possible_ht.plateau_x_models
-    elif locus_type == "Y":
-        plateau_model = possible_ht.plateau_y_models
-    else:
-        plateau_model = possible_ht.plateau_models
+    # TODO: uncomment when the other models exist
+    # Used this for testing:
+    # plateau_model = hl.experimental.read_expression(
+    #    "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.plateau.autosome_par.he"
+    # )
+    # if locus_type == "X":
+    #    plateau_model = (
+    #        get_models(model_type="plateau", genomic_region="chrx_non_par").he(),
+    #    )
+    # elif locus_type == "Y":
+    #    plateau_model = (
+    #        get_models(model_type="plateau", genomic_region="chry_non_par").he(),
+    #    )
+    # else:
+    #    plateau_model = get_models(model_type="plateau").he()
+    plateau_model = get_models(model_type="plateau").he()
 
     agg_expr = {
         "mu": hl.agg.sum(mu_expr * cov_corr_expr),
@@ -244,7 +257,9 @@ def calculate_exp_from_mu(
     logger.info(
         "Grouping by %s and computing expected counts per grouping...", groupings
     )
-    group_ht = possible_ht.group_by(*groupings).aggregate(**agg_expr)
+    group_ht = (
+        possible_ht.group_by(*groupings).aggregate(**agg_expr).drop("observed_variants")
+    )
     group_ht = group_ht.checkpoint(
         f"{TEMP_PATH_WITH_SLOW_DEL}/context_exp_group.ht",
         _read_if_exists=not overwrite,
@@ -276,10 +291,11 @@ def create_possible_hts(
     ht: hl.Table,
     locus_type: str = "autosomes",
     additional_grouping: List[str] = [
+        "cpg",
         "annotation",
         "modifier",
         "transcript",
-        "coverage",
+        "exomes_AN_percent",
     ],
     mu_ht_partitions: int = 100,
     overwrite: bool = False,
@@ -306,7 +322,7 @@ def create_possible_hts(
         Default is "autosomes".
     :param additional_grouping: Additional fields to group by when calculating possible variants.
         These fields are added on top of the context, ref, alt, and methylation level grouping.
-        Default is ["annotation", "modifier", "transcript", "coverage"].
+        Default is ["cpg", "annotation", "modifier", "transcript", "exomes_AN_percent"].
     :param mu_ht_partitions: Number of desired partitions for mutation rate HT. Default is 100.
     :param overwrite: Whether to overwrite temporary data. Default is False.
     :return: Table filtered to `locus_type` with possible variants per variant type.
@@ -329,13 +345,15 @@ def create_possible_hts(
     possible_ht = possible_ht.transmute(possible_variants=possible_ht.variant_count)
 
     # Annotate HT globals with models
-    # Need to annotate globals with models to use in `calculate_exp_from_mu`
     possible_ht = possible_ht.annotate_globals(
-        plateau_models=get_models(model_type="plateau").he(),
         # TODO: Uncomment lines below when chrX/chrY, coverage models are ready
         # plateau_x_models=get_models(model_type="plateau", genomic_region="chrx_non_par").he(),
         # plateau_y_models=get_models(model_type="plateau", genomic_region="chry_non_par").he(),
-        # coverage_model=plateau_x_models=get_models(model_type="coverage").he(),,
+        # Used this for testing
+        # coverage_model=hl.experimental.read_expression(
+        #     "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.coverage.autosome_par.he"
+        # ),
+        coverage_model=get_models(model_type="coverage").he(),
     )
     possible_ht = possible_ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/{locus_type}_possible_variants.ht",
@@ -350,12 +368,14 @@ def create_filtered_context_ht(
     n_partitions: int = 10000,
     overwrite: bool = False,
     additional_grouping: List[str] = [
+        "cpg",
         "annotation",
         "modifier",
         "transcript",
-        "coverage",
+        "exomes_AN_percent",
     ],
     mu_ht_partitions: int = 100,
+    canonical_only: bool = True,
 ) -> None:
     """
     Create allele-level VEP context Table with constraint annotations including expected variant counts.
@@ -371,17 +391,17 @@ def create_filtered_context_ht(
     :param overwrite: Whether to overwrite temporary data. Default is False.
     :param additional_grouping: Additional fields to group by when calculating possible variants.
         These fields are added on top of the context, ref, alt, and methylation level grouping.
-        Default is ["annotation", "modifier", "transcript", "coverage"].
+        Default is ["cpg", "annotation", "modifier", "transcript", "exomes_AN_percent"].
     :param mu_ht_partitions: Number of desired partitions for mutation rate HT. Default is 100.
+    :param canonical_only: Whether to filter to canonical transcripts only. Default is True.
     :return: None; writes Table to path.
     """
     logger.info(
         "Preprocessing VEP context HT to filter to missense, nonsense, and"
-        " synonymous variants in all canonical transcripts and add constraint"
-        " annotations..."
+        " synonymous variants, and add constraint annotations..."
     )
     # NOTE: Constraint outlier transcripts are not removed
-    ht = process_context_ht(filter_csq=csq)
+    ht = process_context_ht(filter_to_canonical=canonical_only, filter_csq=csq)
 
     logger.info(
         "Filtering context HT to all covered sites not found or rare in gnomAD"
@@ -456,9 +476,9 @@ def create_filtered_context_ht(
             f"Found {negative_exp} variants with negative expected values!"
         )
     if zero_exp.count() > 0:
-        raise DataException(
-            f"Found {zero_exp.count() - negative_exp} variants with zero expected"
-            " values!"
+        logger.warning(
+            "Found %d variants with zero expected values!",
+            zero_exp.count() - negative_exp,
         )
 
     logger.info(
@@ -469,10 +489,15 @@ def create_filtered_context_ht(
 
 
 def create_constraint_prep_ht(
-    filter_csq: Set[str] = {MISSENSE}, n_partitions: int = 15000, overwrite: bool = True
+    filter_csq: Set[str] = {MISSENSE}, n_partitions: int = 10000, overwrite: bool = True
 ) -> None:
     """
-    Create locus-level constraint prep Table from filtered context Table for all canonical protein-coding transcripts.
+    Create locus-level constraint prep Table from filtered context Table.
+
+    Function will remove transcripts with zero expected values transcript-wide
+    but will not do any additional transcript filtering.
+    Transcripts need to be filtered to canonical only if desired in upstream step to
+    create the `filtered_context` Table.
 
     This Table is used in the first step of regional constraint breakpoint search.
 
@@ -497,12 +522,39 @@ def create_constraint_prep_ht(
         expected=hl.agg.sum(ht.expected),
     )
 
+    transcript_group = ht.group_by("transcript").aggregate(
+        observed=hl.agg.sum(ht.observed),
+        expected=hl.agg.sum(ht.expected),
+    )
+    transcript_group = transcript_group.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/transcript_group.ht", overwrite=overwrite
+    )
+    zero_exp = transcript_group.filter(transcript_group.expected == 0)
+    if zero_exp.count() > 0:
+        logger.warning(
+            "Found %d transcripts with zero expected values across the entire"
+            " transcript!",
+            zero_exp.count(),
+        )
+        zero_exp_transcripts = zero_exp.aggregate(
+            hl.agg.collect_as_set(zero_exp.transcript)
+        )
+        ht = ht.filter(
+            hl.literal(zero_exp_transcripts).contains(ht.transcript), keep=False
+        )
+
+    ht = ht.annotate(expected=hl.if_else(ht.expected == 0, 1e-09, ht.expected))
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/transcripts_nonzero_exp.ht", overwrite=True
+    )
+
     logger.info("Adding section annotation...")
     # Add transcript start and stop CDS positions
     # NOTE: RMC freezes 1-7 used `gene_model` resource to get transcript start and stops
     # rather than CDS
     build = ht.locus.dtype.reference_genome.name
     if not file_exists(transcript_ref.versions[build].path):
+        logger.warning("Transcript reference resources do not exist -- creating now...")
         create_transcript_ref(
             build, overwrite=not file_exists(transcript_cds.versions[build].path)
         )
@@ -1321,21 +1373,16 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     group_rmc_prep_ht = group_rmc_prep_ht.annotate(
         transcript_oe=group_rmc_prep_ht.obs / group_rmc_prep_ht.exp
     )
-
-    # Read in LoF constraint HT to get OE ratio for five transcripts missing in v2 RMC results
-    # # 'ENST00000304270', 'ENST00000344415', 'ENST00000373521', 'ENST00000381708', 'ENST00000596936'
-    # All 5 of these transcripts have extremely low coverage in gnomAD
-    # Will keep for consistency with v2 LoF results but they look terrible
-    # NOTE: LoF HT is keyed by gene and transcript, but `_key_by_assert_sorted` doesn't work here for v2 version
-    # Throws this error: hail.utils.java.FatalError: IllegalArgumentException
-    lof_ht = constraint_ht.ht().select("oe_mis").key_by("transcript")
+    group_rmc_prep_ht = group_rmc_prep_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_group_rmc_prep.ht", overwrite=True
+    )
 
     ht = ht.annotate(
-        gnomad_transcript_oe=lof_ht[ht.transcript].oe_mis,
-        rmc_transcript_oe=group_rmc_prep_ht[ht.transcript].transcript_oe,
+        transcript_oe=group_rmc_prep_ht[ht.transcript].transcript_oe,
     )
-    ht = ht.transmute(
-        transcript_oe=hl.coalesce(ht.rmc_transcript_oe, ht.gnomad_transcript_oe)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/temp_freeze_{freeze}_transcript_oe_annotated.ht",
+        overwrite=True,
     )
 
     check_file_exists_raise_error(
@@ -1344,6 +1391,8 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
         error_if_not_exists_msg="Merged RMC results table does not exist!",
     )
     rmc_ht = rmc_results.versions[freeze].ht().key_by("interval")
+
+    # Annotate with RMC OE
     ht = ht.annotate(
         section_oe=rmc_ht.index(ht.locus, all_matches=True)
         .filter(lambda x: x.transcript == ht.transcript)
@@ -1355,6 +1404,7 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
             ht.section_oe[0],
         ),
     )
+    # Annotate with RMC OE where available, otherwise select transcript OE
     return ht.transmute(oe=hl.coalesce(ht.section_oe, ht.transcript_oe))
 
 
@@ -1393,9 +1443,12 @@ def dedup_annot(
 
 def create_context_with_oe(
     freeze: int,
+    filter_to_canonical: bool = False,
     missense_str: str = MISSENSE,
-    n_partitions: int = 30000,
+    n_partitions: int = 10000,
     overwrite_temp: bool = False,
+    filter_outliers: bool = False,
+    vep_version: str = "105",
 ) -> None:
     """
     Filter VEP context Table to missense variants in canonical transcripts, and add missense observed/expected.
@@ -1408,18 +1461,18 @@ def create_context_with_oe(
         - `context_with_oe_dedup`: Deduplicated version of `context_with_oe` that only contains missense o/e and transcript annotations.
 
     :param freeze: RMC data freeze number.
-    :param str missense_str: String representing missense variant consequence. Default is MISSENSE.
-    :param int n_partitions: Number of desired partitions for the VEP context Table.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
+    :param missense_str: String representing missense variant consequence. Default is MISSENSE.
+    :param n_partitions: Number of desired partitions for the VEP context Table.
         Repartition VEP context Table to this number on read.
         Default is 30000.
-    :param bool overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
+    :param overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
         Default is False.
+    :param filter_outliers: Whether to filter out outlier transcripts. Default is False.
+    :param vep_version: VEP version to use. Default is "105".
     :return: None; function writes Table to resource path.
     """
-    logger.info("Importing set of transcripts to keep...")
-    transcripts = get_constraint_transcripts(outlier=False)
-
     logger.info(
         "Reading in SNPs-only, VEP-annotated context HT and filtering to missense"
         " variants in canonical transcripts..."
@@ -1427,20 +1480,28 @@ def create_context_with_oe(
     # Using vep_context.path to read in table with fewer partitions
     # VEP context resource has 62164 partitions
     ht = (
-        hl.read_table(vep_context.path, _n_partitions=n_partitions)
+        hl.read_table(vep_context.versions[vep_version].path)
         .select_globals()
         .select("vep", "was_split")
     )
+    ht = ht.naive_coalesce(n_partitions)
     ht = filter_vep_transcript_csqs(
         t=ht,
         vep_root="vep",
         synonymous=False,
-        canonical=True,
+        canonical=filter_to_canonical,
+        protein_coding=True,
         ensembl_only=True,
         filter_empty_csq=True,
         csqs={missense_str},
     )
-    ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
+    if filter_outliers:
+        logger.info("Importing set of transcripts to keep...")
+        transcripts = get_constraint_transcripts(outlier=False)
+        ht = ht.filter(transcripts.contains(ht.transcript_consequences.transcript_id))
+
+    # Explode VEP and annotate `transcript_consequences` as top level field
+    ht = explode_by_vep_annotation(ht, "transcript_consequences")
     ht = get_annotations_from_context_ht_vep(ht)
     # Save context Table to temporary path with specified deletion policy because this is a very large file
     # and relevant information will be saved at `context_with_oe` (written below)
@@ -1476,7 +1537,9 @@ def create_context_with_oe(
     logger.info("Output OE-annotated dedup context HT fields: %s", set(ht.row))
 
 
-def annot_rmc_with_start_stop_aas(ht: hl.Table, overwrite_temp: bool):
+def annot_rmc_with_start_stop_aas(
+    ht: hl.Table, overwrite_temp: bool, filter_to_canonical: bool
+) -> hl.Table:
     """
     Annotate RMC regions HT with amino acids at region starts and stops.
 
@@ -1484,13 +1547,16 @@ def annot_rmc_with_start_stop_aas(ht: hl.Table, overwrite_temp: bool):
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only.
     :return: RMC regions HT annotated with amino acid information for region starts and stops.
     """
     logger.info("Getting amino acid information from context HT...")
     rmc_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
     # Get amino acid information from context table for variants in chosen transcripts
     context_ht = get_aa_from_context(
-        overwrite_temp=overwrite_temp, keep_transcripts=rmc_transcripts
+        overwrite_temp=overwrite_temp,
+        keep_transcripts=rmc_transcripts,
+        filter_to_canonical=filter_to_canonical,
     )
     # Get reference AA label for each locus-transcript combination in context HT
     context_ht = get_ref_aa(
@@ -1639,7 +1705,13 @@ def fix_transcript_start_stop_aas(
             miss_start_stop_ht.stop_aa,
         ),
     )
-    return miss_start_stop_ht.select("start_aa", "stop_aa")
+    ht = join_and_fix_aa(ht, miss_start_stop_ht)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_transcript_start_stop_aa_fix.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    return ht
 
 
 def fix_region_start_stop_aas(
@@ -1773,11 +1845,6 @@ def fix_region_start_stop_aas(
             ].prev_exon_stop,
         ),
     )
-    missing_ht = missing_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/region_start_stop_missing_aa_exon_annot.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
     missing_ht = missing_ht.annotate(
         start_aa=hl.if_else(
             hl.is_missing(missing_ht.start_aa),
@@ -1790,7 +1857,42 @@ def fix_region_start_stop_aas(
             missing_ht.stop_aa,
         ),
     )
-    return missing_ht.select("start_aa", "stop_aa")
+    missing_ht = missing_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/region_start_stop_missing_aa_exon_annot.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    ht = ht.annotate(
+        start_coordinate=hl.if_else(
+            hl.is_missing(ht.start_aa),
+            start_fix_ht[
+                hl.locus(
+                    ht.start_coordinate.contig,
+                    ht.start_coordinate.position - 1,
+                ),
+                ht.transcript,
+            ].next_exon_start,
+            ht.start_coordinate,
+        ),
+        stop_coordinate=hl.if_else(
+            hl.is_missing(ht.stop_aa),
+            stop_fix_ht[
+                hl.locus(
+                    ht.stop_coordinate.contig,
+                    ht.stop_coordinate.position + 1,
+                ),
+                ht.transcript,
+            ].prev_exon_stop,
+            ht.stop_coordinate,
+        ),
+    )
+    ht = join_and_fix_aa(ht, missing_ht)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_all_aa_fix.ht",
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+    return ht
 
 
 def check_and_fix_missing_aa(
@@ -1846,29 +1948,16 @@ def check_and_fix_missing_aa(
     ht = ht.annotate(**transcript_ht[ht.transcript])
     ht = ht.annotate(
         # NOTE: This is actually the transcript end for transcripts on the negative strand
-        is_transcript_start=ht.start_coordinate == ht.cds_start,
-        is_transcript_stop=ht.stop_coordinate == ht.cds_end,
+        is_transcript_start=ht.start_coordinate.position == ht.cds_start,
+        is_transcript_stop=ht.stop_coordinate.position == ht.cds_end,
     )
     # NOTE: We adjusted transcript starts and stops that were missing AA annotations for gnomAD v2
     # Some starts and stops had uninformative amino acid information in the VEP context HT:
     # Amino acid was annotated as "X"
     # VEP context HT was created using VEP version 85, GENCODE version 19
-    transcript_start_stop_fix_ht = fix_transcript_start_stop_aas(
-        ht, context_ht, overwrite_temp
-    )
-    ht = join_and_fix_aa(ht, transcript_start_stop_fix_ht)
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_transcript_start_stop_aa_fix.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
-    region_fix_ht = fix_region_start_stop_aas(ht, context_ht, overwrite_temp)
-    ht = join_and_fix_aa(ht, region_fix_ht)
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_all_aa_fix.ht",
-        _read_if_exists=not overwrite_temp,
-        overwrite=overwrite_temp,
-    )
+    ht = fix_transcript_start_stop_aas(ht, context_ht, overwrite_temp)
+    ht = fix_region_start_stop_aas(ht, context_ht, overwrite_temp)
+
     # Double check that all rows have defined AA annotations
     missing_ht = _missing_aa_check(ht)
     if missing_ht:
@@ -1879,7 +1968,9 @@ def check_and_fix_missing_aa(
     return ht
 
 
-def add_globals_rmc_browser(ht: hl.Table) -> hl.Table:
+def add_globals_rmc_browser(
+    ht: hl.Table, filter_to_canonical: bool, keep_outliers: bool = True
+) -> hl.Table:
     """
     Annotate HT globals with RMC transcript information.
 
@@ -1890,22 +1981,33 @@ def add_globals_rmc_browser(ht: hl.Table) -> hl.Table:
         - outlier transcripts
     :param HT: Input Table. Should be RMC regions HT annotated with amino acid
         information for region starts and stops.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only.
+    :param keep_outliers: Whether to keep outlier transcripts.
+        Default is True.
     :return: RMC regions HT with updated globals annotations.
     """
     # Get transcripts with evidence of RMC
     rmc_transcripts = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.transcript)))
 
-    # Get all QC pass transcripts and outlier transcripts
-    qc_pass_transcripts = get_constraint_transcripts(outlier=False)
-    outlier_transcripts = get_constraint_transcripts(outlier=True)
-
-    # Get all transcripts displayed on browser
-    transcript_ht = gene_model.ht()
-    all_transcripts = transcript_ht.aggregate(
-        hl.agg.collect_as_set(transcript_ht.transcript)
+    # Get all QC pass transcripts
+    qc_pass_transcripts = get_constraint_transcripts(
+        filter_to_canonical=filter_to_canonical, outlier=False
     )
-    transcripts_no_rmc = qc_pass_transcripts.difference(rmc_transcripts)
-    transcripts_not_searched = all_transcripts.difference(qc_pass_transcripts)
+    outlier_transcripts = get_constraint_transcripts(
+        filter_to_canonical=filter_to_canonical, outlier=True
+    )
+
+    # Get all transcripts from constraint HT
+    all_transcripts = get_constraint_transcripts(
+        all_transcripts=True, filter_to_canonical=filter_to_canonical
+    )
+    if keep_outliers:
+        transcripts_no_rmc = all_transcripts.difference(rmc_transcripts)
+        transcripts_not_searched = hl.empty_array(hl.tstr)
+    else:
+        transcripts_no_rmc = qc_pass_transcripts.difference(rmc_transcripts)
+        transcripts_not_searched = all_transcripts.difference(qc_pass_transcripts)
+
     ht = ht.select_globals()
     return ht.annotate_globals(
         transcripts_not_searched=transcripts_not_searched,
@@ -1914,7 +2016,9 @@ def add_globals_rmc_browser(ht: hl.Table) -> hl.Table:
     )
 
 
-def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
+def format_rmc_browser_ht(
+    freeze: int, overwrite_temp: bool, filter_to_canonical: bool = False
+) -> None:
     """
     Reformat annotations in input HT for release.
 
@@ -1949,6 +2053,7 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only.
     :return: None; writes Table with desired schema to resource path.
     """
     ht = rmc_results.versions[freeze].ht()
@@ -1960,7 +2065,7 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
     )
 
     # Annotate start and stop amino acids per region
-    ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp)
+    ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp, filter_to_canonical)
 
     # Remove missense O/E cap of 1
     # (Missense O/E capped for RMC search, but
@@ -1988,7 +2093,7 @@ def format_rmc_browser_ht(freeze: int, overwrite_temp: bool) -> None:
     ht = ht.group_by("transcript").aggregate(regions=hl.agg.collect(ht.region))
 
     # Annotate globals and write
-    ht = add_globals_rmc_browser(ht)
+    ht = add_globals_rmc_browser(ht, filter_to_canonical)
     ht.write(rmc_browser.versions[freeze].path, overwrite=True)
 
 

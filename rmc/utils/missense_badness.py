@@ -34,6 +34,7 @@ def prepare_amino_acid_ht(
     freeze: int = CURRENT_FREEZE,
     gnomad_data_type: str = "exomes",
     loftee_hc_str: str = "HC",
+    an_threshold: int = 0,
 ) -> None:
     """
     Prepare Table(s) with all possible amino acid substitutions and their missense observed to expected (OE) ratio.
@@ -57,6 +58,7 @@ def prepare_amino_acid_ht(
         Must be one of "exomes" or "genomes" (check is done within `public_release`).
         Default is "exomes".
     :param loftee_hc_str: String indicating that a variant is predicted to cause loss-of-function with high confidence by LOFTEE.
+    :param an_threshold: Remove variants at or below this AN threshold (in gnomAD exomes). Default is 0.
     :return: None; writes amino acid Table(s) to resource path(s).
     """
     logger.info("Reading in VEP context HT...")
@@ -65,6 +67,12 @@ def prepare_amino_acid_ht(
     # However, `process_context_ht` no longer supports outlier transcript filtering;
     # will need to add filtering logic if still desired
     context_ht = process_context_ht(filter_csq=KEEP_CODING_CSQ)
+
+    # Filter to rows with defined AN; previously filtered to defined coverage
+    # but have switched coverage to AN
+    context_ht = context_ht.filter(
+        hl.is_defined(context_ht.exomes_AN) & (context_ht.exomes_AN > an_threshold)
+    )
 
     logger.info("Selecting relevant annotations...")
     context_ht = context_ht.select(
