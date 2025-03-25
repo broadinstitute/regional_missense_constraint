@@ -132,7 +132,11 @@ def process_context_ht(
     # ht = hl.read_table(
     #    "gs://gnomad/v4.1/constraint_an/preprocessed_data/gnomad.v4.1.context.preprocessed.autosome_par.ht"
     # ).select_globals()
-    ht = get_preprocessed_ht("context").ht().select_globals()
+    # TODO: Update this path once new 4.1 constraint is released
+    ht = hl.read_table(
+        "gs://gnomad/v4.1/constraint_an_coverage_corrected/preprocessed_data/gnomad.v4.1.context.preprocessed.ht"
+        ).select_globals()
+    # ht = get_preprocessed_ht("context").ht().select_globals()
 
     if filter_to_canonical:
         logger.info("Filtering to canonical transcripts only...")

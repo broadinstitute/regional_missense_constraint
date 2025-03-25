@@ -26,7 +26,7 @@ from rmc.resources.rmc import (
     simul_search_round_bucket_path,
     single_search_round_ht_path,
 )
-from rmc.slack_creds import slack_token
+# from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     annotate_max_chisq_per_section,
     check_break_search_round_nums,

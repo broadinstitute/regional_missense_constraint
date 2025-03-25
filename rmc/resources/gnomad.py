@@ -10,7 +10,9 @@ constraint_ht = VersionedTableResource(
             path="gs://gcp-public-data--gnomad/release/2.1.1/constraint/gnomad.v2.1.1.lof_metrics.by_transcript.ht"
         ),
         "4.1": TableResource(
-            path="gs://gcp-public-data--gnomad/release/4.1/constraint/gnomad.v4.1.constraint_metrics.ht"
+            # TODO: change this back when new constraint metrics are made public
+            # path="gs://gcp-public-data--gnomad/release/4.1/constraint/gnomad.v4.1.constraint_metrics.ht"
+            path="gs://gnomad/v4.1/constraint_an_3_10_25/metrics/transcript_consequences/gnomad.v4.1.constraint_metrics.ht"
         ),
     },
 )

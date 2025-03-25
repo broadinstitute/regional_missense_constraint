@@ -24,14 +24,14 @@ from rmc.resources.basics import (
 from rmc.resources.reference_data import FOLD_K
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
-FREEZES = [1]
+FREEZES = [1, 2]
 """
 RMC/MPC data versions computed with current gnomAD version.
 
 gnomAD v2.1.1 freezes: [1, 2, 3, 4, 5, 6, 7].
 """
 
-CURRENT_FREEZE = 1
+CURRENT_FREEZE = 2
 """
 Current RMC/MPC data version.
 
