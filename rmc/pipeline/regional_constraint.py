@@ -64,20 +64,21 @@ def main(args):
             logger.info("Creating transcript reference resources...")
             create_transcript_ref(build="GRCh38", overwrite=args.overwrite)
 
-        if args.command == "prep-filtered-context":
-            hl.init(
-                log="/RMC_pre_process.log",
-                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
-                quiet=args.quiet,
-            )
-            hl.default_reference("GRCh38")
-            logger.info("Creating filtered context HT...")
-            n_partitions = 10000
-            create_filtered_context_ht(
-                canonical_only=args.filter_to_canonical,
-                n_partitions=args.n_partitions if args.n_partitions else n_partitions,
-                overwrite=args.overwrite_temp,
-            )
+        # TODO: This is not needed for now since we directly read apply_models HT from constraint as our filtered context
+        # if args.command == "prep-filtered-context":
+        #     hl.init(
+        #         log="/RMC_pre_process.log",
+        #         tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+        #         quiet=args.quiet,
+        #     )
+        #     hl.default_reference("GRCh38")
+        #     logger.info("Creating filtered context HT...")
+        #     n_partitions = 10000
+        #     create_filtered_context_ht(
+        #         canonical_only=args.filter_to_canonical,
+        #         n_partitions=args.n_partitions if args.n_partitions else n_partitions,
+        #         overwrite=args.overwrite_temp,
+        #     )
 
         if args.command == "prep-constraint":
             hl.init(

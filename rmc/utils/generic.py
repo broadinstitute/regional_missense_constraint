@@ -163,7 +163,7 @@ def process_context_ht(
     # for documentation on annotations added
     ht, _ = annotate_exploded_vep_for_constraint_groupings(
         ht=ht,
-        coverage_expr=ht.exomes_AN,
+        coverage_expr=ht.exomes_AN_percent,
         vep_annotation="transcript_consequences",
         include_canonical_group=True,
         # NOTE: all canonical transcripts are also the MANE select transcript in

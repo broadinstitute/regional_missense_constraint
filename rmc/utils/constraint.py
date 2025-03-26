@@ -181,14 +181,16 @@ def adjust_fwd_cumulative_count_expr(
     )
 
 # TODO: replace or remove this to read exp directly from per-variant constraint results
-def annotate_exp_from_constraint(
-    context_ht: hl.Table,
-    apply_ht: hl.Table,
-    locus_type: str,
-    # groupings: List[str] = GROUPINGS,
-    overwrite: bool = False,
-    n_partitions: int = 5000,
-) -> hl.Table:
+# TODO: This is not needed for now since reading per-variant apply models HT from constraint
+# directly as filtered context HT for downstream prep-constraint step.
+# def annotate_exp_from_constraint(
+#     context_ht: hl.Table,
+#     apply_ht: hl.Table,
+#     locus_type: str,
+#     # groupings: List[str] = GROUPINGS,
+#     overwrite: bool = False,
+#     n_partitions: int = 5000,
+# ) -> hl.Table:
     """
     Annotate context Table with the per-variant (locus-allele) expected counts based on per-variant constraint table.
 
@@ -276,34 +278,34 @@ def annotate_exp_from_constraint(
     # group_ht = group_ht.annotate(
     #     expected=group_ht.expected_variants / group_ht.possible_variants
     # ).select("expected")
-    logger.info(
-        "Annotating expected counts per allele from the constraint table.."
-    )
-    apply_ht = apply_ht.annotate(expected = apply_ht.expected_variants[0]).select("expected")
-    context_ht = context_ht.annotate(
-        expected = apply_ht[context_ht.key].expected
-    )
-    context_ht = context_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/{locus_type}_context_exp.ht",
-        _read_if_exists=not overwrite,
-        overwrite=overwrite,
-    )
-    return context_ht
+    # logger.info(
+    #     "Annotating expected counts per allele from the constraint table.."
+    # )
+    # apply_ht = apply_ht.annotate(expected = apply_ht.expected_variants[0]).select("expected")
+    # context_ht = context_ht.annotate(
+    #     expected = apply_ht[context_ht.key].expected
+    # )
+    # context_ht = context_ht.checkpoint(
+    #     f"{TEMP_PATH_WITH_FAST_DEL}/{locus_type}_context_exp.ht",
+    #     _read_if_exists=not overwrite,
+    #     overwrite=overwrite,
+    # )
+    # return context_ht
 
 # TODO: Might not need this function since annotating expected directly from constraint
-def create_possible_hts(
-    ht: hl.Table,
-    locus_type: str = "autosomes",
-    additional_grouping: List[str] = [
-        "cpg",
-        "annotation",
-        "modifier",
-        "transcript",
-        "exomes_AN_percent",
-    ],
-    mu_ht_partitions: int = 100,
-    overwrite: bool = False,
-) -> hl.Table:
+# def create_possible_hts(
+#     ht: hl.Table,
+#     locus_type: str = "autosomes",
+#     additional_grouping: List[str] = [
+#         "cpg",
+#         "annotation",
+#         "modifier",
+#         "transcript",
+#         "exomes_AN_percent",
+#     ],
+#     mu_ht_partitions: int = 100,
+#     overwrite: bool = False,
+# ) -> hl.Table:
     """
     Create Table with possible variants per variant type for each locus type.
 
@@ -331,56 +333,57 @@ def create_possible_hts(
     :param overwrite: Whether to overwrite temporary data. Default is False.
     :return: Table filtered to `locus_type` with possible variants per variant type.
     """
-    logger.info("Filtering to region: %s", locus_type)
-    ht = filter_to_region_type(ht, locus_type)
+    # logger.info("Filtering to region: %s", locus_type)
+    # ht = filter_to_region_type(ht, locus_type)
 
-    logger.info(
-        "Counting number of possible variants by variant type + transcript grouping..."
-    )
-    possible_ht = count_variants_by_group(
-        ht,
-        additional_grouping=additional_grouping,
-        use_table_group_by=True,
-    )
-    mu_ht = hl.read_table(
-        get_mutation_ht().path, _n_partitions=mu_ht_partitions
-    ).select("mu_snp")
-    possible_ht = annotate_with_mu(possible_ht, mu_ht)
-    possible_ht = possible_ht.transmute(possible_variants=possible_ht.variant_count)
+    # logger.info(
+    #     "Counting number of possible variants by variant type + transcript grouping..."
+    # )
+    # possible_ht = count_variants_by_group(
+    #     ht,
+    #     additional_grouping=additional_grouping,
+    #     use_table_group_by=True,
+    # )
+    # mu_ht = hl.read_table(
+    #     get_mutation_ht().path, _n_partitions=mu_ht_partitions
+    # ).select("mu_snp")
+    # possible_ht = annotate_with_mu(possible_ht, mu_ht)
+    # possible_ht = possible_ht.transmute(possible_variants=possible_ht.variant_count)
 
-    # Annotate HT globals with models
-    possible_ht = possible_ht.annotate_globals(
-        # TODO: Uncomment lines below when chrX/chrY, coverage models are ready
-        plateau_x_models=get_models(model_type="plateau", genomic_region="chrx_non_par").he(),
-        plateau_y_models=get_models(model_type="plateau", genomic_region="chry_non_par").he(),
-        # Used this for testing
-        # coverage_model=hl.experimental.read_expression(
-        #     "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.coverage.autosome_par.he"
-        # ),
-        coverage_model=get_models(model_type="coverage").he(),
-    )
-    possible_ht = possible_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/{locus_type}_possible_variants.ht",
-        _read_if_exists=not overwrite,
-        overwrite=overwrite,
-    )
-    return possible_ht
+    # # Annotate HT globals with models
+    # possible_ht = possible_ht.annotate_globals(
+    #     # TODO: Uncomment lines below when chrX/chrY, coverage models are ready
+    #     plateau_x_models=get_models(model_type="plateau", genomic_region="chrx_non_par").he(),
+    #     plateau_y_models=get_models(model_type="plateau", genomic_region="chry_non_par").he(),
+    #     # Used this for testing
+    #     # coverage_model=hl.experimental.read_expression(
+    #     #     "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.coverage.autosome_par.he"
+    #     # ),
+    #     coverage_model=get_models(model_type="coverage").he(),
+    # )
+    # possible_ht = possible_ht.checkpoint(
+    #     f"{TEMP_PATH_WITH_FAST_DEL}/{locus_type}_possible_variants.ht",
+    #     _read_if_exists=not overwrite,
+    #     overwrite=overwrite,
+    # )
+    # return possible_ht
 
-
-def create_filtered_context_ht(
-    csq: Set[str] = KEEP_CODING_CSQ,
-    n_partitions: int = 10000,
-    overwrite: bool = False,
-    additional_grouping: List[str] = [
-        "cpg",
-        "annotation",
-        "modifier",
-        "transcript",
-        "exomes_AN_percent",
-    ],
-    mu_ht_partitions: int = 100,
-    canonical_only: bool = True,
-) -> None:
+# TODO: This function is an upstream step to create filtered context used in prep-constraint.
+# TODO: Using the apply models HT directly as filtered context for prep-constraint step. 
+# def create_filtered_context_ht(
+#     csq: Set[str] = KEEP_CODING_CSQ,
+#     n_partitions: int = 10000,
+#     overwrite: bool = False,
+#     additional_grouping: List[str] = [
+#         "cpg",
+#         "annotation",
+#         "modifier",
+#         "transcript",
+#         "exomes_AN_percent",
+#     ],
+#     mu_ht_partitions: int = 100,
+#     canonical_only: bool = True,
+# ) -> None:
     """
     Create allele-level VEP context Table with constraint annotations including expected variant counts.
 
@@ -400,103 +403,103 @@ def create_filtered_context_ht(
     :param canonical_only: Whether to filter to canonical transcripts only. Default is True.
     :return: None; writes Table to path.
     """
-    logger.info(
-        "Preprocessing VEP context HT to filter to missense, nonsense, and"
-        " synonymous variants, and add constraint annotations..."
-    )
-    # NOTE: Constraint outlier transcripts are not removed
-    ht = process_context_ht(filter_to_canonical=canonical_only, filter_csq=csq)
+    # logger.info(
+    #     "Preprocessing VEP context HT to filter to missense, nonsense, and"
+    #     " synonymous variants, and add constraint annotations..."
+    # )
+    # # NOTE: Constraint outlier transcripts are not removed
+    # ht = process_context_ht(filter_to_canonical=canonical_only, filter_csq=csq)
 
-    logger.info(
-        "Filtering context HT to all covered sites not found or rare in gnomAD"
-        " exomes and checkpointing..."
-    )
-    ht = filter_context_using_gnomad(ht, "exomes")
-    # Reducing number of partitions as the VEP context table has 62k
-    ht = ht.naive_coalesce(n_partitions)
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht",
-        _read_if_exists=not overwrite,
-        overwrite=overwrite,
-    )
+    # logger.info(
+    #     "Filtering context HT to all covered sites not found or rare in gnomAD"
+    #     " exomes and checkpointing..."
+    # )
+    # ht = filter_context_using_gnomad(ht, "exomes")
+    # # Reducing number of partitions as the VEP context table has 62k
+    # ht = ht.naive_coalesce(n_partitions)
+    # ht = ht.checkpoint(
+    #     f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht",
+    #     _read_if_exists=not overwrite,
+    #     overwrite=overwrite,
+    # )
 
-    # logger.info("Calculating expected values per allele and checkpointing...")
-    logger.info("Annotating with expected values per allele and checkpointing...")
-    # TODO: replace this with more general resource path when available
-    apply_ht = hl.read_table(
-        "gs://gnomad/v4.1/constraint_an_coverage_corrected/apply_models/transcript_consequences/gnomad.v4.1.per_variant_expected.coverage_corrected.ht"
-        )
-    ht = (
-        annotate_exp_from_constraint(
-            filter_to_region_type(ht, "autosome_or_par"),
-            apply_ht.filter(apply_ht.genomic_region == "autosome_or_par"),
-            # create_possible_hts(
-            #     ht=ht,
-            #     locus_type="autosomes",
-            #     additional_grouping=additional_grouping,
-            #     mu_ht_partitions=mu_ht_partitions,
-            #     overwrite=overwrite,
-            # ),
-            locus_type="autosome_or_par",
-        )
-        .union(annotate_exp_from_constraint(
-           filter_to_region_type(ht, "chrx_nonpar"),
-           apply_ht.filter(apply_ht.genomic_region == "chrx_nonpar"),
-           # create_possible_hts(
-           #     ht=ht,
-           #     locus_type="chrX",
-           #     additional_grouping=additional_grouping,
-           #     mu_ht_partitions=mu_ht_partitions,
-           #     overwrite=overwrite,
-           # ),
-           locus_type="chrx_nonpar",
-           )
-        )
-        .union(annotate_exp_from_constraint(
-           filter_to_region_type(ht, "chry_nonpar"),
-           apply_ht.filter(apply_ht.genomic_region == "chry_nonpar"),
-           # create_possible_hts(
-           #     ht=ht,
-           #     locus_type="chrY",
-           #     additional_grouping=additional_grouping,
-           #     mu_ht_partitions=mu_ht_partitions,
-           #     overwrite=overwrite,
-           # ),
-           locus_type="chry_nonpar",
-           )
-        )
-    )
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht",
-        _read_if_exists=not overwrite,
-        overwrite=overwrite,
-    )
-    # Repartition HT
-    ht = hl.read_table(
-        f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht", _n_partitions=n_partitions
-    )
+    # # logger.info("Calculating expected values per allele and checkpointing...")
+    # logger.info("Annotating with expected values per allele and checkpointing...")
+    # # TODO: replace this with more general resource path when available
+    # apply_ht = hl.read_table(
+    #     "gs://gnomad/v4.1/constraint_an_coverage_corrected/apply_models/transcript_consequences/gnomad.v4.1.per_variant_expected.coverage_corrected.ht"
+    #     )
+    # ht = (
+    #     annotate_exp_from_constraint(
+    #         filter_to_region_type(ht, "autosome_or_par"),
+    #         apply_ht.filter(apply_ht.genomic_region == "autosome_or_par"),
+    #         # create_possible_hts(
+    #         #     ht=ht,
+    #         #     locus_type="autosomes",
+    #         #     additional_grouping=additional_grouping,
+    #         #     mu_ht_partitions=mu_ht_partitions,
+    #         #     overwrite=overwrite,
+    #         # ),
+    #         locus_type="autosome_or_par",
+    #     )
+    #     .union(annotate_exp_from_constraint(
+    #        filter_to_region_type(ht, "chrx_nonpar"),
+    #        apply_ht.filter(apply_ht.genomic_region == "chrx_nonpar"),
+    #        # create_possible_hts(
+    #        #     ht=ht,
+    #        #     locus_type="chrX",
+    #        #     additional_grouping=additional_grouping,
+    #        #     mu_ht_partitions=mu_ht_partitions,
+    #        #     overwrite=overwrite,
+    #        # ),
+    #        locus_type="chrx_nonpar",
+    #        )
+    #     )
+    #     .union(annotate_exp_from_constraint(
+    #        filter_to_region_type(ht, "chry_nonpar"),
+    #        apply_ht.filter(apply_ht.genomic_region == "chry_nonpar"),
+    #        # create_possible_hts(
+    #        #     ht=ht,
+    #        #     locus_type="chrY",
+    #        #     additional_grouping=additional_grouping,
+    #        #     mu_ht_partitions=mu_ht_partitions,
+    #        #     overwrite=overwrite,
+    #        # ),
+    #        locus_type="chry_nonpar",
+    #        )
+    #     )
+    # )
+    # ht = ht.checkpoint(
+    #     f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht",
+    #     _read_if_exists=not overwrite,
+    #     overwrite=overwrite,
+    # )
+    # # Repartition HT
+    # ht = hl.read_table(
+    #     f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht", _n_partitions=n_partitions
+    # )
 
-    # Check for negative expected values
-    zero_exp = ht.filter(ht.expected <= 0)
-    negative_exp = zero_exp.filter(zero_exp.expected < 0).count()
-    if negative_exp > 0:
-        # NOTE: in v2, we found negative expected values for a handful of alleles on chrY
-        # due to negative coefficient in the model on this chr
-        # (we decided to remove these sites for v2)
-        raise DataException(
-            f"Found {negative_exp} variants with negative expected values!"
-        )
-    if zero_exp.count() > 0:
-        logger.warning(
-            "Found %d variants with zero expected values!",
-            zero_exp.count() - negative_exp,
-        )
+    # # Check for negative expected values
+    # zero_exp = ht.filter(ht.expected <= 0)
+    # negative_exp = zero_exp.filter(zero_exp.expected < 0).count()
+    # if negative_exp > 0:
+    #     # NOTE: in v2, we found negative expected values for a handful of alleles on chrY
+    #     # due to negative coefficient in the model on this chr
+    #     # (we decided to remove these sites for v2)
+    #     raise DataException(
+    #         f"Found {negative_exp} variants with negative expected values!"
+    #     )
+    # if zero_exp.count() > 0:
+    #     logger.warning(
+    #         "Found %d variants with zero expected values!",
+    #         zero_exp.count() - negative_exp,
+    #     )
 
-    logger.info(
-        "Annotating context HT with number of observed variants and writing out..."
-    )
-    ht = add_obs_annotation(ht)
-    ht.write(filtered_context.path, overwrite=True)
+    # logger.info(
+    #     "Annotating context HT with number of observed variants and writing out..."
+    # )
+    # ht = add_obs_annotation(ht)
+    # ht.write(filtered_context.path, overwrite=True)
 
 
 def create_constraint_prep_ht(
@@ -520,7 +523,16 @@ def create_constraint_prep_ht(
     :param overwrite: Whether to overwrite Table. Default is True.
     :return: None; writes Table to path.
     """
-    ht = filtered_context.ht()
+    #TODO: Make a resource path for this table.
+    # ht = filtered_context.ht()
+    ht = hl.read_table(
+        "gs://gnomad/v4.1/constraint_an_coverage_corrected/apply_models/transcript_consequences/gnomad.v4.1.per_variant_expected.coverage_corrected.ht"
+        )
+    # Annotate obs and exp columns to be used downstream
+    ht = ht.annotate(
+        observed=ht.calibrate_mu.observed_variants[0],
+        expected=ht.expected_variants[0]
+        )
     if filter_csq:
         logger.info("Filtering to %s...", filter_csq)
         ht = ht.filter(hl.literal(filter_csq).contains(ht.annotation))
