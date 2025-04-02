@@ -132,11 +132,7 @@ def process_context_ht(
     # ht = hl.read_table(
     #    "gs://gnomad/v4.1/constraint_an/preprocessed_data/gnomad.v4.1.context.preprocessed.autosome_par.ht"
     # ).select_globals()
-    # TODO: Update this path once new 4.1 constraint is released
-    ht = hl.read_table(
-        "gs://gnomad/v4.1/constraint_an_coverage_corrected/preprocessed_data/gnomad.v4.1.context.preprocessed.ht"
-        ).select_globals()
-    # ht = get_preprocessed_ht("context").ht().select_globals()
+    ht = get_preprocessed_ht("context").ht().select_globals()
 
     if filter_to_canonical:
         logger.info("Filtering to canonical transcripts only...")
@@ -163,7 +159,7 @@ def process_context_ht(
     # for documentation on annotations added
     ht, _ = annotate_exploded_vep_for_constraint_groupings(
         ht=ht,
-        coverage_expr=ht.exomes_AN_percent,
+        coverage_expr=ht.exomes_AN,
         vep_annotation="transcript_consequences",
         include_canonical_group=True,
         # NOTE: all canonical transcripts are also the MANE select transcript in

@@ -180,19 +180,18 @@ def adjust_fwd_cumulative_count_expr(
         cumulative_count_expr[group_expr] + count_expr,
     )
 
-# TODO: replace or remove this to read exp directly from per-variant constraint results
 # TODO: This is not needed for now since reading per-variant apply models HT from constraint
 # directly as filtered context HT for downstream prep-constraint step.
-# def annotate_exp_from_constraint(
+# def calculate_exp_from_mu(
 #     context_ht: hl.Table,
-#     apply_ht: hl.Table,
+#     possible_ht: hl.Table,
 #     locus_type: str,
-#     # groupings: List[str] = GROUPINGS,
+#     groupings: List[str] = GROUPINGS,
 #     overwrite: bool = False,
 #     n_partitions: int = 5000,
 # ) -> hl.Table:
     """
-    Annotate context Table with the per-variant (locus-allele) expected counts based on per-variant constraint table.
+    Annotate context Table with the per-variant (locus-allele) expected counts based on the per-variant mu.
 
     .. note::
         - Assumes that input Tables (context and possible) are annotated with all of the fields in `groupings` and that
@@ -207,7 +206,7 @@ def adjust_fwd_cumulative_count_expr(
             added to the context Table reflects the proportion of expected variation for a given variant per transcript.
 
     :param context_ht: Variant-level input context Table.
-    :param apply_ht: Table containing the expected counts per-variant from the constraint model
+    :param possible_ht: Table containing the number of possible and predicted proportion observed
         (precursor to expected variant count) variants per variant type.
     :param locus_type: Locus type of input Table. One of "X", "Y", or "autosomes".
         NOTE: Will treat any input other than "X" or "Y" as autosomes.
@@ -278,12 +277,8 @@ def adjust_fwd_cumulative_count_expr(
     # group_ht = group_ht.annotate(
     #     expected=group_ht.expected_variants / group_ht.possible_variants
     # ).select("expected")
-    # logger.info(
-    #     "Annotating expected counts per allele from the constraint table.."
-    # )
-    # apply_ht = apply_ht.annotate(expected = apply_ht.expected_variants[0]).select("expected")
     # context_ht = context_ht.annotate(
-    #     expected = apply_ht[context_ht.key].expected
+    #     **group_ht.index(*[context_ht[g] for g in groupings])
     # )
     # context_ht = context_ht.checkpoint(
     #     f"{TEMP_PATH_WITH_FAST_DEL}/{locus_type}_context_exp.ht",
@@ -407,7 +402,7 @@ def adjust_fwd_cumulative_count_expr(
     #     "Preprocessing VEP context HT to filter to missense, nonsense, and"
     #     " synonymous variants, and add constraint annotations..."
     # )
-    # # NOTE: Constraint outlier transcripts are not removed
+    # NOTE: Constraint outlier transcripts are not removed
     # ht = process_context_ht(filter_to_canonical=canonical_only, filter_csq=csq)
 
     # logger.info(
@@ -415,7 +410,7 @@ def adjust_fwd_cumulative_count_expr(
     #     " exomes and checkpointing..."
     # )
     # ht = filter_context_using_gnomad(ht, "exomes")
-    # # Reducing number of partitions as the VEP context table has 62k
+    # Reducing number of partitions as the VEP context table has 62k
     # ht = ht.naive_coalesce(n_partitions)
     # ht = ht.checkpoint(
     #     f"{TEMP_PATH_WITH_FAST_DEL}/processed_context.ht",
@@ -423,51 +418,44 @@ def adjust_fwd_cumulative_count_expr(
     #     overwrite=overwrite,
     # )
 
-    # # logger.info("Calculating expected values per allele and checkpointing...")
-    # logger.info("Annotating with expected values per allele and checkpointing...")
-    # # TODO: replace this with more general resource path when available
-    # apply_ht = hl.read_table(
-    #     "gs://gnomad/v4.1/constraint_an_coverage_corrected/apply_models/transcript_consequences/gnomad.v4.1.per_variant_expected.coverage_corrected.ht"
-    #     )
+    # logger.info("Calculating expected values per allele and checkpointing...")
     # ht = (
-    #     annotate_exp_from_constraint(
-    #         filter_to_region_type(ht, "autosome_or_par"),
-    #         apply_ht.filter(apply_ht.genomic_region == "autosome_or_par"),
-    #         # create_possible_hts(
-    #         #     ht=ht,
-    #         #     locus_type="autosomes",
-    #         #     additional_grouping=additional_grouping,
-    #         #     mu_ht_partitions=mu_ht_partitions,
-    #         #     overwrite=overwrite,
-    #         # ),
-    #         locus_type="autosome_or_par",
+    #     calculate_exp_from_mu(
+    #         filter_to_region_type(ht, "autosomes"),
+    #         create_possible_hts(
+    #             ht=ht,
+    #             locus_type="autosomes",
+    #             additional_grouping=additional_grouping,
+    #             mu_ht_partitions=mu_ht_partitions,
+    #             overwrite=overwrite,
+    #         ),
+    #         locus_type="autosomes",
     #     )
-    #     .union(annotate_exp_from_constraint(
-    #        filter_to_region_type(ht, "chrx_nonpar"),
-    #        apply_ht.filter(apply_ht.genomic_region == "chrx_nonpar"),
-    #        # create_possible_hts(
-    #        #     ht=ht,
-    #        #     locus_type="chrX",
-    #        #     additional_grouping=additional_grouping,
-    #        #     mu_ht_partitions=mu_ht_partitions,
-    #        #     overwrite=overwrite,
-    #        # ),
-    #        locus_type="chrx_nonpar",
-    #        )
-    #     )
-    #     .union(annotate_exp_from_constraint(
-    #        filter_to_region_type(ht, "chry_nonpar"),
-    #        apply_ht.filter(apply_ht.genomic_region == "chry_nonpar"),
-    #        # create_possible_hts(
-    #        #     ht=ht,
-    #        #     locus_type="chrY",
-    #        #     additional_grouping=additional_grouping,
-    #        #     mu_ht_partitions=mu_ht_partitions,
-    #        #     overwrite=overwrite,
-    #        # ),
-    #        locus_type="chry_nonpar",
-    #        )
-    #     )
+        # TODO: Uncomment lines below when chrX/chrY models are ready
+        # .union(calculate_exp_from_mu(
+        #    filter_to_region_type(ht, "chrX"),
+        #    create_possible_hts(
+        #        ht=ht,
+        #        locus_type="chrX",
+        #        additional_grouping=additional_grouping,
+        #        mu_ht_partitions=mu_ht_partitions,
+        #        overwrite=overwrite,
+        #    ),
+        #    locus_type="X",
+        #    )
+        # )
+        # .union(calculate_exp_from_mu(
+        #    filter_to_region_type(ht, "chrY"),
+        #    create_possible_hts(
+        #        ht=ht,
+        #        locus_type="chrY",
+        #        additional_grouping=additional_grouping,
+        #        mu_ht_partitions=mu_ht_partitions,
+        #        overwrite=overwrite,
+        #    ),
+        #    locus_type="Y",
+        #    )
+        # )
     # )
     # ht = ht.checkpoint(
     #     f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht",
@@ -479,7 +467,7 @@ def adjust_fwd_cumulative_count_expr(
     #     f"{TEMP_PATH_WITH_FAST_DEL}/context_exp.ht", _n_partitions=n_partitions
     # )
 
-    # # Check for negative expected values
+    # Check for negative expected values
     # zero_exp = ht.filter(ht.expected <= 0)
     # negative_exp = zero_exp.filter(zero_exp.expected < 0).count()
     # if negative_exp > 0:
