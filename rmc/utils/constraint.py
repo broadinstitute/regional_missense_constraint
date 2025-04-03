@@ -14,7 +14,11 @@ from gnomad.utils.constraint import (
 )
 from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
 from gnomad.utils.vep import explode_by_vep_annotation, filter_vep_transcript_csqs
-from gnomad_constraint.resources.resource_utils import get_models, get_mutation_ht
+from gnomad_constraint.resources.resource_utils import (
+    get_models,
+    get_mutation_ht,
+    get_per_variant_expected_dataset,
+)
 
 from rmc.resources.basics import (
     CONSTRAINT_PREFIX,
@@ -520,9 +524,9 @@ def create_constraint_prep_ht(
     """
     # TODO: Make a resource path for this table.
     # ht = filtered_context.ht()
-    ht = hl.read_table(
-        "gs://gnomad/v4.1/constraint_an_coverage_corrected/apply_models/transcript_consequences/gnomad.v4.1.per_variant_expected.coverage_corrected.ht"
-    )
+    ht = get_per_variant_expected_dataset(
+        directory_post_fix="an_coverage_corrected", path_post_fix="coverage_corrected"
+    ).ht()
     # Annotate obs and exp columns to be used downstream
     ht = ht.annotate(
         observed=ht.calibrate_mu.observed_variants[0], expected=ht.expected_variants[0]
