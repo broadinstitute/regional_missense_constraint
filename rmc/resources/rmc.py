@@ -4,6 +4,7 @@ Script containing RMC and MPC related resources.
 RMC: Regional missense constraint
 MPC: Missense badness, Polyphen-2, and Constraint score
 """
+
 from typing import Set
 
 import scipy
@@ -29,6 +30,12 @@ FREEZES = [1, 2]
 RMC/MPC data versions computed with current gnomAD version.
 
 gnomAD v2.1.1 freezes: [1, 2, 3, 4, 5, 6, 7].
+
+gnomAD v4.1 freezes: [1, 2].
+
+NOTE: v4.1 freeze 1 uses AN as proxy for coverage with high coverage defined as AN>66%.
+v4.1 freeze 2 uses AN>90% as high coverage definition, uses per-variant expected calculated upstream from gene constraint
+and corrects for low coverage sites using coverage model.
 """
 
 CURRENT_FREEZE = 2
@@ -267,9 +274,7 @@ def single_search_round_ht_path(
     """
     break_status = "break_found" if is_break_found else "no_break_found"
     breakpoint_status = "_breakpoint_only" if is_breakpoint_only else ""
-    return (
-        f"{single_search_bucket_path(search_num, freeze)}/{break_status}{breakpoint_status}.ht"
-    )
+    return f"{single_search_bucket_path(search_num, freeze)}/{break_status}{breakpoint_status}.ht"
 
 
 SIMUL_SEARCH_BUCKET_NAMES = {"prep", "raw_results", "final_results", "success_files"}

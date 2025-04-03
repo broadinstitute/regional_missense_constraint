@@ -26,6 +26,7 @@ from rmc.resources.rmc import (
     simul_search_round_bucket_path,
     single_search_round_ht_path,
 )
+
 # from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     annotate_max_chisq_per_section,
@@ -65,20 +66,20 @@ def main(args):
             create_transcript_ref(build="GRCh38", overwrite=args.overwrite)
 
         # NOTE: This code block is no longer needed since the expected values are now calculated per-variant upstream
-        # if args.command == "prep-filtered-context":
-        #     hl.init(
-        #         log="/RMC_pre_process.log",
-        #         tmp_dir=TEMP_PATH_WITH_FAST_DEL,
-        #         quiet=args.quiet,
-        #     )
-        #     hl.default_reference("GRCh38")
-        #     logger.info("Creating filtered context HT...")
-        #     n_partitions = 10000
-        #     create_filtered_context_ht(
-        #         canonical_only=args.filter_to_canonical,
-        #         n_partitions=args.n_partitions if args.n_partitions else n_partitions,
-        #         overwrite=args.overwrite_temp,
-        #     )
+        if args.command == "prep-filtered-context":
+            hl.init(
+                log="/RMC_pre_process.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
+            )
+            hl.default_reference("GRCh38")
+            logger.info("Creating filtered context HT...")
+            n_partitions = 10000
+            create_filtered_context_ht(
+                canonical_only=args.filter_to_canonical,
+                n_partitions=args.n_partitions if args.n_partitions else n_partitions,
+                overwrite=args.overwrite_temp,
+            )
 
         if args.command == "prep-constraint":
             hl.init(
@@ -643,8 +644,9 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if args.slack_channel:
-        with slack_notifications(slack_token, args.slack_channel):
-            main(args)
-    else:
-        main(args)
+    # if args.slack_channel:
+    #     with slack_notifications(slack_token, args.slack_channel):
+    #         main(args)
+    # else:
+    #     main(args)
+    main(args)
