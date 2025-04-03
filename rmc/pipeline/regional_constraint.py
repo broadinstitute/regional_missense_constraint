@@ -64,7 +64,7 @@ def main(args):
             logger.info("Creating transcript reference resources...")
             create_transcript_ref(build="GRCh38", overwrite=args.overwrite)
 
-        # TODO: This is not needed for now since we directly read apply_models HT from constraint as our filtered context
+        # NOTE: This code block is no longer needed since the expected values are now calculated per-variant upstream
         # if args.command == "prep-filtered-context":
         #     hl.init(
         #         log="/RMC_pre_process.log",
