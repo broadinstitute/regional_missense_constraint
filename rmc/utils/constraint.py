@@ -292,7 +292,7 @@ def calculate_exp_from_mu(
     return context_ht
 
 
-# TODO: Might not need this function since annotating expected directly from constraint
+# NOTE: We no longer need this function because expected values are calculated per-variant upstream
 def create_possible_hts(
     ht: hl.Table,
     locus_type: str = "autosomes",
