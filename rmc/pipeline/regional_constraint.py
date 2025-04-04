@@ -27,7 +27,6 @@ from rmc.resources.rmc import (
     single_search_round_ht_path,
 )
 
-# from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     annotate_max_chisq_per_section,
     check_break_search_round_nums,
@@ -644,9 +643,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # if args.slack_channel:
-    #     with slack_notifications(slack_token, args.slack_channel):
-    #         main(args)
-    # else:
-    #     main(args)
     main(args)

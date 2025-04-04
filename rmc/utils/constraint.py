@@ -229,9 +229,9 @@ def calculate_exp_from_mu(
 
     # TODO: uncomment when the other models exist
     # Used this for testing:
-    plateau_model = hl.experimental.read_expression(
-        "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.plateau.autosome_par.he"
-    )
+    # plateau_model = hl.experimental.read_expression(
+    #     "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.plateau.autosome_par.he"
+    # )
     # if locus_type == "X":
     #    plateau_model = (
     #        get_models(model_type="plateau", genomic_region="chrx_non_par").he(),
@@ -353,12 +353,12 @@ def create_possible_hts(
     # Annotate HT globals with models
     possible_ht = possible_ht.annotate_globals(
         # TODO: Uncomment lines below when chrX/chrY, coverage models are ready
-        plateau_x_models=get_models(
-            model_type="plateau", genomic_region="chrx_non_par"
-        ).he(),
-        plateau_y_models=get_models(
-            model_type="plateau", genomic_region="chry_non_par"
-        ).he(),
+        # plateau_x_models=get_models(
+        #     model_type="plateau", genomic_region="chrx_non_par"
+        # ).he(),
+        # plateau_y_models=get_models(
+        #     model_type="plateau", genomic_region="chry_non_par"
+        # ).he(),
         # Used this for testing
         # coverage_model=hl.experimental.read_expression(
         #     "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.coverage.autosome_par.he"
@@ -525,7 +525,7 @@ def create_constraint_prep_ht(
     ht = get_per_variant_expected_dataset(
         directory_post_fix="an_coverage_corrected", path_post_fix="coverage_corrected"
     ).ht()
-    # Annotate obs and exp columns to be used downstream
+    # Annotate obs and exp counts as the zero index (pop global) since they are arrays
     ht = ht.annotate(
         observed=ht.calibrate_mu.observed_variants[0], expected=ht.expected_variants[0]
     )
