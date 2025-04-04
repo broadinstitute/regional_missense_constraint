@@ -373,8 +373,7 @@ def create_possible_hts(
     return possible_ht
 
 
-# TODO: This function is an upstream step to create filtered context used in prep-constraint.
-# NOTE: Not using this function since using the apply models HT directly as filtered context for prep-constraint step.
+# NOTE: This function is no longer needed because the filtered context HT is now created upstream
 def create_filtered_context_ht(
     csq: Set[str] = KEEP_CODING_CSQ,
     n_partitions: int = 10000,
