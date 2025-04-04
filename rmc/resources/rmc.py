@@ -33,9 +33,8 @@ gnomAD v2.1.1 freezes: [1, 2, 3, 4, 5, 6, 7].
 
 gnomAD v4.1 freezes: [1, 2].
 
-NOTE: v4.1 freeze 1 uses AN as proxy for coverage with high coverage defined as AN>66%.
-v4.1 freeze 2 uses AN>90% as high coverage definition, uses per-variant expected calculated upstream from gene constraint
-and corrects for low coverage sites using coverage model.
+NOTE: v4.1 freeze 1 was a test run to ensure that RMC results calculated using allele number (AN) as a proxy for coverage looked reasonable. This freeze defined high coverage as AN > 66%.
+v4.1 freeze 2 also uses AN as a proxy for coverage and defines high coverage as AN>= 90%.
 """
 
 CURRENT_FREEZE = 2
