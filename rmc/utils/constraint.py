@@ -185,8 +185,7 @@ def adjust_fwd_cumulative_count_expr(
     )
 
 
-# TODO: This is not needed for now since reading per-variant apply models HT from constraint
-# directly as filtered context HT for downstream prep-constraint step.
+# NOTE: This is no longer needed because expected values are now calculated per-variant upstream
 def calculate_exp_from_mu(
     context_ht: hl.Table,
     possible_ht: hl.Table,
