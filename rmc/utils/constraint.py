@@ -242,7 +242,7 @@ def calculate_exp_from_mu(
     #    )
     # else:
     #    plateau_model = get_models(model_type="plateau").he()
-    # plateau_model = get_models(model_type="plateau").he()
+    plateau_model = get_models(model_type="plateau").he()
 
     agg_expr = {
         "mu": hl.agg.sum(mu_expr * cov_corr_expr),
@@ -520,7 +520,7 @@ def create_constraint_prep_ht(
     :param overwrite: Whether to overwrite Table. Default is True.
     :return: None; writes Table to path.
     """
-    # TODO: Make a resource path for this table.
+
     # NOTE: Observed counts upstream now includes variants with AF <= 0.001 instead of AF < 0.001.
     # ht = filtered_context.ht()
     ht = get_per_variant_expected_dataset(

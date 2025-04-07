@@ -493,7 +493,7 @@ def keep_criteria(
     """
     Return Boolean expression to filter variants in input Table.
 
-    Default values will filter to rare variants (AC > 0, AF < 0.001) that pass filters.
+    Default values will filter to rare variants (AC > 0, AF <= 0.001) that pass filters.
 
     :param ac_expr: Allele count (AC) Int32Expression.
     :param af_expr: Allele frequency (AF) Float64Expression.
@@ -506,7 +506,7 @@ def keep_criteria(
     :return: Boolean expression used to filter variants.
     """
     af_filter_expr = (
-        (af_expr < af_threshold) if filter_to_rare else (af_expr >= af_threshold)
+        (af_expr <= af_threshold) if filter_to_rare else (af_expr > af_threshold)
     )
     return (ac_expr > 0) & (af_filter_expr) & (hl.len(filters_expr) == 0)
 
