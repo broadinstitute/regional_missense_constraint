@@ -523,8 +523,8 @@ def create_constraint_prep_ht(
     :param n_partitions: Number of desired partitions for the Table. Default is 15000.
     :param csq: Desired consequences. Default is {`MISSENSE`}. Must be specified if filter is True.
     :param overwrite: Whether to overwrite Table. Default is True.
-    :param directory_post_fix: Specify directory suffix for reading per-variant expected dataset. Default is "an_coverage_corrected".
-    :param path_post_fix: Specify file suffix to use for reading per-variant expected dataset. Default is "coverage_corrected".
+    :param directory_post_fix: Directory suffix for reading per-variant expected dataset. Default is "an_coverage_corrected".
+    :param path_post_fix: File suffix to use for reading per-variant expected dataset. Default is "coverage_corrected".
     :param variant_idx: Index of observed and expected arrays to use. Default is 0.
     :return: None; writes Table to path.
     """
