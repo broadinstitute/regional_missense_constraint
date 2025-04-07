@@ -3,7 +3,7 @@ import logging
 
 import hail as hl
 from gnomad.utils.file_utils import file_exists
-from gnomad.utils.slack import slack_notifications
+
 
 from rmc.resources.basics import (
     CONSTRAINT_PREFIX,
