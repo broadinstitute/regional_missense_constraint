@@ -525,7 +525,7 @@ def create_constraint_prep_ht(
     :param overwrite: Whether to overwrite Table. Default is True.
     :param directory_post_fix: Directory suffix for reading per-variant expected dataset. Default is "an_coverage_corrected".
     :param path_post_fix: File suffix to use for reading per-variant expected dataset. Default is "coverage_corrected".
-    :param variant_idx: Index of observed and expected arrays to use. Default is 0.
+    :param variant_idx: Index of observed and expected arrays to use. Default is 0 (corresponds to counts calculated on gnomAD-wide / "global" frequencies).
     :return: None; writes Table to path.
     """
     # NOTE: Observed counts upstream now includes variants with AF <= 0.001 instead of AF < 0.001.
