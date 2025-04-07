@@ -520,7 +520,6 @@ def create_constraint_prep_ht(
     :param overwrite: Whether to overwrite Table. Default is True.
     :return: None; writes Table to path.
     """
-
     # NOTE: Observed counts upstream now includes variants with AF <= 0.001 instead of AF < 0.001.
     # ht = filtered_context.ht()
     ht = get_per_variant_expected_dataset(

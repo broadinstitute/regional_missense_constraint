@@ -4,7 +4,6 @@ import logging
 import hail as hl
 from gnomad.utils.file_utils import file_exists
 
-
 from rmc.resources.basics import (
     CONSTRAINT_PREFIX,
     LOGGING_PATH,
