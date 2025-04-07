@@ -521,7 +521,6 @@ def create_constraint_prep_ht(
     :return: None; writes Table to path.
     """
     # NOTE: Observed counts upstream now includes variants with AF <= 0.001 instead of AF < 0.001.
-    # ht = filtered_context.ht()
     ht = get_per_variant_expected_dataset(
         directory_post_fix="an_coverage_corrected", path_post_fix="coverage_corrected"
     ).ht()
