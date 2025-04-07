@@ -500,7 +500,12 @@ def create_filtered_context_ht(
 
 
 def create_constraint_prep_ht(
-    filter_csq: Set[str] = {MISSENSE}, n_partitions: int = 10000, overwrite: bool = True
+    filter_csq: Set[str] = {MISSENSE},
+    n_partitions: int = 10000,
+    overwrite: bool = True,
+    directory_post_fix: str = "an_coverage_corrected",
+    path_post_fix: str = "coverage_corrected",
+    variant_idx: int = 0,
 ) -> None:
     """
     Create locus-level constraint prep Table from filtered context Table.
@@ -518,16 +523,20 @@ def create_constraint_prep_ht(
     :param n_partitions: Number of desired partitions for the Table. Default is 15000.
     :param csq: Desired consequences. Default is {`MISSENSE`}. Must be specified if filter is True.
     :param overwrite: Whether to overwrite Table. Default is True.
+    :param directory_post_fix: Specify directory suffix for reading per-variant expected dataset. Default is "an_coverage_corrected".
+    :param path_post_fix: Specify file suffix to use for reading per-variant expected dataset. Default is "coverage_corrected".
+    :param variant_idx: Index of observed and expected arrays to use. Default is 0.
     :return: None; writes Table to path.
     """
     # NOTE: Observed counts upstream now includes variants with AF <= 0.001 instead of AF < 0.001.
     ht = get_per_variant_expected_dataset(
-        directory_post_fix="an_coverage_corrected", path_post_fix="coverage_corrected"
+        directory_post_fix=directory_post_fix, path_post_fix=path_post_fix
     ).ht()
     # Obs and exp counts are arrays to account for different frequency strata
     # Use zeroth index (gnomAD-wide ["global"] frequencies)
     ht = ht.annotate(
-        observed=ht.calibrate_mu.observed_variants[0], expected=ht.expected_variants[0]
+        observed=ht.calibrate_mu.observed_variants[variant_idx],
+        expected=ht.expected_variants[variant_idx],
     )
     if filter_csq:
         logger.info("Filtering to %s...", filter_csq)

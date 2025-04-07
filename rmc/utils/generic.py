@@ -500,8 +500,8 @@ def keep_criteria(
     :param filters_expr: Filters SetExpression.
     :param af_threshold: AF threshold used for filtering variants in combination with `filter_to_rare`. Default is 0.001.
     :param filter_to_rare: Whether to filter to keep rare variants only.
-        If True, only variants with AF < `af_threshold` will be kept.
-        If False, only variants with AF >= `af_threshold` will be kept.
+        If True, only variants with AF <= `af_threshold` will be kept.
+        If False, only variants with AF > `af_threshold` will be kept.
         Default is True.
     :return: Boolean expression used to filter variants.
     """
