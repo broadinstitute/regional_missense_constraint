@@ -533,7 +533,6 @@ def create_constraint_prep_ht(
         directory_post_fix=directory_post_fix, path_post_fix=path_post_fix
     ).ht()
     # Obs and exp counts are arrays to account for different frequency strata
-    # Use zeroth index (gnomAD-wide ["global"] frequencies)
     ht = ht.annotate(
         observed=ht.calibrate_mu.observed_variants[variant_idx],
         expected=ht.expected_variants[variant_idx],
