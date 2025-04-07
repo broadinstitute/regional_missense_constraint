@@ -524,7 +524,8 @@ def create_constraint_prep_ht(
     ht = get_per_variant_expected_dataset(
         directory_post_fix="an_coverage_corrected", path_post_fix="coverage_corrected"
     ).ht()
-    # Annotate obs and exp counts as the zero index (pop global) since they are arrays
+    # Obs and exp counts are arrays to account for different frequency strata
+    # Use zeroth index (gnomAD-wide ["global"] frequencies)
     ht = ht.annotate(
         observed=ht.calibrate_mu.observed_variants[0], expected=ht.expected_variants[0]
     )
