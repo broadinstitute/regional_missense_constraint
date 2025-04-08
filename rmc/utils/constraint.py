@@ -14,7 +14,11 @@ from gnomad.utils.constraint import (
 )
 from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
 from gnomad.utils.vep import explode_by_vep_annotation, filter_vep_transcript_csqs
-from gnomad_constraint.resources.resource_utils import get_models, get_mutation_ht
+from gnomad_constraint.resources.resource_utils import (
+    get_models,
+    get_mutation_ht,
+    get_per_variant_expected_dataset,
+)
 
 from rmc.resources.basics import (
     CONSTRAINT_PREFIX,
@@ -181,6 +185,7 @@ def adjust_fwd_cumulative_count_expr(
     )
 
 
+# NOTE: This is no longer needed because expected values are now calculated per-variant upstream
 def calculate_exp_from_mu(
     context_ht: hl.Table,
     possible_ht: hl.Table,
@@ -225,7 +230,7 @@ def calculate_exp_from_mu(
     # TODO: uncomment when the other models exist
     # Used this for testing:
     # plateau_model = hl.experimental.read_expression(
-    #    "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.plateau.autosome_par.he"
+    #     "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.plateau.autosome_par.he"
     # )
     # if locus_type == "X":
     #    plateau_model = (
@@ -287,6 +292,7 @@ def calculate_exp_from_mu(
     return context_ht
 
 
+# NOTE: We no longer need this function because expected values are calculated per-variant upstream
 def create_possible_hts(
     ht: hl.Table,
     locus_type: str = "autosomes",
@@ -347,8 +353,12 @@ def create_possible_hts(
     # Annotate HT globals with models
     possible_ht = possible_ht.annotate_globals(
         # TODO: Uncomment lines below when chrX/chrY, coverage models are ready
-        # plateau_x_models=get_models(model_type="plateau", genomic_region="chrx_non_par").he(),
-        # plateau_y_models=get_models(model_type="plateau", genomic_region="chry_non_par").he(),
+        # plateau_x_models=get_models(
+        #     model_type="plateau", genomic_region="chrx_non_par"
+        # ).he(),
+        # plateau_y_models=get_models(
+        #     model_type="plateau", genomic_region="chry_non_par"
+        # ).he(),
         # Used this for testing
         # coverage_model=hl.experimental.read_expression(
         #     "gs://gnomad/v4.1/constraint_an/models/gnomad.v4.1.coverage.autosome_par.he"
@@ -363,6 +373,7 @@ def create_possible_hts(
     return possible_ht
 
 
+# NOTE: This function is no longer needed because the filtered context HT is now created upstream
 def create_filtered_context_ht(
     csq: Set[str] = KEEP_CODING_CSQ,
     n_partitions: int = 10000,
@@ -489,7 +500,12 @@ def create_filtered_context_ht(
 
 
 def create_constraint_prep_ht(
-    filter_csq: Set[str] = {MISSENSE}, n_partitions: int = 10000, overwrite: bool = True
+    filter_csq: Set[str] = {MISSENSE},
+    n_partitions: int = 10000,
+    overwrite: bool = True,
+    directory_post_fix: str = "an_coverage_corrected",
+    path_post_fix: str = "coverage_corrected",
+    variant_idx: int = 0,
 ) -> None:
     """
     Create locus-level constraint prep Table from filtered context Table.
@@ -507,9 +523,20 @@ def create_constraint_prep_ht(
     :param n_partitions: Number of desired partitions for the Table. Default is 15000.
     :param csq: Desired consequences. Default is {`MISSENSE`}. Must be specified if filter is True.
     :param overwrite: Whether to overwrite Table. Default is True.
+    :param directory_post_fix: Directory suffix for reading per-variant expected dataset. Default is "an_coverage_corrected".
+    :param path_post_fix: File suffix to use for reading per-variant expected dataset. Default is "coverage_corrected".
+    :param variant_idx: Index of observed and expected arrays to use. Default is 0 (corresponds to counts calculated on gnomAD-wide / "global" frequencies).
     :return: None; writes Table to path.
     """
-    ht = filtered_context.ht()
+    # NOTE: Observed counts upstream now includes variants with AF <= 0.001 instead of AF < 0.001.
+    ht = get_per_variant_expected_dataset(
+        directory_post_fix=directory_post_fix, path_post_fix=path_post_fix
+    ).ht()
+    # Obs and exp counts are arrays to account for different frequency strata
+    ht = ht.annotate(
+        observed=ht.calibrate_mu.observed_variants[variant_idx],
+        expected=ht.expected_variants[variant_idx],
+    )
     if filter_csq:
         logger.info("Filtering to %s...", filter_csq)
         ht = ht.filter(hl.literal(filter_csq).contains(ht.annotation))

@@ -3,7 +3,6 @@ import logging
 
 import hail as hl
 from gnomad.utils.file_utils import file_exists
-from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import (
     CONSTRAINT_PREFIX,
@@ -26,7 +25,6 @@ from rmc.resources.rmc import (
     simul_search_round_bucket_path,
     single_search_round_ht_path,
 )
-from rmc.slack_creds import slack_token
 from rmc.utils.constraint import (
     annotate_max_chisq_per_section,
     check_break_search_round_nums,
@@ -64,6 +62,7 @@ def main(args):
             logger.info("Creating transcript reference resources...")
             create_transcript_ref(build="GRCh38", overwrite=args.overwrite)
 
+        # NOTE: This code block is no longer needed since the expected values are now calculated per-variant upstream
         if args.command == "prep-filtered-context":
             hl.init(
                 log="/RMC_pre_process.log",
@@ -642,8 +641,4 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if args.slack_channel:
-        with slack_notifications(slack_token, args.slack_channel):
-            main(args)
-    else:
-        main(args)
+    main(args)
