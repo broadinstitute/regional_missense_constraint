@@ -503,7 +503,7 @@ def create_constraint_prep_ht(
     filter_csq: Set[str] = {MISSENSE},
     n_partitions: int = 10000,
     overwrite: bool = True,
-    directory_post_fix: str = "an_coverage_corrected",
+    directory_post_fix: str = "coverage_corrected",
     path_post_fix: str = "coverage_corrected",
     variant_idx: int = 0,
 ) -> None:
