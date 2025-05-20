@@ -11,7 +11,6 @@ import logging
 import hail as hl
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import file_exists
-from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import (
@@ -21,7 +20,6 @@ from rmc.resources.rmc import (
     simul_search_round_bucket_path,
     simul_sections_split_by_len_path,
 )
-from rmc.slack_creds import slack_token
 from rmc.utils.simultaneous_breaks import process_section_group
 
 logging.basicConfig(
@@ -48,8 +46,10 @@ def main(args):
         if args.p_value:
             chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 2))
 
+        # Adding dummy values to variables to avoid pre-commit errors
+        sections_to_run = list()
+        over_threshold = None
         if args.run_all_sections:
-            over_threshold = None
             sections_to_run = list(
                 hl.eval(
                     hl.experimental.read_expression(
@@ -192,10 +192,6 @@ if __name__ == "__main__":
         default=10,
     )
     parser.add_argument(
-        "--slack-channel",
-        help="Send message to Slack channel/user.",
-    )
-    parser.add_argument(
         "--search-num",
         help=(
             "Search iteration number (e.g., second round of searching for two"
@@ -256,8 +252,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.slack_channel:
-        with slack_notifications(slack_token, args.slack_channel):
-            main(args)
-    else:
-        main(args)
+    main(args)
