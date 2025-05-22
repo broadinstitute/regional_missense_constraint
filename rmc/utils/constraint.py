@@ -534,6 +534,13 @@ def create_constraint_prep_ht(
     ht = get_per_variant_expected_dataset(
         directory_post_fix=directory_post_fix, path_post_fix=path_post_fix
     ).ht()
+    # Filter to Canonical Ensembl transcripts
+    # NOTE: All MANE Select transcripts in GENCODE v39 are canonical, but not all canonical transcripts are MANE Select
+    logger.info("Filtering to canonical Ensembl transcripts...")
+    ht = ht.filter(ht.canonical & ht.transcript.startswith("ENST"))
+    # Count number of transcripts after filtering
+    n_transcripts = len(ht.aggregate(hl.agg.collect_as_set(ht.transcript)))
+    logger.info("Found %d transcripts after filtering...", n_transcripts)
     # Obs and exp counts are arrays to account for different frequency strata
     ht = ht.annotate(
         observed=ht.calibrate_mu.observed_variants[variant_idx],
@@ -1137,7 +1144,10 @@ def get_break_search_round_nums(
     return sorted(round_nums)
 
 
-def check_break_search_round_nums(freeze: int = CURRENT_FREEZE) -> List[int]:
+def check_break_search_round_nums(
+    freeze: int = CURRENT_FREEZE,
+    google_project: str = "broad-mpg-gnomad",
+) -> List[int]:
     """
     Check for valid single and simultaneous break search round number outputs.
 
@@ -1148,14 +1158,18 @@ def check_break_search_round_nums(freeze: int = CURRENT_FREEZE) -> List[int]:
         Assumes there is a folder for each search round run, regardless of whether there were breaks discovered
 
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
+    :param google_project: Google project to use to read data from requester-pays buckets.
+        Default is 'broad-mpg-gnomad'.
     :return: Sorted list of round numbers.
     """
     # Get sorted round numbers
     single_search_round_nums = get_break_search_round_nums(
-        single_search_bucket_path(freeze=freeze)
+        single_search_bucket_path(freeze=freeze),
+        google_project=google_project,
     )
     simul_search_round_nums = get_break_search_round_nums(
-        simul_search_bucket_path(freeze=freeze)
+        simul_search_bucket_path(freeze=freeze),
+        google_project=google_project,
     )
     logger.info(
         "Single search round numbers: %s\nSimultaneous search round numbers: %s",
