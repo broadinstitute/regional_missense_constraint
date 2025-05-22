@@ -538,6 +538,9 @@ def create_constraint_prep_ht(
     # NOTE: All MANE Select transcripts in GENCODE v39 are canonical, but not all canonical transcripts are MANE Select
     logger.info("Filtering to canonical Ensembl transcripts...")
     ht = ht.filter(ht.canonical & ht.transcript.startswith("ENST"))
+    # Count number of transcripts after filtering
+    n_transcripts = len(ht.aggregate(hl.agg.collect_as_set(ht.transcript)))
+    logger.info("Found %d transcripts after filtering...", n_transcripts)
     # Obs and exp counts are arrays to account for different frequency strata
     ht = ht.annotate(
         observed=ht.calibrate_mu.observed_variants[variant_idx],
@@ -1155,6 +1158,8 @@ def check_break_search_round_nums(
         Assumes there is a folder for each search round run, regardless of whether there were breaks discovered
 
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
+    :param google_project: Google project to use to read data from requester-pays buckets.
+        Default is 'broad-mpg-gnomad'.
     :return: Sorted list of round numbers.
     """
     # Get sorted round numbers
