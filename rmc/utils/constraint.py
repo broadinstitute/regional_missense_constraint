@@ -534,7 +534,8 @@ def create_constraint_prep_ht(
     ht = get_per_variant_expected_dataset(
         directory_post_fix=directory_post_fix, path_post_fix=path_post_fix
     ).ht()
-    # filter to Canonical Ensembl transcripts
+    # Filter to Canonical Ensembl transcripts
+    # NOTE: All MANE Select transcripts in GENCODE v39 are canonical, but not all canonical transcripts are MANE Select
     logger.info("Filtering to canonical Ensembl transcripts...")
     ht = ht.filter(ht.canonical & ht.transcript.startswith("ENST"))
     # Obs and exp counts are arrays to account for different frequency strata
