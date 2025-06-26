@@ -396,7 +396,9 @@ def main(args):
             )
             hl.default_reference("GRCh38")
             logger.info("Checking round paths...")
-            round_nums = check_break_search_round_nums(args.freeze)
+            round_nums = check_break_search_round_nums(
+                args.freeze, google_project=args.google_project
+            )
 
             logger.info("Finalizing section-level RMC table...")
             rmc_ht = merge_rmc_hts(
@@ -538,10 +540,6 @@ if __name__ == "__main__":
         action="store_true",
     )
     parser.add_argument(
-        "--slack-channel",
-        help="Send message to Slack channel/user.",
-    )
-    parser.add_argument(
         "--quiet",
         help="Initialize Hail with `quiet=True` to print fewer log messages",
         action="store_true",
@@ -555,6 +553,13 @@ if __name__ == "__main__":
         "--filter-to-canonical",
         help="Filter to canonical transcripts only.",
         action="store_true",
+    )
+    parser.add_argument(
+        "--google-project",
+        help="""
+            Google cloud project used to read from requester-pays buckets.
+            """,
+        default="broad-mpg-gnomad",
     )
 
     subparsers = parser.add_subparsers(title="command", dest="command", required=True)

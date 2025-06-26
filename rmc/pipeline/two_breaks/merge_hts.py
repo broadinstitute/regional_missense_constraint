@@ -7,11 +7,9 @@ import argparse
 import logging
 
 import hail as hl
-from gnomad.utils.slack import slack_notifications
 
 from rmc.resources.basics import LOGGING_PATH, TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.rmc import CURRENT_FREEZE, simul_search_round_bucket_path
-from rmc.slack_creds import slack_token
 from rmc.utils.constraint import merge_simul_break_temp_hts
 
 logging.basicConfig(
@@ -95,10 +93,6 @@ if __name__ == "__main__":
         "--overwrite", help="Overwrite existing data.", action="store_true"
     )
     parser.add_argument(
-        "--slack-channel",
-        help="Send message to Slack channel/user.",
-    )
-    parser.add_argument(
         "--search-num",
         help=(
             "Search iteration number (e.g., second round of searching for two"
@@ -116,8 +110,4 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    if args.slack_channel:
-        with slack_notifications(slack_token, args.slack_channel):
-            main(args)
-    else:
-        main(args)
+    main(args)
