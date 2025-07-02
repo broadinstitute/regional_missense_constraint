@@ -1429,17 +1429,25 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     )
 
     check_file_exists_raise_error(
-        rmc_results.versions[freeze].path,
+        rmc_browser.versions[freeze].path,
         error_if_not_exists=True,
         error_if_not_exists_msg="Merged RMC results table does not exist!",
     )
-    rmc_ht = rmc_results.versions[freeze].ht().key_by("interval")
+    rmc_ht = rmc_browser.versions[freeze].ht()
+    # Explode on regions and create intervals
+    rmc_ht = rmc_ht.explode(rmc_ht.regions)
+    rmc_ht = rmc_ht.annotate(
+        interval=hl.interval(
+            rmc_ht.regions.start_coordinate,
+            rmc_ht.regions.stop_coordinate,
+        )
+    ).key_by("interval")
 
     # Annotate with RMC OE
     ht = ht.annotate(
         section_oe=rmc_ht.index(ht.locus, all_matches=True)
         .filter(lambda x: x.transcript == ht.transcript)
-        .section_oe
+        .regions.oe
     )
     ht = ht.annotate(
         section_oe=hl.or_missing(
