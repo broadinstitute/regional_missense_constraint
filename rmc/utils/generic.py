@@ -632,15 +632,9 @@ def get_constraint_transcripts(
         " exists..."
     )
     if not file_exists(constraint_ht.path):
-        # NOTE: read the non-public consraint HT if the public one is not available
-        # raise DataException("Constraint HT not found!")
-        constraint_transcript_ht = hl.read_table(
-            "gs://gnomad/v4.1/constraint_coverage_corrected/metrics/transcript_consequences/gnomad.v4.1.constraint_metrics.coverage_corrected.ht"
-        )
-    else:
-        constraint_transcript_ht = constraint_ht.ht()
+        raise DataException("Constraint HT not found!")
 
-    constraint_transcript_ht = constraint_transcript_ht.key_by("transcript")
+    constraint_transcript_ht = constraint_ht.ht().key_by("transcript")
     # NOTE: all protein-coding transcripts are ENST transcripts in constraint HT
     constraint_transcript_ht = constraint_transcript_ht.filter(
         constraint_transcript_ht.transcript_type == "protein_coding"

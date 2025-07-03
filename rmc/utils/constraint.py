@@ -1440,6 +1440,8 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
         interval=hl.interval(
             rmc_ht.regions.start_coordinate,
             rmc_ht.regions.stop_coordinate,
+            includes_start=True,
+            includes_end=True,
         )
     ).key_by("interval")
 
