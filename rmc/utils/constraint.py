@@ -13,6 +13,7 @@ from gnomad.utils.constraint import (
     count_variants_by_group,
 )
 from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
+from gnomad.utils.intervals import explode_intervals_to_loci
 from gnomad.utils.vep import explode_by_vep_annotation, filter_vep_transcript_csqs
 from gnomad_constraint.resources.resource_utils import (
     get_models,
@@ -1443,20 +1444,12 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
             includes_start=True,
             includes_end=True,
         )
-    ).key_by("interval")
+    ).key_by("interval", "transcript")
 
     # Annotate with RMC OE
-    ht = ht.annotate(
-        section_oe=rmc_ht.index(ht.locus, all_matches=True)
-        .filter(lambda x: x.transcript == ht.transcript)
-        .regions.oe
-    )
-    ht = ht.annotate(
-        section_oe=hl.or_missing(
-            hl.len(ht.section_oe) > 0,
-            ht.section_oe[0],
-        ),
-    )
+    rmc_exploded = explode_intervals_to_loci(rmc_ht).key_by("locus", "transcript")
+    ht = ht.annotate(section_oe=rmc_exploded[ht.locus, ht.transcript].regions.oe)
+
     # Annotate with RMC OE where available, otherwise select transcript OE
     return ht.transmute(oe=hl.coalesce(ht.section_oe, ht.transcript_oe))
 
