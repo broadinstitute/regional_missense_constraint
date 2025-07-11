@@ -1511,7 +1511,7 @@ def create_context_with_oe(
     :param missense_str: String representing missense variant consequence. Default is MISSENSE.
     :param n_partitions: Number of desired partitions for the VEP context Table.
         Repartition VEP context Table to this number on read.
-        Default is 30000.
+        Default is 10000.
     :param overwrite_temp: Whether to overwrite intermediate temporary (OE-independent) data if it already exists.
         If False, will read existing intermediate temporary data rather than overwriting.
         Default is False.
