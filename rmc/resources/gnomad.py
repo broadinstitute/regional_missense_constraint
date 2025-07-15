@@ -21,7 +21,7 @@ Public gnomAD gene constraint Table.
 
 v2.1.1: Observed variants count is annotated as `ht.obs_mis` and expected variants count is annotated as `ht.exp_mis`.
 v4.1: Observed variants count is annotated as `ht.mis.obs` and expected variants count is annotated as `ht.mis.exp`.
-NOTE: default version is manually set to point to most updated resource. When public resource is updated,
-please set the default version to CURRENT_GNOMAD_VERSION and add this import
-from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
+NOTE: Default version is manually set to point to most updated resource. When public resource is updated,
+please update `CURRENT_GNOMAD_VERSION`, set the default version to `CURRENT_GNOMAD_VERSION` and add this import:
+`from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION`
 """
