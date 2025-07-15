@@ -1447,7 +1447,7 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     ).key_by("interval", "transcript")
 
     # Annotate with RMC OE
-    rmc_exploded = explode_intervals_to_loci(rmc_ht).key_by("locus", "transcript")
+    rmc_exploded = explode_intervals_to_loci(rmc_ht, interval_field="interval", keep_intervals=False).key_by("locus", "transcript")
     ht = ht.annotate(section_oe=rmc_exploded[ht.locus, ht.transcript].regions.oe)
 
     # Annotate with RMC OE where available, otherwise select transcript OE
