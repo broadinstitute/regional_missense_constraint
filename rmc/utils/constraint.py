@@ -1,7 +1,7 @@
 import logging
 import re
 import subprocess
-from typing import List, Set, Tuple, Union
+from typing import List, Optional, Set, Tuple, Union
 
 import hail as hl
 import scipy
@@ -13,7 +13,10 @@ from gnomad.utils.constraint import (
     count_variants_by_group,
 )
 from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
-from gnomad.utils.intervals import explode_intervals_to_loci
+
+# from gnomad.utils.intervals import explode_intervals_to_loci #TODO: Uncomment when methods PR#789 is merged
+# TODO: Remove this import when methods PR#789 is merged
+from gnomad.utils.reference_genome import get_reference_genome
 from gnomad.utils.vep import explode_by_vep_annotation, filter_vep_transcript_csqs
 from gnomad_constraint.resources.resource_utils import (
     get_models,
@@ -102,6 +105,75 @@ Fields to group by when calculating expected variants per variant type.
 
 Fields based off of gnomAD LoF repo.
 """
+
+
+# TODO: Remove this function when methods PR#789 is merged
+def explode_intervals_to_loci(
+    intervals: Union[hl.Table, hl.expr.IntervalExpression],
+    interval_field: Optional[str] = None,
+    keep_intervals: Optional[bool] = False,
+) -> Union[hl.Table, hl.expr.ArrayExpression]:
+    """
+    Expand intervals to loci and key by loci, or return loci range expression.
+
+    :param intervals: Hail Table or Interval Expression.
+    :param interval_field: Name of the interval field. Only required if input is a Hail Table. Default is None.
+    :param keep_intervals: If True, keep the original intervals as a column in output. Only applies if input is a Hail Table. Default is False.
+    :return: If input is a Hail Table, returns exploded Table keyed by locus. If input is an IntervalExpression, returns position array expression.
+    """
+    assert isinstance(intervals, hl.Table) or isinstance(
+        intervals, hl.expr.IntervalExpression
+    ), "Input must be a Table or IntervalExpression!"
+
+    if isinstance(intervals, hl.Table) and (
+        not interval_field or keep_intervals is None
+    ):
+        raise ValueError(
+            "`interval_field` and `keep_intervals` must be defined if input is a Table!"
+        )
+    assert (
+        interval_field in intervals.row
+    ), "`interval_field` must be an annotation present on input Table!"
+    intervals_expr = (
+        intervals
+        if isinstance(intervals, hl.expr.IntervalExpression)
+        else intervals[interval_field]
+    )
+    intervals_start_expr = hl.if_else(
+        intervals_expr.includes_start,
+        intervals_expr.start.position,
+        intervals_expr.start.position + 1,
+    )
+    intervals_end_expr = hl.if_else(
+        intervals_expr.includes_end,
+        intervals_expr.end.position + 1,
+        intervals_expr.end.position,
+    )
+    if isinstance(intervals, hl.Table):
+        intervals = intervals.annotate(
+            pos=hl.range(intervals_start_expr, intervals_end_expr)
+        ).explode("pos")
+        intervals = intervals.key_by(
+            locus=hl.locus(
+                intervals[interval_field].start.contig,
+                intervals.pos,
+                reference_genome=get_reference_genome(intervals[interval_field]),
+            )
+        )
+
+        fields_to_drop = ["pos"]
+        if not keep_intervals:
+            fields_to_drop.append(interval_field)
+
+        return intervals.drop(*fields_to_drop)
+
+    logger.warning(
+        "Input is an IntervalExpression, so function will return ArrayExpression of"
+        " positions  within input intervals. To fully explode intervals to loci, we"
+        " recommend annotating your dataset with the returned ArrayExpression,"
+        " exploding the array, and converting the positions to loci!"
+    )
+    return hl.range(intervals_start_expr, intervals_end_expr)
 
 
 def add_obs_annotation(
