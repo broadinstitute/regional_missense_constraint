@@ -24,8 +24,23 @@ jobs:
             pip-
       - name: Install dependencies
         run: |
-          pip install wheel "setuptools<75"
-          pip install --no-build-isolation -r requirements.txt -r requirements-dev.txt
+          pip install wheel
+          git clone --depth 1 https://github.com/broadinstitute/gnomad-constraint.git /tmp/gnomad-constraint
+          cat > /tmp/gnomad-constraint/pyproject.toml << 'PYPROJECT'
+          [build-system]
+          requires = ["setuptools"]
+          build-backend = "setuptools.build_meta"
+
+          [project]
+          name = "gnomad-constraint"
+          version = "0.0.0"
+
+          [tool.setuptools.packages.find]
+          include = ["gnomad_constraint*"]
+          PYPROJECT
+          pip install /tmp/gnomad-constraint
+          grep -v gnomad-constraint requirements.txt > /tmp/requirements-filtered.txt
+          pip install -r /tmp/requirements-filtered.txt -r requirements-dev.txt
       - name: Run pre-commit
         run: |
           pre-commit run --all
