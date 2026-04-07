@@ -639,6 +639,8 @@ def get_constraint_transcripts(
     constraint_transcript_ht = constraint_transcript_ht.filter(
         constraint_transcript_ht.transcript_type == "protein_coding"
     )
+
+    # NOTE: all MANE Select transcripts are also canonical in GENCODE v39/VEP v105
     if filter_to_canonical:
         constraint_transcript_ht = constraint_transcript_ht.filter(
             constraint_transcript_ht.canonical
