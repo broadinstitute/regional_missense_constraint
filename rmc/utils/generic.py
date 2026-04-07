@@ -634,7 +634,7 @@ def get_constraint_transcripts(
     if not file_exists(constraint_ht.path):
         raise DataException("Constraint HT not found!")
 
-    constraint_transcript_ht = constraint_ht.ht().key_by("transcript")
+    constraint_transcript_ht = constraint_ht.ht()
     # NOTE: all protein-coding transcripts are ENST transcripts in constraint HT
     constraint_transcript_ht = constraint_transcript_ht.filter(
         constraint_transcript_ht.transcript_type == "protein_coding"
