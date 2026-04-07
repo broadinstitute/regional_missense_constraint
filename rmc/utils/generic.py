@@ -635,28 +635,21 @@ def get_constraint_transcripts(
         raise DataException("Constraint HT not found!")
 
     constraint_transcript_ht = constraint_ht.ht()
+
     # NOTE: all protein-coding transcripts are ENST transcripts in constraint HT
-    constraint_transcript_ht = constraint_transcript_ht.filter(
-        constraint_transcript_ht.transcript_type == "protein_coding"
-    )
+    filter_expr = constraint_transcript_ht.transcript_type == "protein_coding"
 
     # NOTE: all MANE Select transcripts are also canonical in GENCODE v39/VEP v105
     if filter_to_canonical:
-        constraint_transcript_ht = constraint_transcript_ht.filter(
-            constraint_transcript_ht.canonical
-        )
+        filter_expr &= constraint_transcript_ht.canonical
 
     if not all_transcripts:
-        constraint_transcript_ht = constraint_transcript_ht.select("constraint_flags")
         if outlier:
-            constraint_transcript_ht = constraint_transcript_ht.filter(
-                hl.len(constraint_transcript_ht.constraint_flags) > 0
-            )
+            filter_expr &= hl.len(constraint_transcript_ht.constraint_flags) > 0
         else:
-            constraint_transcript_ht = constraint_transcript_ht.filter(
-                hl.len(constraint_transcript_ht.constraint_flags) == 0
-            )
+            filter_expr &= hl.len(constraint_transcript_ht.constraint_flags) == 0
 
+    constraint_transcript_ht = constraint_transcript_ht.filter(filter_expr)
     return hl.literal(
         constraint_transcript_ht.aggregate(
             hl.agg.collect_as_set(constraint_transcript_ht.transcript)
