@@ -2142,10 +2142,17 @@ def format_rmc_browser_ht(
     Desired schema:
     ----------------------------------------
     Global fields:
-        'p_value': float64
-        'transcripts_not_searched': set<str>
-        'transcripts_no_rmc': set<str>
-        'outlier_transcripts': set<str>
+        'transcript_counts': struct {
+            'all_transcripts': set<str>
+            'rmc_transcripts': set<str>
+            'transcripts_no_rmc': set<str>
+        }
+        'transcript_counts_all': struct {
+            'all_transcripts': set<str>
+            'rmc_transcripts': set<str>
+            'transcripts_no_rmc': set<str>
+            'outlier_transcripts': set<str>
+        }
     ----------------------------------------
     Row fields:
         'transcript': str
