@@ -2089,50 +2089,45 @@ def check_and_fix_missing_aa(
 
 
 def add_globals_rmc_browser(
-    ht: hl.Table, filter_to_canonical: bool, keep_outliers: bool = True
+    ht: hl.Table,
+    filter_to_canonical: bool = True,
 ) -> hl.Table:
     """
     Annotate HT globals with RMC transcript information.
 
     Function is used when reformatting RMC results for browser release.
-    Annotates:
-        - transcripts not searched for RMC
-        - transcripts without evidence of RMC
-        - outlier transcripts
+
+    Annotates two structs:
+        - `transcript_counts`: Counts of total transcripts and transcripts with/without evidence of RMC (QC pass only).
+        - `transcript_counts_all`: Counts of all transcripts, transcripts with/without evidence of RMC, and outlier transcripts.
+
     :param HT: Input Table. Should be RMC regions HT annotated with amino acid
         information for region starts and stops.
-    :param filter_to_canonical: Whether to filter to canonical transcripts only.
-    :param keep_outliers: Whether to keep outlier transcripts.
-        Default is True.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is True.
     :return: RMC regions HT with updated globals annotations.
     """
-    # Get transcripts with evidence of RMC
+    # Get all transcripts with evidence of RMC
     rmc_transcripts = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.transcript)))
-
-    # Get all QC pass transcripts
-    qc_pass_transcripts = get_constraint_transcripts(
-        filter_to_canonical=filter_to_canonical, outlier=False
-    )
-    outlier_transcripts = get_constraint_transcripts(
-        filter_to_canonical=filter_to_canonical, outlier=True
-    )
 
     # Get all transcripts from constraint HT
     all_transcripts = get_constraint_transcripts(
         all_transcripts=True, filter_to_canonical=filter_to_canonical
     )
-    if keep_outliers:
-        transcripts_no_rmc = all_transcripts.difference(rmc_transcripts)
-        transcripts_not_searched = hl.empty_array(hl.tstr)
-    else:
-        transcripts_no_rmc = qc_pass_transcripts.difference(rmc_transcripts)
-        transcripts_not_searched = all_transcripts.difference(qc_pass_transcripts)
+    outlier_transcripts = get_constraint_transcripts(
+        filter_to_canonical=filter_to_canonical, outlier=True
+    )
 
     ht = ht.select_globals()
     return ht.annotate_globals(
-        transcripts_not_searched=transcripts_not_searched,
-        transcripts_no_rmc=transcripts_no_rmc,
-        outlier_transcripts=outlier_transcripts,
+        transcript_counts=hl.struct(
+            all_transcripts=all_transcripts.difference(outlier_transcripts),
+            rmc_transcripts=rmc_transcripts.difference(outlier_transcripts),
+        ),
+        transcript_counts_all=hl.struct(
+            all_transcripts=all_transcripts,
+            rmc_transcripts=rmc_transcripts,
+            outlier_transcripts=outlier_transcripts,
+        ),
     )
 
 
