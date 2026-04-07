@@ -1,6 +1,7 @@
 """Script containing resources for the current gnomAD version."""
 from gnomad.resources.resource_utils import TableResource, VersionedTableResource
 
+# TODO: replace with `constraint()` from gnomad_methods
 constraint_ht = VersionedTableResource(
     default_version="4.1.1",
     versions={
