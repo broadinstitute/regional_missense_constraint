@@ -2223,9 +2223,6 @@ def format_rmc_browser_ht(
     )
     # Group Table by transcript
     ht = ht.group_by("transcript").aggregate(regions=hl.agg.collect(ht.region))
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_browser_ht_grouped.ht", overwrite=True
-    )
 
     # Annotate globals and write
     ht = add_globals_rmc_browser(ht, filter_to_canonical)
