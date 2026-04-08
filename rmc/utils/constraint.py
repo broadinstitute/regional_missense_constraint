@@ -2168,6 +2168,7 @@ def format_rmc_browser_ht(
             chisq: float64,
             p: float64,
             low_coverage: bool,
+            is_gray: bool,
         }>
     ----------------------------------------
     Key: ['transcript']
