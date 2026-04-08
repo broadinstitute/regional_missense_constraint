@@ -498,6 +498,19 @@ a most severe consequence of 'missense_variant' in more than one canonical trans
 This Table contains only one row per each unique locus/alleles combination.
 """
 
+rmc_coverage_stats_ht = VersionedTableResource(
+    default_version=CURRENT_FREEZE,
+    versions={
+        freeze: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/rmc_coverage_stats.ht"
+        )
+        for freeze in FREEZES
+    },
+)
+"""
+Table containing exome AN percent per RMC region.
+"""
+
 rmc_browser = VersionedTableResource(
     default_version=CURRENT_FREEZE,
     versions={
