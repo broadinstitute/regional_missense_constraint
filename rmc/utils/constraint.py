@@ -57,6 +57,7 @@ from rmc.resources.rmc import (
     no_breaks_he_path,
     oe_bin_counts_tsv,
     rmc_browser,
+    rmc_coverage_stats_ht,
     rmc_downloads_resource_paths,
     rmc_results,
     simul_search_bucket_path,
@@ -2180,6 +2181,7 @@ def format_rmc_browser_ht(
     :return: None; writes Table with desired schema to resource path.
     """
     ht = rmc_results.versions[freeze].ht()
+    cov_ht = rmc_coverage_stats_ht.versions[freeze].ht()
 
     # Annotate start and stop coordinates per region
     ht = ht.annotate(
@@ -2189,6 +2191,12 @@ def format_rmc_browser_ht(
 
     # Annotate start and stop amino acids per region
     ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp, filter_to_canonical)
+
+    # Annotate low coverage flag per region using coverage stats
+    cov_ht = cov_ht.key_by("interval", "transcript")
+    ht = ht.annotate(
+        low_coverage=cov_ht[ht.interval, ht.transcript].median_exomes_AN_percent < 90
+    )
 
     # Remove missense O/E cap of 1
     # (Missense O/E capped for RMC search, but
@@ -2210,10 +2218,14 @@ def format_rmc_browser_ht(
             oe=ht.section_oe,
             chisq=ht.section_chisq,
             p=ht.section_p_value,
+            low_coverage=ht.low_coverage,
         )
     )
     # Group Table by transcript
     ht = ht.group_by("transcript").aggregate(regions=hl.agg.collect(ht.region))
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_browser_ht_grouped.ht", overwrite=True
+    )
 
     # Annotate globals and write
     ht = add_globals_rmc_browser(ht, filter_to_canonical)
