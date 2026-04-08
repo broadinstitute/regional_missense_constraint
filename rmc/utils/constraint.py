@@ -2221,6 +2221,8 @@ def format_rmc_browser_ht(
             low_coverage=ht.low_coverage,
         )
     )
+    ht = ht.annotate(is_gray=(ht.region.p > P_VALUE) | ht.region.low_coverage)
+
     # Group Table by transcript
     ht = ht.group_by("transcript").aggregate(regions=hl.agg.collect(ht.region))
 
