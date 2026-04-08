@@ -2168,7 +2168,7 @@ def format_rmc_browser_ht(
             chisq: float64,
             p: float64,
             low_coverage: bool,
-            is_gray: bool,
+            no_color: bool,
         }>
     ----------------------------------------
     Key: ['transcript']
@@ -2222,7 +2222,7 @@ def format_rmc_browser_ht(
             low_coverage=ht.low_coverage,
         )
     )
-    ht = ht.annotate(is_gray=(ht.regions.p > P_VALUE) | ht.regions.low_coverage)
+    ht = ht.annotate(no_color=(ht.regions.p > P_VALUE) | ht.regions.low_coverage)
 
     # Group Table by transcript
     ht = ht.group_by("transcript").aggregate(regions=hl.agg.collect(ht.region))
