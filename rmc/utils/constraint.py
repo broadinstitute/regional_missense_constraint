@@ -54,6 +54,7 @@ from rmc.resources.rmc import (
     context_with_oe,
     context_with_oe_dedup,
     filtered_context,
+    mis_oe_percentiles,
     no_breaks_he_path,
     oe_bin_counts_tsv,
     rmc_browser,
@@ -2132,6 +2133,40 @@ def add_globals_rmc_browser(
     )
 
 
+def annot_rmc_with_percentile(ht: hl.Table, oe_field: str) -> hl.Table:
+    """
+    Annotate input HT with missense OE depletion percentile using `mis_oe_percentiles` resource.
+
+    This resource is a list with 100 elements corresponding to missense OE for that percentile.
+
+    Percentiles to annotate are:
+        - <=1
+        - <=5
+        - <=10
+        - <=15
+        - <=25
+        - <=50
+        - <=75
+
+    :param ht: Input HT with RMC information.
+    :param oe_field: Field name of OE to use for percentile annotation.
+    :return: HT with missense OE depletion percentile annotated per RMC region.
+    """
+    mis_oe_pcts = hl.eval(mis_oe_percentiles.he())
+    oe = ht[oe_field]
+    return ht.annotate(
+        mis_oe_percentile=hl.case()
+        .when(oe <= mis_oe_pcts[0], "<=1")
+        .when(oe <= mis_oe_pcts[4], "<=5")
+        .when(oe <= mis_oe_pcts[9], "<=10")
+        .when(oe <= mis_oe_pcts[14], "<=15")
+        .when(oe <= mis_oe_pcts[24], "<=25")
+        .when(oe <= mis_oe_pcts[49], "<=50")
+        .when(oe <= mis_oe_pcts[74], "<=75")
+        .default(">75")
+    )
+
+
 def format_rmc_browser_ht(
     freeze: int, overwrite_temp: bool, filter_to_canonical: bool = False
 ) -> None:
@@ -2169,6 +2204,7 @@ def format_rmc_browser_ht(
             p: float64,
             low_coverage: bool,
             no_color: bool,
+            percentile: str,
         }>
     ----------------------------------------
     Key: ['transcript']
@@ -2199,10 +2235,11 @@ def format_rmc_browser_ht(
         low_coverage=cov_ht[ht.interval, ht.transcript].median_exomes_AN_percent < 90
     )
 
-    # Remove missense O/E cap of 1
+    # Remove missense O/E cap of 1 and add percentile
     # (Missense O/E capped for RMC search, but
     # it shouldn't be capped when displayed in the browser)
     ht = ht.annotate(section_oe=ht.section_obs / ht.section_exp)
+    ht = annot_rmc_with_percentile(ht, "section_oe")
 
     # Convert chi square to p-value
     ht = ht.annotate(section_p_value=hl.pchisqtail(ht.section_chisq, 1))
@@ -2220,6 +2257,7 @@ def format_rmc_browser_ht(
             chisq=ht.section_chisq,
             p=ht.section_p_value,
             low_coverage=ht.low_coverage,
+            percentile=ht.mis_oe_percentile,
         )
     )
     ht = ht.annotate(
