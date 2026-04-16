@@ -54,9 +54,11 @@ from rmc.resources.rmc import (
     context_with_oe,
     context_with_oe_dedup,
     filtered_context,
+    mis_oe_percentiles,
     no_breaks_he_path,
     oe_bin_counts_tsv,
     rmc_browser,
+    rmc_coverage_stats_ht,
     rmc_downloads_resource_paths,
     rmc_results,
     simul_search_bucket_path,
@@ -2089,50 +2091,82 @@ def check_and_fix_missing_aa(
 
 
 def add_globals_rmc_browser(
-    ht: hl.Table, filter_to_canonical: bool, keep_outliers: bool = True
+    ht: hl.Table,
+    filter_to_canonical: bool = True,
 ) -> hl.Table:
     """
     Annotate HT globals with RMC transcript information.
 
     Function is used when reformatting RMC results for browser release.
-    Annotates:
-        - transcripts not searched for RMC
-        - transcripts without evidence of RMC
-        - outlier transcripts
+
+    Annotates two structs:
+        - `transcript_counts`: Counts of total transcripts and transcripts with/without evidence of RMC (QC pass only).
+        - `transcript_counts_all`: Counts of all transcripts, transcripts with/without evidence of RMC, and outlier transcripts.
+
     :param HT: Input Table. Should be RMC regions HT annotated with amino acid
         information for region starts and stops.
-    :param filter_to_canonical: Whether to filter to canonical transcripts only.
-    :param keep_outliers: Whether to keep outlier transcripts.
-        Default is True.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is True.
     :return: RMC regions HT with updated globals annotations.
     """
-    # Get transcripts with evidence of RMC
+    # Get all transcripts with evidence of RMC
     rmc_transcripts = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.transcript)))
-
-    # Get all QC pass transcripts
-    qc_pass_transcripts = get_constraint_transcripts(
-        filter_to_canonical=filter_to_canonical, outlier=False
-    )
-    outlier_transcripts = get_constraint_transcripts(
-        filter_to_canonical=filter_to_canonical, outlier=True
-    )
 
     # Get all transcripts from constraint HT
     all_transcripts = get_constraint_transcripts(
         all_transcripts=True, filter_to_canonical=filter_to_canonical
     )
-    if keep_outliers:
-        transcripts_no_rmc = all_transcripts.difference(rmc_transcripts)
-        transcripts_not_searched = hl.empty_array(hl.tstr)
-    else:
-        transcripts_no_rmc = qc_pass_transcripts.difference(rmc_transcripts)
-        transcripts_not_searched = all_transcripts.difference(qc_pass_transcripts)
+    outlier_transcripts = get_constraint_transcripts(
+        filter_to_canonical=filter_to_canonical, outlier=True
+    )
+    qc_pass_transcripts = all_transcripts.difference(outlier_transcripts)
 
     ht = ht.select_globals()
     return ht.annotate_globals(
-        transcripts_not_searched=transcripts_not_searched,
-        transcripts_no_rmc=transcripts_no_rmc,
-        outlier_transcripts=outlier_transcripts,
+        transcript_counts=hl.struct(
+            all_transcripts=qc_pass_transcripts,
+            rmc_transcripts=rmc_transcripts.difference(outlier_transcripts),
+            transcripts_no_rmc=qc_pass_transcripts.difference(rmc_transcripts),
+        ),
+        transcript_counts_all=hl.struct(
+            all_transcripts=all_transcripts,
+            rmc_transcripts=rmc_transcripts,
+            transcripts_no_rmc=all_transcripts.difference(rmc_transcripts),
+            outlier_transcripts=outlier_transcripts,
+        ),
+    )
+
+
+def annot_rmc_with_percentile(ht: hl.Table, oe_field: str) -> hl.Table:
+    """
+    Annotate input HT with missense OE depletion percentile using `mis_oe_percentiles` resource.
+
+    This resource is a list with 100 elements corresponding to missense OE for that percentile.
+
+    Percentiles to annotate are:
+        - <=1
+        - <=5
+        - <=10
+        - <=15
+        - <=25
+        - <=50
+        - <=75
+
+    :param ht: Input HT with RMC information.
+    :param oe_field: Field name of OE to use for percentile annotation.
+    :return: HT with missense OE depletion percentile annotated per RMC region.
+    """
+    mis_oe_pcts = hl.eval(mis_oe_percentiles.he())
+    oe = ht[oe_field]
+    return ht.annotate(
+        mis_oe_percentile=hl.case()
+        .when(oe <= mis_oe_pcts[0], "<=1")
+        .when(oe <= mis_oe_pcts[4], "<=5")
+        .when(oe <= mis_oe_pcts[9], "<=10")
+        .when(oe <= mis_oe_pcts[14], "<=15")
+        .when(oe <= mis_oe_pcts[24], "<=25")
+        .when(oe <= mis_oe_pcts[49], "<=50")
+        .when(oe <= mis_oe_pcts[74], "<=75")
+        .default(">75")
     )
 
 
@@ -2147,10 +2181,17 @@ def format_rmc_browser_ht(
     Desired schema:
     ----------------------------------------
     Global fields:
-        'p_value': float64
-        'transcripts_not_searched': set<str>
-        'transcripts_no_rmc': set<str>
-        'outlier_transcripts': set<str>
+        'transcript_counts': struct {
+            'all_transcripts': set<str>
+            'rmc_transcripts': set<str>
+            'transcripts_no_rmc': set<str>
+        }
+        'transcript_counts_all': struct {
+            'all_transcripts': set<str>
+            'rmc_transcripts': set<str>
+            'transcripts_no_rmc': set<str>
+            'outlier_transcripts': set<str>
+        }
     ----------------------------------------
     Row fields:
         'transcript': str
@@ -2163,7 +2204,10 @@ def format_rmc_browser_ht(
             exp: float64,
             oe: float64,
             chisq: float64,
-            p: float64
+            p: float64,
+            low_coverage: bool,
+            no_color: bool,
+            percentile: str,
         }>
     ----------------------------------------
     Key: ['transcript']
@@ -2177,6 +2221,7 @@ def format_rmc_browser_ht(
     :return: None; writes Table with desired schema to resource path.
     """
     ht = rmc_results.versions[freeze].ht()
+    cov_ht = rmc_coverage_stats_ht.versions[freeze].ht()
 
     # Annotate start and stop coordinates per region
     ht = ht.annotate(
@@ -2187,10 +2232,17 @@ def format_rmc_browser_ht(
     # Annotate start and stop amino acids per region
     ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp, filter_to_canonical)
 
-    # Remove missense O/E cap of 1
+    # Annotate low coverage flag per region using coverage stats
+    cov_ht = cov_ht.key_by("interval", "transcript")
+    ht = ht.annotate(
+        low_coverage=cov_ht[ht.interval, ht.transcript].median_exomes_AN_percent < 90
+    )
+
+    # Remove missense O/E cap of 1 and add percentile
     # (Missense O/E capped for RMC search, but
     # it shouldn't be capped when displayed in the browser)
     ht = ht.annotate(section_oe=ht.section_obs / ht.section_exp)
+    ht = annot_rmc_with_percentile(ht, "section_oe")
 
     # Convert chi square to p-value
     ht = ht.annotate(section_p_value=hl.pchisqtail(ht.section_chisq, 1))
@@ -2207,8 +2259,16 @@ def format_rmc_browser_ht(
             oe=ht.section_oe,
             chisq=ht.section_chisq,
             p=ht.section_p_value,
+            low_coverage=ht.low_coverage,
+            percentile=ht.mis_oe_percentile,
         )
     )
+    ht = ht.annotate(
+        region=ht.region.annotate(
+            no_color=(ht.region.p > P_VALUE) | ht.region.low_coverage
+        )
+    )
+
     # Group Table by transcript
     ht = ht.group_by("transcript").aggregate(regions=hl.agg.collect(ht.region))
 

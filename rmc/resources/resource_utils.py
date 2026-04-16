@@ -2,6 +2,8 @@
 CURRENT_BUILD = "GRCh38"
 BUILDS = ["GRCh37", "GRCh38"]
 
+# NOTE: RMC on v4 was started on gnomAD v4.1, which is why the version here is still 4.1
+# However, the models underlying the expected variant counts match computed gnomAD v4.1.1
 CURRENT_GNOMAD_VERSION = "4.1"
 GNOMAD_VERSIONS = ["2.1.1", "4.1"]
 

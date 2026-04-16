@@ -10,6 +10,7 @@ from typing import Set
 import scipy
 from gnomad.resources.resource_utils import (
     DataException,
+    ExpressionResource,
     TableResource,
     VersionedTableResource,
 )
@@ -496,6 +497,26 @@ Some locus/alleles combinations are present more than once in `context_with_oe` 
 a most severe consequence of 'missense_variant' in more than one canonical transcript.
 
 This Table contains only one row per each unique locus/alleles combination.
+"""
+
+rmc_coverage_stats_ht = VersionedTableResource(
+    default_version=CURRENT_FREEZE,
+    versions={
+        freeze: TableResource(
+            path=f"{CONSTRAINT_PREFIX}/{CURRENT_GNOMAD_VERSION}/{freeze}/rmc_coverage_stats.ht"
+        )
+        for freeze in FREEZES
+    },
+)
+"""
+Table containing exome AN percent per RMC region.
+"""
+
+mis_oe_percentiles = ExpressionResource(
+    path="gs://gnomad-public-requester-pays/papers/2026-rmc/gnomad_v4.1.1_coding_locus_oe_percentiles.he"
+)
+"""
+Expression containing missense OE depletion percentiles for coding loci.
 """
 
 rmc_browser = VersionedTableResource(

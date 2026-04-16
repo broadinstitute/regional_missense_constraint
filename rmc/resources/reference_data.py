@@ -36,6 +36,7 @@ VEP_VERSION = "105"
 VEP version used to annotate variants.
 """
 
+# TODO: Replace this with `browser_gene()` gnomad_methods resource
 gene_model = VersionedTableResource(
     default_version=CURRENT_BUILD,
     versions={
@@ -43,7 +44,7 @@ gene_model = VersionedTableResource(
             path=f"{get_resource_build_prefix('GRCh37')}/browser/b37_transcripts.ht"
         ),
         "GRCh38": TableResource(
-            path="gs://gcp-public-data--gnomad/resources/grch38/browser/gnomad.genes.GRCh38.GENCODEv39.ht"
+            path="gs://gcp-public-data--gnomad/resources/grch38/browser/gnomad.genes.GRCh38.GENCODEv39.pext.flags.ht"
         ),
     },
 )
