@@ -32,11 +32,9 @@ from rmc.utils.constraint import (
     create_context_with_oe,
     create_filtered_context_ht,
     create_no_breaks_he,
-    create_rmc_release_downloads,
     format_rmc_browser_ht,
     merge_rmc_hts,
     process_sections,
-    validate_rmc_release_downloads,
 )
 from rmc.utils.data_loading import create_transcript_ref
 from rmc.utils.generic import get_constraint_transcripts
@@ -448,14 +446,6 @@ def main(args):
             # TODO: Create region-level table that combines `rmc_results` and `no_breaks_he`
             # (used in RMC assessment plots)
 
-            logger.info("Reformatting RMC results for browser release...")
-            # NOTE: `filter_to_canonical` is included here only to make
-            # amino acid annotation with context HT more efficient if
-            # RMC results were filtered to canonical transcripts
-            format_rmc_browser_ht(
-                args.freeze, args.overwrite_temp, args.filter_to_canonical
-            )
-
         if args.command == "create-context-with-oe":
             hl.init(
                 log="/RMC_create_context_with_oe.log",
@@ -476,11 +466,14 @@ def main(args):
                 "Creating versions of files to be publicly released on gnomAD"
                 " browser..."
             )
-            create_rmc_release_downloads(args.freeze, args.overwrite)
-
-        if args.command == "validate-rmc-release":
-            logger.info("Running validity checks on public RMC files...")
-            validate_rmc_release_downloads(args.freeze)
+            # NOTE: This step creates the browser release, which is distinct from the
+            # MCR release files.
+            # NOTE: `filter_to_canonical` is included here only to make
+            # amino acid annotation with context HT more efficient if
+            # RMC results were filtered to canonical transcripts
+            format_rmc_browser_ht(
+                args.freeze, args.overwrite_temp, args.filter_to_canonical
+            )
 
     finally:
         logger.info("Copying hail log to logging bucket...")
@@ -638,11 +631,7 @@ if __name__ == "__main__":
 
     create_release = subparsers.add_parser(
         "create-rmc-release",
-        help="Create RMC release files (to be publicly shared on gnomAD browser).",
-    )
-    validate_release = subparsers.add_parser(
-        "validate-rmc-release",
-        help="Check validity of RMC release files.",
+        help="Create RMC browser release table.",
     )
     args = parser.parse_args()
 
