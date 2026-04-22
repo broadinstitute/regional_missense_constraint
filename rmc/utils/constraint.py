@@ -2122,12 +2122,12 @@ def add_globals_rmc_browser(
 
     ht = ht.select_globals()
     return ht.annotate_globals(
-        transcript_counts=hl.struct(
+        transcripts=hl.struct(
             all_transcripts=qc_pass_transcripts,
             rmc_transcripts=rmc_transcripts.difference(outlier_transcripts),
             transcripts_no_rmc=qc_pass_transcripts.difference(rmc_transcripts),
         ),
-        transcript_counts_all=hl.struct(
+        all_transcripts=hl.struct(
             all_transcripts=all_transcripts,
             rmc_transcripts=rmc_transcripts,
             transcripts_no_rmc=all_transcripts.difference(rmc_transcripts),
