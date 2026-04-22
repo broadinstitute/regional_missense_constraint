@@ -2122,12 +2122,12 @@ def add_globals_rmc_browser(
 
     ht = ht.select_globals()
     return ht.annotate_globals(
-        transcript_counts=hl.struct(
+        transcripts=hl.struct(
             all_transcripts=qc_pass_transcripts,
             rmc_transcripts=rmc_transcripts.difference(outlier_transcripts),
             transcripts_no_rmc=qc_pass_transcripts.difference(rmc_transcripts),
         ),
-        transcript_counts_all=hl.struct(
+        all_transcripts=hl.struct(
             all_transcripts=all_transcripts,
             rmc_transcripts=rmc_transcripts,
             transcripts_no_rmc=all_transcripts.difference(rmc_transcripts),
@@ -2181,12 +2181,12 @@ def format_rmc_browser_ht(
     Desired schema:
     ----------------------------------------
     Global fields:
-        'transcript_counts': struct {
+        'transcripts': struct {
             'all_transcripts': set<str>
             'rmc_transcripts': set<str>
             'transcripts_no_rmc': set<str>
         }
-        'transcript_counts_all': struct {
+        'all_transcripts': struct {
             'all_transcripts': set<str>
             'rmc_transcripts': set<str>
             'transcripts_no_rmc': set<str>
@@ -2196,8 +2196,8 @@ def format_rmc_browser_ht(
     Row fields:
         'transcript': str
         'regions': array<struct {
-            start_coordinate: locus<GRCh37>,
-            stop_coordinate: locus<GRCh37>,
+            start_coordinate: locus<GRCh38>,
+            stop_coordinate: locus<GRCh38>,
             start_aa: str,
             stop_aa: str,
             obs: int64,
@@ -2233,10 +2233,30 @@ def format_rmc_browser_ht(
     ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp, filter_to_canonical)
 
     # Annotate low coverage flag per region using coverage stats
+    # NOTE: Coverage HT uses browser HT intervals, not raw RMC region intervals
     cov_ht = cov_ht.key_by("interval", "transcript")
     ht = ht.annotate(
-        low_coverage=cov_ht[ht.interval, ht.transcript].median_exomes_AN_percent < 90
+        interval2=hl.interval(
+            ht.start_coordinate,
+            ht.stop_coordinate,
+            includes_start=True,
+            includes_end=True,
+        )
     )
+    ht = ht.annotate(
+        low_coverage1=cov_ht[ht.interval, ht.transcript].median_exomes_AN_percent < 90
+    )
+    ht = ht.annotate(
+        low_coverage2=cov_ht[ht.interval2, ht.transcript].median_exomes_AN_percent < 90
+    )
+    ht = ht.transmute(low_coverage=hl.coalesce(ht.low_coverage1, ht.low_coverage2))
+    ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/rmc_aa_cov_annot.ht", overwrite=True)
+    cov_def_check = ht.aggregate(hl.agg.count_where(hl.is_missing(ht.low_coverage)))
+    if cov_def_check != 0:
+        raise DataException(
+            f"{cov_def_check} regions are missing coverage information after join!"
+            " Please double check."
+        )
 
     # Remove missense O/E cap of 1 and add percentile
     # (Missense O/E capped for RMC search, but
