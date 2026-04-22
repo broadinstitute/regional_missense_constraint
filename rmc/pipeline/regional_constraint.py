@@ -466,6 +466,12 @@ def main(args):
                 "Creating versions of files to be publicly released on gnomAD"
                 " browser..."
             )
+            hl.init(
+                log="/RMC_create_rmc_release.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
+            )
+            hl.default_reference("GRCh38")
             # NOTE: This step creates the browser release, which is distinct from the
             # MCR release files.
             # NOTE: `filter_to_canonical` is included here only to make
