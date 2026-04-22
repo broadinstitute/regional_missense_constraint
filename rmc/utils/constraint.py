@@ -2181,12 +2181,12 @@ def format_rmc_browser_ht(
     Desired schema:
     ----------------------------------------
     Global fields:
-        'transcript_counts': struct {
+        'transcripts': struct {
             'all_transcripts': set<str>
             'rmc_transcripts': set<str>
             'transcripts_no_rmc': set<str>
         }
-        'transcript_counts_all': struct {
+        'all_transcripts': struct {
             'all_transcripts': set<str>
             'rmc_transcripts': set<str>
             'transcripts_no_rmc': set<str>
@@ -2196,8 +2196,8 @@ def format_rmc_browser_ht(
     Row fields:
         'transcript': str
         'regions': array<struct {
-            start_coordinate: locus<GRCh37>,
-            stop_coordinate: locus<GRCh37>,
+            start_coordinate: locus<GRCh38>,
+            stop_coordinate: locus<GRCh38>,
             start_aa: str,
             stop_aa: str,
             obs: int64,
