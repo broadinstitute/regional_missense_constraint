@@ -2233,10 +2233,30 @@ def format_rmc_browser_ht(
     ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp, filter_to_canonical)
 
     # Annotate low coverage flag per region using coverage stats
+    # NOTE: Coverage HT uses browser HT intervals, not raw RMC region intervals
     cov_ht = cov_ht.key_by("interval", "transcript")
     ht = ht.annotate(
-        low_coverage=cov_ht[ht.interval, ht.transcript].median_exomes_AN_percent < 90
+        interval2=hl.interval(
+            ht.start_coordinate,
+            ht.stop_coordinate,
+            includes_start=True,
+            includes_end=True,
+        )
     )
+    ht = ht.annotate(
+        low_coverage1=cov_ht[ht.interval, ht.transcript].median_exomes_AN_percent < 90
+    )
+    ht = ht.annotate(
+        low_coverage2=cov_ht[ht.interval2, ht.transcript].median_exomes_AN_percent < 90
+    )
+    ht = ht.transmute(low_coverage=hl.coalesce(ht.low_coverage1, ht.low_coverage2))
+    ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/rmc_aa_cov_annot.ht", overwrite=True)
+    cov_def_check = ht.aggregate(hl.agg.count_where(hl.is_missing(ht.low_coverage)))
+    if cov_def_check != 0:
+        raise DataException(
+            f"{cov_def_check} regions are missing coverage information after join!"
+            " Please double check."
+        )
 
     # Remove missense O/E cap of 1 and add percentile
     # (Missense O/E capped for RMC search, but
