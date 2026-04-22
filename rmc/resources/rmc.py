@@ -513,7 +513,7 @@ Table containing exome AN percent per RMC region.
 """
 
 mis_oe_percentiles = ExpressionResource(
-    path="gs://gnomad-public-requester-pays/papers/2026-rmc/gnomad_v4.1.1_coding_locus_oe_percentiles.he"
+    path="gs://gcp-public-data--gnomad/papers/2026-rmc/gnomad_v4.1.1_coding_locus_oe_percentiles.he"
 )
 """
 Expression containing missense OE depletion percentiles for coding loci.
