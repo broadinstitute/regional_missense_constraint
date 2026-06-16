@@ -603,6 +603,7 @@ def get_constraint_transcripts(
     all_transcripts: bool = False,
     filter_to_canonical: bool = False,
     outlier: bool = True,
+    outlier_class: str = None,
 ) -> hl.expr.SetExpression:
     """
     Read in LoF constraint HT results to get set of transcripts.
@@ -624,9 +625,18 @@ def get_constraint_transcripts(
     :param outlier: Whether to filter LoF constraint HT to outlier transcripts (if True),
         or QC-pass transcripts (if False). Applies only if `all_transcripts` is False.
         Default is True.
+    :param outlier_class: Optionally restrict outlier transcripts to a single class.
+        Applies only if `all_transcripts` is False and `outlier` is True. One of:
+            - "no_exp": Outliers missing at least one class of variation (any
+                constraint flag starting with "no_exp").
+            - "count": Outliers with outlier counts of variation only (no "no_exp"
+                flags).
+        Default is None (return all outlier transcripts).
     :return: Set of outlier transcripts or transcript QC pass transcripts.
     :rtype: hl.expr.SetExpression
     """
+    if outlier_class is not None and outlier_class not in {"no_exp", "count"}:
+        raise ValueError("`outlier_class` must be one of None, 'no_exp', or 'count'!")
     logger.warning(
         "Assumes LoF constraint has been separately calculated and that constraint HT"
         " exists..."
@@ -646,6 +656,15 @@ def get_constraint_transcripts(
     if not all_transcripts:
         if outlier:
             filter_expr &= hl.len(constraint_transcript_ht.constraint_flags) > 0
+            if outlier_class is not None:
+                # Outliers missing a class of variation carry a constraint flag
+                # starting with "no_exp"; count outliers carry none of these flags
+                missing_var = constraint_transcript_ht.constraint_flags.any(
+                    lambda f: f.startswith("no_exp")
+                )
+                filter_expr &= (
+                    missing_var if outlier_class == "no_exp" else ~missing_var
+                )
         else:
             filter_expr &= hl.len(constraint_transcript_ht.constraint_flags) == 0
 

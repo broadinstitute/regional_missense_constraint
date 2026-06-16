@@ -2118,6 +2118,14 @@ def add_globals_rmc_browser(
     outlier_transcripts = get_constraint_transcripts(
         filter_to_canonical=filter_to_canonical, outlier=True
     )
+    # Split outlier transcripts into those missing at least one class of variation
+    # ("no_exp" constraint flags) and those with outlier counts of variation
+    no_exp_outlier_transcripts = get_constraint_transcripts(
+        filter_to_canonical=filter_to_canonical, outlier=True, outlier_class="no_exp"
+    )
+    count_outlier_transcripts = get_constraint_transcripts(
+        filter_to_canonical=filter_to_canonical, outlier=True, outlier_class="count"
+    )
     qc_pass_transcripts = all_transcripts.difference(outlier_transcripts)
 
     ht = ht.select_globals()
@@ -2131,7 +2139,9 @@ def add_globals_rmc_browser(
             all_transcripts=all_transcripts,
             rmc_transcripts=rmc_transcripts,
             transcripts_no_rmc=all_transcripts.difference(rmc_transcripts),
-            outlier_transcripts=outlier_transcripts,
+            all_outlier_transcripts=outlier_transcripts,
+            no_exp_outlier_transcripts=no_exp_outlier_transcripts,
+            count_outlier_transcripts=count_outlier_transcripts,
         ),
     )
 
@@ -2190,7 +2200,9 @@ def format_rmc_browser_ht(
             'all_transcripts': set<str>
             'rmc_transcripts': set<str>
             'transcripts_no_rmc': set<str>
-            'outlier_transcripts': set<str>
+            'all_outlier_transcripts': set<str>
+            'no_exp_outlier_transcripts': set<str>
+            'count_outlier_transcripts': set<str>
         }
     ----------------------------------------
     Row fields:
