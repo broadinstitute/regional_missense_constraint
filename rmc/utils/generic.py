@@ -604,6 +604,7 @@ def get_constraint_transcripts(
     filter_to_canonical: bool = False,
     outlier: bool = True,
     outlier_class: str = None,
+    gene_flag: str = None,
 ) -> hl.expr.SetExpression:
     """
     Read in LoF constraint HT results to get set of transcripts.
@@ -617,6 +618,8 @@ def get_constraint_transcripts(
     .. note::
         - Function assumes that LoF constraint HT has been filtered to include only
             protein-coding transcripts.
+        - The `gene_flags` field used by `gene_flag` does not exist in constraint HT
+            versions prior to 4.1.1, so `gene_flag` can only be used with 4.1.1+.
 
     :param all_transcripts: Whether to filter to all transcripts. Will only keep
         all transcripts if `filter_to_canonical` is False, otherwise toggles
@@ -632,6 +635,10 @@ def get_constraint_transcripts(
             - "count": Outliers with outlier counts of variation only (no "no_exp"
                 flags).
         Default is None (return all outlier transcripts).
+    :param gene_flag: Optionally restrict to transcripts whose constraint `gene_flags`
+        set contains this value, e.g. "low_exome_coverage" (low coverage) or
+        "low_exome_mapping_quality" (low mappability). Only available for constraint HT
+        version 4.1.1+ (see note above). Default is None (no gene flag filter).
     :return: Set of outlier transcripts or transcript QC pass transcripts.
     :rtype: hl.expr.SetExpression
     """
@@ -667,6 +674,9 @@ def get_constraint_transcripts(
                 )
         else:
             filter_expr &= hl.len(constraint_transcript_ht.constraint_flags) == 0
+
+    if gene_flag is not None:
+        filter_expr &= constraint_transcript_ht.gene_flags.contains(gene_flag)
 
     constraint_transcript_ht = constraint_transcript_ht.filter(filter_expr)
     return hl.literal(

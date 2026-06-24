@@ -2101,7 +2101,8 @@ def add_globals_rmc_browser(
 
     Annotates two structs:
         - `transcript_counts`: Counts of total transcripts and transcripts with/without evidence of RMC (QC pass only).
-        - `transcript_counts_all`: Counts of all transcripts, transcripts with/without evidence of RMC, and outlier transcripts.
+        - `transcript_counts_all`: Counts of all transcripts, transcripts with/without evidence of RMC, outlier transcripts,
+            and transcripts without evidence of RMC that carry a low coverage and/or low mappability constraint gene flag.
 
     :param HT: Input Table. Should be RMC regions HT annotated with amino acid
         information for region starts and stops.
@@ -2128,6 +2129,20 @@ def add_globals_rmc_browser(
     )
     qc_pass_transcripts = all_transcripts.difference(outlier_transcripts)
 
+    # Get transcripts (including outliers) flagged for low coverage or low mappability
+    # in the constraint table
+    low_coverage_transcripts = get_constraint_transcripts(
+        all_transcripts=True,
+        filter_to_canonical=filter_to_canonical,
+        gene_flag="low_exome_coverage",
+    )
+    low_mappability_transcripts = get_constraint_transcripts(
+        all_transcripts=True,
+        filter_to_canonical=filter_to_canonical,
+        gene_flag="low_exome_mapping_quality",
+    )
+    flagged_transcripts = low_coverage_transcripts.union(low_mappability_transcripts)
+
     ht = ht.select_globals()
     return ht.annotate_globals(
         transcripts=hl.struct(
@@ -2142,6 +2157,15 @@ def add_globals_rmc_browser(
             all_outlier_transcripts=outlier_transcripts,
             no_exp_outlier_transcripts=no_exp_outlier_transcripts,
             count_outlier_transcripts=count_outlier_transcripts,
+            transcripts_no_rmc_low_exome_coverage=low_coverage_transcripts.difference(
+                rmc_transcripts
+            ),
+            transcripts_no_rmc_low_exome_mapping_quality=low_mappability_transcripts.difference(
+                rmc_transcripts
+            ),
+            transcripts_no_rmc_with_flag=flagged_transcripts.difference(
+                rmc_transcripts
+            ),
         ),
     )
 
@@ -2210,6 +2234,9 @@ def format_rmc_browser_ht(
             'all_outlier_transcripts': set<str>
             'no_exp_outlier_transcripts': set<str>
             'count_outlier_transcripts': set<str>
+            'transcripts_no_rmc_low_exome_coverage': set<str>
+            'transcripts_no_rmc_low_exome_mapping_quality': set<str>
+            'transcripts_no_rmc_with_flag': set<str>
         }
     ----------------------------------------
     Row fields:
