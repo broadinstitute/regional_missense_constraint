@@ -2180,12 +2180,11 @@ def annot_rmc_with_percentile(ht: hl.Table, oe_field: str) -> hl.Table:
     index 99 = percentile 100).
 
     The annotated percentile is the smallest percentile (index + 1) whose missense OE value
-    is larger than the provided OE. For example, a missense OE of 0.5469 is annotated as
-    percentile 7.
+    is larger than or equal to the provided OE. For example, a missense OE of 0.5469 is
+    annotated as percentile 7.
 
-    Any OE greater than or equal to the largest percentile value is annotated as percentile
-    100, and a warning is logged because this is not expected. Missing OE values are
-    annotated as missing.
+    Any OE greater than the largest percentile value is annotated as percentile 100, and a
+    warning is logged because this is not expected. Missing OE values are annotated as missing.
 
     :param ht: Input HT with RMC information.
     :param oe_field: Field name of OE to use for percentile annotation.
@@ -2195,21 +2194,21 @@ def annot_rmc_with_percentile(ht: hl.Table, oe_field: str) -> hl.Table:
     max_oe = mis_oe_pcts[-1]
     oe = ht[oe_field]
 
-    # Warn if any OE is at or above the largest percentile value, since this is not expected
-    n_above_max = ht.aggregate(hl.agg.count_where(hl.is_defined(oe) & (oe >= max_oe)))
+    # Warn if any OE is above the largest percentile value, since this is not expected
+    n_above_max = ht.aggregate(hl.agg.count_where(hl.is_defined(oe) & (oe > max_oe)))
     if n_above_max > 0:
         logger.warning(
-            "%i row(s) have a missense O/E (%s) >= the largest percentile value (%f);"
+            "%i row(s) have a missense O/E (%s) > the largest percentile value (%f);"
             " these will be annotated as percentile 100.",
             n_above_max,
             oe_field,
             max_oe,
         )
 
-    # Find the smallest index whose percentile value is larger than the provided OE.
-    # The percentile is that index + 1 (percentiles start at 1).
-    match = hl.enumerate(hl.literal(mis_oe_pcts)).find(lambda t: t[1] > oe)
-    return ht.annotate(mis_oe_percentile=hl.if_else(oe >= max_oe, 100, match[0] + 1))
+    # Find the smallest index whose percentile value is larger than or equal to the provided
+    # OE. The percentile is that index + 1 (percentiles start at 1).
+    match = hl.enumerate(hl.literal(mis_oe_pcts)).find(lambda t: t[1] >= oe)
+    return ht.annotate(mis_oe_percentile=hl.if_else(oe > max_oe, 100, match[0] + 1))
 
 
 def format_rmc_browser_ht(
