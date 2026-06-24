@@ -76,6 +76,7 @@ from rmc.utils.generic import (
     filter_to_region_type,
     get_aa_from_context,
     get_annotations_from_context_ht_vep,
+    get_constraint_transcript_sets,
     get_constraint_transcripts,
     get_coverage_correction_expr,
     get_gnomad_public_release,
@@ -2099,10 +2100,11 @@ def add_globals_rmc_browser(
 
     Function is used when reformatting RMC results for browser release.
 
-    Annotates two structs:
-        - `transcript_counts`: Counts of total transcripts and transcripts with/without evidence of RMC (QC pass only).
-        - `transcript_counts_all`: Counts of all transcripts, transcripts with/without evidence of RMC, outlier transcripts,
-            and transcripts without evidence of RMC that carry a low coverage and/or low mappability constraint gene flag.
+    Annotates two structs (each field is a set of transcript IDs, not a count):
+        - `transcripts`: Sets across QC-pass transcripts only — all QC-pass transcripts and those with/without evidence of RMC.
+        - `all_transcripts`: Sets across all transcripts — all transcripts, those with/without evidence of RMC, outlier
+            transcripts (overall, no-exp, and count), and transcripts without evidence of RMC that carry a low coverage
+            and/or low mappability constraint gene flag.
 
     :param HT: Input Table. Should be RMC regions HT annotated with amino acid
         information for region starts and stops.
@@ -2112,36 +2114,35 @@ def add_globals_rmc_browser(
     # Get all transcripts with evidence of RMC
     rmc_transcripts = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.transcript)))
 
-    # Get all transcripts from constraint HT
-    all_transcripts = get_constraint_transcripts(
-        all_transcripts=True, filter_to_canonical=filter_to_canonical
-    )
-    outlier_transcripts = get_constraint_transcripts(
-        filter_to_canonical=filter_to_canonical, outlier=True
-    )
-    # Split outlier transcripts into those missing at least one class of variation
-    # ("no_exp" constraint flags) and those with outlier counts of variation
-    no_exp_outlier_transcripts = get_constraint_transcripts(
-        filter_to_canonical=filter_to_canonical, outlier=True, outlier_class="no_exp"
-    )
-    count_outlier_transcripts = get_constraint_transcripts(
-        filter_to_canonical=filter_to_canonical, outlier=True, outlier_class="count"
-    )
-    qc_pass_transcripts = all_transcripts.difference(outlier_transcripts)
-
-    # Get transcripts (including outliers) flagged for low coverage or low mappability
-    # in the constraint table
-    low_coverage_transcripts = get_constraint_transcripts(
-        all_transcripts=True,
+    # Derive every constraint-HT transcript set in a single aggregation pass.
+    # Outlier transcripts are also split into those missing at least one class of
+    # variation ("no_exp" constraint flags) and those with outlier counts of variation,
+    # and all/outlier transcripts flagged for low coverage or low mappability are kept.
+    constraint_sets = get_constraint_transcript_sets(
+        {
+            "all": {"all_transcripts": True},
+            "outlier": {"outlier": True},
+            "no_exp_outlier": {"outlier": True, "outlier_class": "no_exp"},
+            "count_outlier": {"outlier": True, "outlier_class": "count"},
+            "low_coverage": {
+                "all_transcripts": True,
+                "gene_flag": "low_exome_coverage",
+            },
+            "low_mappability": {
+                "all_transcripts": True,
+                "gene_flag": "low_exome_mapping_quality",
+            },
+        },
         filter_to_canonical=filter_to_canonical,
-        gene_flag="low_exome_coverage",
     )
-    low_mappability_transcripts = get_constraint_transcripts(
-        all_transcripts=True,
-        filter_to_canonical=filter_to_canonical,
-        gene_flag="low_exome_mapping_quality",
-    )
+    all_transcripts = constraint_sets["all"]
+    outlier_transcripts = constraint_sets["outlier"]
+    no_exp_outlier_transcripts = constraint_sets["no_exp_outlier"]
+    count_outlier_transcripts = constraint_sets["count_outlier"]
+    low_coverage_transcripts = constraint_sets["low_coverage"]
+    low_mappability_transcripts = constraint_sets["low_mappability"]
     flagged_transcripts = low_coverage_transcripts.union(low_mappability_transcripts)
+    qc_pass_transcripts = all_transcripts.difference(outlier_transcripts)
 
     ht = ht.select_globals()
     return ht.annotate_globals(
