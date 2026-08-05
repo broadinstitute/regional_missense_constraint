@@ -599,52 +599,35 @@ def get_plateau_model(
 ####################################################################################
 ## Outlier transcript utils
 ####################################################################################
-def get_constraint_transcripts(
+def _constraint_filter_expr(
+    constraint_transcript_ht: hl.Table,
     all_transcripts: bool = False,
     filter_to_canonical: bool = False,
     outlier: bool = True,
     outlier_class: str = None,
-) -> hl.expr.SetExpression:
+    gene_flag: str = None,
+) -> hl.expr.BooleanExpression:
     """
-    Read in LoF constraint HT results to get set of transcripts.
+    Build the per-row filter used to select transcripts from the constraint HT.
 
-    Return either set of transcripts to keep (transcripts that passed transcript QC)
-    or outlier transcripts.
+    See :func:`get_constraint_transcripts` for the meaning of each argument and for
+    constraint HT version compatibility notes.
 
-    Transcripts are removed for the reasons detailed here:
-    https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
-
-    .. note::
-        - Function assumes that LoF constraint HT has been filtered to include only
-            protein-coding transcripts.
-
-    :param all_transcripts: Whether to filter to all transcripts. Will only keep
-        all transcripts if `filter_to_canonical` is False, otherwise toggles
-        between removing or keeping non-outlier transcripts. Default is False.
-    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
-    :param outlier: Whether to filter LoF constraint HT to outlier transcripts (if True),
-        or QC-pass transcripts (if False). Applies only if `all_transcripts` is False.
-        Default is True.
-    :param outlier_class: Optionally restrict outlier transcripts to a single class.
-        Applies only if `all_transcripts` is False and `outlier` is True. One of:
-            - "no_exp": Outliers missing at least one class of variation (any
-                constraint flag starting with "no_exp").
-            - "count": Outliers with outlier counts of variation only (no "no_exp"
-                flags).
-        Default is None (return all outlier transcripts).
-    :return: Set of outlier transcripts or transcript QC pass transcripts.
-    :rtype: hl.expr.SetExpression
+    :param constraint_transcript_ht: Constraint HT to build the filter expression against.
+    :param all_transcripts: Whether to keep all transcripts (skips the outlier filter).
+        Default is False.
+    :param filter_to_canonical: Whether to restrict to canonical transcripts. Default is False.
+    :param outlier: Whether to keep outlier transcripts (if True) or QC-pass transcripts
+        (if False). Applies only if `all_transcripts` is False. Default is True.
+    :param outlier_class: Optionally restrict outlier transcripts to a single class
+        ("no_exp" or "count"). Default is None.
+    :param gene_flag: Optionally restrict to transcripts whose `gene_flags` set contains
+        this value. Default is None.
+    :return: Boolean row expression selecting the requested transcripts.
+    :rtype: hl.expr.BooleanExpression
     """
     if outlier_class is not None and outlier_class not in {"no_exp", "count"}:
         raise ValueError("`outlier_class` must be one of None, 'no_exp', or 'count'!")
-    logger.warning(
-        "Assumes LoF constraint has been separately calculated and that constraint HT"
-        " exists..."
-    )
-    if not file_exists(constraint_ht.path):
-        raise DataException("Constraint HT not found!")
-
-    constraint_transcript_ht = constraint_ht.ht()
 
     # NOTE: all protein-coding transcripts are ENST transcripts in constraint HT
     filter_expr = constraint_transcript_ht.transcript_type == "protein_coding"
@@ -668,9 +651,139 @@ def get_constraint_transcripts(
         else:
             filter_expr &= hl.len(constraint_transcript_ht.constraint_flags) == 0
 
+    if gene_flag is not None:
+        filter_expr &= constraint_transcript_ht.gene_flags.contains(gene_flag)
+
+    return filter_expr
+
+
+def get_constraint_transcripts(
+    all_transcripts: bool = False,
+    filter_to_canonical: bool = False,
+    outlier: bool = True,
+    outlier_class: str = None,
+    gene_flag: str = None,
+) -> hl.expr.SetExpression:
+    """
+    Read in LoF constraint HT results to get set of transcripts.
+
+    Return either set of transcripts to keep (transcripts that passed transcript QC)
+    or outlier transcripts.
+
+    Transcripts are removed for the reasons detailed here:
+    https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
+
+    .. note::
+        - Function assumes that LoF constraint HT has been filtered to include only
+            protein-coding transcripts.
+        - This function is designed for gnomAD v4.1.1 constraint data and is not
+            compatible with previous versions, which used different names for the
+            outlier flags (`constraint_flags`).
+        - The `gene_flags` field used by `gene_flag` does not exist in constraint HT
+            versions prior to 4.1.1, so `gene_flag` can only be used with 4.1.1+.
+
+    :param all_transcripts: Whether to filter to all transcripts. Will only keep
+        all transcripts if `filter_to_canonical` is False, otherwise toggles
+        between removing or keeping non-outlier transcripts. Default is False.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
+    :param outlier: Whether to filter LoF constraint HT to outlier transcripts (if True),
+        or QC-pass transcripts (if False). Applies only if `all_transcripts` is False.
+        Default is True.
+    :param outlier_class: Optionally restrict outlier transcripts to a single class.
+        Applies only if `all_transcripts` is False and `outlier` is True. One of:
+            - "no_exp": Outliers missing at least one class of variation (any
+                constraint flag starting with "no_exp").
+            - "count": Outliers with outlier counts of variation only (no "no_exp"
+                flags).
+        Default is None (return all outlier transcripts).
+    :param gene_flag: Optionally restrict to transcripts whose constraint `gene_flags`
+        set contains this value, e.g. "low_exome_coverage" (low coverage) or
+        "low_exome_mapping_quality" (low mappability). Only available for constraint HT
+        version 4.1.1+ (see note above). Default is None (no gene flag filter).
+    :return: Set of outlier transcripts or transcript QC pass transcripts.
+    :rtype: hl.expr.SetExpression
+    """
+    logger.warning(
+        "Assumes LoF constraint has been separately calculated and that constraint HT"
+        " exists..."
+    )
+    if not file_exists(constraint_ht.path):
+        raise DataException("Constraint HT not found!")
+
+    constraint_transcript_ht = constraint_ht.ht()
+    filter_expr = _constraint_filter_expr(
+        constraint_transcript_ht,
+        all_transcripts=all_transcripts,
+        filter_to_canonical=filter_to_canonical,
+        outlier=outlier,
+        outlier_class=outlier_class,
+        gene_flag=gene_flag,
+    )
     constraint_transcript_ht = constraint_transcript_ht.filter(filter_expr)
     return hl.literal(
         constraint_transcript_ht.aggregate(
             hl.agg.collect_as_set(constraint_transcript_ht.transcript)
         )
     )
+
+
+def get_constraint_transcript_sets(
+    specs: Dict[str, Dict],
+    filter_to_canonical: bool = False,
+) -> Dict[str, hl.expr.SetExpression]:
+    """
+    Read the constraint HT once and return one transcript set per named spec.
+
+    Each spec value is a dict of keyword arguments accepted by
+    :func:`get_constraint_transcripts` (`all_transcripts`, `outlier`, `outlier_class`,
+    `gene_flag`) describing one filter. `filter_to_canonical` is applied to every spec.
+    All sets are collected in a single aggregation pass over the constraint HT, which is
+    more efficient than calling :func:`get_constraint_transcripts` once per set (each
+    such call otherwise re-reads and re-aggregates the constraint HT).
+
+    Example::
+
+        get_constraint_transcript_sets(
+            {
+                "all": {"all_transcripts": True},
+                "low_coverage": {
+                    "all_transcripts": True,
+                    "gene_flag": "low_exome_coverage",
+                },
+            }
+        )
+
+    .. note::
+        - Same constraint HT assumptions and version compatibility as
+            :func:`get_constraint_transcripts` (designed for gnomAD v4.1.1 data).
+        - Spec names become struct field names, so they must be valid Hail field names.
+
+    :param specs: Mapping of output name to `get_constraint_transcripts` keyword arguments.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
+    :return: Mapping of each spec name to its set of transcripts.
+    :rtype: Dict[str, hl.expr.SetExpression]
+    """
+    logger.warning(
+        "Assumes LoF constraint has been separately calculated and that constraint HT"
+        " exists..."
+    )
+    if not file_exists(constraint_ht.path):
+        raise DataException("Constraint HT not found!")
+
+    constraint_transcript_ht = constraint_ht.ht()
+    results = constraint_transcript_ht.aggregate(
+        hl.struct(
+            **{
+                name: hl.agg.filter(
+                    _constraint_filter_expr(
+                        constraint_transcript_ht,
+                        filter_to_canonical=filter_to_canonical,
+                        **spec,
+                    ),
+                    hl.agg.collect_as_set(constraint_transcript_ht.transcript),
+                )
+                for name, spec in specs.items()
+            }
+        )
+    )
+    return {name: hl.literal(results[name]) for name in specs}
