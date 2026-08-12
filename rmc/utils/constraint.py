@@ -581,6 +581,8 @@ def create_constraint_prep_ht(
     directory_post_fix: str = "coverage_corrected",
     path_post_fix: str = "coverage_corrected",
     variant_idx: int = 0,
+    freeze: int = CURRENT_FREEZE,
+    keep_transcripts: Set[str] = None,
 ) -> None:
     """
     Create locus-level constraint prep Table from filtered context Table.
@@ -601,6 +603,10 @@ def create_constraint_prep_ht(
     :param directory_post_fix: Directory suffix for reading per-variant expected dataset. Default is "coverage_corrected".
     :param path_post_fix: File suffix to use for reading per-variant expected dataset. Default is "coverage_corrected".
     :param variant_idx: Index of observed and expected arrays to use. Default is 0 (corresponds to counts calculated on gnomAD-wide / "global" frequencies).
+    :param freeze: RMC freeze number. Default is `CURRENT_FREEZE`.
+    :param keep_transcripts: Desired set of transcripts to search.
+        If set, function will filter to these transcripts instead of canonical
+        transcripts. Default is None.
     :return: None; writes Table to path.
     """
     # NOTE: Observed counts upstream now includes variants with AF <= 0.001 instead of AF < 0.001.
@@ -609,10 +615,17 @@ def create_constraint_prep_ht(
     ht = get_per_variant_expected_dataset(
         directory_post_fix=directory_post_fix, path_post_fix=path_post_fix
     ).ht()
-    # Filter to Canonical Ensembl transcripts
+    # Filter to Ensembl transcripts in the desired transcript set
     # NOTE: All MANE Select transcripts in GENCODE v39 are canonical, but not all canonical transcripts are MANE Select
-    logger.info("Filtering to canonical Ensembl transcripts...")
-    ht = ht.filter(ht.canonical & ht.transcript.startswith("ENST"))
+    if keep_transcripts:
+        logger.info(
+            "Filtering to %i specified Ensembl transcripts...", len(keep_transcripts)
+        )
+        transcript_expr = hl.literal(keep_transcripts).contains(ht.transcript)
+    else:
+        logger.info("Filtering to canonical Ensembl transcripts...")
+        transcript_expr = ht.canonical
+    ht = ht.filter(transcript_expr & ht.transcript.startswith("ENST"))
     # Count number of transcripts after filtering
     n_transcripts = len(ht.aggregate(hl.agg.collect_as_set(ht.transcript)))
     logger.info("Found %d transcripts after filtering...", n_transcripts)
@@ -678,7 +691,7 @@ def create_constraint_prep_ht(
     ht = ht.key_by("locus", "section").drop("start", "stop", "transcript")
 
     ht = ht.naive_coalesce(n_partitions)
-    ht.write(constraint_prep.path, overwrite=overwrite)
+    ht.write(constraint_prep.versions[freeze].path, overwrite=overwrite)
 
 
 def get_obs_exp_expr(
