@@ -498,7 +498,6 @@ def main(args):
             logger.info("Creating RMC coverage stats HT...")
             create_rmc_coverage_stats(
                 overwrite_temp=args.overwrite_temp,
-                filter_to_canonical=args.filter_to_canonical,
                 freeze=args.freeze,
                 overwrite=args.overwrite,
             )
@@ -531,9 +530,9 @@ def main(args):
             hl.default_reference("GRCh38")
             # NOTE: This step creates the browser release, which is distinct from the
             # MCR release files.
-            # NOTE: `filter_to_canonical` is included here only to make
-            # amino acid annotation with context HT more efficient if
-            # RMC results were filtered to canonical transcripts
+            # NOTE: `--filter-to-canonical` doesn't apply here. Amino acid annotation
+            # is restricted by the RMC transcripts themselves, and the released
+            # transcript sets are always canonical plus `--extra-transcripts-he`.
             extra_transcripts = None
             if args.extra_transcripts_he:
                 logger.info(
@@ -546,7 +545,6 @@ def main(args):
             format_rmc_browser_ht(
                 args.freeze,
                 args.overwrite_temp,
-                args.filter_to_canonical,
                 extra_transcripts,
             )
 

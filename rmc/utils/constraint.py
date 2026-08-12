@@ -1738,17 +1738,22 @@ def get_transcript_cds_intervals(
 def annot_rmc_with_start_stop_aas(
     ht: hl.Table,
     overwrite_temp: bool,
-    filter_to_canonical: bool,
     freeze: int = CURRENT_FREEZE,
 ) -> hl.Table:
     """
     Annotate RMC regions HT with amino acids at region starts and stops.
 
+    .. note::
+
+        The context HT is deliberately not filtered to canonical transcripts:
+        `keep_transcripts` and `intervals` already restrict it, and filtering would
+        drop non-canonical transcripts (e.g. MANE Plus Clinical) before their amino
+        acids are looked up, leaving their regions permanently missing amino acids.
+
     :param ht: Input RMC regions HT.
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
-    :param filter_to_canonical: Whether to filter to canonical transcripts only.
     :param freeze: RMC freeze number. Default is `CURRENT_FREEZE`.
     :return: RMC regions HT annotated with amino acid information for region starts and stops.
     """
@@ -1765,7 +1770,6 @@ def annot_rmc_with_start_stop_aas(
         intervals=get_transcript_cds_intervals(
             rmc_transcripts, build=get_reference_genome(ht.interval).name
         ),
-        filter_to_canonical=filter_to_canonical,
     )
     # Get reference AA label for each locus-transcript combination in context HT
     context_ht = get_ref_aa(
@@ -2211,7 +2215,6 @@ def check_and_fix_missing_aa(
 
 def add_globals_rmc_browser(
     ht: hl.Table,
-    filter_to_canonical: bool = True,
     extra_transcripts: Set[str] = None,
 ) -> hl.Table:
     """
@@ -2225,15 +2228,15 @@ def add_globals_rmc_browser(
 
     .. note::
 
-        Transcript sets must describe only the transcripts the freeze covers.
-        The constraint HT contains every protein-coding transcript, so running
-        without `filter_to_canonical` and without `extra_transcripts` would report
-        transcripts that were never searched as lacking evidence of RMC, including
-        in the public downloads created by `create_rmc_release_downloads`.
+        Transcript sets describe only the transcripts a freeze covers: canonical
+        transcripts plus `extra_transcripts`. Scoping to canonical here is not
+        optional -- the constraint HT contains every protein-coding transcript, so
+        using it unscoped would report transcripts that were never searched as
+        lacking evidence of RMC, including in the public downloads created by
+        `create_rmc_release_downloads`.
 
     :param HT: Input Table. Should be RMC regions HT annotated with amino acid
         information for region starts and stops.
-    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is True.
     :param extra_transcripts: Additional transcripts covered by this freeze on top of
         the canonical transcripts, e.g. the transcripts unique to the MANE Select plus
         clinical set. Assumed to be present in the constraint HT. Default is None.
@@ -2244,7 +2247,7 @@ def add_globals_rmc_browser(
 
     # Get all transcripts covered by this freeze from constraint HT
     all_transcripts = get_constraint_transcripts(
-        all_transcripts=True, filter_to_canonical=filter_to_canonical
+        all_transcripts=True, filter_to_canonical=True
     )
     if extra_transcripts:
         all_transcripts = all_transcripts.union(hl.literal(extra_transcripts))
@@ -2351,7 +2354,6 @@ def get_exomes_an_percent_expr(
 
 def create_rmc_coverage_stats(
     overwrite_temp: bool,
-    filter_to_canonical: bool = False,
     freeze: int = CURRENT_FREEZE,
     overwrite: bool = True,
     an_data_type: str = "exomes",
@@ -2374,8 +2376,6 @@ def create_rmc_coverage_stats(
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
-    :param filter_to_canonical: Whether to filter to canonical transcripts only.
-        Only used to annotate amino acids. Default is False.
     :param freeze: RMC freeze number. Default is `CURRENT_FREEZE`.
     :param overwrite: Whether to overwrite output Table. Default is True.
     :param an_data_type: gnomAD data type used to get all sites AN Table.
@@ -2392,9 +2392,7 @@ def create_rmc_coverage_stats(
         start_coordinate=rmc_ht.interval.start,
         stop_coordinate=rmc_ht.interval.end,
     )
-    rmc_ht = annot_rmc_with_start_stop_aas(
-        rmc_ht, overwrite_temp, filter_to_canonical, freeze=freeze
-    )
+    rmc_ht = annot_rmc_with_start_stop_aas(rmc_ht, overwrite_temp, freeze=freeze)
     rmc_ht = rmc_ht.key_by(
         interval=hl.interval(
             rmc_ht.start_coordinate,
@@ -2562,7 +2560,6 @@ def union_freeze_resources(
 def format_rmc_browser_ht(
     freeze: int,
     overwrite_temp: bool,
-    filter_to_canonical: bool = False,
     extra_transcripts: Set[str] = None,
 ) -> None:
     """
@@ -2611,7 +2608,6 @@ def format_rmc_browser_ht(
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
-    :param filter_to_canonical: Whether to filter to canonical transcripts only.
     :param extra_transcripts: Additional transcripts covered by this freeze on top of
         the canonical transcripts, e.g. the transcripts unique to the MANE Select plus
         clinical set. Used to annotate globals. Default is None.
@@ -2627,9 +2623,7 @@ def format_rmc_browser_ht(
     )
 
     # Annotate start and stop amino acids per region
-    ht = annot_rmc_with_start_stop_aas(
-        ht, overwrite_temp, filter_to_canonical, freeze=freeze
-    )
+    ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp, freeze=freeze)
 
     # Annotate low coverage flag per region using coverage stats
     # NOTE: Coverage HT is keyed on the amino acid annotated coordinates released in
@@ -2690,7 +2684,7 @@ def format_rmc_browser_ht(
     ht = ht.group_by("transcript").aggregate(regions=hl.agg.collect(ht.region))
 
     # Annotate globals and write
-    ht = add_globals_rmc_browser(ht, filter_to_canonical, extra_transcripts)
+    ht = add_globals_rmc_browser(ht, extra_transcripts)
     ht.write(rmc_browser.versions[freeze].path, overwrite=True)
 
 
