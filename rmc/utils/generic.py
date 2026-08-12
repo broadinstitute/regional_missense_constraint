@@ -11,7 +11,6 @@ from gnomad.utils.vep import (
     CSQ_NON_CODING,
     explode_by_vep_annotation,
     filter_vep_transcript_csqs,
-    process_consequences,
 )
 from gnomad_constraint.resources.resource_utils import get_preprocessed_ht
 
@@ -22,6 +21,7 @@ from rmc.resources.basics import (
 )
 from rmc.resources.gnomad import constraint_ht
 from rmc.resources.reference_data import VEP_VERSION
+from rmc.resources.rmc import CURRENT_FREEZE
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -186,7 +186,9 @@ def process_context_ht(
 
 def get_aa_from_context(
     overwrite_temp: bool,
+    freeze: int = CURRENT_FREEZE,
     keep_transcripts: Set[str] = None,
+    intervals: List[hl.utils.Interval] = None,
     n_partitions: int = 10000,
     filter_to_canonical: bool = False,
     vep_version: str = VEP_VERSION,
@@ -194,14 +196,26 @@ def get_aa_from_context(
     """
     Extract amino acid information from VEP context HT.
 
+    .. note::
+        Passing `intervals` prunes partitions at read, which is much faster than
+        filtering after VEP processing. Intervals should cover every locus that needs
+        an amino acid annotation (e.g. the full CDS of each desired transcript, since
+        downstream amino acid fixes require exon boundaries and transcript-wide
+        maximum amino acid numbers).
+
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
+    :param freeze: RMC freeze number. Used to name temporary data.
+        Default is `CURRENT_FREEZE`.
     :param keep_transcripts: Desired set of transcripts to keep from the context HT.
         If set, function will filter to keep these trancripts only.
         Default is None.
-    :param n_partitions: Desired number of partitions for context HT after filtering.
-        Default is 10,000.
+    :param intervals: Intervals to filter the context HT to at read.
+        If set, partitions that don't overlap these intervals aren't loaded.
+        Default is None.
+    :param n_partitions: Desired number of partitions for context HT.
+        Only applied if `intervals` is None. Default is 10,000.
     :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
     :param vep_version: VEP version to use. Default is `VEP_VERSION`.
     :return: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
@@ -217,7 +231,13 @@ def get_aa_from_context(
         .select_globals()
         .select("vep", "was_split")
     )
-    ht = ht.naive_coalesce(n_partitions)
+    if intervals:
+        logger.info("Filtering to %i intervals...", len(intervals))
+        ht = hl.filter_intervals(ht, intervals)
+    else:
+        # NOTE: `naive_coalesce` runs first in the pipeline, so it is skipped when
+        # intervals are specified (interval filtering already reduces partitions)
+        ht = ht.naive_coalesce(n_partitions)
     ht = filter_vep_transcript_csqs(
         t=ht,
         vep_root="vep",
@@ -227,12 +247,31 @@ def get_aa_from_context(
         ensembl_only=True,
         filter_empty_csq=True,
     )
-    ht = process_consequences(ht)
     ht = explode_by_vep_annotation(ht, "transcript_consequences")
     ht = ht.select("transcript_consequences")
+
+    if keep_transcripts:
+        logger.info("Filtering to desired transcripts only...")
+        ht = ht.filter(
+            hl.literal(keep_transcripts).contains(
+                ht.transcript_consequences.transcript_id
+            )
+        )
+
+    # Remove consequences that are non-coding in this transcript
+    # NOTE: HT is exploded above, so each row is a single transcript's consequence;
+    # a variant that is coding in one transcript and non-coding in another keeps only
+    # the coding transcript's row.
+    # NOTE: `most_severe_consequence` isn't annotated per transcript consequence in
+    # the context HT, and `process_consequences` (which adds it) is an expensive pass.
+    # `CSQ_NON_CODING` is a suffix of the severity-ordered `CSQ_ORDER`, so a
+    # consequence's most severe term is non-coding only if none of its terms are
+    # coding, which makes this filter equivalent to filtering on
+    # `most_severe_consequence`.
+    non_coding_csq = hl.literal(CSQ_NON_CODING)
     ht = ht.filter(
-        ~hl.literal(CSQ_NON_CODING).contains(
-            ht.transcript_consequences.most_severe_consequence
+        ht.transcript_consequences.consequence_terms.any(
+            lambda csq: ~non_coding_csq.contains(csq)
         )
     )
     # Unnest annotations from context HT
@@ -243,12 +282,8 @@ def get_aa_from_context(
         amino_acids=ht.transcript_consequences.amino_acids,
     )
 
-    if keep_transcripts:
-        logger.info("Filtering to desired transcripts only...")
-        ht = ht.filter(hl.literal(keep_transcripts).contains(ht.transcript))
-
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/vep_amino_acids.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_vep_amino_acids.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -258,6 +293,7 @@ def get_aa_from_context(
 def get_ref_aa(
     ht: hl.Table,
     overwrite_temp: bool,
+    freeze: int = CURRENT_FREEZE,
     extra_aa_map: Dict[str, str] = {"*": "Ter", "U": "Sec"},
     aa_to_remove: Set[str] = {"X"},
 ) -> hl.Table:
@@ -268,6 +304,8 @@ def get_ref_aa(
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
+    :param freeze: RMC freeze number. Used to name temporary data.
+        Default is `CURRENT_FREEZE`.
     :param extra_aa_map: Dictionary mapping any amino acid one letter codes to three letter codes.
         Designed to capture any amino acids not present in `ACID_NAMES_PATH`.
         Default is {"*": "Ter", "U": "Sec"}.
@@ -279,61 +317,53 @@ def get_ref_aa(
     # Add any extra mappings into amino acid mapping dict
     if extra_aa_map:
         aa_map.update(extra_aa_map)
-    aa_map = hl.literal(aa_map)
+    # NOTE: `aa_map` is kept as a python dict so that its values can be checked below
+    # without evaluating the literal
+    aa_map_expr = hl.literal(aa_map)
     ht = ht.annotate(ref_aa_1_letter=ht.amino_acids.split("/")[0])
-    ht = ht.annotate(ref_aa=aa_map.get(ht.ref_aa_1_letter, ht.ref_aa_1_letter))
+    ht = ht.annotate(ref_aa=aa_map_expr.get(ht.ref_aa_1_letter, ht.ref_aa_1_letter))
     if aa_to_remove:
         ht = ht.filter(~hl.literal(aa_to_remove).contains(ht.ref_aa))
 
     # Select fields and checkpoint
     ht = ht.select("ref_aa", "aa_start_num", "aa_end_num", "transcript")
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/ref_amino_acids.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_ref_amino_acids.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
 
-    # Check if there are any ref amino acids in HT that aren't in `aa_map`
-    ref_aa_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/ref_aa_3_letter_check.he"
-    overwrite_ref_aa_he = (
-        not file_exists(ref_aa_check_he_path) if not overwrite_temp else overwrite_temp
+    # Check that all ref amino acids are in `aa_map` and that protein start always
+    # equals protein end
+    # NOTE: Both checks are collected in a single aggregation and cached together
+    checks_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_ref_aa_checks.he"
+    overwrite_checks_he = (
+        not file_exists(checks_he_path) if not overwrite_temp else overwrite_temp
     )
-    if overwrite_ref_aa_he:
-        ref_aa_check = ht.aggregate(hl.agg.collect_as_set(ht.ref_aa))
-        hl.experimental.write_expression(
-            ref_aa_check, ref_aa_check_he_path, overwrite=True
+    if overwrite_checks_he:
+        checks = ht.aggregate(
+            hl.struct(
+                ref_aa=hl.agg.collect_as_set(ht.ref_aa),
+                n_protein_num_mismatch=hl.agg.count_where(
+                    ht.aa_start_num != ht.aa_end_num
+                ),
+            )
         )
-    ref_aa_check = hl.eval(hl.experimental.read_expression(ref_aa_check_he_path))
-    ref_aa_check = ref_aa_check.difference(set(hl.eval(aa_map).values()))
-    if len(ref_aa_check) != 0:
+        hl.experimental.write_expression(checks, checks_he_path, overwrite=True)
+    else:
+        checks = hl.eval(hl.experimental.read_expression(checks_he_path))
+
+    unmapped_aa = checks.ref_aa.difference(set(aa_map.values()))
+    if len(unmapped_aa) != 0:
         logger.warning(
             "The following reference amino acids were not mapped to three letter"
             " codes: %s",
-            ref_aa_check,
+            unmapped_aa,
         )
-
-    # Double check that protein start always equals protein end
-    protein_num_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/protein_num_count.he"
-    overwrite_protein_num_he = (
-        not file_exists(protein_num_check_he_path)
-        if not overwrite_temp
-        else overwrite_temp
-    )
-    if overwrite_protein_num_he:
-        protein_num_check = ht.aggregate(
-            hl.agg.count_where(ht.aa_start_num != ht.aa_end_num)
-        )
-        hl.experimental.write_expression(
-            protein_num_check, protein_num_check_he_path, overwrite=True
-        )
-    # Assume file already exists otherwise
-    protein_num_check = hl.eval(
-        hl.experimental.read_expression(protein_num_check_he_path)
-    )
-    if protein_num_check != 0:
+    if checks.n_protein_num_mismatch != 0:
         raise DataException(
-            f"{protein_num_check} sites had different amino acid numbers at start and"
-            " end -- please double check!"
+            f"{checks.n_protein_num_mismatch} sites had different amino acid numbers at"
+            " start and end -- please double check!"
         )
 
     # Reformat reference AA to have both the 3 letter code and number
@@ -348,30 +378,33 @@ def get_ref_aa(
     ht = ht.key_by("locus", "transcript").drop("alleles", "aa_start_num", "aa_end_num")
     ht = ht.collect_by_key(name="aa_info")
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/ref_aa_collected.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_ref_aa_collected.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
 
     # Check to see if AA info is defined for all alleles associated with a locus/transcript
-    missing_aa_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/missing_aa_check.he"
+    missing_aa_check_he_path = (
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_missing_aa_check.he"
+    )
     overwrite_he = (
         not file_exists(missing_aa_check_he_path)
         if not overwrite_temp
         else overwrite_temp
     )
     if overwrite_he:
-        ht = ht.annotate(
-            any_aa_missing=hl.any(hl.map(lambda x: hl.is_missing(x.ref_aa), ht.aa_info))
+        missing_aa_check = ht.aggregate(
+            hl.agg.count_where(
+                hl.any(hl.map(lambda x: hl.is_missing(x.ref_aa), ht.aa_info))
+            )
         )
-        missing_aa_check = ht.aggregate(hl.agg.count_where(ht.any_aa_missing))
-        missing_aa_check = hl.experimental.write_expression(
+        hl.experimental.write_expression(
             missing_aa_check, missing_aa_check_he_path, overwrite=True
         )
-
-    missing_aa_check = hl.eval(
-        hl.experimental.read_expression(missing_aa_check_he_path)
-    )
+    else:
+        missing_aa_check = hl.eval(
+            hl.experimental.read_expression(missing_aa_check_he_path)
+        )
     if missing_aa_check != 0:
         logger.warning(
             "%i locus-transcript combinations had missing AA info for at least 1"

@@ -40,6 +40,7 @@ from rmc.resources.reference_data import (
     transcript_ref,
 )
 from rmc.resources.resource_utils import (
+    CURRENT_BUILD,
     CURRENT_GNOMAD_VERSION,
     KEEP_CODING_CSQ,
     MISSENSE,
@@ -1672,8 +1673,46 @@ def create_context_with_oe(
     logger.info("Output OE-annotated dedup context HT fields: %s", set(ht.row))
 
 
+def get_transcript_cds_intervals(
+    transcripts: Set[str], build: str = CURRENT_BUILD
+) -> List[hl.utils.Interval]:
+    """
+    Get one interval spanning the CDS of each input transcript.
+
+    Used to prune partitions when reading the VEP context HT.
+
+    .. note::
+        `transcript_ref` stores coordinates as a contig string and integer positions
+        rather than loci, so the build can't be inferred and must be specified.
+
+    :param transcripts: Set of transcripts.
+    :param build: Reference genome build. Default is `CURRENT_BUILD`.
+    :return: List of intervals spanning each transcript's CDS.
+    """
+    ht = transcript_ref.ht()
+    ht = ht.filter(hl.literal(transcripts).contains(ht.transcript))
+    coords = ht.key_by().select("transcript", "chrom", "cds_start", "cds_end").collect()
+    missing = transcripts - {c.transcript for c in coords}
+    if missing:
+        raise DataException(
+            f"{len(missing)} transcripts are missing from `transcript_ref`, so their"
+            f" loci would be dropped from the context HT: {missing}"
+        )
+    return [
+        hl.utils.Interval(
+            hl.Locus(c.chrom, c.cds_start, reference_genome=build),
+            hl.Locus(c.chrom, c.cds_end, reference_genome=build),
+            includes_end=True,
+        )
+        for c in coords
+    ]
+
+
 def annot_rmc_with_start_stop_aas(
-    ht: hl.Table, overwrite_temp: bool, filter_to_canonical: bool
+    ht: hl.Table,
+    overwrite_temp: bool,
+    filter_to_canonical: bool,
+    freeze: int = CURRENT_FREEZE,
 ) -> hl.Table:
     """
     Annotate RMC regions HT with amino acids at region starts and stops.
@@ -1683,20 +1722,29 @@ def annot_rmc_with_start_stop_aas(
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
     :param filter_to_canonical: Whether to filter to canonical transcripts only.
+    :param freeze: RMC freeze number. Default is `CURRENT_FREEZE`.
     :return: RMC regions HT annotated with amino acid information for region starts and stops.
     """
     logger.info("Getting amino acid information from context HT...")
     rmc_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
     # Get amino acid information from context table for variants in chosen transcripts
+    # NOTE: Intervals span each transcript's full CDS rather than only region
+    # starts/stops because the amino acid fixes below need exon boundaries and
+    # transcript-wide maximum amino acid numbers
     context_ht = get_aa_from_context(
         overwrite_temp=overwrite_temp,
+        freeze=freeze,
         keep_transcripts=rmc_transcripts,
+        intervals=get_transcript_cds_intervals(
+            rmc_transcripts, build=get_reference_genome(ht.interval).name
+        ),
         filter_to_canonical=filter_to_canonical,
     )
     # Get reference AA label for each locus-transcript combination in context HT
     context_ht = get_ref_aa(
         ht=context_ht,
         overwrite_temp=overwrite_temp,
+        freeze=freeze,
     )
     # NOTE: For transcripts on the negative strand, `start_aa` is the larger AA number and
     # `stop_aa` is the smaller number
@@ -1705,7 +1753,7 @@ def annot_rmc_with_start_stop_aas(
         stop_aa=context_ht[ht.stop_coordinate, ht.transcript].ref_aa,
     )
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_aa_annot.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_rmc_results_aa_annot.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -2255,7 +2303,9 @@ def format_rmc_browser_ht(
     )
 
     # Annotate start and stop amino acids per region
-    ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp, filter_to_canonical)
+    ht = annot_rmc_with_start_stop_aas(
+        ht, overwrite_temp, filter_to_canonical, freeze=freeze
+    )
 
     # Annotate low coverage flag per region using coverage stats
     # NOTE: Coverage HT uses browser HT intervals, not raw RMC region intervals
