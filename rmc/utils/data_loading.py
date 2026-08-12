@@ -1,8 +1,11 @@
 """Utilities for loading resource data."""
+import gzip
 import logging
-from typing import List
+import re
+from typing import Dict, List, Set
 
 import hail as hl
+import hailtop.fs as hfs
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
 from gnomad.utils.filtering import filter_to_clinvar_pathogenic
@@ -10,6 +13,7 @@ from gnomad.utils.liftover import default_lift_data
 
 from rmc.resources.basics import TEMP_PATH_WITH_FAST_DEL
 from rmc.resources.reference_data import (
+    GENCODE_GTF_PATH,
     autism_de_novo_2022_tsv_path,
     clinvar,
     clinvar_plp_mis_haplo,
@@ -18,6 +22,7 @@ from rmc.resources.reference_data import (
     dosage_tsv_path,
     gene_model,
     haplo_genes_path,
+    mane_plus_clinical_transcripts_path,
     ndd_de_novo,
     ndd_de_novo_2020_tsv_path,
     transcript_cds,
@@ -36,6 +41,118 @@ logger.setLevel(logging.INFO)
 ####################################################################################
 ## Transcript utils
 ####################################################################################
+TRANSCRIPT_ID_REGEX = re.compile(r'transcript_id "([^".]+)')
+"""
+Regex capturing the unversioned transcript ID from a GENCODE GTF attribute string.
+"""
+
+
+def get_gencode_transcript_tags(
+    gtf_path: str = GENCODE_GTF_PATH,
+    protein_coding_only: bool = True,
+) -> Dict[str, Dict[str, bool]]:
+    """
+    Get MANE and canonical tags per transcript from GENCODE GTF.
+
+    .. note::
+        - `hl.experimental.import_gtf` parses the attribute column into a dict, which
+            keeps only the last of GENCODE's repeated `tag` attributes, so the
+            attribute string is parsed directly here.
+        - Transcript IDs are unversioned, and chrY PAR copies (IDs ending in
+            '_PAR_Y') are skipped, to match transcript IDs used elsewhere in the
+            pipeline.
+        - The VEP context HT also has `mane_select` and `mane_plus_clinical` fields
+            on `transcript_consequences`, but GENCODE is used here so that the
+            transcript set doesn't depend on the VEP annotation.
+
+    :param gtf_path: Path to GENCODE GTF. Default is `GENCODE_GTF_PATH`.
+    :param protein_coding_only: Whether to keep only protein-coding transcripts.
+        Default is True.
+    :return: Dict of transcript ID to MANE Select, MANE Plus Clinical, and Ensembl
+        canonical tag status.
+    """
+    logger.info("Reading GENCODE GTF from %s...", gtf_path)
+    transcripts = {}
+    # `hfs.open` reads the remote file but doesn't decompress (transparent
+    # decompression in `hl.hadoop_open` is deprecated as of hail 0.2.137), so the
+    # gzip stream is decoded here. Avoiding `hl.hadoop_open` also keeps this parse
+    # pure Python, i.e. runnable without a JVM.
+    with hfs.open(gtf_path, "rb") as raw, gzip.open(raw, "rt") as g:
+        for line in g:
+            if line.startswith("#"):
+                continue
+            # GTF fields: seqname, source, feature, start, end, score, strand,
+            # frame, attribute
+            fields = line.rstrip("\n").split("\t")
+            if fields[2] != "transcript":
+                continue
+            attributes = fields[8]
+            if protein_coding_only and (
+                'transcript_type "protein_coding"' not in attributes
+            ):
+                continue
+            if "_PAR_Y" in attributes:
+                continue
+            transcripts[TRANSCRIPT_ID_REGEX.search(attributes).group(1)] = {
+                "mane_select": 'tag "MANE_Select"' in attributes,
+                "mane_plus_clinical": 'tag "MANE_Plus_Clinical"' in attributes,
+                "canonical": 'tag "Ensembl_canonical"' in attributes,
+            }
+    logger.info("Parsed %i transcripts from GTF", len(transcripts))
+    return transcripts
+
+
+def get_mane_plus_clinical_transcripts(
+    gtf_path: str = GENCODE_GTF_PATH,
+    unique_only: bool = True,
+) -> Set[str]:
+    """
+    Get MANE Plus Clinical transcripts from GENCODE GTF.
+
+    :param gtf_path: Path to GENCODE GTF. Default is `GENCODE_GTF_PATH`.
+    :param unique_only: Whether to keep only transcripts not searched in the freeze 2
+        run, i.e. transcripts that aren't Ensembl canonical. Default is True.
+    :return: Set of unversioned Ensembl transcript IDs.
+    """
+    transcripts = get_gencode_transcript_tags(gtf_path)
+
+    # NOTE: repo assumes all MANE Select transcripts are canonical in GENCODE v39
+    mane_not_canonical = {
+        t for t, v in transcripts.items() if v["mane_select"] and not v["canonical"]
+    }
+    if mane_not_canonical:
+        logger.warning(
+            "%i MANE Select transcripts aren't Ensembl canonical -- please double"
+            " check!",
+            len(mane_not_canonical),
+        )
+
+    keep = {t for t, v in transcripts.items() if v["mane_plus_clinical"]}
+    logger.info("Found %i MANE Plus Clinical transcripts", len(keep))
+    if unique_only:
+        # NOTE: `create_constraint_prep_ht` gates the freeze 2 run on `canonical` only
+        keep = {t for t in keep if not transcripts[t]["canonical"]}
+        logger.info("Kept %i transcripts that aren't Ensembl canonical", len(keep))
+    return keep
+
+
+def create_mane_plus_clinical_he(
+    overwrite: bool,
+    gtf_path: str = GENCODE_GTF_PATH,
+) -> None:
+    """
+    Write HailExpression of transcripts unique to the MANE Select plus clinical set.
+
+    :param overwrite: Whether to overwrite output HailExpression if it exists.
+    :param gtf_path: Path to GENCODE GTF. Default is `GENCODE_GTF_PATH`.
+    :return: None; writes HailExpression to resource path.
+    """
+    transcripts = get_mane_plus_clinical_transcripts(gtf_path)
+    hl.experimental.write_expression(
+        hl.literal(transcripts),
+        mane_plus_clinical_transcripts_path,
+        overwrite=overwrite,
+    )
 
 
 def create_transcript_cds(

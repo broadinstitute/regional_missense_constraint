@@ -36,6 +36,25 @@ VEP_VERSION = "105"
 VEP version used to annotate variants.
 """
 
+GENCODE_GTF_PATH = f"gs://gcp-public-data--gnomad/resources/grch38/gencode/gencode.v{GENCODE_VERSION}.annotation.gtf.gz"
+"""
+Path to public GENCODE GTF for `GENCODE_VERSION`.
+
+Same GTF imported by the gnomad_methods `gencode` GRCh38 resource.
+Used to get MANE Select and MANE Plus Clinical transcripts.
+"""
+
+mane_plus_clinical_transcripts_path = (
+    f"{get_ref_data_prefix()}/ht/mane_plus_clinical_transcripts.he"
+)
+"""
+Path to HailExpression of transcripts unique to the MANE Select plus clinical set.
+
+Contains the protein-coding MANE Plus Clinical transcripts that aren't Ensembl
+canonical, i.e. the transcripts not searched in RMC freeze 2 (56 transcripts in
+GENCODE v39).
+"""
+
 # TODO: Replace this with `browser_gene()` gnomad_methods resource
 gene_model = VersionedTableResource(
     default_version=CURRENT_BUILD,
