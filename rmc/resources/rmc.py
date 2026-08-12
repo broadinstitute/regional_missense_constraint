@@ -549,6 +549,33 @@ Contains same information as `rmc_results` but has different formatting for gnom
 """
 
 
+NO_BREAKS_RESOURCE = "no_breaks"
+"""
+Name used to refer to the no breaks HailExpression when unioning freezes.
+
+Kept separate from `UNIONABLE_RESOURCES` because this resource is a HailExpression
+(set of transcripts) rather than a Table.
+"""
+
+UNIONABLE_RESOURCES = {
+    "rmc_results": rmc_results,
+    "rmc_coverage_stats": rmc_coverage_stats_ht,
+}
+"""
+Freeze-versioned Tables that can be unioned across freezes.
+
+Used by `union_freeze_resources` to look up resources by name.
+
+NOTE: `context_with_oe` and `context_with_oe_dedup` aren't included because they are
+only consumed by missense badness/MPC, which remain on freeze 2. Add them here if MPC
+is regenerated on a unioned freeze.
+
+NOTE: `rmc_browser` is deliberately excluded. Its globals are transcript sets and its
+rows are grouped by transcript, so it should be regenerated from the unioned freeze
+with `format_rmc_browser_ht` rather than unioned directly.
+"""
+
+
 def rmc_downloads_resource_paths(
     get_ht_path: bool,
     has_rmc: bool = True,

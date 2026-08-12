@@ -5,6 +5,7 @@ from typing import List, Optional, Set, Tuple, Union
 
 import hail as hl
 import scipy
+from gnomad.resources.grch38.gnomad import all_sites_an
 from gnomad.resources.grch38.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.constraint import (
@@ -12,7 +13,11 @@ from gnomad.utils.constraint import (
     compute_expected_variants,
     count_variants_by_group,
 )
-from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
+from gnomad.utils.file_utils import (
+    check_file_exists_raise_error,
+    file_exists,
+    repartition_for_join,
+)
 
 # from gnomad.utils.intervals import explode_intervals_to_loci #TODO: Uncomment when methods PR#789 is merged
 # TODO: Remove this import when methods PR#789 is merged
@@ -49,8 +54,10 @@ from rmc.resources.rmc import (
     CURRENT_FREEZE,
     FINAL_ANNOTATIONS,
     MIN_EXP_MIS,
+    NO_BREAKS_RESOURCE,
     P_VALUE,
     SIMUL_SEARCH_ANNOTATIONS,
+    UNIONABLE_RESOURCES,
     constraint_prep,
     context_with_oe,
     context_with_oe_dedup,
@@ -2239,6 +2246,207 @@ def annot_rmc_with_percentile(ht: hl.Table, oe_field: str) -> hl.Table:
         .when(oe <= mis_oe_pcts[74], "<=75")
         .default(">75")
     )
+
+
+def get_exomes_an_percent_expr(
+    locus_expr: hl.expr.LocusExpression,
+    an_expr: hl.expr.ArrayExpression,
+    an_globals: hl.expr.StructExpression,
+    adj_idx: int = 0,
+) -> hl.expr.Int32Expression:
+    """
+    Get percent of gnomAD exomes samples with a defined genotype at a locus.
+
+    Matches the `AN_percent` exome coverage metric used in the gene constraint
+    pipeline.
+
+    :param locus_expr: Locus expression.
+    :param an_expr: Allele number array expression from the all sites AN Table.
+    :param an_globals: Globals of the all sites AN Table. Must contain `strata_meta`
+        and `strata_sample_count` annotations.
+    :param adj_idx: Index of allele number array calculated on high quality (adj)
+        genotypes across all samples. Default is 0.
+    :return: Percent of samples with a defined genotype at the locus.
+    """
+    sample_count = an_globals.strata_sample_count
+    strata_meta = an_globals.strata_meta
+    xx_count = sample_count[strata_meta.index({"group": "adj", "sex": "XX"})]
+    xy_count = sample_count[strata_meta.index({"group": "adj", "sex": "XY"})]
+    # XX samples have two X chromosomes and no Y, and XY samples have one of each
+    total_an = (
+        hl.case()
+        .when(locus_expr.in_x_nonpar(), (xx_count * 2) + xy_count)
+        .when(locus_expr.in_y_nonpar(), xy_count)
+        .default(sample_count[adj_idx] * 2)
+    )
+    return hl.int((an_expr[adj_idx] / total_an) * 100)
+
+
+def create_rmc_coverage_stats(
+    freeze: int = CURRENT_FREEZE,
+    overwrite: bool = True,
+    an_data_type: str = "exomes",
+) -> None:
+    """
+    Create Table of median gnomAD exome AN percent per RMC region.
+
+    Median is calculated over CDS sites only. Output Table contains one row per RMC
+    region plus one row spanning the CDS of each transcript without evidence of RMC.
+
+    Table is used to flag low coverage regions in `format_rmc_browser_ht`.
+
+    :param freeze: RMC freeze number. Default is `CURRENT_FREEZE`.
+    :param overwrite: Whether to overwrite output Table. Default is True.
+    :param an_data_type: gnomAD data type used to get all sites AN Table.
+        Default is "exomes".
+    :return: None; writes Table to resource path.
+    """
+    logger.info("Getting RMC regions and transcripts without RMC...")
+    rmc_ht = rmc_results.versions[freeze].ht().select_globals().select()
+    build = get_reference_genome(rmc_ht.interval).name
+
+    # Transcripts without evidence of RMC get a single region spanning their CDS
+    no_rmc_transcripts = hl.eval(
+        hl.experimental.read_expression(no_breaks_he_path(freeze))
+    )
+    no_rmc_ht = transcript_ref.ht()
+    no_rmc_ht = no_rmc_ht.filter(
+        hl.literal(no_rmc_transcripts).contains(no_rmc_ht.transcript)
+    )
+    no_rmc_ht = no_rmc_ht.select(
+        interval=hl.locus_interval(
+            no_rmc_ht.chrom,
+            no_rmc_ht.cds_start,
+            no_rmc_ht.cds_end,
+            includes_end=True,
+            reference_genome=build,
+        )
+    )
+    regions_ht = rmc_ht.union(no_rmc_ht.key_by("interval", "transcript").select())
+
+    logger.info("Exploding CDS intervals to loci...")
+    transcripts = regions_ht.aggregate(hl.agg.collect_as_set(regions_ht.transcript))
+    cds_ht = transcript_cds.ht()
+    cds_ht = cds_ht.filter(hl.literal(transcripts).contains(cds_ht.transcript))
+    cds_ht = explode_intervals_to_loci(cds_ht, interval_field="interval")
+
+    # Annotate each CDS locus with the region it falls in
+    # NOTE: Regions are collected per transcript so that this is a key join on
+    # transcript rather than an interval join
+    regions_by_transcript = regions_ht.group_by("transcript").aggregate(
+        regions=hl.agg.collect(regions_ht.interval)
+    )
+    cds_ht = cds_ht.annotate(
+        interval=regions_by_transcript[cds_ht.transcript].regions.find(
+            lambda region: region.contains(cds_ht.locus)
+        )
+    )
+    cds_ht = cds_ht.filter(hl.is_defined(cds_ht.interval))
+    cds_loci_path = f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_rmc_cds_loci.ht"
+    cds_ht = cds_ht.checkpoint(cds_loci_path, overwrite=True)
+
+    logger.info("Annotating CDS loci with exome AN percent...")
+    # Co-partition the all sites AN Table with the CDS loci to make the join efficient
+    an_ht = hl.read_table(
+        all_sites_an(an_data_type).path,
+        _intervals=repartition_for_join(cds_loci_path),
+    )
+    cds_ht = cds_ht.annotate(
+        exomes_AN_percent=get_exomes_an_percent_expr(
+            cds_ht.locus, an_ht[cds_ht.locus].AN, an_ht.index_globals()
+        )
+    )
+
+    logger.info("Calculating median AN percent per region...")
+    cov_ht = cds_ht.group_by("interval", "transcript").aggregate(
+        median_exomes_AN_percent=hl.median(hl.agg.collect(cds_ht.exomes_AN_percent))
+    )
+    cov_ht.write(rmc_coverage_stats_ht.versions[freeze].path, overwrite=overwrite)
+
+
+def union_freeze_resources(
+    resource_names: List[str],
+    freezes: List[int],
+    output_freeze: int,
+    overwrite: bool,
+) -> None:
+    """
+    Union freeze-versioned resources across freezes and write to an output freeze.
+
+    Resource names must be keys of `UNIONABLE_RESOURCES` or `NO_BREAKS_RESOURCE`.
+
+    .. note::
+        Transcripts must be disjoint across input freezes, otherwise results for the
+        same transcript would be duplicated in the output.
+
+    :param resource_names: Names of resources to union.
+    :param freezes: Freeze numbers to union. Must contain at least two freezes.
+    :param output_freeze: Freeze number to write unioned resources to.
+    :param overwrite: Whether to overwrite output data.
+    :return: None; writes resources to output freeze paths.
+    """
+    valid_names = set(UNIONABLE_RESOURCES) | {NO_BREAKS_RESOURCE}
+    unknown_names = set(resource_names) - valid_names
+    if unknown_names:
+        raise DataException(
+            f"Cannot union {unknown_names}! Resource names must be one of"
+            f" {valid_names}."
+        )
+    if len(freezes) < 2:
+        raise DataException("At least two freezes are required to union!")
+    if output_freeze in freezes:
+        raise DataException(
+            f"Output freeze ({output_freeze}) cannot be one of the freezes being"
+            " unioned!"
+        )
+
+    def _check_transcripts_disjoint(
+        transcript_sets: List[Set[str]], resource_name: str
+    ) -> None:
+        """
+        Check that transcripts don't overlap across freezes.
+
+        :param transcript_sets: Set of transcripts from each freeze.
+        :param resource_name: Name of resource being checked.
+        :return: None; raises DataException if any transcripts overlap.
+        """
+        n_transcripts = sum(len(t) for t in transcript_sets)
+        n_unique = len(set().union(*transcript_sets))
+        if n_unique != n_transcripts:
+            raise DataException(
+                f"Transcripts overlap across freezes {freezes} for {resource_name}"
+                f" ({n_transcripts} transcripts, {n_unique} unique)!"
+            )
+
+    for name in resource_names:
+        logger.info("Unioning %s across freezes %s...", name, freezes)
+        if name == NO_BREAKS_RESOURCE:
+            transcript_sets = [
+                set(hl.eval(hl.experimental.read_expression(no_breaks_he_path(freeze))))
+                for freeze in freezes
+            ]
+            _check_transcripts_disjoint(transcript_sets, name)
+            hl.experimental.write_expression(
+                hl.literal(set().union(*transcript_sets)),
+                no_breaks_he_path(output_freeze),
+                overwrite=overwrite,
+            )
+            continue
+
+        resource = UNIONABLE_RESOURCES[name]
+        hts = [resource.versions[freeze].ht() for freeze in freezes]
+        # Globals are taken from the first Table in a union, so check they all match
+        table_globals = [hl.eval(ht.index_globals()) for ht in hts]
+        if any(g != table_globals[0] for g in table_globals[1:]):
+            raise DataException(
+                f"Globals don't match across freezes {freezes} for {name}:"
+                f" {table_globals}!"
+            )
+        _check_transcripts_disjoint(
+            [ht.aggregate(hl.agg.collect_as_set(ht.transcript)) for ht in hts], name
+        )
+        ht = hts[0].union(*hts[1:])
+        ht.write(resource.versions[output_freeze].path, overwrite=overwrite)
 
 
 def format_rmc_browser_ht(
