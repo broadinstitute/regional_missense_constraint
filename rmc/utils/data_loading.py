@@ -1,5 +1,6 @@
 """Utilities for loading resource data."""
 import gzip
+import io
 import logging
 import re
 from typing import Dict, List, Set
@@ -77,8 +78,15 @@ def get_gencode_transcript_tags(
     # decompression in `hl.hadoop_open` is deprecated as of hail 0.2.137), so the
     # gzip stream is decoded here. Avoiding `hl.hadoop_open` also keeps this parse
     # pure Python, i.e. runnable without a JVM.
-    with hfs.open(gtf_path, "rb") as raw, gzip.open(raw, "rt") as g:
-        for line in g:
+    # NOTE: The compressed bytes are buffered because the GTF is bgzipped (a series of
+    # gzip members), and decompressing straight from the remote stream makes gzip probe
+    # for another member at every member boundary, logging an aiohttp EOF warning per
+    # probe. Only the compressed file is held in memory; lines are still streamed.
+    with hfs.open(gtf_path, "rb") as f:
+        raw = io.BytesIO(f.read())
+    with gzip.GzipFile(fileobj=raw) as g:
+        for raw_line in g:
+            line = raw_line.decode("utf-8")
             if line.startswith("#"):
                 continue
             # GTF fields: seqname, source, feature, start, end, score, strand,
