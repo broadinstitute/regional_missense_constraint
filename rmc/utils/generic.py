@@ -39,6 +39,7 @@ def get_codon_lookup() -> hl.expr.DictExpression:
     Read in codon lookup table and return as dictionary (key: codon, value: amino acid).
 
     .. note::
+
         This is only necessary for testing on ExAC and should be replaced with VEP annotations.
 
     :return: DictExpression of codon translation.
@@ -197,6 +198,7 @@ def get_aa_from_context(
     Extract amino acid information from VEP context HT.
 
     .. note::
+
         Passing `intervals` prunes partitions at read, which is much faster than
         filtering after VEP processing. Intervals should cover every locus that needs
         an amino acid annotation (e.g. the full CDS of each desired transcript, since
@@ -571,6 +573,7 @@ def get_coverage_correction_expr(
     Get 'coverage' correction for expected variants count.
 
     .. note::
+
         - As of gnomAD v4, we use allele number (AN) as a proxy for coverage,
             because coverage in v4 was not computed from CRAMs.
         - Default high coverage cutoff taken from gnomAD LoF repo.
@@ -604,6 +607,7 @@ def get_plateau_model(
     Get model to determine adjustment to mutation rate based on locus type and CpG status.
 
     .. note::
+
         This function expects that the context Table has each plateau model (autosome, X, Y) added as global annotations.
 
     :param hl.expr.LocusExpression locus_expr: Locus expression.
@@ -648,6 +652,7 @@ def get_constraint_transcripts(
     https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
 
     .. note::
+
         - Function assumes that LoF constraint HT has been filtered to include only
             protein-coding transcripts.
 

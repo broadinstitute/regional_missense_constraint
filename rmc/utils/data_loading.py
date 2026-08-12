@@ -56,6 +56,7 @@ def get_gencode_transcript_tags(
     Get MANE and canonical tags per transcript from GENCODE GTF.
 
     .. note::
+
         - `hl.experimental.import_gtf` parses the attribute column into a dict, which
             keeps only the last of GENCODE's repeated `tag` attributes, so the
             attribute string is parsed directly here.
@@ -172,6 +173,7 @@ def create_transcript_cds(
     Create transcript reference Table with CDS annotations.
 
     .. note ::
+
         - This function was written to create the GRCh38 Table only;
             the GRCh37 HT was created using code in a notebook.
         - Assumes `preferred_transcript_id` is present in input HT
@@ -269,6 +271,7 @@ def create_transcript_ref(
     Function also optionally creates `transcript_cds` resource.
 
     .. note ::
+
         - This function was written to create the GRCh38 Table only;
             the GRCh37 HT was created using code in a notebook.
         - Assumes all `annotations` (except `hgnc_symbol` and `transcript_version`)
@@ -426,6 +429,7 @@ def import_clinvar(
     and triplosensitive genes.
 
     .. note::
+
         This function assumes that the ClinVar VCF has been added to the path
         f"{TEMP_PATH_WITH_FAST_DEL}/clinvar.tsv.gz".
 
@@ -583,6 +587,7 @@ def import_de_novo_variants(
     Import de novo missense variants.
 
     .. note::
+
         These files currently only exist for build GRCh37.
 
     :param bool overwrite: Whether to overwrite de novo Table.

@@ -40,6 +40,7 @@ def group_no_single_break_found_ht(
     This creates the input to the two simultaneous breaks search (`search_for_two_breaks`).
 
     .. note::
+
         - Expects that input Table is keyed by locus and section.
             This is *required*, as the function expects that loci are sorted in the input Table.
         - Expects that input Table is annotated with OE for transcript/transcript section and

@@ -195,6 +195,7 @@ def train_val_test_transcripts_path(
     By default, all training transcripts are returned.
 
     .. note::
+
         - `is_test` cannot be True if `fold` is defined.
         - `is_test` and `is_val` cannot be True simultaneously.
         - If `is_val` is True, `fold` must also be defined.
@@ -341,6 +342,7 @@ Sample count* breakdown:
 - 5,492 control siblings without NDDs
 
 .. note::
+
     Fu et al. note that:
     "one family is in both SPARK and unpublished ASC data, with different probands;
     one mother in the unpublished ASC data is also a proband in a different trio

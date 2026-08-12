@@ -320,6 +320,7 @@ def calculate_misbad(
     If `use_exac_oe_cutoffs` is set, will remove all rows with 0.6 < OE <= 0.8.
 
     .. note::
+
         Assumes table(s) containing all possible amino acid substitutions and their missense OE ratio exists.
 
     :param bool use_exac_oe_cutoffs: Whether to use the same missense OE cutoffs as in ExAC missense badness calculation.

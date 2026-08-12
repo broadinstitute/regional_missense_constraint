@@ -534,8 +534,20 @@ def main(args):
             # NOTE: `filter_to_canonical` is included here only to make
             # amino acid annotation with context HT more efficient if
             # RMC results were filtered to canonical transcripts
+            extra_transcripts = None
+            if args.extra_transcripts_he:
+                logger.info(
+                    "Reading additional covered transcripts from %s...",
+                    args.extra_transcripts_he,
+                )
+                extra_transcripts = hl.eval(
+                    hl.experimental.read_expression(args.extra_transcripts_he)
+                )
             format_rmc_browser_ht(
-                args.freeze, args.overwrite_temp, args.filter_to_canonical
+                args.freeze,
+                args.overwrite_temp,
+                args.filter_to_canonical,
+                extra_transcripts,
             )
 
     finally:
@@ -743,6 +755,14 @@ if __name__ == "__main__":
     create_release = subparsers.add_parser(
         "create-rmc-release",
         help="Create RMC browser release table.",
+    )
+    create_release.add_argument(
+        "--extra-transcripts-he",
+        help="""
+        Path to HailExpression containing transcripts covered by this freeze on top of
+        canonical transcripts, e.g. the transcripts unique to the MANE Select plus
+        clinical set. Used to annotate globals.
+        """,
     )
     args = parser.parse_args()
 

@@ -186,6 +186,7 @@ def prepare_pop_path_ht(
     predicted-haploinsufficient genes.
 
     .. note::
+
         Assumes tables containing all variants in canonical transcripts and their
         missense O/E exist (both duplicated and dedup versions).
 
@@ -663,6 +664,7 @@ def calculate_fitted_scores(
     Use MPC model chosen in `run_regressions` to calculate fitted scores for input Table.
 
     .. note::
+
         - Function will remove any rows with undefined MPC feature annotations from input Table.
         - Input Table is assumed to be keyed by ['locus', 'alleles'].
         - If the model uses transcript-specific features (e.g. RMC O/E) and there are variants
@@ -1045,6 +1047,7 @@ def liftover_mpc(
     Liftover MPC release from one genome build to another.
 
     .. note::
+
         - Function will only lift GRCh37 data to GRCh38.
 
     :param freeze: RMC data freeze number. Default is CURRENT_FREEZE.
