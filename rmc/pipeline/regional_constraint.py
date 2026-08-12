@@ -496,7 +496,12 @@ def main(args):
             )
             hl.default_reference("GRCh38")
             logger.info("Creating RMC coverage stats HT...")
-            create_rmc_coverage_stats(freeze=args.freeze, overwrite=args.overwrite)
+            create_rmc_coverage_stats(
+                overwrite_temp=args.overwrite_temp,
+                filter_to_canonical=args.filter_to_canonical,
+                freeze=args.freeze,
+                overwrite=args.overwrite,
+            )
 
         if args.command == "union-freezes":
             hl.init(

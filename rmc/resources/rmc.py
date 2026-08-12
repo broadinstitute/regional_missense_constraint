@@ -524,6 +524,9 @@ rmc_coverage_stats_ht = VersionedTableResource(
 )
 """
 Table containing exome AN percent per RMC region.
+
+Keyed on the amino acid annotated region coordinates released in `rmc_browser`,
+not on the raw region intervals in `rmc_results`.
 """
 
 mis_oe_percentiles = ExpressionResource(

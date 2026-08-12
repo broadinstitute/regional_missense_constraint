@@ -2317,6 +2317,8 @@ def get_exomes_an_percent_expr(
 
 
 def create_rmc_coverage_stats(
+    overwrite_temp: bool,
+    filter_to_canonical: bool = False,
     freeze: int = CURRENT_FREEZE,
     overwrite: bool = True,
     an_data_type: str = "exomes",
@@ -2327,8 +2329,18 @@ def create_rmc_coverage_stats(
     Median is calculated over CDS sites only. Output Table contains one row per RMC
     region plus one row spanning the CDS of each transcript without evidence of RMC.
 
+    .. note::
+        Regions are keyed on the amino acid annotated coordinates that get released,
+        not on the raw `rmc_results` intervals, so coverage describes the region the
+        browser actually displays.
+
     Table is used to flag low coverage regions in `format_rmc_browser_ht`.
 
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only.
+        Only used to annotate amino acids. Default is False.
     :param freeze: RMC freeze number. Default is `CURRENT_FREEZE`.
     :param overwrite: Whether to overwrite output Table. Default is True.
     :param an_data_type: gnomAD data type used to get all sites AN Table.
@@ -2336,8 +2348,27 @@ def create_rmc_coverage_stats(
     :return: None; writes Table to resource path.
     """
     logger.info("Getting RMC regions and transcripts without RMC...")
-    rmc_ht = rmc_results.versions[freeze].ht().select_globals().select()
+    rmc_ht = rmc_results.versions[freeze].ht().select_globals()
     build = get_reference_genome(rmc_ht.interval).name
+
+    # NOTE: Amino acid checkpoints are shared with `format_rmc_browser_ht`, so this
+    # annotation only runs once across the two steps if `overwrite_temp` is False
+    rmc_ht = rmc_ht.annotate(
+        start_coordinate=rmc_ht.interval.start,
+        stop_coordinate=rmc_ht.interval.end,
+    )
+    rmc_ht = annot_rmc_with_start_stop_aas(
+        rmc_ht, overwrite_temp, filter_to_canonical, freeze=freeze
+    )
+    rmc_ht = rmc_ht.key_by(
+        interval=hl.interval(
+            rmc_ht.start_coordinate,
+            rmc_ht.stop_coordinate,
+            includes_start=True,
+            includes_end=True,
+        ),
+        transcript=rmc_ht.transcript,
+    ).select()
 
     # Transcripts without evidence of RMC get a single region spanning their CDS
     no_rmc_transcripts = hl.eval(
@@ -2550,23 +2581,21 @@ def format_rmc_browser_ht(
     )
 
     # Annotate low coverage flag per region using coverage stats
-    # NOTE: Coverage HT uses browser HT intervals, not raw RMC region intervals
+    # NOTE: Coverage HT is keyed on the amino acid annotated coordinates released in
+    # the browser HT, not on raw RMC region intervals
     cov_ht = cov_ht.key_by("interval", "transcript")
     ht = ht.annotate(
-        interval2=hl.interval(
-            ht.start_coordinate,
-            ht.stop_coordinate,
-            includes_start=True,
-            includes_end=True,
-        )
+        low_coverage=cov_ht[
+            hl.interval(
+                ht.start_coordinate,
+                ht.stop_coordinate,
+                includes_start=True,
+                includes_end=True,
+            ),
+            ht.transcript,
+        ].median_exomes_AN_percent
+        < 90
     )
-    ht = ht.annotate(
-        low_coverage1=cov_ht[ht.interval, ht.transcript].median_exomes_AN_percent < 90
-    )
-    ht = ht.annotate(
-        low_coverage2=cov_ht[ht.interval2, ht.transcript].median_exomes_AN_percent < 90
-    )
-    ht = ht.transmute(low_coverage=hl.coalesce(ht.low_coverage1, ht.low_coverage2))
     ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/rmc_aa_cov_annot.ht", overwrite=True)
     cov_def_check = ht.aggregate(hl.agg.count_where(hl.is_missing(ht.low_coverage)))
     if cov_def_check != 0:
