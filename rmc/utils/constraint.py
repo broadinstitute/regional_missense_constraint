@@ -1500,7 +1500,11 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     :param freeze: RMC data freeze number.
     :return: Table with `oe` annotation.
     """
-    rmc_prep_ht = constraint_prep.ht().select_globals()
+    # NOTE: Constraint prep is read at `freeze` rather than at the default freeze.
+    # Freeze 3's constraint prep contains only the MANE Plus Clinical transcripts that
+    # freeze 2 didn't search, so reading the default freeze (2) here would leave
+    # `transcript_oe` missing for every freeze 3 transcript.
+    rmc_prep_ht = constraint_prep.versions[freeze].ht().select_globals()
     # Add transcript annotation from section field as this is required for joins to other tables
     rmc_prep_ht = rmc_prep_ht.annotate(transcript=rmc_prep_ht.section.split("_")[0])
     group_rmc_prep_ht = rmc_prep_ht.group_by("transcript").aggregate(
@@ -1764,7 +1768,7 @@ def annot_rmc_with_start_stop_aas(
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
-    return check_and_fix_missing_aa(ht, context_ht, overwrite_temp)
+    return check_and_fix_missing_aa(ht, context_ht, overwrite_temp, freeze=freeze)
 
 
 def join_and_fix_aa(ht: hl.Table, fix_ht: hl.Table) -> hl.Table:
@@ -1792,7 +1796,10 @@ def join_and_fix_aa(ht: hl.Table, fix_ht: hl.Table) -> hl.Table:
 
 
 def fix_transcript_start_stop_aas(
-    ht: hl.Table, context_ht: hl.Table, overwrite_temp: bool
+    ht: hl.Table,
+    context_ht: hl.Table,
+    overwrite_temp: bool,
+    freeze: int = CURRENT_FREEZE,
 ) -> hl.Table:
     """
     Fix missing start or stop amino acid at transcript start or stop coordinates.
@@ -1812,6 +1819,8 @@ def fix_transcript_start_stop_aas(
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
+    :param freeze: RMC freeze number. Used to name temporary data.
+        Default is `CURRENT_FREEZE`.
     :return: HT containing start and stop amino acids only for RMC regions that were
         previously missing amino acid information at transcript stops/ends.
     """
@@ -1840,7 +1849,7 @@ def fix_transcript_start_stop_aas(
         ),
     )
     miss_start_stop_ht = miss_start_stop_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/transcript_start_stop_missing_aa.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_transcript_start_stop_missing_aa.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -1862,7 +1871,7 @@ def fix_transcript_start_stop_aas(
         largest_aa=hl.agg.max(max_aa_ht.aa_num)
     )
     max_aa_grp_ht = max_aa_grp_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/max_aa_per_transcript_group.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_max_aa_per_transcript_group.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -1877,7 +1886,7 @@ def fix_transcript_start_stop_aas(
         largest_aa=max_aa_ht[miss_start_stop_ht.transcript].ref_aa,
     )
     miss_start_stop_ht = miss_start_stop_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/ts_missing_start_stop_largest.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_ts_missing_start_stop_largest.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -1897,7 +1906,7 @@ def fix_transcript_start_stop_aas(
     )
     ht = join_and_fix_aa(ht, miss_start_stop_ht)
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_transcript_start_stop_aa_fix.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_rmc_results_transcript_start_stop_aa_fix.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -1905,7 +1914,10 @@ def fix_transcript_start_stop_aas(
 
 
 def fix_region_start_stop_aas(
-    ht: hl.Table, context_ht: hl.Table, overwrite_temp: bool
+    ht: hl.Table,
+    context_ht: hl.Table,
+    overwrite_temp: bool,
+    freeze: int = CURRENT_FREEZE,
 ) -> hl.Table:
     """
     Fix missing start or stop amino acid information for non-transcript starts and stops.
@@ -1933,12 +1945,14 @@ def fix_region_start_stop_aas(
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
+    :param freeze: RMC freeze number. Used to name temporary data.
+        Default is `CURRENT_FREEZE`.
     :return: HT containing start and stop amino acids only for RMC regions that were
         previously missing amino acid information.
     """
     missing_ht = ht.filter(hl.is_missing(ht.start_aa) | hl.is_missing(ht.stop_aa))
     missing_ht = missing_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/region_start_stop_missing_aa.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_region_start_stop_missing_aa.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -1958,7 +1972,10 @@ def fix_region_start_stop_aas(
 
     # Create two versions of CDS HT to fix missing region start and stop AAs
     def _create_exon_position_ht(
-        cds_ht: hl.Table, fix_missing_start: bool, overwrite_temp: bool
+        cds_ht: hl.Table,
+        fix_missing_start: bool,
+        overwrite_temp: bool,
+        freeze: int = freeze,
     ) -> hl.Table:
         """
         Create Table keyed by either exon start or stop position.
@@ -1972,6 +1989,8 @@ def fix_region_start_stop_aas(
         :param overwrite_temp: Whether to overwrite temporary data.
             If False, will read existing temp data rather than overwriting.
             If True, will overwrite temp data.
+        :param freeze: RMC freeze number. Used to name temporary data.
+            Default is the enclosing function's `freeze`.
         :return: CDS HT keyed by either exon start or stop position and transcript.
         """
         if fix_missing_start:
@@ -1979,7 +1998,9 @@ def fix_region_start_stop_aas(
             # Region starts missing AAs need to get adjusted to use the AA from the next
             # exon start (this will now be from the previous row due to the reorder
             # and prev nonnull scan)
-            checkpoint_path = f"{TEMP_PATH_WITH_FAST_DEL}/cds_start_fix.ht"
+            checkpoint_path = (
+                f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_cds_start_fix.ht"
+            )
             cds_ht = cds_ht.order_by(
                 hl.asc(cds_ht.transcript), hl.desc(cds_ht.exon_start)
             )
@@ -1992,7 +2013,9 @@ def fix_region_start_stop_aas(
             # (the previous key is interval and transcript)
             # Region stops missing AAs need to get adjusted to use the AA from the
             # previous exon stop
-            checkpoint_path = f"{TEMP_PATH_WITH_FAST_DEL}/cds_stop_fix.ht"
+            checkpoint_path = (
+                f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_cds_stop_fix.ht"
+            )
             cds_ht = cds_ht.order_by("transcript", "exon_stop")
             cds_ht = cds_ht.annotate(
                 prev_exon_stop=hl.scan._prev_nonnull(cds_ht.exon_stop)
@@ -2008,10 +2031,16 @@ def fix_region_start_stop_aas(
 
     # Get relevant exon start and stop positions
     start_fix_ht = _create_exon_position_ht(
-        cds_ht=cds_ht, fix_missing_start=True, overwrite_temp=overwrite_temp
+        cds_ht=cds_ht,
+        fix_missing_start=True,
+        overwrite_temp=overwrite_temp,
+        freeze=freeze,
     )
     stop_fix_ht = _create_exon_position_ht(
-        cds_ht=cds_ht, fix_missing_start=False, overwrite_temp=overwrite_temp
+        cds_ht=cds_ht,
+        fix_missing_start=False,
+        overwrite_temp=overwrite_temp,
+        freeze=freeze,
     )
     missing_ht = missing_ht.annotate(
         next_exon_start=hl.or_missing(
@@ -2048,7 +2077,7 @@ def fix_region_start_stop_aas(
         ),
     )
     missing_ht = missing_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/region_start_stop_missing_aa_exon_annot.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_region_start_stop_missing_aa_exon_annot.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -2078,7 +2107,7 @@ def fix_region_start_stop_aas(
     )
     ht = join_and_fix_aa(ht, missing_ht)
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_all_aa_fix.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_rmc_results_all_aa_fix.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -2086,7 +2115,10 @@ def fix_region_start_stop_aas(
 
 
 def check_and_fix_missing_aa(
-    ht: hl.Table, context_ht: hl.Table, overwrite_temp: bool
+    ht: hl.Table,
+    context_ht: hl.Table,
+    overwrite_temp: bool,
+    freeze: int = CURRENT_FREEZE,
 ) -> hl.Table:
     """
     Check for and fix any missing amino acid information in RMC regions HT.
@@ -2098,6 +2130,8 @@ def check_and_fix_missing_aa(
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
+    :param freeze: RMC freeze number. Used to name temporary data.
+        Default is `CURRENT_FREEZE`.
     :return: Fixed RMC regions HT annotated with amino acid information
         for region starts and stops, including starts and stops that are previously
         missing annotations.
@@ -2145,8 +2179,8 @@ def check_and_fix_missing_aa(
     # Some starts and stops had uninformative amino acid information in the VEP context HT:
     # Amino acid was annotated as "X"
     # VEP context HT was created using VEP version 85, GENCODE version 19
-    ht = fix_transcript_start_stop_aas(ht, context_ht, overwrite_temp)
-    ht = fix_region_start_stop_aas(ht, context_ht, overwrite_temp)
+    ht = fix_transcript_start_stop_aas(ht, context_ht, overwrite_temp, freeze=freeze)
+    ht = fix_region_start_stop_aas(ht, context_ht, overwrite_temp, freeze=freeze)
 
     # Double check that all rows have defined AA annotations
     missing_ht = _missing_aa_check(ht)
