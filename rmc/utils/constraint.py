@@ -2252,6 +2252,17 @@ def add_globals_rmc_browser(
     if extra_transcripts:
         all_transcripts = all_transcripts.union(hl.literal(extra_transcripts))
 
+    # Catch a freeze covering non-canonical transcripts that was released without
+    # `extra_transcripts`, which would drop those transcripts from the released sets
+    # NOTE: This can't catch the case where none of the missing transcripts have RMC
+    uncovered_transcripts = hl.eval(rmc_transcripts.difference(all_transcripts))
+    if uncovered_transcripts:
+        raise DataException(
+            f"{len(uncovered_transcripts)} transcripts with RMC results aren't in the"
+            f" covered transcript set: {uncovered_transcripts}. Pass them as"
+            " `extra_transcripts` if this freeze covers non-canonical transcripts."
+        )
+
     # Restrict outlier transcripts to the transcripts this freeze covers
     outlier_transcripts = get_constraint_transcripts(outlier=True).intersection(
         all_transcripts
@@ -2371,7 +2382,7 @@ def create_rmc_coverage_stats(
         browser actually displays.
 
     Table is used to flag low coverage regions in `format_rmc_browser_ht`, so this
-    function must run after `finalize` and before `create_rmc_release_downloads`.
+    function must run after `finalize` and before the browser release step.
 
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.

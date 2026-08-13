@@ -191,7 +191,6 @@ def get_aa_from_context(
     keep_transcripts: Set[str] = None,
     intervals: List[hl.utils.Interval] = None,
     n_partitions: int = 10000,
-    filter_to_canonical: bool = False,
     vep_version: str = VEP_VERSION,
 ) -> hl.Table:
     """
@@ -218,13 +217,12 @@ def get_aa_from_context(
         Default is None.
     :param n_partitions: Desired number of partitions for context HT.
         Only applied if `intervals` is None. Default is 10,000.
-    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
     :param vep_version: VEP version to use. Default is `VEP_VERSION`.
     :return: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
     """
     logger.info(
-        "Reading in VEP context HT and filtering to coding effects in canonical"
-        " transcripts..."
+        "Reading in VEP context HT and filtering to coding effects in protein-coding"
+        " Ensembl transcripts..."
     )
     # TODO: Add option to filter to non-outliers if still desired
     # Drop globals and select only VEP transcript consequences field
@@ -244,7 +242,11 @@ def get_aa_from_context(
         t=ht,
         vep_root="vep",
         synonymous=False,
-        canonical=filter_to_canonical,
+        # NOTE: Never filtered to canonical transcripts -- `keep_transcripts` and
+        # `intervals` already restrict the context HT, and filtering here would drop
+        # non-canonical transcripts (e.g. MANE Plus Clinical) before their amino acids
+        # are looked up
+        canonical=False,
         protein_coding=True,
         ensembl_only=True,
         filter_empty_csq=True,
