@@ -45,6 +45,7 @@ from rmc.resources.reference_data import (
     transcript_ref,
 )
 from rmc.resources.resource_utils import (
+    CONSTRAINT_VERSION,
     CURRENT_BUILD,
     CURRENT_GNOMAD_VERSION,
     KEEP_CODING_CSQ,
@@ -591,6 +592,7 @@ def create_constraint_prep_ht(
     overwrite: bool = True,
     directory_post_fix: str = "coverage_corrected",
     path_post_fix: str = "coverage_corrected",
+    constraint_version: str = CONSTRAINT_VERSION,
     variant_idx: int = 0,
     freeze: int = CURRENT_FREEZE,
     keep_transcripts: Set[str] = None,
@@ -613,6 +615,8 @@ def create_constraint_prep_ht(
     :param overwrite: Whether to overwrite Table. Default is True.
     :param directory_post_fix: Directory suffix for reading per-variant expected dataset. Default is "coverage_corrected".
     :param path_post_fix: File suffix to use for reading per-variant expected dataset. Default is "coverage_corrected".
+    :param constraint_version: gnomAD constraint version used to read the per-variant
+        expected dataset. Default is `CONSTRAINT_VERSION`.
     :param variant_idx: Index of observed and expected arrays to use. Default is 0 (corresponds to counts calculated on gnomAD-wide / "global" frequencies).
     :param freeze: RMC freeze number. Default is `CURRENT_FREEZE`.
     :param keep_transcripts: Desired set of transcripts to search.
@@ -624,7 +628,9 @@ def create_constraint_prep_ht(
     # The resource path below is called from an alternative (non-main) branch of gnomad-constraint repo:
     # https://github.com/broadinstitute/gnomad-constraint/blob/fa2412e03b86bee714d9a6b6ed44e5a0bd9320f5/gnomad_constraint/resources/resource_utils.py#L410
     ht = get_per_variant_expected_dataset(
-        directory_post_fix=directory_post_fix, path_post_fix=path_post_fix
+        directory_post_fix=directory_post_fix,
+        path_post_fix=path_post_fix,
+        version=constraint_version,
     ).ht()
     # Filter to Ensembl transcripts in the desired transcript set
     # NOTE: All MANE Select transcripts in GENCODE v39 are canonical, but not all canonical transcripts are MANE Select
