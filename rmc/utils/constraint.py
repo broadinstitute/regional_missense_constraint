@@ -2397,8 +2397,9 @@ def create_rmc_coverage_stats(
     rmc_ht = rmc_results.versions[freeze].ht().select_globals()
     build = get_reference_genome(rmc_ht.interval).name
 
-    # NOTE: Amino acid checkpoints are shared with `format_rmc_browser_ht`, so this
-    # annotation only runs once across the two steps if `overwrite_temp` is False
+    # NOTE: Amino acid checkpoints are freeze scoped, so they are only shared with
+    # `format_rmc_browser_ht` when both steps run on the same freeze. Releasing a
+    # unioned freeze recomputes this annotation over every transcript in the union
     rmc_ht = rmc_ht.annotate(
         start_coordinate=rmc_ht.interval.start,
         stop_coordinate=rmc_ht.interval.end,
@@ -2464,9 +2465,17 @@ def create_rmc_coverage_stats(
         all_sites_an(an_data_type).path,
         _intervals=repartition_for_join(cds_loci_path),
     )
+    # NOTE: The all sites AN Table only spans the exome calling intervals, so CDS loci
+    # outside them have no row (e.g. 508 chr21 CDS loci across 11 transcripts). Those
+    # loci have no exome coverage and are counted as 0%; leaving them missing would
+    # drop them from the median (`hl.median` ignores missing values) and overstate
+    # coverage for partially covered regions.
     cds_ht = cds_ht.annotate(
-        exomes_AN_percent=get_exomes_an_percent_expr(
-            cds_ht.locus, an_ht[cds_ht.locus].AN, an_ht.index_globals()
+        exomes_AN_percent=hl.or_else(
+            get_exomes_an_percent_expr(
+                cds_ht.locus, an_ht[cds_ht.locus].AN, an_ht.index_globals()
+            ),
+            0,
         )
     )
 
