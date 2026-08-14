@@ -599,18 +599,17 @@ def create_constraint_prep_ht(
     """
     Create locus-level constraint prep Table from filtered context Table.
 
-    Function will remove transcripts with zero expected values transcript-wide
-    but will not do any additional transcript filtering.
-    Transcripts need to be filtered to canonical only if desired in upstream step to
-    create the `filtered_context` Table.
+    Function filters to Ensembl transcripts in `keep_transcripts`, or to canonical
+    Ensembl transcripts if `keep_transcripts` is unset, and removes transcripts with
+    zero expected values transcript-wide.
 
     This Table is used in the first step of regional constraint breakpoint search.
 
     Table can be filtered to variants with specific consequences before aggregation by locus.
 
-    :param filter_csq: Whether to filter Table to specific consequences. Default is True.
-    :param n_partitions: Number of desired partitions for the Table. Default is 15000.
-    :param csq: Desired consequences. Default is {`MISSENSE`}. Must be specified if filter is True.
+    :param filter_csq: Consequences to filter to before aggregating by locus.
+        If empty, no consequence filtering is done. Default is {`MISSENSE`}.
+    :param n_partitions: Number of desired partitions for the Table. Default is 10000.
     :param overwrite: Whether to overwrite Table. Default is True.
     :param directory_post_fix: Directory suffix for reading per-variant expected dataset. Default is "coverage_corrected".
     :param path_post_fix: File suffix to use for reading per-variant expected dataset. Default is "coverage_corrected".
@@ -673,8 +672,12 @@ def create_constraint_prep_ht(
         observed=hl.agg.sum(ht.observed),
         expected=hl.agg.sum(ht.expected),
     )
+    # NOTE: Temp paths are freeze scoped so concurrent freezes don't collide, and are
+    # always recomputed: their contents also depend on `filter_csq`, `variant_idx`, and
+    # `keep_transcripts`, which the path doesn't capture
     transcript_group = transcript_group.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/transcript_group.ht", overwrite=overwrite
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_transcript_group.ht",
+        overwrite=True,
     )
     zero_exp = transcript_group.filter(transcript_group.expected == 0)
     if zero_exp.count() > 0:
@@ -692,7 +695,8 @@ def create_constraint_prep_ht(
 
     ht = ht.annotate(expected=hl.if_else(ht.expected == 0, 1e-09, ht.expected))
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/transcripts_nonzero_exp.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_transcripts_nonzero_exp.ht",
+        overwrite=True,
     )
 
     logger.info("Adding section annotation...")
