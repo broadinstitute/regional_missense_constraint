@@ -83,6 +83,13 @@ Any breakpoint combinations with a chi square value less than this threshold
 will not be emitted for storage.
 """
 
+MIN_EXOMES_AN_PERCENT = 90
+"""
+Minimum median exome AN percent for a region to be considered well covered.
+
+Regions below this threshold are flagged as low coverage in the browser release.
+"""
+
 MIN_EXP_MIS = 16.0
 """
 Minimum number of expected missense variants within each RMC section.

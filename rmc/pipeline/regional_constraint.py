@@ -654,6 +654,9 @@ if __name__ == "__main__":
         help="""
         Path to HailExpression containing the set of transcripts to search.
         If not specified, canonical transcripts will be searched.
+        Use `mane_plus_clinical_transcripts_path` (written by
+        `create-mane-plus-clinical-he`) when searching the transcripts unique to the
+        MANE Select plus clinical set.
         """,
     )
     prep_csq = parser.add_mutually_exclusive_group()
@@ -760,6 +763,9 @@ if __name__ == "__main__":
         Path to HailExpression containing transcripts covered by this freeze on top of
         canonical transcripts, e.g. the transcripts unique to the MANE Select plus
         clinical set. Used to annotate globals.
+        Use `mane_plus_clinical_transcripts_path` (written by
+        `create-mane-plus-clinical-he`) when releasing a freeze that covers those
+        transcripts.
         """,
     )
     args = parser.parse_args()
