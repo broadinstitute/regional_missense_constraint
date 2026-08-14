@@ -85,6 +85,7 @@ from rmc.utils.generic import (
     filter_to_region_type,
     get_aa_from_context,
     get_annotations_from_context_ht_vep,
+    get_constraint_transcript_sets,
     get_constraint_transcripts,
     get_coverage_correction_expr,
     get_gnomad_public_release,
@@ -2222,9 +2223,11 @@ def add_globals_rmc_browser(
 
     Function is used when reformatting RMC results for browser release.
 
-    Annotates two structs:
-        - `transcript_counts`: Counts of total transcripts and transcripts with/without evidence of RMC (QC pass only).
-        - `transcript_counts_all`: Counts of all transcripts, transcripts with/without evidence of RMC, and outlier transcripts.
+    Annotates two structs (each field is a set of transcript IDs, not a count):
+        - `transcripts`: Sets across QC-pass transcripts only — all QC-pass transcripts and those with/without evidence of RMC.
+        - `all_transcripts`: Sets across all transcripts — all transcripts, those with/without evidence of RMC, outlier
+            transcripts (overall, no-exp, and count), and transcripts without evidence of RMC that carry a low coverage
+            and/or low mappability constraint gene flag.
 
     .. note::
 
@@ -2245,10 +2248,30 @@ def add_globals_rmc_browser(
     # Get all transcripts with evidence of RMC
     rmc_transcripts = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.transcript)))
 
-    # Get all transcripts covered by this freeze from constraint HT
-    all_transcripts = get_constraint_transcripts(
-        all_transcripts=True, filter_to_canonical=True
+    # Derive every constraint-HT transcript set in a single aggregation pass.
+    # Outlier transcripts are also split into those missing at least one class of
+    # variation ("no_exp" constraint flags) and those with outlier counts of variation,
+    # and transcripts flagged for low coverage or low mappability are kept.
+    # NOTE: Only the covered set is scoped to canonical here; every other set is scoped
+    # by intersecting with it below, so `extra_transcripts` keep their flags
+    constraint_sets = get_constraint_transcript_sets(
+        {
+            "all": {"all_transcripts": True, "filter_to_canonical": True},
+            "outlier": {"outlier": True},
+            "no_exp_outlier": {"outlier": True, "outlier_class": "no_exp"},
+            "count_outlier": {"outlier": True, "outlier_class": "count"},
+            "low_coverage": {
+                "all_transcripts": True,
+                "gene_flag": "low_exome_coverage",
+            },
+            "low_mappability": {
+                "all_transcripts": True,
+                "gene_flag": "low_exome_mapping_quality",
+            },
+        },
     )
+    # Get all transcripts covered by this freeze from constraint HT
+    all_transcripts = constraint_sets["all"]
     if extra_transcripts:
         all_transcripts = all_transcripts.union(hl.literal(extra_transcripts))
 
@@ -2263,18 +2286,21 @@ def add_globals_rmc_browser(
             " `extra_transcripts` if this freeze covers non-canonical transcripts."
         )
 
-    # Restrict outlier transcripts to the transcripts this freeze covers
-    outlier_transcripts = get_constraint_transcripts(outlier=True).intersection(
+    # Restrict every other set to the transcripts this freeze covers
+    outlier_transcripts = constraint_sets["outlier"].intersection(all_transcripts)
+    no_exp_outlier_transcripts = constraint_sets["no_exp_outlier"].intersection(
         all_transcripts
     )
-    # Split outlier transcripts into those missing at least one class of variation
-    # ("no_exp" constraint flags) and those with outlier counts of variation
-    no_exp_outlier_transcripts = get_constraint_transcripts(
-        outlier=True, outlier_class="no_exp"
-    ).intersection(all_transcripts)
-    count_outlier_transcripts = get_constraint_transcripts(
-        outlier=True, outlier_class="count"
-    ).intersection(all_transcripts)
+    count_outlier_transcripts = constraint_sets["count_outlier"].intersection(
+        all_transcripts
+    )
+    low_coverage_transcripts = constraint_sets["low_coverage"].intersection(
+        all_transcripts
+    )
+    low_mappability_transcripts = constraint_sets["low_mappability"].intersection(
+        all_transcripts
+    )
+    flagged_transcripts = low_coverage_transcripts.union(low_mappability_transcripts)
     qc_pass_transcripts = all_transcripts.difference(outlier_transcripts)
 
     ht = ht.select_globals()
@@ -2291,6 +2317,15 @@ def add_globals_rmc_browser(
             all_outlier_transcripts=outlier_transcripts,
             no_exp_outlier_transcripts=no_exp_outlier_transcripts,
             count_outlier_transcripts=count_outlier_transcripts,
+            transcripts_no_rmc_low_exome_coverage=low_coverage_transcripts.difference(
+                rmc_transcripts
+            ),
+            transcripts_no_rmc_low_exome_mapping_quality=low_mappability_transcripts.difference(
+                rmc_transcripts
+            ),
+            transcripts_no_rmc_with_flag=flagged_transcripts.difference(
+                rmc_transcripts
+            ),
         ),
     )
 
@@ -2299,34 +2334,40 @@ def annot_rmc_with_percentile(ht: hl.Table, oe_field: str) -> hl.Table:
     """
     Annotate input HT with missense OE depletion percentile using `mis_oe_percentiles` resource.
 
-    This resource is a list with 100 elements corresponding to missense OE for that percentile.
+    This resource is a list of 100 missense OE values, sorted in ascending order, where the
+    index corresponds to the missense OE percentile (index 0 = percentile 1, ...,
+    index 99 = percentile 100).
 
-    Percentiles to annotate are:
-        - <=1
-        - <=5
-        - <=10
-        - <=15
-        - <=25
-        - <=50
-        - <=75
+    The annotated percentile is the smallest percentile (index + 1) whose missense OE value
+    is larger than or equal to the provided OE. For example, a missense OE of 0.5469 is
+    annotated as percentile 7.
+
+    Any OE greater than the largest percentile value is annotated as percentile 100, and a
+    warning is logged because this is not expected. Missing OE values are annotated as missing.
 
     :param ht: Input HT with RMC information.
     :param oe_field: Field name of OE to use for percentile annotation.
     :return: HT with missense OE depletion percentile annotated per RMC region.
     """
     mis_oe_pcts = hl.eval(mis_oe_percentiles.he())
+    max_oe = mis_oe_pcts[-1]
     oe = ht[oe_field]
-    return ht.annotate(
-        mis_oe_percentile=hl.case()
-        .when(oe <= mis_oe_pcts[0], "<=1")
-        .when(oe <= mis_oe_pcts[4], "<=5")
-        .when(oe <= mis_oe_pcts[9], "<=10")
-        .when(oe <= mis_oe_pcts[14], "<=15")
-        .when(oe <= mis_oe_pcts[24], "<=25")
-        .when(oe <= mis_oe_pcts[49], "<=50")
-        .when(oe <= mis_oe_pcts[74], "<=75")
-        .default(">75")
-    )
+
+    # Warn if any OE is above the largest percentile value, since this is not expected
+    n_above_max = ht.aggregate(hl.agg.count_where(hl.is_defined(oe) & (oe > max_oe)))
+    if n_above_max > 0:
+        logger.warning(
+            "%i row(s) have a missense O/E (%s) > the largest percentile value (%f);"
+            " these will be annotated as percentile 100.",
+            n_above_max,
+            oe_field,
+            max_oe,
+        )
+
+    # Find the smallest index whose percentile value is larger than or equal to the provided
+    # OE. The percentile is that index + 1 (percentiles start at 1).
+    match = hl.enumerate(hl.literal(mis_oe_pcts)).find(lambda t: t[1] >= oe)
+    return ht.annotate(mis_oe_percentile=hl.if_else(oe > max_oe, 100, match[0] + 1))
 
 
 def get_exomes_an_percent_expr(
@@ -2602,6 +2643,9 @@ def format_rmc_browser_ht(
             'all_outlier_transcripts': set<str>
             'no_exp_outlier_transcripts': set<str>
             'count_outlier_transcripts': set<str>
+            'transcripts_no_rmc_low_exome_coverage': set<str>
+            'transcripts_no_rmc_low_exome_mapping_quality': set<str>
+            'transcripts_no_rmc_with_flag': set<str>
         }
     ----------------------------------------
     Row fields:
@@ -2618,7 +2662,7 @@ def format_rmc_browser_ht(
             p: float64,
             low_coverage: bool,
             no_color: bool,
-            percentile: str,
+            percentile: int32,
         }>
     ----------------------------------------
     Key: ['transcript']
