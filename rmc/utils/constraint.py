@@ -46,7 +46,6 @@ from rmc.resources.reference_data import (
 )
 from rmc.resources.resource_utils import (
     CONSTRAINT_VERSION,
-    CURRENT_BUILD,
     CURRENT_GNOMAD_VERSION,
     KEEP_CODING_CSQ,
     MISSENSE,
@@ -1706,39 +1705,32 @@ def create_context_with_oe(
 
 
 def get_transcript_cds_intervals(
-    transcripts: Set[str], build: str = CURRENT_BUILD
+    transcripts: Set[str],
 ) -> List[hl.utils.Interval]:
     """
-    Get one interval spanning the CDS of each input transcript.
+    Get the CDS exon intervals of each input transcript.
 
     Used to prune partitions when reading the VEP context HT.
 
     .. note::
 
-        `transcript_ref` stores coordinates as a contig string and integer positions
-        rather than loci, so the build can't be inferred and must be specified.
+        These are per exon intervals, not one interval per transcript. A transcript's
+        first to last coding coordinate spans its introns, which for large transcripts
+        is more than an order of magnitude more loci than the coding sequence itself.
 
     :param transcripts: Set of transcripts.
-    :param build: Reference genome build. Default is `CURRENT_BUILD`.
-    :return: List of intervals spanning each transcript's CDS.
+    :return: List of CDS exon intervals.
     """
-    ht = transcript_ref.ht()
+    ht = transcript_cds.ht()
     ht = ht.filter(hl.literal(transcripts).contains(ht.transcript))
-    coords = ht.key_by().select("transcript", "chrom", "cds_start", "cds_end").collect()
-    missing = transcripts - {c.transcript for c in coords}
+    rows = ht.key_by().select("transcript", "interval").collect()
+    missing = transcripts - {r.transcript for r in rows}
     if missing:
         raise DataException(
-            f"{len(missing)} transcripts are missing from `transcript_ref`, so their"
+            f"{len(missing)} transcripts are missing from `transcript_cds`, so their"
             f" loci would be dropped from the context HT: {missing}"
         )
-    return [
-        hl.utils.Interval(
-            hl.Locus(c.chrom, c.cds_start, reference_genome=build),
-            hl.Locus(c.chrom, c.cds_end, reference_genome=build),
-            includes_end=True,
-        )
-        for c in coords
-    ]
+    return [r.interval for r in rows]
 
 
 def annot_rmc_with_start_stop_aas(
@@ -1766,16 +1758,14 @@ def annot_rmc_with_start_stop_aas(
     logger.info("Getting amino acid information from context HT...")
     rmc_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
     # Get amino acid information from context table for variants in chosen transcripts
-    # NOTE: Intervals span each transcript's full CDS rather than only region
-    # starts/stops because the amino acid fixes below need exon boundaries and
-    # transcript-wide maximum amino acid numbers
+    # NOTE: Intervals cover every CDS exon, not just region starts/stops, because the
+    # amino acid fixes below need exon boundaries and transcript-wide maximum amino
+    # acid numbers
     context_ht = get_aa_from_context(
         overwrite_temp=overwrite_temp,
         freeze=freeze,
         keep_transcripts=rmc_transcripts,
-        intervals=get_transcript_cds_intervals(
-            rmc_transcripts, build=get_reference_genome(ht.interval).name
-        ),
+        intervals=get_transcript_cds_intervals(rmc_transcripts),
     )
     # Get reference AA label for each locus-transcript combination in context HT
     context_ht = get_ref_aa(

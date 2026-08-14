@@ -251,16 +251,21 @@ def get_aa_from_context(
         ensembl_only=True,
         filter_empty_csq=True,
     )
-    ht = explode_by_vep_annotation(ht, "transcript_consequences")
-    ht = ht.select("transcript_consequences")
-
+    # Filter consequences before exploding so only the desired transcripts are expanded
     if keep_transcripts:
         logger.info("Filtering to desired transcripts only...")
-        ht = ht.filter(
-            hl.literal(keep_transcripts).contains(
-                ht.transcript_consequences.transcript_id
+        keep_transcripts_expr = hl.literal(keep_transcripts)
+        ht = ht.annotate(
+            vep=ht.vep.annotate(
+                transcript_consequences=ht.vep.transcript_consequences.filter(
+                    lambda csq: keep_transcripts_expr.contains(csq.transcript_id)
+                )
             )
         )
+        ht = ht.filter(hl.len(ht.vep.transcript_consequences) > 0)
+
+    ht = explode_by_vep_annotation(ht, "transcript_consequences")
+    ht = ht.select("transcript_consequences")
 
     # Remove consequences that are non-coding in this transcript
     # NOTE: HT is exploded above, so each row is a single transcript's consequence;
