@@ -50,7 +50,6 @@ def group_no_single_break_found_ht(
         have a single significant break.
     :param out_ht_path: Path to output Table grouped by transcripts/transcript sections with lists
         of cumulative observed, expected missense counts.
-    :param group_str: Field used to group observed and expected values.
     :param overwrite: Whether to overwrite existing grouped Table.
     :return: None; writes Table grouped by transcript/transcript section with cumulative observed, expected missense counts
         and all positions collected into lists to resource path.

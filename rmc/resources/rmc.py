@@ -194,7 +194,9 @@ constraint_prep = VersionedTableResource(
 """
 Locus-level Table used in first step of regional constraint calculation.
 
-Filtered to only one specific coding variant consequence but contains all canonical, protein-coding transcripts.
+Filtered to only one specific coding variant consequence but contains every protein-coding
+transcript searched for that freeze: all canonical transcripts by default, or the set passed
+via `keep_transcripts`, e.g. the non-canonical MANE Plus Clinical transcripts in freeze 3.
 
 v4.1 schema:
 ----------------------------------------
@@ -534,6 +536,9 @@ Table containing exome AN percent per RMC region.
 
 Keyed on the amino acid annotated region coordinates released in `rmc_browser`,
 not on the raw region intervals in `rmc_results`.
+
+Contains RMC regions only. Transcripts without evidence of RMC take their coverage
+from the public gene constraint Table's `low_exome_coverage` gene flag instead.
 """
 
 mis_oe_percentiles = ExpressionResource(

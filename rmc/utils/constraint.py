@@ -2414,13 +2414,15 @@ def create_rmc_coverage_stats(
     """
     Create Table of median gnomAD exome AN percent per RMC region.
 
-    Output Table contains one row per RMC region plus one row spanning the CDS of each
-    transcript without evidence of RMC, and flags each row as low coverage.
+    Output Table contains one row per RMC region, flagged as low coverage using a
+    median AN percent calculated over CDS sites only.
 
-    RMC regions are flagged using a median AN percent calculated over CDS sites only.
-    Transcripts without evidence of RMC have no searched regions, so they are flagged
-    using the gene level `low_exome_coverage` constraint flag instead and their
-    `median_exomes_AN_percent` is missing.
+    .. note::
+
+        Transcripts without evidence of RMC are deliberately left out. They have no
+        searched regions, and the public gene constraint Table already carries their
+        coverage as the gene level `low_exome_coverage` flag, which
+        `add_globals_rmc_browser` releases as `transcripts_no_rmc_low_exome_coverage`.
 
     .. note::
 
@@ -2440,9 +2442,8 @@ def create_rmc_coverage_stats(
         Default is "exomes".
     :return: None; writes Table to resource path.
     """
-    logger.info("Getting RMC regions and transcripts without RMC...")
+    logger.info("Getting RMC regions...")
     rmc_ht = rmc_results.versions[freeze].ht().select_globals()
-    build = get_reference_genome(rmc_ht.interval).name
 
     # NOTE: Amino acid checkpoints are freeze scoped, so they are only shared with
     # `format_rmc_browser_ht` when both steps run on the same freeze. Releasing a
@@ -2516,35 +2517,6 @@ def create_rmc_coverage_stats(
     cov_ht = cov_ht.annotate(
         low_coverage=cov_ht.median_exomes_AN_percent < MIN_EXOMES_AN_PERCENT
     )
-
-    logger.info("Adding transcripts without evidence of RMC...")
-    # Transcripts without evidence of RMC get a single row spanning their CDS. Their
-    # coverage comes from the gene level constraint flag rather than a median over CDS
-    # sites, so `median_exomes_AN_percent` is missing for these rows
-    no_rmc_transcripts = hl.eval(
-        hl.experimental.read_expression(no_breaks_he_path(freeze))
-    )
-    low_coverage_transcripts = get_constraint_transcripts(
-        all_transcripts=True, gene_flag="low_exome_coverage"
-    )
-    no_rmc_ht = transcript_ref.ht()
-    no_rmc_ht = no_rmc_ht.filter(
-        hl.literal(no_rmc_transcripts).contains(no_rmc_ht.transcript)
-    )
-    no_rmc_ht = no_rmc_ht.select(
-        interval=hl.locus_interval(
-            no_rmc_ht.chrom,
-            no_rmc_ht.cds_start,
-            no_rmc_ht.cds_end,
-            includes_end=True,
-            reference_genome=build,
-        )
-    ).key_by("interval", "transcript")
-    no_rmc_ht = no_rmc_ht.select(
-        median_exomes_AN_percent=hl.missing(cov_ht.median_exomes_AN_percent.dtype),
-        low_coverage=low_coverage_transcripts.contains(no_rmc_ht.transcript),
-    )
-    cov_ht = cov_ht.union(no_rmc_ht)
     cov_ht.write(rmc_coverage_stats_ht.versions[freeze].path, overwrite=overwrite)
 
 

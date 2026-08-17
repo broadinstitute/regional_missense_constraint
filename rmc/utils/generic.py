@@ -736,9 +736,9 @@ def get_constraint_transcripts(
         - The `gene_flags` field used by `gene_flag` does not exist in constraint HT
             versions prior to 4.1.1, so `gene_flag` can only be used with 4.1.1+.
 
-    :param all_transcripts: Whether to filter to all transcripts. Will only keep
-        all transcripts if `filter_to_canonical` is False, otherwise toggles
-        between removing or keeping non-outlier transcripts. Default is False.
+    :param all_transcripts: Whether to skip the outlier filter and keep transcripts
+        regardless of their constraint flags, which makes `outlier` and `outlier_class`
+        no-ops. `filter_to_canonical` and `gene_flag` still apply. Default is False.
     :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
     :param outlier: Whether to filter LoF constraint HT to outlier transcripts (if True),
         or QC-pass transcripts (if False). Applies only if `all_transcripts` is False.
