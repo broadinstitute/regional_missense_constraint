@@ -2476,9 +2476,7 @@ def create_rmc_coverage_stats(
 
     logger.info("Exploding CDS intervals to loci...")
     transcripts = regions_ht.aggregate(hl.agg.collect_as_set(regions_ht.transcript))
-    # NOTE: `transcript_cds` globals are dropped so this Table can be unioned with
-    # freezes written before this function existed, which have no globals
-    cds_ht = transcript_cds.ht().select_globals()
+    cds_ht = transcript_cds.ht()
     cds_ht = cds_ht.filter(hl.literal(transcripts).contains(cds_ht.transcript))
     cds_ht = explode_intervals_to_loci(cds_ht, interval_field="interval")
 
@@ -2525,6 +2523,9 @@ def create_rmc_coverage_stats(
     cov_ht = cds_ht.group_by("interval", "transcript").aggregate(
         median_exomes_AN_percent=hl.median(hl.agg.collect(cds_ht.exomes_AN_percent))
     )
+    # NOTE: Drop globals to keep freezes unionable. The amino acid annotation pulls in
+    # `mane_select_version`, and older freezes have no globals
+    cov_ht = cov_ht.select_globals()
     cov_ht.write(rmc_coverage_stats_ht.versions[freeze].path, overwrite=overwrite)
 
 
