@@ -88,6 +88,8 @@ MIN_EXOMES_AN_PERCENT = 90
 Minimum median exome AN percent for a region to be considered well covered.
 
 Regions below this threshold are flagged as low coverage in the browser release.
+Applied at release rather than stored in `rmc_coverage_stats_ht`, which keeps that
+Table's schema unionable across freezes.
 """
 
 MIN_EXP_MIS = 16.0

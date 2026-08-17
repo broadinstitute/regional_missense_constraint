@@ -2414,8 +2414,9 @@ def create_rmc_coverage_stats(
     """
     Create Table of median gnomAD exome AN percent per RMC region.
 
-    Output Table contains one row per RMC region, flagged as low coverage using a
-    median AN percent calculated over CDS sites only.
+    Output Table contains one row per RMC region, with a median calculated over CDS
+    sites only. `format_rmc_browser_ht` applies `MIN_EXOMES_AN_PERCENT` to that median
+    to flag low coverage regions.
 
     .. note::
 
@@ -2513,9 +2514,6 @@ def create_rmc_coverage_stats(
     logger.info("Calculating median AN percent per region...")
     cov_ht = cds_ht.group_by("interval", "transcript").aggregate(
         median_exomes_AN_percent=hl.median(hl.agg.collect(cds_ht.exomes_AN_percent))
-    )
-    cov_ht = cov_ht.annotate(
-        low_coverage=cov_ht.median_exomes_AN_percent < MIN_EXOMES_AN_PERCENT
     )
     cov_ht.write(rmc_coverage_stats_ht.versions[freeze].path, overwrite=overwrite)
 
@@ -2695,7 +2693,8 @@ def format_rmc_browser_ht(
                 includes_end=True,
             ),
             ht.transcript,
-        ].low_coverage
+        ].median_exomes_AN_percent
+        < MIN_EXOMES_AN_PERCENT
     )
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_rmc_aa_cov_annot.ht", overwrite=True
