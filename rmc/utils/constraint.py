@@ -2476,7 +2476,9 @@ def create_rmc_coverage_stats(
 
     logger.info("Exploding CDS intervals to loci...")
     transcripts = regions_ht.aggregate(hl.agg.collect_as_set(regions_ht.transcript))
-    cds_ht = transcript_cds.ht()
+    # NOTE: `transcript_cds` globals are dropped so this Table can be unioned with
+    # freezes written before this function existed, which have no globals
+    cds_ht = transcript_cds.ht().select_globals()
     cds_ht = cds_ht.filter(hl.literal(transcripts).contains(cds_ht.transcript))
     cds_ht = explode_intervals_to_loci(cds_ht, interval_field="interval")
 
