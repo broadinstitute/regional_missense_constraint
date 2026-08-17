@@ -1851,6 +1851,10 @@ def fix_transcript_start_stop_aas(
         (hl.is_missing(ht.start_aa) & ht.is_transcript_start)
         | (hl.is_missing(ht.stop_aa) & ht.is_transcript_stop)
     )
+    # A freeze can have nothing to fix, and `hl.literal` can't type an empty set
+    if miss_start_stop_ht.count() == 0:
+        logger.info("No transcript starts or stops are missing amino acids...")
+        return ht
     # Correct any applicable starts/ends to Met1
     miss_start_stop_ht = miss_start_stop_ht.annotate(
         start_aa=hl.or_missing(
@@ -1979,6 +1983,10 @@ def fix_region_start_stop_aas(
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
+    # A freeze can have nothing to fix, and `hl.literal` can't type an empty set
+    if missing_ht.count() == 0:
+        logger.info("No region starts or stops are missing amino acids...")
+        return ht
     missing_transcripts = hl.literal(
         missing_ht.aggregate(hl.agg.collect_as_set(missing_ht.transcript))
     )
