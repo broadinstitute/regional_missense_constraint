@@ -191,7 +191,6 @@ def get_aa_from_context(
     keep_transcripts: Set[str] = None,
     intervals: List[hl.utils.Interval] = None,
     n_partitions: int = 10000,
-    read_n_partitions: int = 250000,
     vep_version: str = VEP_VERSION,
 ) -> hl.Table:
     """
@@ -218,10 +217,6 @@ def get_aa_from_context(
         Default is None.
     :param n_partitions: Desired number of partitions for context HT.
         Only applied if `intervals` is None. Default is 10,000.
-    :param read_n_partitions: Number of partitions to read the context HT with.
-        Set above the Table's native partitioning to split partitions, since
-        `hl.filter_intervals` prunes whole partitions rather than shrinking them.
-        Default is 250,000.
     :param vep_version: VEP version to use. Default is `VEP_VERSION`.
     :return: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
     """
@@ -231,13 +226,8 @@ def get_aa_from_context(
     )
     # TODO: Add option to filter to non-outliers if still desired
     # Drop globals and select only VEP transcript consequences field
-    # NOTE: `hl.filter_intervals` prunes whole partitions, so per task memory is set
-    # by partition size, not by how precise the intervals are. The context HT's native
-    # partitions are too large to explode VEP consequences within, so refine on read.
     ht = (
-        hl.read_table(
-            vep_context.versions[vep_version].path, _n_partitions=read_n_partitions
-        )
+        hl.read_table(vep_context.versions[vep_version].path)
         .select_globals()
         .select("vep", "was_split")
     )
