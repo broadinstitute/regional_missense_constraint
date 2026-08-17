@@ -2697,7 +2697,9 @@ def format_rmc_browser_ht(
             ht.transcript,
         ].low_coverage
     )
-    ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/rmc_aa_cov_annot.ht", overwrite=True)
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_rmc_aa_cov_annot.ht", overwrite=True
+    )
     cov_def_check = ht.aggregate(hl.agg.count_where(hl.is_missing(ht.low_coverage)))
     if cov_def_check != 0:
         raise DataException(
