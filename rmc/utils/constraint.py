@@ -2761,10 +2761,20 @@ def create_rmc_release_downloads(
     - TSV with region results for transcripts that had evidence of RMC
     - TSV listing all transcripts that were searched for but did not have evidence of RMC
 
+    .. warning::
+
+        No pipeline subcommand calls this function, and it does not run as written:
+        `transcripts_no_rmc` is a field of the `transcripts` and `all_transcripts`
+        global structs, not a top-level global, so reading it raises AttributeError.
+
+        Reviving this step means choosing which set the public no-RMC TSV should list:
+        `transcripts.transcripts_no_rmc` (QC pass only) or
+        `all_transcripts.transcripts_no_rmc` (includes outliers). The
+        `transcripts_no_rmc_low_exome_coverage` and `transcripts_no_rmc_with_flag`
+        globals qualify that list further.
+
     .. note::
 
-        - Function assumes the global annotation `transcripts_no_rmc` exists
-        in `rmc_browser.ht()`
         - Function assumes the following fields exist in `regions` struct on `rmc_browser.ht()`:
             - start_coordinate
             - stop_coordinate
