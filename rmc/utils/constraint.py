@@ -2452,16 +2452,10 @@ def create_rmc_coverage_stats(
     :return: None; writes Table to resource path.
     """
     logger.info("Getting RMC regions...")
-    rmc_ht = rmc_results.versions[freeze].ht().select_globals()
-
-    # NOTE: Amino acid checkpoints are freeze scoped, so they are only shared with
-    # `format_rmc_browser_ht` when both steps run on the same freeze. A unioned freeze
-    # reuses the input freezes' annotations instead, via `--union-freezes-aa`
-    rmc_ht = rmc_ht.annotate(
-        start_coordinate=rmc_ht.interval.start,
-        stop_coordinate=rmc_ht.interval.end,
-    )
-    rmc_ht = annot_rmc_with_start_stop_aas(rmc_ht, overwrite_temp, freeze=freeze)
+    # NOTE: This adjusts region start and stop coordinates to exon boundaries, so
+    # coverage is keyed on the coordinates the browser displays. The checkpoint is
+    # freeze scoped, so `format_rmc_browser_ht` reuses it when run on the same freeze
+    rmc_ht = get_rmc_regions_aa_ht(freeze, overwrite_temp).select_globals()
     rmc_ht = rmc_ht.key_by(
         interval=hl.interval(
             rmc_ht.start_coordinate,
@@ -2620,6 +2614,44 @@ def union_freeze_resources(
         ht.write(resource.versions[output_freeze].path, overwrite=overwrite)
 
 
+def get_rmc_regions_aa_ht(freeze: int, overwrite_temp: bool) -> hl.Table:
+    """
+    Get RMC regions with the start and stop coordinates and amino acids that get released.
+
+    `fix_region_start_stop_aas` shifts region starts and stops to exon boundaries, so
+    these coordinates differ from the raw intervals in `rmc_results`. Deriving them
+    requires the amino acid lookup over the VEP context Table, the most expensive step
+    in the pipeline.
+
+    `create_rmc_coverage_stats` needs these coordinates to key coverage on the regions
+    the browser displays, and `format_rmc_browser_ht` needs them plus the amino acids,
+    so both read this checkpoint rather than running the lookup once each.
+
+    :param freeze: RMC freeze number.
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
+    :return: RMC regions HT annotated with released start and stop coordinates and
+        amino acids.
+    """
+    # NOTE: Existence is checked before deriving anything because the annotation runs
+    # counts and aggregations eagerly. Passing this Table to `checkpoint` would skip
+    # only the write, and its temporary data is deleted sooner than this Table, so the
+    # lookup would rerun in full once that data expires
+    path = f"{TEMP_PATH_WITH_SLOW_DEL}/freeze{freeze}_rmc_regions_aa.ht"
+    if not overwrite_temp and file_exists(path):
+        logger.info("Reading existing amino acid annotated RMC regions...")
+        return hl.read_table(path)
+
+    ht = rmc_results.versions[freeze].ht()
+    ht = ht.annotate(
+        start_coordinate=ht.interval.start,
+        stop_coordinate=ht.interval.end,
+    )
+    ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp, freeze=freeze)
+    return ht.checkpoint(path, overwrite=True)
+
+
 def union_rmc_browser_regions(freezes: List[int]) -> hl.Table:
     """
     Union per region amino acid annotations from browser Tables of multiple freezes.
@@ -2728,14 +2760,8 @@ def format_rmc_browser_ht(
     if union_freezes:
         ht = union_rmc_browser_regions(union_freezes)
     else:
-        ht = rmc_results.versions[freeze].ht()
-        # Annotate start and stop coordinates per region
-        ht = ht.annotate(
-            start_coordinate=ht.interval.start,
-            stop_coordinate=ht.interval.end,
-        )
-        # Annotate start and stop amino acids per region
-        ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp, freeze=freeze)
+        # Annotate adjusted start and stop coordinates and amino acids per region
+        ht = get_rmc_regions_aa_ht(freeze, overwrite_temp)
 
     # Annotate low coverage flag per region using coverage stats
     # NOTE: Coverage HT is keyed on the amino acid annotated coordinates released in
