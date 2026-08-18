@@ -47,6 +47,8 @@ def main(args):
             chisq_threshold = hl.eval(hl.qchisqtail(args.p_value, 2))
 
         # Adding dummy values to variables to avoid pre-commit errors
+        # NOTE: `over_threshold` only picks the output file name; every section is
+        # searched block by block regardless of size
         sections_to_run = list()
         over_threshold = None
         if args.run_all_sections:
@@ -144,7 +146,6 @@ def main(args):
                 ),
                 section_group=group,
                 count=counter,
-                over_threshold=True,
                 output_ht_path=output_ht_path,
                 output_n_partitions=args.output_n_partitions,
                 chisq_threshold=chisq_threshold,
