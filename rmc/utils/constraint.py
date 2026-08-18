@@ -2627,6 +2627,12 @@ def get_rmc_regions_aa_ht(freeze: int, overwrite_temp: bool) -> hl.Table:
     the browser displays, and `format_rmc_browser_ht` needs them plus the amino acids,
     so both read this checkpoint rather than running the lookup once each.
 
+    .. warning::
+
+        The checkpoint is keyed on the freeze alone, so rerunning `finalize` leaves it
+        holding regions from the superseded RMC results. Pass `overwrite_temp` to the
+        steps that follow a rerun.
+
     :param freeze: RMC freeze number.
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
@@ -2652,7 +2658,7 @@ def get_rmc_regions_aa_ht(freeze: int, overwrite_temp: bool) -> hl.Table:
     return ht.checkpoint(path, overwrite=True)
 
 
-def union_rmc_browser_regions(freezes: List[int]) -> hl.Table:
+def union_rmc_browser_regions(freezes: List[int], output_freeze: int) -> hl.Table:
     """
     Union per region amino acid annotations from browser Tables of multiple freezes.
 
@@ -2666,8 +2672,23 @@ def union_rmc_browser_regions(freezes: List[int]) -> hl.Table:
         percentile, low coverage, or p-value cutoffs don't leave stale values behind.
 
     :param freezes: Freezes whose browser Tables to union. Transcripts must be disjoint.
+    :param output_freeze: Freeze being released. Its `rmc_results` transcripts must
+        match the unioned transcripts.
     :return: Table with one row per region, keyed by transcript.
     """
+    invalid_freezes = (set(freezes) | {output_freeze}) - set(FREEZES)
+    if invalid_freezes:
+        raise DataException(
+            f"Freeze(s) {invalid_freezes} are not in FREEZES ({FREEZES})!"
+        )
+    if len(freezes) < 2:
+        raise DataException("At least two freezes are required to union!")
+    if output_freeze in freezes:
+        raise DataException(
+            f"Output freeze ({output_freeze}) cannot be one of the freezes being"
+            " unioned!"
+        )
+
     hts = []
     for freeze in freezes:
         ht = rmc_browser.versions[freeze].ht().select_globals()
@@ -2685,9 +2706,23 @@ def union_rmc_browser_regions(freezes: List[int]) -> hl.Table:
         )
     transcript_sets = [ht.aggregate(hl.agg.collect_as_set(ht.transcript)) for ht in hts]
     n_transcripts = sum(len(t) for t in transcript_sets)
-    if len(set().union(*transcript_sets)) != n_transcripts:
+    unioned_transcripts = set().union(*transcript_sets)
+    if len(unioned_transcripts) != n_transcripts:
         raise DataException(
             f"Transcripts overlap across browser Tables for freezes {freezes}!"
+        )
+
+    # Catch a freeze list that doesn't match the freezes actually unioned, which would
+    # otherwise drop the missing freeze's transcripts from the release silently
+    results_ht = rmc_results.versions[output_freeze].ht()
+    results_transcripts = results_ht.aggregate(
+        hl.agg.collect_as_set(results_ht.transcript)
+    )
+    if unioned_transcripts != results_transcripts:
+        raise DataException(
+            f"Transcripts from freezes {freezes} don't match freeze {output_freeze}'s"
+            f" RMC results ({len(unioned_transcripts)} unioned,"
+            f" {len(results_transcripts)} in results)!"
         )
     return hts[0].union(*hts[1:])
 
@@ -2758,7 +2793,7 @@ def format_rmc_browser_ht(
     cov_ht = rmc_coverage_stats_ht.versions[freeze].ht()
 
     if union_freezes:
-        ht = union_rmc_browser_regions(union_freezes)
+        ht = union_rmc_browser_regions(union_freezes, freeze)
     else:
         # Annotate adjusted start and stop coordinates and amino acids per region
         ht = get_rmc_regions_aa_ht(freeze, overwrite_temp)
