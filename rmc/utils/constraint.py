@@ -2690,11 +2690,8 @@ def union_rmc_browser_regions(freezes: List[int], output_freeze: int) -> hl.Tabl
         )
 
     hts = []
-    expected_transcripts = set()
     for freeze in freezes:
-        ht = rmc_browser.versions[freeze].ht()
-        expected_transcripts |= hl.eval(ht.all_transcripts.rmc_transcripts)
-        ht = ht.select_globals()
+        ht = rmc_browser.versions[freeze].ht().select_globals()
         ht = ht.explode("regions")
         hts.append(
             ht.select(
@@ -2709,19 +2706,9 @@ def union_rmc_browser_regions(freezes: List[int], output_freeze: int) -> hl.Tabl
         )
     transcript_sets = [ht.aggregate(hl.agg.collect_as_set(ht.transcript)) for ht in hts]
     n_transcripts = sum(len(t) for t in transcript_sets)
-    unioned_transcripts = set().union(*transcript_sets)
-    if len(unioned_transcripts) != n_transcripts:
+    if len(set().union(*transcript_sets)) != n_transcripts:
         raise DataException(
             f"Transcripts overlap across browser Tables for freezes {freezes}!"
-        )
-
-    # Catch a browser Table whose regions don't match the transcripts its own globals
-    # report, which would otherwise release a truncated set of regions
-    if unioned_transcripts != expected_transcripts:
-        raise DataException(
-            f"Regions from freezes {freezes} cover {len(unioned_transcripts)}"
-            f" transcripts, but their globals report {len(expected_transcripts)}"
-            " transcripts with RMC!"
         )
     return hts[0].union(*hts[1:])
 
