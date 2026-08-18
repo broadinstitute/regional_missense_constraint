@@ -2455,8 +2455,8 @@ def create_rmc_coverage_stats(
     rmc_ht = rmc_results.versions[freeze].ht().select_globals()
 
     # NOTE: Amino acid checkpoints are freeze scoped, so they are only shared with
-    # `format_rmc_browser_ht` when both steps run on the same freeze. Releasing a
-    # unioned freeze recomputes this annotation over every transcript in the union
+    # `format_rmc_browser_ht` when both steps run on the same freeze. A unioned freeze
+    # reuses the input freezes' annotations instead, via `--union-freezes-aa`
     rmc_ht = rmc_ht.annotate(
         start_coordinate=rmc_ht.interval.start,
         stop_coordinate=rmc_ht.interval.end,
@@ -2620,10 +2620,51 @@ def union_freeze_resources(
         ht.write(resource.versions[output_freeze].path, overwrite=overwrite)
 
 
+def union_rmc_browser_regions(freezes: List[int]) -> hl.Table:
+    """
+    Union per region amino acid annotations from browser Tables of multiple freezes.
+
+    Amino acid lookup dominates the browser release, and a freeze that unions others
+    covers transcripts those freezes already annotated. This reuses that work.
+
+    .. note::
+
+        Only the amino acid annotations and the region statistics carry over.
+        `format_rmc_browser_ht` recomputes everything derived from them, so changes to
+        percentile, low coverage, or p-value cutoffs don't leave stale values behind.
+
+    :param freezes: Freezes whose browser Tables to union. Transcripts must be disjoint.
+    :return: Table with one row per region, keyed by transcript.
+    """
+    hts = []
+    for freeze in freezes:
+        ht = rmc_browser.versions[freeze].ht().select_globals()
+        ht = ht.explode("regions")
+        hts.append(
+            ht.select(
+                start_coordinate=ht.regions.start_coordinate,
+                stop_coordinate=ht.regions.stop_coordinate,
+                start_aa=ht.regions.start_aa,
+                stop_aa=ht.regions.stop_aa,
+                section_obs=ht.regions.obs,
+                section_exp=ht.regions.exp,
+                section_chisq=ht.regions.chisq,
+            )
+        )
+    transcript_sets = [ht.aggregate(hl.agg.collect_as_set(ht.transcript)) for ht in hts]
+    n_transcripts = sum(len(t) for t in transcript_sets)
+    if len(set().union(*transcript_sets)) != n_transcripts:
+        raise DataException(
+            f"Transcripts overlap across browser Tables for freezes {freezes}!"
+        )
+    return hts[0].union(*hts[1:])
+
+
 def format_rmc_browser_ht(
     freeze: int,
     overwrite_temp: bool,
     extra_transcripts: Set[str] = None,
+    union_freezes: List[int] = None,
 ) -> None:
     """
     Reformat annotations in input HT for release.
@@ -2677,19 +2718,24 @@ def format_rmc_browser_ht(
     :param extra_transcripts: Additional transcripts covered by this freeze on top of
         the canonical transcripts, e.g. the transcripts unique to the MANE Select plus
         clinical set. Used to annotate globals. Default is None.
+    :param union_freezes: Freezes whose browser Tables hold the amino acid annotations
+        for this freeze's transcripts. If set, function reuses those annotations instead
+        of looking amino acids up again. Default is None.
     :return: None; writes Table with desired schema to resource path.
     """
-    ht = rmc_results.versions[freeze].ht()
     cov_ht = rmc_coverage_stats_ht.versions[freeze].ht()
 
-    # Annotate start and stop coordinates per region
-    ht = ht.annotate(
-        start_coordinate=ht.interval.start,
-        stop_coordinate=ht.interval.end,
-    )
-
-    # Annotate start and stop amino acids per region
-    ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp, freeze=freeze)
+    if union_freezes:
+        ht = union_rmc_browser_regions(union_freezes)
+    else:
+        ht = rmc_results.versions[freeze].ht()
+        # Annotate start and stop coordinates per region
+        ht = ht.annotate(
+            start_coordinate=ht.interval.start,
+            stop_coordinate=ht.interval.end,
+        )
+        # Annotate start and stop amino acids per region
+        ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp, freeze=freeze)
 
     # Annotate low coverage flag per region using coverage stats
     # NOTE: Coverage HT is keyed on the amino acid annotated coordinates released in

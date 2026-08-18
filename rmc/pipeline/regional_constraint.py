@@ -546,6 +546,7 @@ def main(args):
                 args.freeze,
                 args.overwrite_temp,
                 extra_transcripts,
+                args.union_freezes_aa,
             )
 
     finally:
@@ -767,6 +768,16 @@ if __name__ == "__main__":
         `create-mane-plus-clinical-he`) when releasing a freeze that covers those
         transcripts.
         """,
+    )
+    create_release.add_argument(
+        "--union-freezes-aa",
+        help="""
+        Freezes whose browser Tables already hold amino acid annotations for this
+        freeze's transcripts. Pass the freezes unioned by `union-freezes` to reuse
+        their annotations instead of looking amino acids up again.
+        """,
+        type=int,
+        nargs="+",
     )
     args = parser.parse_args()
 
