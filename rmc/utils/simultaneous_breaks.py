@@ -426,13 +426,17 @@ def process_section_group(
         ht = ht.annotate(i=ht.start_idx.i_start, j=ht.start_idx.j_start)
         ht = ht._key_by_assert_sorted("section", "i", "j")
         ht = ht.annotate(
-            # NOTE: i_max_idx needs to be adjusted here to be one smaller than the max
-            # This is because we don't need to check the situation where i is the last index in a list
-            # For example, if the section has 1003 possible missense sites,
-            # (1002 is the largest list index)
-            # we don't need to check the scenario where i = 1002
-            i_max_idx=hl.min(ht.i + split_list_len, ht.max_idx) - 1,
             j_max_idx=hl.min(ht.j + split_list_len, ht.max_idx),
+        )
+        ht = ht.annotate(
+            # NOTE: A window needs a j larger than i, and `calculate_window_chisq` is
+            # missing when j is the section's last index, so i stops below both the
+            # section's last index and this row's last j.
+            # For example, if the section has 1003 possible missense sites
+            # (1002 is the largest list index), i never reaches 1002.
+            # Both caps belong inside `hl.min`: subtracting from the block end instead
+            # would leave the top index of every block unsearched
+            i_max_idx=hl.min(ht.i + split_list_len, ht.j_max_idx - 1, ht.max_idx - 1),
         )
         # Adjust j_start in rows where j_start is the same as i_start
         ht = ht.annotate(
