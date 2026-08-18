@@ -2672,8 +2672,8 @@ def union_rmc_browser_regions(freezes: List[int], output_freeze: int) -> hl.Tabl
         percentile, low coverage, or p-value cutoffs don't leave stale values behind.
 
     :param freezes: Freezes whose browser Tables to union. Transcripts must be disjoint.
-    :param output_freeze: Freeze being released. Its `rmc_results` transcripts must
-        match the unioned transcripts.
+    :param output_freeze: Freeze being released. Checked against `freezes` so a freeze
+        can't union itself.
     :return: Table with one row per region, keyed by transcript.
     """
     invalid_freezes = (set(freezes) | {output_freeze}) - set(FREEZES)
@@ -2690,8 +2690,11 @@ def union_rmc_browser_regions(freezes: List[int], output_freeze: int) -> hl.Tabl
         )
 
     hts = []
+    expected_transcripts = set()
     for freeze in freezes:
-        ht = rmc_browser.versions[freeze].ht().select_globals()
+        ht = rmc_browser.versions[freeze].ht()
+        expected_transcripts |= hl.eval(ht.all_transcripts.rmc_transcripts)
+        ht = ht.select_globals()
         ht = ht.explode("regions")
         hts.append(
             ht.select(
@@ -2712,17 +2715,13 @@ def union_rmc_browser_regions(freezes: List[int], output_freeze: int) -> hl.Tabl
             f"Transcripts overlap across browser Tables for freezes {freezes}!"
         )
 
-    # Catch a freeze list that doesn't match the freezes actually unioned, which would
-    # otherwise drop the missing freeze's transcripts from the release silently
-    results_ht = rmc_results.versions[output_freeze].ht()
-    results_transcripts = results_ht.aggregate(
-        hl.agg.collect_as_set(results_ht.transcript)
-    )
-    if unioned_transcripts != results_transcripts:
+    # Catch a browser Table whose regions don't match the transcripts its own globals
+    # report, which would otherwise release a truncated set of regions
+    if unioned_transcripts != expected_transcripts:
         raise DataException(
-            f"Transcripts from freezes {freezes} don't match freeze {output_freeze}'s"
-            f" RMC results ({len(unioned_transcripts)} unioned,"
-            f" {len(results_transcripts)} in results)!"
+            f"Regions from freezes {freezes} cover {len(unioned_transcripts)}"
+            f" transcripts, but their globals report {len(expected_transcripts)}"
+            " transcripts with RMC!"
         )
     return hts[0].union(*hts[1:])
 
