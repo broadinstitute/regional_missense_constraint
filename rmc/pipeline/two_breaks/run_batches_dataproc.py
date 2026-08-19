@@ -1,9 +1,10 @@
 """
 This script searches for two simultaneous breaks in groups of transcripts using Hail Query within Google Cloud Dataproc.
 
-This script should be run only on transcripts that are greater than or equal
-to the --transcript-len-threshold specified in `prepare_transcripts.py` if these transcripts are too slow or getting preempted in Hail Batch.
-Transcripts smaller than --transcript-len-threshold  should be run using `run_batches.py` as they run quickly and inexpensively in Hail Batch.
+This script searches transcripts/transcript sections of any size. The
+--missense-len-threshold specified in `prepare_transcripts.py` splits sections into two
+groups only so that they can be run separately and land in separate output files; every
+section is searched block by block regardless of which group it is in.
 """
 import argparse
 import logging
@@ -150,7 +151,6 @@ def main(args):
                 output_n_partitions=args.output_n_partitions,
                 chisq_threshold=chisq_threshold,
                 split_list_len=args.split_list_len,
-                read_if_exists=args.read_if_exists,
                 save_chisq_ht=args.save_chisq_ht,
                 freeze=args.freeze,
             )
@@ -230,11 +230,6 @@ if __name__ == "__main__":
     section_ids.add_argument(
         "--run-sections-under-threshold",
         help="Search for simultaneous breaks in sections that are under length cutoff.",
-        action="store_true",
-    )
-    parser.add_argument(
-        "--read-if-exists",
-        help="Use temporary Tables if they already exist.",
         action="store_true",
     )
     parser.add_argument(

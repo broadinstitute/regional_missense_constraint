@@ -354,7 +354,6 @@ def process_section_group(
     chisq_threshold: float = scipy.stats.chi2.ppf(1 - P_VALUE, 2),
     min_num_exp_mis: float = MIN_EXP_MIS,
     split_list_len: int = 500,
-    read_if_exists: bool = False,
     save_chisq_ht: bool = False,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
@@ -366,6 +365,7 @@ def process_section_group(
     :param ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param section_group: List of transcripts or transcript sections to process.
     :param count: Which transcript or transcript section group is being run (based on counter generated in `main`).
+    :param output_ht_path: Path to output results Table.
     :param output_n_partitions: Desired number of partitions for output Table.
         Default is 10.
     :param chisq_threshold: Chi-square significance threshold. Default is
@@ -380,10 +380,6 @@ def process_section_group(
         E.g., if split_list_len is 500, and the list lengths are 998, then the transcript/section will be
         split into two rows with lists of length 500 and 498.
         Default is 500.
-    :param read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
-        Only applies to Table that is input to `search_for_two_breaks`
-        (`f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}.ht"`).
-        Default is False.
     :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
         (as long as chi square value is >= min_chisq_threshold).
         This saves a lot of extra data and should only occur once.
@@ -448,10 +444,11 @@ def process_section_group(
     # keep the desired number of partitions
     # (would sometimes repartition to a lower number of partitions)
     ht = ht.repartition(n_rows)
+    # NOTE: Always rewritten. This Table carries `i_max_idx` and `j_max_idx`, so reading
+    # an existing one would search whatever index ranges that run used
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}_tmp_repart.ht",
-        _read_if_exists=read_if_exists,
-        overwrite=not read_if_exists,
+        overwrite=True,
     )
     # Search for two simultaneous breaks
     ht = search_for_two_breaks(
@@ -463,7 +460,6 @@ def process_section_group(
         freeze=freeze,
     )
 
-    # If over threshold, checkpoint HT and check if there were any breaks
     # A split section has one row per block, so reduce to its best break
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}.ht", overwrite=True
