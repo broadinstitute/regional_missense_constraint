@@ -460,7 +460,7 @@ def process_section_group(
         freeze=freeze,
     )
 
-    # A split section has one row per block, so reduce to its best break
+    # Checkpoint before count below to avoid recomputing two break search
     ht = ht.checkpoint(
         f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}.ht", overwrite=True
     )
