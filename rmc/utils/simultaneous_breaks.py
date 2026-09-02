@@ -339,6 +339,7 @@ def search_for_two_breaks(
         f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_dataproc_temp_chisq_group{count}{f'_{table_suffix}' if table_suffix is not None else ''}.ht"
     )
     if save_chisq_ht:
+        # This table should only be saved once, during the first round of search, but suffix is passed here as well just in case
         group_ht_path = (
             f"{SIMUL_BREAK_TEMP_PATH}/freeze{freeze}/dataproc_temp_chisq_group{count}{f'_{table_suffix}' if table_suffix is not None else ''}.ht"
         )
