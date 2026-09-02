@@ -385,7 +385,7 @@ def process_section_group(
         This saves a lot of extra data and should only occur once.
         Default is False.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
-    :return: None; processes Table and writes to path. Also writes success TSV to path.
+    :return: None; processes Table and writes to path.
     """
     ht = hl.read_table(ht_path)
     ht = ht.filter(hl.literal(section_group).contains(ht.section))
