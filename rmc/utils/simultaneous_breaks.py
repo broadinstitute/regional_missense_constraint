@@ -257,6 +257,7 @@ def search_for_two_breaks(
     min_chisq_threshold: float = MIN_CHISQ_THRESHOLD,
     save_chisq_ht: bool = False,
     freeze: int = CURRENT_FREEZE,
+    table_suffix: str = None,
 ) -> hl.Table:
     """
     Search for transcripts/transcript sections with simultaneous breaks.
@@ -282,6 +283,7 @@ def search_for_two_breaks(
         This saves a lot of extra data and should only occur during the initial search round.
         Default is False.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
+    :param table_suffix: Suffix to append to the checkpoint file name. Default is None.
     :return: Table filtered to transcript/sections with significant simultaneous breakpoints
         and annotated with breakpoint information.
     """
@@ -334,10 +336,12 @@ def search_for_two_breaks(
         ),
     )
     group_ht_path = (
-        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_dataproc_temp_chisq_group{count}.ht"
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_dataproc_temp_chisq_group{count}{f'_{table_suffix}' if table_suffix is not None else ''}.ht"
     )
     if save_chisq_ht:
-        group_ht_path = f"{SIMUL_BREAK_TEMP_PATH}/freeze{freeze}/dataproc_temp_chisq_group{count}.ht"
+        group_ht_path = (
+            f"{SIMUL_BREAK_TEMP_PATH}/freeze{freeze}/dataproc_temp_chisq_group{count}{f'_{table_suffix}' if table_suffix is not None else ''}.ht"
+        )
     group_ht = group_ht.checkpoint(group_ht_path, overwrite=True)
 
     # Remove rows with maximum chi square values below the threshold
@@ -458,6 +462,7 @@ def process_section_group(
         min_num_exp_mis=min_num_exp_mis,
         save_chisq_ht=save_chisq_ht,
         freeze=freeze,
+        table_suffix=section_group[0],
     )
 
     # If any rows had a significant breakpoint,
