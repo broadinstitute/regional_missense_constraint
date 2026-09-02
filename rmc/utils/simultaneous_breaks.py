@@ -467,7 +467,7 @@ def process_section_group(
     # If any rows had a significant breakpoint,
     # find the one "best" breakpoint (breakpoint with largest chi square value)
     if ht.count() > 0:
-        ht = annotate_max_chisq_per_section(ht, freeze)
+        ht = annotate_max_chisq_per_section(ht, freeze, suffix=section_group[0])
         ht = ht.filter(ht.chisq == ht.section_max_chisq)
 
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
