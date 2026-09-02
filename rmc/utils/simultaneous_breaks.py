@@ -460,10 +460,6 @@ def process_section_group(
         freeze=freeze,
     )
 
-    # Checkpoint before count below to avoid recomputing two break search
-    ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}.ht", overwrite=True
-    )
     # If any rows had a significant breakpoint,
     # find the one "best" breakpoint (breakpoint with largest chi square value)
     if ht.count() > 0:
