@@ -257,6 +257,7 @@ def search_for_two_breaks(
     min_chisq_threshold: float = MIN_CHISQ_THRESHOLD,
     save_chisq_ht: bool = False,
     freeze: int = CURRENT_FREEZE,
+    table_suffix: str = None,
 ) -> hl.Table:
     """
     Search for transcripts/transcript sections with simultaneous breaks.
@@ -282,6 +283,7 @@ def search_for_two_breaks(
         This saves a lot of extra data and should only occur during the initial search round.
         Default is False.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
+    :param table_suffix: Suffix to append to the checkpoint file name. Default is None.
     :return: Table filtered to transcript/sections with significant simultaneous breakpoints
         and annotated with breakpoint information.
     """
@@ -334,10 +336,13 @@ def search_for_two_breaks(
         ),
     )
     group_ht_path = (
-        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_dataproc_temp_chisq_group{count}.ht"
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_dataproc_temp_chisq_group{count}{f'_{table_suffix}' if table_suffix is not None else ''}.ht"
     )
     if save_chisq_ht:
-        group_ht_path = f"{SIMUL_BREAK_TEMP_PATH}/freeze{freeze}/dataproc_temp_chisq_group{count}.ht"
+        # This table should only be saved once, during the first round of search, but suffix is passed here as well just in case
+        group_ht_path = (
+            f"{SIMUL_BREAK_TEMP_PATH}/freeze{freeze}/dataproc_temp_chisq_group{count}{f'_{table_suffix}' if table_suffix is not None else ''}.ht"
+        )
     group_ht = group_ht.checkpoint(group_ht_path, overwrite=True)
 
     # Remove rows with maximum chi square values below the threshold
@@ -349,26 +354,22 @@ def process_section_group(
     ht_path: str,
     section_group: List[str],
     count: int,
-    over_threshold: bool,
     output_ht_path: str,
     output_n_partitions: int = 10,
     chisq_threshold: float = scipy.stats.chi2.ppf(1 - P_VALUE, 2),
     min_num_exp_mis: float = MIN_EXP_MIS,
     split_list_len: int = 500,
-    read_if_exists: bool = False,
     save_chisq_ht: bool = False,
     freeze: int = CURRENT_FREEZE,
 ) -> None:
     """
     Run two simultaneous breaks search on a group of transcripts or transcript sections.
 
-    Designed for use with Hail Batch.
+    Sections are split into blocks of `split_list_len` and searched block by block.
 
     :param ht_path: Path to input Table (Table written using `group_no_single_break_found_ht`).
     :param section_group: List of transcripts or transcript sections to process.
     :param count: Which transcript or transcript section group is being run (based on counter generated in `main`).
-    :param over_threshold: Whether input transcript/sections have more
-        possible missense sites than threshold specified in `run_simultaneous_breaks`.
     :param output_ht_path: Path to output results Table.
     :param output_n_partitions: Desired number of partitions for output Table.
         Default is 10.
@@ -383,87 +384,77 @@ def process_section_group(
     :param split_list_len: Max length to divide transcript/sections observed or expected missense and position lists into.
         E.g., if split_list_len is 500, and the list lengths are 998, then the transcript/section will be
         split into two rows with lists of length 500 and 498.
-        Only used if over_threshold is True. Default is 500.
-    :param read_if_exists: Whether to read temporary Table if it already exists rather than overwrite.
-        Only applies to Table that is input to `search_for_two_breaks`
-        (`f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}.ht"`).
-        Default is False.
+        Default is 500.
     :param save_chisq_ht: Whether to save HT with chi square values annotated for every locus
         (as long as chi square value is >= min_chisq_threshold).
         This saves a lot of extra data and should only occur once.
         Default is False.
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
-    :return: None; processes Table and writes to path. Also writes success TSV to path.
+    :return: None; processes Table and writes to path.
     """
     ht = hl.read_table(ht_path)
     ht = ht.filter(hl.literal(section_group).contains(ht.section))
 
-    if over_threshold:
-        # If transcript/sections longer than threshold, split into multiple rows
-        # Each row conducts an independent search within a non-overlapping portion of the transcript/section
-        # E.g., if a transcript has 1003 possible missense sites, and the `split_list_len` is 500,
-        # then this section will split that transcript into 9 rows, with the following windows:
-        # [i_start=0, j_start=0], [i_start=0, j_start=500], [i_start=0, j_start=1000],
-        # [i_start=500, j_start=0], [i_start=500, j_start=500], [i_start=500, j_start=1000],
-        # [i_start=1000, j_start=0], [i_start=1000, j_start=500], [i_start=1000, j_start=1000]
-        # The only windows that should be kept and processed are:
-        # [i_start=0, j_start=0], [i_start=0, j_start=500], [i_start=0, j_start=1000],
-        # [i_start=500, j_start=500], [i_start=500, j_start=1000], [i_start=1000, j_start=1000]
-        ht = ht.annotate(
-            start_idx=hl.flatmap(
-                lambda i: hl.map(
-                    lambda j: hl.struct(i_start=i, j_start=j),
-                    hl.range(0, ht.max_idx + 1, split_list_len),
-                ),
+    # Split each section into blocks and give each block its own row
+    # Each row conducts an independent search within a non-overlapping portion of the transcript/section
+    # E.g., if a transcript has 1003 possible missense sites, and the `split_list_len` is 500,
+    # then this section will split that transcript into 9 rows, with the following windows:
+    # [i_start=0, j_start=0], [i_start=0, j_start=500], [i_start=0, j_start=1000],
+    # [i_start=500, j_start=0], [i_start=500, j_start=500], [i_start=500, j_start=1000],
+    # [i_start=1000, j_start=0], [i_start=1000, j_start=500], [i_start=1000, j_start=1000]
+    # The only windows that should be kept and processed are:
+    # [i_start=0, j_start=0], [i_start=0, j_start=500], [i_start=0, j_start=1000],
+    # [i_start=500, j_start=500], [i_start=500, j_start=1000], [i_start=1000, j_start=1000]
+    ht = ht.annotate(
+        start_idx=hl.flatmap(
+            lambda i: hl.map(
+                lambda j: hl.struct(i_start=i, j_start=j),
                 hl.range(0, ht.max_idx + 1, split_list_len),
-            )
-        )
-        # Remove entries in `start_idx` struct where j_start is smaller than i_start
-        ht = ht.annotate(
-            start_idx=hl.filter(lambda x: x.j_start >= x.i_start, ht.start_idx)
-        )
-        ht = ht.explode("start_idx")
-        ht = ht.annotate(i=ht.start_idx.i_start, j=ht.start_idx.j_start)
-        ht = ht._key_by_assert_sorted("section", "i", "j")
-        ht = ht.annotate(
-            # NOTE: i_max_idx needs to be adjusted here to be one smaller than the max
-            # This is because we don't need to check the situation where i is the last index in a list
-            # For example, if the section has 1003 possible missense sites,
-            # (1002 is the largest list index)
-            # we don't need to check the scenario where i = 1002
-            i_max_idx=hl.min(ht.i + split_list_len, ht.max_idx) - 1,
-            j_max_idx=hl.min(ht.j + split_list_len, ht.max_idx),
-        )
-        # Adjust j_start in rows where j_start is the same as i_start
-        ht = ht.annotate(
-            start_idx=ht.start_idx.annotate(
-                j_start=hl.if_else(
-                    ht.start_idx.i_start == ht.start_idx.j_start,
-                    ht.start_idx.j_start + 1,
-                    ht.start_idx.j_start,
-                ),
             ),
+            hl.range(0, ht.max_idx + 1, split_list_len),
         )
-        n_rows = ht.count()
-        # NOTE: added repartition here because repartioning on read did not
-        # keep the desired number of partitions
-        # (would sometimes repartition to a lower number of partitions)
-        ht = ht.repartition(n_rows)
-        ht = ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}_tmp_repart.ht",
-            _read_if_exists=read_if_exists,
-            overwrite=not read_if_exists,
-        )
-    else:
-        # Add start_idx struct with i_start, j_start, i_max_idx, j_max_idx annotations
-        # (these are expected by `search_for_two_breaks`)
-        ht = ht.annotate(
-            start_idx=hl.struct(i_start=0, j_start=1),
-            # Adjusting i_max_idx here to be ht.max_idx - 1 (see note above)
-            i_max_idx=ht.max_idx - 1,
-            j_max_idx=ht.max_idx,
-        )
-
+    )
+    # Remove entries in `start_idx` struct where j_start is smaller than i_start
+    ht = ht.annotate(
+        start_idx=hl.filter(lambda x: x.j_start >= x.i_start, ht.start_idx)
+    )
+    ht = ht.explode("start_idx")
+    ht = ht.annotate(i=ht.start_idx.i_start, j=ht.start_idx.j_start)
+    ht = ht._key_by_assert_sorted("section", "i", "j")
+    ht = ht.annotate(
+        j_max_idx=hl.min(ht.j + split_list_len, ht.max_idx),
+    )
+    ht = ht.annotate(
+        # NOTE: A window needs a j larger than i, and `calculate_window_chisq` is
+        # missing when j is the section's last index, so i stops below both the
+        # section's last index and this row's last j.
+        # For example, if the section has 1003 possible missense sites
+        # (1002 is the largest list index), i never reaches 1002.
+        # Both caps belong inside `hl.min`: subtracting from the block end instead
+        # would leave the top index of every block unsearched
+        i_max_idx=hl.min(ht.i + split_list_len, ht.j_max_idx - 1, ht.max_idx - 1),
+    )
+    # Adjust j_start in rows where j_start is the same as i_start
+    ht = ht.annotate(
+        start_idx=ht.start_idx.annotate(
+            j_start=hl.if_else(
+                ht.start_idx.i_start == ht.start_idx.j_start,
+                ht.start_idx.j_start + 1,
+                ht.start_idx.j_start,
+            ),
+        ),
+    )
+    n_rows = ht.count()
+    # NOTE: added repartition here because repartioning on read did not
+    # keep the desired number of partitions
+    # (would sometimes repartition to a lower number of partitions)
+    ht = ht.repartition(n_rows)
+    # NOTE: Always rewritten. This Table carries `i_max_idx` and `j_max_idx`, so reading
+    # an existing one would search whatever index ranges that run used
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}_tmp_repart.ht",
+        overwrite=True,
+    )
     # Search for two simultaneous breaks
     ht = search_for_two_breaks(
         group_ht=ht,
@@ -472,18 +463,14 @@ def process_section_group(
         min_num_exp_mis=min_num_exp_mis,
         save_chisq_ht=save_chisq_ht,
         freeze=freeze,
+        table_suffix=section_group[0],
     )
 
-    # If over threshold, checkpoint HT and check if there were any breaks
-    if over_threshold:
-        ht = ht.checkpoint(
-            f"{TEMP_PATH_WITH_FAST_DEL}/{section_group[0]}.ht", overwrite=True
-        )
-        # If any rows had a significant breakpoint,
-        # find the one "best" breakpoint (breakpoint with largest chi square value)
-        if ht.count() > 0:
-            ht = annotate_max_chisq_per_section(ht, freeze)
-            ht = ht.filter(ht.chisq == ht.section_max_chisq)
+    # If any rows had a significant breakpoint,
+    # find the one "best" breakpoint (breakpoint with largest chi square value)
+    if ht.count() > 0:
+        ht = annotate_max_chisq_per_section(ht, freeze, suffix=section_group[0])
+        ht = ht.filter(ht.chisq == ht.section_max_chisq)
 
     ht = ht.annotate_globals(chisq_threshold=chisq_threshold)
     # NOTE: Change `naive_coalesce` to `repartition` below if you run into this Hail bug:

@@ -889,6 +889,7 @@ def get_dpois_expr(
 def annotate_max_chisq_per_section(
     ht: hl.Table,
     freeze: int,
+    suffix: Optional[str] = None,
 ) -> hl.Table:
     """
     Get maximum chi square value per transcript or transcript subsection.
@@ -902,6 +903,7 @@ def annotate_max_chisq_per_section(
 
     :param ht: Input Table.
     :param freeze: RMC data freeze number.
+    :param suffix: Suffix to append to the checkpoint file name.
     :return: Table annotated with maximum chi square value per transcript or transcript subsection.
     """
     group_ht = ht.group_by("section").aggregate(
@@ -909,7 +911,8 @@ def annotate_max_chisq_per_section(
         section_max_chisq=hl.agg.max(ht.chisq)
     )
     group_ht = group_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_group_max_chisq.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_group_max_chisq{f'_{suffix}' if suffix is not None else ''}.ht",
+        overwrite=True,
     )
     return ht.annotate(section_max_chisq=group_ht[ht.section].section_max_chisq)
 
@@ -1199,12 +1202,9 @@ def merge_simul_break_temp_hts(
             logger.info("Working on %s", ht_path)
             temp = hl.read_table(ht_path)
             if temp.count() > 0:
-                # Tables containing transcripts/transcript sections that are over the transcript/section length threshold
-                # are keyed by section, i, j
-                # Tables containing transcripts/transcript sections that are under the length threshold are keyed
-                # only by section
-                # Rekey all tables here and select only the required fields to ensure the union on line 83 is able to work
-                # This `key_by` should not shuffle because `section` is already the first key for both Tables
+                # Temp Tables are keyed by section, i, j
+                # Rekey and select only the required fields so the union below works
+                # This `key_by` should not shuffle because `section` is already the first key
                 temp = temp.key_by("section")
                 row_fields = set(temp.row)
                 if len(SIMUL_SEARCH_ANNOTATIONS.intersection(row_fields)) < len(
