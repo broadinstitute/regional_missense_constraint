@@ -26,16 +26,30 @@ from rmc.resources.basics import (
 from rmc.resources.reference_data import FOLD_K
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
-FREEZES = [1, 2]
+FREEZES = [1, 2, 3, 4]
 """
 RMC/MPC data versions computed with current gnomAD version.
 
 gnomAD v2.1.1 freezes: [1, 2, 3, 4, 5, 6, 7].
 
-gnomAD v4.1 freezes: [1, 2].
+gnomAD v4.1 freezes: [1, 2, 3, 4].
 
 NOTE: v4.1 freeze 1 was a test run to ensure that RMC results calculated using allele number (AN) as a proxy for coverage looked reasonable. This freeze defined high coverage as AN > 66%.
 v4.1 freeze 2 also uses AN as a proxy for coverage and defines high coverage as AN>= 90%.
+v4.1 freeze 3 is an incremental run over the transcripts unique to the MANE Select
+plus clinical set (MANE Plus Clinical transcripts that aren't Ensembl canonical, and
+were therefore not searched in freeze 2). Break search results are independent per
+transcript, so freeze 3 uses the same models and thresholds as freeze 2.
+v4.1 freeze 4 is the union of freezes 2 and 3, created with `union_freeze_resources`.
+
+NOTE: Freezes 2-4 are computed on gnomAD v4.1.1 data (the models underlying the
+expected variant counts and the gene constraint HT are both v4.1.1), but resource
+paths still use `CURRENT_GNOMAD_VERSION` ("4.1") because RMC on v4 started on v4.1.
+The exception is the all sites AN HT used for coverage stats, which is only released
+for v4.1.
+
+NOTE: Missense badness and MPC were not regenerated for freezes 3 and 4 -- they remain
+on freeze 2, which is why `context_with_oe` was not unioned into freeze 4.
 """
 
 CURRENT_FREEZE = 2
@@ -67,6 +81,15 @@ Minimum chi square significance.
 Used only in two simultaneous breaks search.
 Any breakpoint combinations with a chi square value less than this threshold
 will not be emitted for storage.
+"""
+
+MIN_EXOMES_AN_PERCENT = 90
+"""
+Minimum median exome AN percent for a region to be considered well covered.
+
+Regions below this threshold are flagged as low coverage in the browser release.
+Applied at release rather than stored in `rmc_coverage_stats_ht`, which keeps that
+Table's schema unionable across freezes.
 """
 
 MIN_EXP_MIS = 16.0
@@ -173,7 +196,9 @@ constraint_prep = VersionedTableResource(
 """
 Locus-level Table used in first step of regional constraint calculation.
 
-Filtered to only one specific coding variant consequence but contains all canonical, protein-coding transcripts.
+Filtered to only one specific coding variant consequence but contains every protein-coding
+transcript searched for that freeze: all canonical transcripts by default, or the set passed
+via `keep_transcripts`, e.g. the non-canonical MANE Plus Clinical transcripts in freeze 3.
 
 v4.1 schema:
 ----------------------------------------
@@ -510,6 +535,12 @@ rmc_coverage_stats_ht = VersionedTableResource(
 )
 """
 Table containing exome AN percent per RMC region.
+
+Keyed on the amino acid annotated region coordinates released in `rmc_browser`,
+not on the raw region intervals in `rmc_results`.
+
+Contains RMC regions only. Transcripts without evidence of RMC take their coverage
+from the public gene constraint Table's `low_exome_coverage` gene flag instead.
 """
 
 mis_oe_percentiles = ExpressionResource(
@@ -532,6 +563,33 @@ rmc_browser = VersionedTableResource(
 Table containing all transcripts with evidence of regional missense constraint.
 
 Contains same information as `rmc_results` but has different formatting for gnomAD browser.
+"""
+
+
+NO_BREAKS_RESOURCE = "no_breaks"
+"""
+Name used to refer to the no breaks HailExpression when unioning freezes.
+
+Kept separate from `UNIONABLE_RESOURCES` because this resource is a HailExpression
+(set of transcripts) rather than a Table.
+"""
+
+UNIONABLE_RESOURCES = {
+    "rmc_results": rmc_results,
+    "rmc_coverage_stats": rmc_coverage_stats_ht,
+}
+"""
+Freeze-versioned Tables that can be unioned across freezes.
+
+Used by `union_freeze_resources` to look up resources by name.
+
+NOTE: `context_with_oe` and `context_with_oe_dedup` aren't included because they are
+only consumed by missense badness/MPC, which remain on freeze 2. Add them here if MPC
+is regenerated on a unioned freeze.
+
+NOTE: `rmc_browser` is deliberately excluded. Its globals are transcript sets and its
+rows are grouped by transcript, so it should be regenerated from the unioned freeze
+with `format_rmc_browser_ht` rather than unioned directly.
 """
 
 

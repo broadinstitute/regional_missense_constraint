@@ -5,6 +5,7 @@ from typing import List, Optional, Set, Tuple, Union
 
 import hail as hl
 import scipy
+from gnomad.resources.grch38.gnomad import all_sites_an
 from gnomad.resources.grch38.reference_data import vep_context
 from gnomad.resources.resource_utils import DataException
 from gnomad.utils.constraint import (
@@ -12,7 +13,11 @@ from gnomad.utils.constraint import (
     compute_expected_variants,
     count_variants_by_group,
 )
-from gnomad.utils.file_utils import check_file_exists_raise_error, file_exists
+from gnomad.utils.file_utils import (
+    check_file_exists_raise_error,
+    file_exists,
+    repartition_for_join,
+)
 
 # from gnomad.utils.intervals import explode_intervals_to_loci #TODO: Uncomment when methods PR#789 is merged
 # TODO: Remove this import when methods PR#789 is merged
@@ -40,6 +45,7 @@ from rmc.resources.reference_data import (
     transcript_ref,
 )
 from rmc.resources.resource_utils import (
+    CONSTRAINT_VERSION,
     CURRENT_GNOMAD_VERSION,
     KEEP_CODING_CSQ,
     MISSENSE,
@@ -47,9 +53,13 @@ from rmc.resources.resource_utils import (
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
     FINAL_ANNOTATIONS,
+    FREEZES,
+    MIN_EXOMES_AN_PERCENT,
     MIN_EXP_MIS,
+    NO_BREAKS_RESOURCE,
     P_VALUE,
     SIMUL_SEARCH_ANNOTATIONS,
+    UNIONABLE_RESOURCES,
     constraint_prep,
     context_with_oe,
     context_with_oe_dedup,
@@ -76,6 +86,7 @@ from rmc.utils.generic import (
     filter_to_region_type,
     get_aa_from_context,
     get_annotations_from_context_ht_vep,
+    get_constraint_transcript_sets,
     get_constraint_transcripts,
     get_coverage_correction_expr,
     get_gnomad_public_release,
@@ -241,6 +252,7 @@ def adjust_fwd_cumulative_count_expr(
     This function can correct the scan created when searching for the first break or when searching for additional break(s).
 
     .. note::
+
         This function expects that `cumulative_count_expr` is a DictExpression keyed by elements in `group_expr`.
 
     :param cumulative_count_expr: DictExpression containing scan expression with cumulative variant counts per site.
@@ -273,6 +285,7 @@ def calculate_exp_from_mu(
     Annotate context Table with the per-variant (locus-allele) expected counts based on the per-variant mu.
 
     .. note::
+
         - Assumes that input Tables (context and possible) are annotated with all of the fields in `groupings` and that
             the names match exactly.
         - Assumes that input Table is annotated with `cpg`, `mu_snp` (raw mutation rate probability
@@ -580,42 +593,66 @@ def create_constraint_prep_ht(
     overwrite: bool = True,
     directory_post_fix: str = "coverage_corrected",
     path_post_fix: str = "coverage_corrected",
+    constraint_version: str = CONSTRAINT_VERSION,
     variant_idx: int = 0,
+    freeze: int = CURRENT_FREEZE,
+    keep_transcripts: Set[str] = None,
 ) -> None:
     """
     Create locus-level constraint prep Table from filtered context Table.
 
-    Function will remove transcripts with zero expected values transcript-wide
-    but will not do any additional transcript filtering.
-    Transcripts need to be filtered to canonical only if desired in upstream step to
-    create the `filtered_context` Table.
+    Function filters to Ensembl transcripts in `keep_transcripts`, or to canonical
+    Ensembl transcripts if `keep_transcripts` is unset, and removes transcripts with
+    zero expected values transcript-wide.
 
     This Table is used in the first step of regional constraint breakpoint search.
 
     Table can be filtered to variants with specific consequences before aggregation by locus.
 
-    :param filter_csq: Whether to filter Table to specific consequences. Default is True.
-    :param n_partitions: Number of desired partitions for the Table. Default is 15000.
-    :param csq: Desired consequences. Default is {`MISSENSE`}. Must be specified if filter is True.
+    :param filter_csq: Consequences to filter to before aggregating by locus.
+        If empty, no consequence filtering is done. Default is {`MISSENSE`}.
+    :param n_partitions: Number of desired partitions for the Table. Default is 10000.
     :param overwrite: Whether to overwrite Table. Default is True.
     :param directory_post_fix: Directory suffix for reading per-variant expected dataset. Default is "coverage_corrected".
     :param path_post_fix: File suffix to use for reading per-variant expected dataset. Default is "coverage_corrected".
+    :param constraint_version: gnomAD constraint version used to read the per-variant
+        expected dataset. Default is `CONSTRAINT_VERSION`.
     :param variant_idx: Index of observed and expected arrays to use. Default is 0 (corresponds to counts calculated on gnomAD-wide / "global" frequencies).
+    :param freeze: RMC freeze number. Default is `CURRENT_FREEZE`.
+    :param keep_transcripts: Desired set of transcripts to search.
+        If set, function will filter to these transcripts instead of canonical
+        transcripts. Default is None.
     :return: None; writes Table to path.
     """
     # NOTE: Observed counts upstream now includes variants with AF <= 0.001 instead of AF < 0.001.
     # The resource path below is called from an alternative (non-main) branch of gnomad-constraint repo:
     # https://github.com/broadinstitute/gnomad-constraint/blob/fa2412e03b86bee714d9a6b6ed44e5a0bd9320f5/gnomad_constraint/resources/resource_utils.py#L410
     ht = get_per_variant_expected_dataset(
-        directory_post_fix=directory_post_fix, path_post_fix=path_post_fix
+        directory_post_fix=directory_post_fix,
+        path_post_fix=path_post_fix,
+        version=constraint_version,
     ).ht()
-    # Filter to Canonical Ensembl transcripts
+    # Filter to Ensembl transcripts in the desired transcript set
     # NOTE: All MANE Select transcripts in GENCODE v39 are canonical, but not all canonical transcripts are MANE Select
-    logger.info("Filtering to canonical Ensembl transcripts...")
-    ht = ht.filter(ht.canonical & ht.transcript.startswith("ENST"))
+    if keep_transcripts:
+        logger.info(
+            "Filtering to %i specified Ensembl transcripts...", len(keep_transcripts)
+        )
+        transcript_expr = hl.literal(keep_transcripts).contains(ht.transcript)
+    else:
+        logger.info("Filtering to canonical Ensembl transcripts...")
+        transcript_expr = ht.canonical
+    ht = ht.filter(transcript_expr & ht.transcript.startswith("ENST"))
     # Count number of transcripts after filtering
-    n_transcripts = len(ht.aggregate(hl.agg.collect_as_set(ht.transcript)))
-    logger.info("Found %d transcripts after filtering...", n_transcripts)
+    found_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
+    logger.info("Found %d transcripts after filtering...", len(found_transcripts))
+    if keep_transcripts:
+        missing_transcripts = keep_transcripts - found_transcripts
+        if missing_transcripts:
+            raise DataException(
+                f"{len(missing_transcripts)} transcripts are missing from the"
+                f" per-variant expected dataset: {missing_transcripts}"
+            )
     # Obs and exp counts are arrays to account for different frequency strata
     ht = ht.annotate(
         observed=ht.calibrate_mu.observed_variants[variant_idx],
@@ -637,8 +674,12 @@ def create_constraint_prep_ht(
         observed=hl.agg.sum(ht.observed),
         expected=hl.agg.sum(ht.expected),
     )
+    # NOTE: Temp paths are freeze scoped so concurrent freezes don't collide, and are
+    # always recomputed: their contents also depend on `filter_csq`, `variant_idx`, and
+    # `keep_transcripts`, which the path doesn't capture
     transcript_group = transcript_group.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/transcript_group.ht", overwrite=overwrite
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_transcript_group.ht",
+        overwrite=True,
     )
     zero_exp = transcript_group.filter(transcript_group.expected == 0)
     if zero_exp.count() > 0:
@@ -656,7 +697,8 @@ def create_constraint_prep_ht(
 
     ht = ht.annotate(expected=hl.if_else(ht.expected == 0, 1e-09, ht.expected))
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/transcripts_nonzero_exp.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_transcripts_nonzero_exp.ht",
+        overwrite=True,
     )
 
     logger.info("Adding section annotation...")
@@ -678,7 +720,7 @@ def create_constraint_prep_ht(
     ht = ht.key_by("locus", "section").drop("start", "stop", "transcript")
 
     ht = ht.naive_coalesce(n_partitions)
-    ht.write(constraint_prep.path, overwrite=overwrite)
+    ht.write(constraint_prep.versions[freeze].path, overwrite=overwrite)
 
 
 def get_obs_exp_expr(
@@ -740,6 +782,7 @@ def annotate_fwd_exprs(ht: hl.Table) -> hl.Table:
     Annotate input Table with the forward section cumulative observed, expected, and observed/expected values.
 
     .. note::
+
         'Forward' refers to moving through the transcript from smaller to larger chromosomal positions.
 
     Expects input HT to contain the following fields:
@@ -788,6 +831,7 @@ def annotate_reverse_exprs(ht: hl.Table) -> hl.Table:
     Annotate input Table with the reverse section cumulative observed, expected, and observed/expected values.
 
     .. note::
+
         'Reverse' refers to moving through the transcript from larger to smaller chromosomal positions.
 
     Expects input HT to contain the following fields:
@@ -845,6 +889,7 @@ def get_dpois_expr(
 def annotate_max_chisq_per_section(
     ht: hl.Table,
     freeze: int,
+    suffix: Optional[str] = None,
 ) -> hl.Table:
     """
     Get maximum chi square value per transcript or transcript subsection.
@@ -858,6 +903,7 @@ def annotate_max_chisq_per_section(
 
     :param ht: Input Table.
     :param freeze: RMC data freeze number.
+    :param suffix: Suffix to append to the checkpoint file name.
     :return: Table annotated with maximum chi square value per transcript or transcript subsection.
     """
     group_ht = ht.group_by("section").aggregate(
@@ -865,7 +911,8 @@ def annotate_max_chisq_per_section(
         section_max_chisq=hl.agg.max(ht.chisq)
     )
     group_ht = group_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_group_max_chisq.ht", overwrite=True
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_group_max_chisq{f'_{suffix}' if suffix is not None else ''}.ht",
+        overwrite=True,
     )
     return ht.annotate(section_max_chisq=group_ht[ht.section].section_max_chisq)
 
@@ -1119,6 +1166,7 @@ def merge_simul_break_temp_hts(
     Read in simultaneous breaks temporary HTs at specified path and merge.
 
     .. note::
+
         - Assumes temp HTs are keyed by "section" or ("section", "i", "j")
         - Assumes temp HTs contain all annotations in SIMUL_BREAK_ANNOTATIONS
 
@@ -1154,12 +1202,9 @@ def merge_simul_break_temp_hts(
             logger.info("Working on %s", ht_path)
             temp = hl.read_table(ht_path)
             if temp.count() > 0:
-                # Tables containing transcripts/transcript sections that are over the transcript/section length threshold
-                # are keyed by section, i, j
-                # Tables containing transcripts/transcript sections that are under the length threshold are keyed
-                # only by section
-                # Rekey all tables here and select only the required fields to ensure the union on line 83 is able to work
-                # This `key_by` should not shuffle because `section` is already the first key for both Tables
+                # Temp Tables are keyed by section, i, j
+                # Rekey and select only the required fields so the union below works
+                # This `key_by` should not shuffle because `section` is already the first key
                 temp = temp.key_by("section")
                 row_fields = set(temp.row)
                 if len(SIMUL_SEARCH_ANNOTATIONS.intersection(row_fields)) < len(
@@ -1230,6 +1275,7 @@ def check_break_search_round_nums(
     increasing consecutive integers starting at 1, and that at least one search round was run.
 
     .. note::
+
         Assumes there is a folder for each search round run, regardless of whether there were breaks discovered
 
     :param freeze: RMC freeze number. Default is CURRENT_FREEZE.
@@ -1467,6 +1513,7 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     Use regional OE value if available, otherwise use transcript OE value.
 
     .. note::
+
         - Assumes `constraint_prep` Table is missense-specific
         - Assumes input Table has `locus` and `trancript` annotations
         - OE values are transcript specific
@@ -1479,7 +1526,11 @@ def get_oe_annotation(ht: hl.Table, freeze: int) -> hl.Table:
     :param freeze: RMC data freeze number.
     :return: Table with `oe` annotation.
     """
-    rmc_prep_ht = constraint_prep.ht().select_globals()
+    # NOTE: Constraint prep is read at `freeze` rather than at the default freeze.
+    # Freeze 3's constraint prep contains only the MANE Plus Clinical transcripts that
+    # freeze 2 didn't search, so reading the default freeze (2) here would leave
+    # `transcript_oe` missing for every freeze 3 transcript.
+    rmc_prep_ht = constraint_prep.versions[freeze].ht().select_globals()
     # Add transcript annotation from section field as this is required for joins to other tables
     rmc_prep_ht = rmc_prep_ht.annotate(transcript=rmc_prep_ht.section.split("_")[0])
     group_rmc_prep_ht = rmc_prep_ht.group_by("transcript").aggregate(
@@ -1659,31 +1710,74 @@ def create_context_with_oe(
     logger.info("Output OE-annotated dedup context HT fields: %s", set(ht.row))
 
 
+def get_transcript_cds_intervals(
+    transcripts: Set[str],
+) -> List[hl.utils.Interval]:
+    """
+    Get the CDS exon intervals of each input transcript.
+
+    Used to prune partitions when reading the VEP context HT.
+
+    .. note::
+
+        These are per exon intervals, not one interval per transcript. A transcript's
+        first to last coding coordinate spans its introns, which for large transcripts
+        is more than an order of magnitude more loci than the coding sequence itself.
+
+    :param transcripts: Set of transcripts.
+    :return: List of CDS exon intervals.
+    """
+    ht = transcript_cds.ht()
+    ht = ht.filter(hl.literal(transcripts).contains(ht.transcript))
+    rows = ht.key_by().select("transcript", "interval").collect()
+    missing = transcripts - {r.transcript for r in rows}
+    if missing:
+        raise DataException(
+            f"{len(missing)} transcripts are missing from `transcript_cds`, so their"
+            f" loci would be dropped from the context HT: {missing}"
+        )
+    return [r.interval for r in rows]
+
+
 def annot_rmc_with_start_stop_aas(
-    ht: hl.Table, overwrite_temp: bool, filter_to_canonical: bool
+    ht: hl.Table,
+    overwrite_temp: bool,
+    freeze: int = CURRENT_FREEZE,
 ) -> hl.Table:
     """
     Annotate RMC regions HT with amino acids at region starts and stops.
+
+    .. note::
+
+        The context HT is deliberately not filtered to canonical transcripts:
+        `keep_transcripts` and `intervals` already restrict it, and filtering would
+        drop non-canonical transcripts (e.g. MANE Plus Clinical) before their amino
+        acids are looked up, leaving their regions permanently missing amino acids.
 
     :param ht: Input RMC regions HT.
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
-    :param filter_to_canonical: Whether to filter to canonical transcripts only.
+    :param freeze: RMC freeze number. Default is `CURRENT_FREEZE`.
     :return: RMC regions HT annotated with amino acid information for region starts and stops.
     """
     logger.info("Getting amino acid information from context HT...")
     rmc_transcripts = ht.aggregate(hl.agg.collect_as_set(ht.transcript))
     # Get amino acid information from context table for variants in chosen transcripts
+    # NOTE: Intervals cover every CDS exon, not just region starts/stops, because the
+    # amino acid fixes below need exon boundaries and transcript-wide maximum amino
+    # acid numbers
     context_ht = get_aa_from_context(
         overwrite_temp=overwrite_temp,
+        freeze=freeze,
         keep_transcripts=rmc_transcripts,
-        filter_to_canonical=filter_to_canonical,
+        intervals=get_transcript_cds_intervals(rmc_transcripts),
     )
     # Get reference AA label for each locus-transcript combination in context HT
     context_ht = get_ref_aa(
         ht=context_ht,
         overwrite_temp=overwrite_temp,
+        freeze=freeze,
     )
     # NOTE: For transcripts on the negative strand, `start_aa` is the larger AA number and
     # `stop_aa` is the smaller number
@@ -1692,11 +1786,11 @@ def annot_rmc_with_start_stop_aas(
         stop_aa=context_ht[ht.stop_coordinate, ht.transcript].ref_aa,
     )
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_aa_annot.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_rmc_results_aa_annot.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
-    return check_and_fix_missing_aa(ht, context_ht, overwrite_temp)
+    return check_and_fix_missing_aa(ht, context_ht, overwrite_temp, freeze=freeze)
 
 
 def join_and_fix_aa(ht: hl.Table, fix_ht: hl.Table) -> hl.Table:
@@ -1724,7 +1818,10 @@ def join_and_fix_aa(ht: hl.Table, fix_ht: hl.Table) -> hl.Table:
 
 
 def fix_transcript_start_stop_aas(
-    ht: hl.Table, context_ht: hl.Table, overwrite_temp: bool
+    ht: hl.Table,
+    context_ht: hl.Table,
+    overwrite_temp: bool,
+    freeze: int = CURRENT_FREEZE,
 ) -> hl.Table:
     """
     Fix missing start or stop amino acid at transcript start or stop coordinates.
@@ -1744,6 +1841,8 @@ def fix_transcript_start_stop_aas(
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
+    :param freeze: RMC freeze number. Used to name temporary data.
+        Default is `CURRENT_FREEZE`.
     :return: HT containing start and stop amino acids only for RMC regions that were
         previously missing amino acid information at transcript stops/ends.
     """
@@ -1752,6 +1851,10 @@ def fix_transcript_start_stop_aas(
         (hl.is_missing(ht.start_aa) & ht.is_transcript_start)
         | (hl.is_missing(ht.stop_aa) & ht.is_transcript_stop)
     )
+    # A freeze can have nothing to fix, and `hl.literal` can't type an empty set
+    if miss_start_stop_ht.count() == 0:
+        logger.info("No transcript starts or stops are missing amino acids...")
+        return ht
     # Correct any applicable starts/ends to Met1
     miss_start_stop_ht = miss_start_stop_ht.annotate(
         start_aa=hl.or_missing(
@@ -1772,7 +1875,7 @@ def fix_transcript_start_stop_aas(
         ),
     )
     miss_start_stop_ht = miss_start_stop_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/transcript_start_stop_missing_aa.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_transcript_start_stop_missing_aa.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -1794,7 +1897,7 @@ def fix_transcript_start_stop_aas(
         largest_aa=hl.agg.max(max_aa_ht.aa_num)
     )
     max_aa_grp_ht = max_aa_grp_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/max_aa_per_transcript_group.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_max_aa_per_transcript_group.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -1809,7 +1912,7 @@ def fix_transcript_start_stop_aas(
         largest_aa=max_aa_ht[miss_start_stop_ht.transcript].ref_aa,
     )
     miss_start_stop_ht = miss_start_stop_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/ts_missing_start_stop_largest.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_ts_missing_start_stop_largest.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -1829,7 +1932,7 @@ def fix_transcript_start_stop_aas(
     )
     ht = join_and_fix_aa(ht, miss_start_stop_ht)
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_transcript_start_stop_aa_fix.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_rmc_results_transcript_start_stop_aa_fix.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -1837,12 +1940,16 @@ def fix_transcript_start_stop_aas(
 
 
 def fix_region_start_stop_aas(
-    ht: hl.Table, context_ht: hl.Table, overwrite_temp: bool
+    ht: hl.Table,
+    context_ht: hl.Table,
+    overwrite_temp: bool,
+    freeze: int = CURRENT_FREEZE,
 ) -> hl.Table:
     """
     Fix missing start or stop amino acid information for non-transcript starts and stops.
 
     .. note::
+
         - This function assumes that all start coordinates missing AA annotations are one position larger than
             the previous exon stop position. (This was the case in RMC freeze 7.)
             This means that the real start coordinate should be at the next exon start.
@@ -1865,15 +1972,21 @@ def fix_region_start_stop_aas(
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
+    :param freeze: RMC freeze number. Used to name temporary data.
+        Default is `CURRENT_FREEZE`.
     :return: HT containing start and stop amino acids only for RMC regions that were
         previously missing amino acid information.
     """
     missing_ht = ht.filter(hl.is_missing(ht.start_aa) | hl.is_missing(ht.stop_aa))
     missing_ht = missing_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/region_start_stop_missing_aa.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_region_start_stop_missing_aa.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
+    # A freeze can have nothing to fix, and `hl.literal` can't type an empty set
+    if missing_ht.count() == 0:
+        logger.info("No region starts or stops are missing amino acids...")
+        return ht
     missing_transcripts = hl.literal(
         missing_ht.aggregate(hl.agg.collect_as_set(missing_ht.transcript))
     )
@@ -1890,7 +2003,10 @@ def fix_region_start_stop_aas(
 
     # Create two versions of CDS HT to fix missing region start and stop AAs
     def _create_exon_position_ht(
-        cds_ht: hl.Table, fix_missing_start: bool, overwrite_temp: bool
+        cds_ht: hl.Table,
+        fix_missing_start: bool,
+        overwrite_temp: bool,
+        freeze: int = freeze,
     ) -> hl.Table:
         """
         Create Table keyed by either exon start or stop position.
@@ -1904,6 +2020,8 @@ def fix_region_start_stop_aas(
         :param overwrite_temp: Whether to overwrite temporary data.
             If False, will read existing temp data rather than overwriting.
             If True, will overwrite temp data.
+        :param freeze: RMC freeze number. Used to name temporary data.
+            Default is the enclosing function's `freeze`.
         :return: CDS HT keyed by either exon start or stop position and transcript.
         """
         if fix_missing_start:
@@ -1911,7 +2029,9 @@ def fix_region_start_stop_aas(
             # Region starts missing AAs need to get adjusted to use the AA from the next
             # exon start (this will now be from the previous row due to the reorder
             # and prev nonnull scan)
-            checkpoint_path = f"{TEMP_PATH_WITH_FAST_DEL}/cds_start_fix.ht"
+            checkpoint_path = (
+                f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_cds_start_fix.ht"
+            )
             cds_ht = cds_ht.order_by(
                 hl.asc(cds_ht.transcript), hl.desc(cds_ht.exon_start)
             )
@@ -1924,7 +2044,9 @@ def fix_region_start_stop_aas(
             # (the previous key is interval and transcript)
             # Region stops missing AAs need to get adjusted to use the AA from the
             # previous exon stop
-            checkpoint_path = f"{TEMP_PATH_WITH_FAST_DEL}/cds_stop_fix.ht"
+            checkpoint_path = (
+                f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_cds_stop_fix.ht"
+            )
             cds_ht = cds_ht.order_by("transcript", "exon_stop")
             cds_ht = cds_ht.annotate(
                 prev_exon_stop=hl.scan._prev_nonnull(cds_ht.exon_stop)
@@ -1940,10 +2062,16 @@ def fix_region_start_stop_aas(
 
     # Get relevant exon start and stop positions
     start_fix_ht = _create_exon_position_ht(
-        cds_ht=cds_ht, fix_missing_start=True, overwrite_temp=overwrite_temp
+        cds_ht=cds_ht,
+        fix_missing_start=True,
+        overwrite_temp=overwrite_temp,
+        freeze=freeze,
     )
     stop_fix_ht = _create_exon_position_ht(
-        cds_ht=cds_ht, fix_missing_start=False, overwrite_temp=overwrite_temp
+        cds_ht=cds_ht,
+        fix_missing_start=False,
+        overwrite_temp=overwrite_temp,
+        freeze=freeze,
     )
     missing_ht = missing_ht.annotate(
         next_exon_start=hl.or_missing(
@@ -1980,7 +2108,7 @@ def fix_region_start_stop_aas(
         ),
     )
     missing_ht = missing_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/region_start_stop_missing_aa_exon_annot.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_region_start_stop_missing_aa_exon_annot.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -2010,7 +2138,7 @@ def fix_region_start_stop_aas(
     )
     ht = join_and_fix_aa(ht, missing_ht)
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/rmc_results_all_aa_fix.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_rmc_results_all_aa_fix.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -2018,7 +2146,10 @@ def fix_region_start_stop_aas(
 
 
 def check_and_fix_missing_aa(
-    ht: hl.Table, context_ht: hl.Table, overwrite_temp: bool
+    ht: hl.Table,
+    context_ht: hl.Table,
+    overwrite_temp: bool,
+    freeze: int = CURRENT_FREEZE,
 ) -> hl.Table:
     """
     Check for and fix any missing amino acid information in RMC regions HT.
@@ -2030,6 +2161,8 @@ def check_and_fix_missing_aa(
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
+    :param freeze: RMC freeze number. Used to name temporary data.
+        Default is `CURRENT_FREEZE`.
     :return: Fixed RMC regions HT annotated with amino acid information
         for region starts and stops, including starts and stops that are previously
         missing annotations.
@@ -2077,8 +2210,8 @@ def check_and_fix_missing_aa(
     # Some starts and stops had uninformative amino acid information in the VEP context HT:
     # Amino acid was annotated as "X"
     # VEP context HT was created using VEP version 85, GENCODE version 19
-    ht = fix_transcript_start_stop_aas(ht, context_ht, overwrite_temp)
-    ht = fix_region_start_stop_aas(ht, context_ht, overwrite_temp)
+    ht = fix_transcript_start_stop_aas(ht, context_ht, overwrite_temp, freeze=freeze)
+    ht = fix_region_start_stop_aas(ht, context_ht, overwrite_temp, freeze=freeze)
 
     # Double check that all rows have defined AA annotations
     missing_ht = _missing_aa_check(ht)
@@ -2092,40 +2225,91 @@ def check_and_fix_missing_aa(
 
 def add_globals_rmc_browser(
     ht: hl.Table,
-    filter_to_canonical: bool = True,
+    extra_transcripts: Set[str] = None,
 ) -> hl.Table:
     """
     Annotate HT globals with RMC transcript information.
 
     Function is used when reformatting RMC results for browser release.
 
-    Annotates two structs:
-        - `transcript_counts`: Counts of total transcripts and transcripts with/without evidence of RMC (QC pass only).
-        - `transcript_counts_all`: Counts of all transcripts, transcripts with/without evidence of RMC, and outlier transcripts.
+    Annotates two structs (each field is a set of transcript IDs, not a count):
+        - `transcripts`: Sets across QC-pass transcripts only — all QC-pass transcripts and those with/without evidence of RMC.
+        - `all_transcripts`: Sets across all transcripts — all transcripts, those with/without evidence of RMC, outlier
+            transcripts (overall, no-exp, and count), and transcripts without evidence of RMC that carry a low coverage
+            and/or low mappability constraint gene flag.
+
+    .. note::
+
+        Transcript sets describe only the transcripts a freeze covers: canonical
+        transcripts plus `extra_transcripts`. Scoping to canonical here is not
+        optional -- the constraint HT contains every protein-coding transcript, so
+        using it unscoped would report transcripts that were never searched as
+        lacking evidence of RMC, including in the public downloads created by
+        `create_rmc_release_downloads`.
 
     :param HT: Input Table. Should be RMC regions HT annotated with amino acid
         information for region starts and stops.
-    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is True.
+    :param extra_transcripts: Additional transcripts covered by this freeze on top of
+        the canonical transcripts, e.g. the transcripts unique to the MANE Select plus
+        clinical set. Assumed to be present in the constraint HT. Default is None.
     :return: RMC regions HT with updated globals annotations.
     """
     # Get all transcripts with evidence of RMC
     rmc_transcripts = hl.literal(ht.aggregate(hl.agg.collect_as_set(ht.transcript)))
 
-    # Get all transcripts from constraint HT
-    all_transcripts = get_constraint_transcripts(
-        all_transcripts=True, filter_to_canonical=filter_to_canonical
+    # Derive every constraint-HT transcript set in a single aggregation pass.
+    # Outlier transcripts are also split into those missing at least one class of
+    # variation ("no_exp" constraint flags) and those with outlier counts of variation,
+    # and transcripts flagged for low coverage or low mappability are kept.
+    # NOTE: Only the covered set is scoped to canonical here; every other set is scoped
+    # by intersecting with it below, so `extra_transcripts` keep their flags
+    constraint_sets = get_constraint_transcript_sets(
+        {
+            "all": {"all_transcripts": True, "filter_to_canonical": True},
+            "outlier": {"outlier": True},
+            "no_exp_outlier": {"outlier": True, "outlier_class": "no_exp"},
+            "count_outlier": {"outlier": True, "outlier_class": "count"},
+            "low_coverage": {
+                "all_transcripts": True,
+                "gene_flag": "low_exome_coverage",
+            },
+            "low_mappability": {
+                "all_transcripts": True,
+                "gene_flag": "low_exome_mapping_quality",
+            },
+        },
     )
-    outlier_transcripts = get_constraint_transcripts(
-        filter_to_canonical=filter_to_canonical, outlier=True
+    # Get all transcripts covered by this freeze from constraint HT
+    all_transcripts = constraint_sets["all"]
+    if extra_transcripts:
+        all_transcripts = all_transcripts.union(hl.literal(extra_transcripts))
+
+    # Catch a freeze covering non-canonical transcripts that was released without
+    # `extra_transcripts`, which would drop those transcripts from the released sets
+    # NOTE: This can't catch the case where none of the missing transcripts have RMC
+    uncovered_transcripts = hl.eval(rmc_transcripts.difference(all_transcripts))
+    if uncovered_transcripts:
+        raise DataException(
+            f"{len(uncovered_transcripts)} transcripts with RMC results aren't in the"
+            f" covered transcript set: {uncovered_transcripts}. Pass them as"
+            " `extra_transcripts` if this freeze covers non-canonical transcripts."
+        )
+
+    # Restrict every other set to the transcripts this freeze covers
+    outlier_transcripts = constraint_sets["outlier"].intersection(all_transcripts)
+    no_exp_outlier_transcripts = constraint_sets["no_exp_outlier"].intersection(
+        all_transcripts
     )
-    # Split outlier transcripts into those missing at least one class of variation
-    # ("no_exp" constraint flags) and those with outlier counts of variation
-    no_exp_outlier_transcripts = get_constraint_transcripts(
-        filter_to_canonical=filter_to_canonical, outlier=True, outlier_class="no_exp"
+    count_outlier_transcripts = constraint_sets["count_outlier"].intersection(
+        all_transcripts
     )
-    count_outlier_transcripts = get_constraint_transcripts(
-        filter_to_canonical=filter_to_canonical, outlier=True, outlier_class="count"
+    low_coverage_transcripts = constraint_sets["low_coverage"].intersection(
+        all_transcripts
     )
+    low_mappability_transcripts = constraint_sets["low_mappability"].intersection(
+        all_transcripts
+    )
+    flagged_transcripts = low_coverage_transcripts.union(low_mappability_transcripts)
     qc_pass_transcripts = all_transcripts.difference(outlier_transcripts)
 
     ht = ht.select_globals()
@@ -2142,6 +2326,15 @@ def add_globals_rmc_browser(
             all_outlier_transcripts=outlier_transcripts,
             no_exp_outlier_transcripts=no_exp_outlier_transcripts,
             count_outlier_transcripts=count_outlier_transcripts,
+            transcripts_no_rmc_low_exome_coverage=low_coverage_transcripts.difference(
+                rmc_transcripts
+            ),
+            transcripts_no_rmc_low_exome_mapping_quality=low_mappability_transcripts.difference(
+                rmc_transcripts
+            ),
+            transcripts_no_rmc_with_flag=flagged_transcripts.difference(
+                rmc_transcripts
+            ),
         ),
     )
 
@@ -2150,38 +2343,381 @@ def annot_rmc_with_percentile(ht: hl.Table, oe_field: str) -> hl.Table:
     """
     Annotate input HT with missense OE depletion percentile using `mis_oe_percentiles` resource.
 
-    This resource is a list with 100 elements corresponding to missense OE for that percentile.
+    This resource is a list of 100 missense OE values, sorted in ascending order, where the
+    index corresponds to the missense OE percentile (index 0 = percentile 1, ...,
+    index 99 = percentile 100).
 
-    Percentiles to annotate are:
-        - <=1
-        - <=5
-        - <=10
-        - <=15
-        - <=25
-        - <=50
-        - <=75
+    The annotated percentile is the smallest percentile (index + 1) whose missense OE value
+    is larger than or equal to the provided OE. For example, a missense OE of 0.5469 is
+    annotated as percentile 7.
+
+    Any OE greater than the largest percentile value is annotated as percentile 100, and a
+    warning is logged because this is not expected. Missing OE values are annotated as missing.
 
     :param ht: Input HT with RMC information.
     :param oe_field: Field name of OE to use for percentile annotation.
     :return: HT with missense OE depletion percentile annotated per RMC region.
     """
     mis_oe_pcts = hl.eval(mis_oe_percentiles.he())
+    max_oe = mis_oe_pcts[-1]
     oe = ht[oe_field]
-    return ht.annotate(
-        mis_oe_percentile=hl.case()
-        .when(oe <= mis_oe_pcts[0], "<=1")
-        .when(oe <= mis_oe_pcts[4], "<=5")
-        .when(oe <= mis_oe_pcts[9], "<=10")
-        .when(oe <= mis_oe_pcts[14], "<=15")
-        .when(oe <= mis_oe_pcts[24], "<=25")
-        .when(oe <= mis_oe_pcts[49], "<=50")
-        .when(oe <= mis_oe_pcts[74], "<=75")
-        .default(">75")
+
+    # Warn if any OE is above the largest percentile value, since this is not expected
+    n_above_max = ht.aggregate(hl.agg.count_where(hl.is_defined(oe) & (oe > max_oe)))
+    if n_above_max > 0:
+        logger.warning(
+            "%i row(s) have a missense O/E (%s) > the largest percentile value (%f);"
+            " these will be annotated as percentile 100.",
+            n_above_max,
+            oe_field,
+            max_oe,
+        )
+
+    # Find the smallest index whose percentile value is larger than or equal to the provided
+    # OE. The percentile is that index + 1 (percentiles start at 1).
+    match = hl.enumerate(hl.literal(mis_oe_pcts)).find(lambda t: t[1] >= oe)
+    return ht.annotate(mis_oe_percentile=hl.if_else(oe > max_oe, 100, match[0] + 1))
+
+
+def get_exomes_an_percent_expr(
+    locus_expr: hl.expr.LocusExpression,
+    an_expr: hl.expr.ArrayExpression,
+    an_globals: hl.expr.StructExpression,
+    adj_idx: int = 0,
+) -> hl.expr.Int32Expression:
+    """
+    Get percent of gnomAD exomes samples with a defined genotype at a locus.
+
+    Matches the `AN_percent` exome coverage metric used in the gene constraint
+    pipeline.
+
+    :param locus_expr: Locus expression.
+    :param an_expr: Allele number array expression from the all sites AN Table.
+    :param an_globals: Globals of the all sites AN Table. Must contain `strata_meta`
+        and `strata_sample_count` annotations.
+    :param adj_idx: Index of allele number array calculated on high quality (adj)
+        genotypes across all samples. Default is 0.
+    :return: Percent of samples with a defined genotype at the locus.
+    """
+    sample_count = an_globals.strata_sample_count
+    strata_meta = an_globals.strata_meta
+    xx_count = sample_count[strata_meta.index({"group": "adj", "sex": "XX"})]
+    xy_count = sample_count[strata_meta.index({"group": "adj", "sex": "XY"})]
+    # XX samples have two X chromosomes and no Y, and XY samples have one of each
+    total_an = (
+        hl.case()
+        .when(locus_expr.in_x_nonpar(), (xx_count * 2) + xy_count)
+        .when(locus_expr.in_y_nonpar(), xy_count)
+        .default(sample_count[adj_idx] * 2)
     )
+    return hl.int((an_expr[adj_idx] / total_an) * 100)
+
+
+def create_rmc_coverage_stats(
+    overwrite_temp: bool,
+    freeze: int = CURRENT_FREEZE,
+    overwrite: bool = True,
+    an_data_type: str = "exomes",
+) -> None:
+    """
+    Create Table of median gnomAD exome AN percent per RMC region.
+
+    Output Table contains one row per RMC region, with a median calculated over CDS
+    sites only. `format_rmc_browser_ht` applies `MIN_EXOMES_AN_PERCENT` to that median
+    to flag low coverage regions.
+
+    .. note::
+
+        Transcripts without evidence of RMC are deliberately left out. They have no
+        searched regions, and the public gene constraint Table already carries their
+        coverage as the gene level `low_exome_coverage` flag, which
+        `add_globals_rmc_browser` releases as `transcripts_no_rmc_low_exome_coverage`.
+
+    .. note::
+
+        Regions are keyed on the amino acid annotated coordinates that get released,
+        not on the raw `rmc_results` intervals, so coverage describes the region the
+        browser actually displays.
+
+    Table is used to flag low coverage regions in `format_rmc_browser_ht`, so this
+    function must run after `finalize` and before the browser release step.
+
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
+    :param freeze: RMC freeze number. Default is `CURRENT_FREEZE`.
+    :param overwrite: Whether to overwrite output Table. Default is True.
+    :param an_data_type: gnomAD data type used to get all sites AN Table.
+        Default is "exomes".
+    :return: None; writes Table to resource path.
+    """
+    logger.info("Getting RMC regions...")
+    # NOTE: This adjusts region start and stop coordinates to exon boundaries, so
+    # coverage is keyed on the coordinates the browser displays. The checkpoint is
+    # freeze scoped, so `format_rmc_browser_ht` reuses it when run on the same freeze
+    rmc_ht = get_rmc_regions_aa_ht(freeze, overwrite_temp).select_globals()
+    rmc_ht = rmc_ht.key_by(
+        interval=hl.interval(
+            rmc_ht.start_coordinate,
+            rmc_ht.stop_coordinate,
+            includes_start=True,
+            includes_end=True,
+        ),
+        transcript=rmc_ht.transcript,
+    ).select()
+
+    regions_ht = rmc_ht
+
+    logger.info("Exploding CDS intervals to loci...")
+    transcripts = regions_ht.aggregate(hl.agg.collect_as_set(regions_ht.transcript))
+    cds_ht = transcript_cds.ht()
+    cds_ht = cds_ht.filter(hl.literal(transcripts).contains(cds_ht.transcript))
+    cds_ht = explode_intervals_to_loci(cds_ht, interval_field="interval")
+
+    # Annotate each CDS locus with the region it falls in
+    # NOTE: Regions are collected per transcript so that this is a key join on
+    # transcript rather than an interval join
+    regions_by_transcript = regions_ht.group_by("transcript").aggregate(
+        regions=hl.agg.collect(regions_ht.interval)
+    )
+    cds_ht = cds_ht.annotate(
+        interval=regions_by_transcript[cds_ht.transcript].regions.find(
+            lambda region: region.contains(cds_ht.locus)
+        )
+    )
+    cds_ht = cds_ht.filter(hl.is_defined(cds_ht.interval))
+    cds_loci_path = f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_rmc_cds_loci.ht"
+    cds_ht = cds_ht.checkpoint(
+        cds_loci_path,
+        _read_if_exists=not overwrite_temp,
+        overwrite=overwrite_temp,
+    )
+
+    logger.info("Annotating CDS loci with exome AN percent...")
+    # Co-partition the all sites AN Table with the CDS loci to make the join efficient
+    an_ht = hl.read_table(
+        all_sites_an(an_data_type).path,
+        _intervals=repartition_for_join(cds_loci_path),
+    )
+    # NOTE: The all sites AN Table only spans the exome calling intervals, so CDS loci
+    # outside them have no row (e.g. 508 chr21 CDS loci across 11 transcripts). Those
+    # loci have no exome coverage and are counted as 0%; leaving them missing would
+    # drop them from the median (`hl.median` ignores missing values) and overstate
+    # coverage for partially covered regions.
+    cds_ht = cds_ht.annotate(
+        exomes_AN_percent=hl.or_else(
+            get_exomes_an_percent_expr(
+                cds_ht.locus, an_ht[cds_ht.locus].AN, an_ht.index_globals()
+            ),
+            0,
+        )
+    )
+
+    logger.info("Calculating median AN percent per region...")
+    cov_ht = cds_ht.group_by("interval", "transcript").aggregate(
+        median_exomes_AN_percent=hl.median(hl.agg.collect(cds_ht.exomes_AN_percent))
+    )
+    # NOTE: Drop globals to keep freezes unionable. The amino acid annotation pulls in
+    # `mane_select_version`, and older freezes have no globals
+    cov_ht = cov_ht.select_globals()
+    cov_ht.write(rmc_coverage_stats_ht.versions[freeze].path, overwrite=overwrite)
+
+
+def union_freeze_resources(
+    resource_names: List[str],
+    freezes: List[int],
+    output_freeze: int,
+    overwrite: bool,
+) -> None:
+    """
+    Union freeze-versioned resources across freezes and write to an output freeze.
+
+    Resource names must be keys of `UNIONABLE_RESOURCES` or `NO_BREAKS_RESOURCE`.
+
+    .. note::
+
+        Transcripts must be disjoint across input freezes, otherwise results for the
+        same transcript would be duplicated in the output.
+
+    :param resource_names: Names of resources to union.
+    :param freezes: Freeze numbers to union. Must contain at least two freezes.
+    :param output_freeze: Freeze number to write unioned resources to.
+    :param overwrite: Whether to overwrite output data.
+    :return: None; writes resources to output freeze paths.
+    """
+    valid_names = set(UNIONABLE_RESOURCES) | {NO_BREAKS_RESOURCE}
+    unknown_names = set(resource_names) - valid_names
+    if unknown_names:
+        raise DataException(
+            f"Cannot union {unknown_names}! Resource names must be one of"
+            f" {valid_names}."
+        )
+    invalid_freezes = (set(freezes) | {output_freeze}) - set(FREEZES)
+    if invalid_freezes:
+        raise DataException(
+            f"Freeze(s) {invalid_freezes} are not in FREEZES ({FREEZES})!"
+        )
+    if len(freezes) < 2:
+        raise DataException("At least two freezes are required to union!")
+    if output_freeze in freezes:
+        raise DataException(
+            f"Output freeze ({output_freeze}) cannot be one of the freezes being"
+            " unioned!"
+        )
+
+    def _check_transcripts_disjoint(
+        transcript_sets: List[Set[str]], resource_name: str
+    ) -> None:
+        """
+        Check that transcripts don't overlap across freezes.
+
+        :param transcript_sets: Set of transcripts from each freeze.
+        :param resource_name: Name of resource being checked.
+        :return: None; raises DataException if any transcripts overlap.
+        """
+        n_transcripts = sum(len(t) for t in transcript_sets)
+        n_unique = len(set().union(*transcript_sets))
+        if n_unique != n_transcripts:
+            raise DataException(
+                f"Transcripts overlap across freezes {freezes} for {resource_name}"
+                f" ({n_transcripts} transcripts, {n_unique} unique)!"
+            )
+
+    for name in resource_names:
+        logger.info("Unioning %s across freezes %s...", name, freezes)
+        if name == NO_BREAKS_RESOURCE:
+            transcript_sets = [
+                set(hl.eval(hl.experimental.read_expression(no_breaks_he_path(freeze))))
+                for freeze in freezes
+            ]
+            _check_transcripts_disjoint(transcript_sets, name)
+            hl.experimental.write_expression(
+                hl.literal(set().union(*transcript_sets)),
+                no_breaks_he_path(output_freeze),
+                overwrite=overwrite,
+            )
+            continue
+
+        resource = UNIONABLE_RESOURCES[name]
+        hts = [resource.versions[freeze].ht() for freeze in freezes]
+        # Globals are taken from the first Table in a union, so check they all match
+        table_globals = [hl.eval(ht.index_globals()) for ht in hts]
+        if any(g != table_globals[0] for g in table_globals[1:]):
+            raise DataException(
+                f"Globals don't match across freezes {freezes} for {name}:"
+                f" {table_globals}!"
+            )
+        _check_transcripts_disjoint(
+            [ht.aggregate(hl.agg.collect_as_set(ht.transcript)) for ht in hts], name
+        )
+        ht = hts[0].union(*hts[1:])
+        ht.write(resource.versions[output_freeze].path, overwrite=overwrite)
+
+
+def get_rmc_regions_aa_ht(freeze: int, overwrite_temp: bool) -> hl.Table:
+    """
+    Get RMC regions with the start and stop coordinates and amino acids that get released.
+
+    `fix_region_start_stop_aas` shifts region starts and stops to exon boundaries, so
+    these coordinates differ from the raw intervals in `rmc_results`. Deriving them
+    requires the amino acid lookup over the VEP context Table, the most expensive step
+    in the pipeline.
+
+    `create_rmc_coverage_stats` needs these coordinates to key coverage on the regions
+    the browser displays, and `format_rmc_browser_ht` needs them plus the amino acids,
+    so both read this checkpoint rather than running the lookup once each.
+
+    .. warning::
+
+        The checkpoint is keyed on the freeze alone, so rerunning `finalize` leaves it
+        holding regions from the superseded RMC results. Pass `overwrite_temp` to the
+        steps that follow a rerun.
+
+    :param freeze: RMC freeze number.
+    :param overwrite_temp: Whether to overwrite temporary data.
+        If False, will read existing temp data rather than overwriting.
+        If True, will overwrite temp data.
+    :return: RMC regions HT annotated with released start and stop coordinates and
+        amino acids.
+    """
+    # NOTE: Existence is checked before deriving anything because the annotation runs
+    # counts and aggregations eagerly. Passing this Table to `checkpoint` would skip
+    # only the write, and its temporary data is deleted sooner than this Table, so the
+    # lookup would rerun in full once that data expires
+    path = f"{TEMP_PATH_WITH_SLOW_DEL}/freeze{freeze}_rmc_regions_aa.ht"
+    if not overwrite_temp and file_exists(path):
+        logger.info("Reading existing amino acid annotated RMC regions...")
+        return hl.read_table(path)
+
+    ht = rmc_results.versions[freeze].ht()
+    ht = ht.annotate(
+        start_coordinate=ht.interval.start,
+        stop_coordinate=ht.interval.end,
+    )
+    ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp, freeze=freeze)
+    return ht.checkpoint(path, overwrite=True)
+
+
+def union_rmc_browser_regions(freezes: List[int], output_freeze: int) -> hl.Table:
+    """
+    Union per region amino acid annotations from browser Tables of multiple freezes.
+
+    Amino acid lookup dominates the browser release, and a freeze that unions others
+    covers transcripts those freezes already annotated. This reuses that work.
+
+    .. note::
+
+        Only the amino acid annotations and the region statistics carry over.
+        `format_rmc_browser_ht` recomputes everything derived from them, so changes to
+        percentile, low coverage, or p-value cutoffs don't leave stale values behind.
+
+    :param freezes: Freezes whose browser Tables to union. Transcripts must be disjoint.
+    :param output_freeze: Freeze being released. Checked against `freezes` so a freeze
+        can't union itself.
+    :return: Table with one row per region, keyed by transcript.
+    """
+    invalid_freezes = (set(freezes) | {output_freeze}) - set(FREEZES)
+    if invalid_freezes:
+        raise DataException(
+            f"Freeze(s) {invalid_freezes} are not in FREEZES ({FREEZES})!"
+        )
+    if len(freezes) < 2:
+        raise DataException("At least two freezes are required to union!")
+    if output_freeze in freezes:
+        raise DataException(
+            f"Output freeze ({output_freeze}) cannot be one of the freezes being"
+            " unioned!"
+        )
+
+    hts = []
+    for freeze in freezes:
+        ht = rmc_browser.versions[freeze].ht().select_globals()
+        ht = ht.explode("regions")
+        hts.append(
+            ht.select(
+                start_coordinate=ht.regions.start_coordinate,
+                stop_coordinate=ht.regions.stop_coordinate,
+                start_aa=ht.regions.start_aa,
+                stop_aa=ht.regions.stop_aa,
+                section_obs=ht.regions.obs,
+                section_exp=ht.regions.exp,
+                section_chisq=ht.regions.chisq,
+            )
+        )
+    transcript_sets = [ht.aggregate(hl.agg.collect_as_set(ht.transcript)) for ht in hts]
+    n_transcripts = sum(len(t) for t in transcript_sets)
+    if len(set().union(*transcript_sets)) != n_transcripts:
+        raise DataException(
+            f"Transcripts overlap across browser Tables for freezes {freezes}!"
+        )
+    return hts[0].union(*hts[1:])
 
 
 def format_rmc_browser_ht(
-    freeze: int, overwrite_temp: bool, filter_to_canonical: bool = False
+    freeze: int,
+    overwrite_temp: bool,
+    extra_transcripts: Set[str] = None,
+    union_freezes: List[int] = None,
 ) -> None:
     """
     Reformat annotations in input HT for release.
@@ -2203,6 +2739,9 @@ def format_rmc_browser_ht(
             'all_outlier_transcripts': set<str>
             'no_exp_outlier_transcripts': set<str>
             'count_outlier_transcripts': set<str>
+            'transcripts_no_rmc_low_exome_coverage': set<str>
+            'transcripts_no_rmc_low_exome_mapping_quality': set<str>
+            'transcripts_no_rmc_with_flag': set<str>
         }
     ----------------------------------------
     Row fields:
@@ -2219,7 +2758,7 @@ def format_rmc_browser_ht(
             p: float64,
             low_coverage: bool,
             no_color: bool,
-            percentile: str,
+            percentile: int32,
         }>
     ----------------------------------------
     Key: ['transcript']
@@ -2229,40 +2768,41 @@ def format_rmc_browser_ht(
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
-    :param filter_to_canonical: Whether to filter to canonical transcripts only.
+    :param extra_transcripts: Additional transcripts covered by this freeze on top of
+        the canonical transcripts, e.g. the transcripts unique to the MANE Select plus
+        clinical set. Used to annotate globals. Default is None.
+    :param union_freezes: Freezes whose browser Tables hold the amino acid annotations
+        for this freeze's transcripts. If set, function reuses those annotations instead
+        of looking amino acids up again. Default is None.
     :return: None; writes Table with desired schema to resource path.
     """
-    ht = rmc_results.versions[freeze].ht()
     cov_ht = rmc_coverage_stats_ht.versions[freeze].ht()
 
-    # Annotate start and stop coordinates per region
-    ht = ht.annotate(
-        start_coordinate=ht.interval.start,
-        stop_coordinate=ht.interval.end,
-    )
-
-    # Annotate start and stop amino acids per region
-    ht = annot_rmc_with_start_stop_aas(ht, overwrite_temp, filter_to_canonical)
+    if union_freezes:
+        ht = union_rmc_browser_regions(union_freezes, freeze)
+    else:
+        # Annotate adjusted start and stop coordinates and amino acids per region
+        ht = get_rmc_regions_aa_ht(freeze, overwrite_temp)
 
     # Annotate low coverage flag per region using coverage stats
-    # NOTE: Coverage HT uses browser HT intervals, not raw RMC region intervals
+    # NOTE: Coverage HT is keyed on the amino acid annotated coordinates released in
+    # the browser HT, not on raw RMC region intervals
     cov_ht = cov_ht.key_by("interval", "transcript")
     ht = ht.annotate(
-        interval2=hl.interval(
-            ht.start_coordinate,
-            ht.stop_coordinate,
-            includes_start=True,
-            includes_end=True,
-        )
+        low_coverage=cov_ht[
+            hl.interval(
+                ht.start_coordinate,
+                ht.stop_coordinate,
+                includes_start=True,
+                includes_end=True,
+            ),
+            ht.transcript,
+        ].median_exomes_AN_percent
+        < MIN_EXOMES_AN_PERCENT
     )
-    ht = ht.annotate(
-        low_coverage1=cov_ht[ht.interval, ht.transcript].median_exomes_AN_percent < 90
+    ht = ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_rmc_aa_cov_annot.ht", overwrite=True
     )
-    ht = ht.annotate(
-        low_coverage2=cov_ht[ht.interval2, ht.transcript].median_exomes_AN_percent < 90
-    )
-    ht = ht.transmute(low_coverage=hl.coalesce(ht.low_coverage1, ht.low_coverage2))
-    ht = ht.checkpoint(f"{TEMP_PATH_WITH_FAST_DEL}/rmc_aa_cov_annot.ht", overwrite=True)
     cov_def_check = ht.aggregate(hl.agg.count_where(hl.is_missing(ht.low_coverage)))
     if cov_def_check != 0:
         raise DataException(
@@ -2305,7 +2845,7 @@ def format_rmc_browser_ht(
     ht = ht.group_by("transcript").aggregate(regions=hl.agg.collect(ht.region))
 
     # Annotate globals and write
-    ht = add_globals_rmc_browser(ht, filter_to_canonical)
+    ht = add_globals_rmc_browser(ht, extra_transcripts)
     ht.write(rmc_browser.versions[freeze].path, overwrite=True)
 
 
@@ -2324,9 +2864,20 @@ def create_rmc_release_downloads(
     - TSV with region results for transcripts that had evidence of RMC
     - TSV listing all transcripts that were searched for but did not have evidence of RMC
 
+    .. warning::
+
+        No pipeline subcommand calls this function, and it does not run as written:
+        `transcripts_no_rmc` is a field of the `transcripts` and `all_transcripts`
+        global structs, not a top-level global, so reading it raises AttributeError.
+
+        Reviving this step means choosing which set the public no-RMC TSV should list:
+        `transcripts.transcripts_no_rmc` (QC pass only) or
+        `all_transcripts.transcripts_no_rmc` (includes outliers). The
+        `transcripts_no_rmc_low_exome_coverage` and `transcripts_no_rmc_with_flag`
+        globals qualify that list further.
+
     .. note::
-        - Function assumes the global annotation `transcripts_no_rmc` exists
-        in `rmc_browser.ht()`
+
         - Function assumes the following fields exist in `regions` struct on `rmc_browser.ht()`:
             - start_coordinate
             - stop_coordinate
@@ -2357,6 +2908,7 @@ def create_rmc_release_downloads(
         Annotate input HT with GENCODE gene information using `transcript_ref`.
 
         .. note::
+
             Assumes input HT is annotated with transcript information
             (assumes `ht.transcript` exists).
 
@@ -2458,6 +3010,7 @@ def import_tsv_and_agg_transcripts(tsv_path: str) -> Set[str]:
     Import TSV from specified path and aggregate transcripts present in TSV.
 
     .. note ::
+
         Function assumes TSV has a header and that the header contains the field 'transcript'.
 
     :param tsv_path: Path from which to import TSV.

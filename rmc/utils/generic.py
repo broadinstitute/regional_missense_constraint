@@ -11,7 +11,6 @@ from gnomad.utils.vep import (
     CSQ_NON_CODING,
     explode_by_vep_annotation,
     filter_vep_transcript_csqs,
-    process_consequences,
 )
 from gnomad_constraint.resources.resource_utils import get_preprocessed_ht
 
@@ -22,6 +21,7 @@ from rmc.resources.basics import (
 )
 from rmc.resources.gnomad import constraint_ht
 from rmc.resources.reference_data import VEP_VERSION
+from rmc.resources.rmc import CURRENT_FREEZE
 
 logging.basicConfig(
     format="%(asctime)s (%(name)s %(lineno)s): %(message)s",
@@ -39,6 +39,7 @@ def get_codon_lookup() -> hl.expr.DictExpression:
     Read in codon lookup table and return as dictionary (key: codon, value: amino acid).
 
     .. note::
+
         This is only necessary for testing on ExAC and should be replaced with VEP annotations.
 
     :return: DictExpression of codon translation.
@@ -186,29 +187,42 @@ def process_context_ht(
 
 def get_aa_from_context(
     overwrite_temp: bool,
+    freeze: int = CURRENT_FREEZE,
     keep_transcripts: Set[str] = None,
+    intervals: List[hl.utils.Interval] = None,
     n_partitions: int = 10000,
-    filter_to_canonical: bool = False,
     vep_version: str = VEP_VERSION,
 ) -> hl.Table:
     """
     Extract amino acid information from VEP context HT.
 
+    .. note::
+
+        Passing `intervals` prunes partitions at read, which is much faster than
+        filtering after VEP processing. Intervals should cover every locus that needs
+        an amino acid annotation (e.g. the full CDS of each desired transcript, since
+        downstream amino acid fixes require exon boundaries and transcript-wide
+        maximum amino acid numbers).
+
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
+    :param freeze: RMC freeze number. Used to name temporary data.
+        Default is `CURRENT_FREEZE`.
     :param keep_transcripts: Desired set of transcripts to keep from the context HT.
         If set, function will filter to keep these trancripts only.
         Default is None.
-    :param n_partitions: Desired number of partitions for context HT after filtering.
-        Default is 10,000.
-    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
+    :param intervals: Intervals to filter the context HT to at read.
+        If set, partitions that don't overlap these intervals aren't loaded.
+        Default is None.
+    :param n_partitions: Desired number of partitions for context HT.
+        Only applied if `intervals` is None. Default is 10,000.
     :param vep_version: VEP version to use. Default is `VEP_VERSION`.
     :return: VEP context HT filtered to keep only transcript ID, protein number, and amino acid information.
     """
     logger.info(
-        "Reading in VEP context HT and filtering to coding effects in canonical"
-        " transcripts..."
+        "Reading in VEP context HT and filtering to coding effects in protein-coding"
+        " Ensembl transcripts..."
     )
     # TODO: Add option to filter to non-outliers if still desired
     # Drop globals and select only VEP transcript consequences field
@@ -217,22 +231,56 @@ def get_aa_from_context(
         .select_globals()
         .select("vep", "was_split")
     )
-    ht = ht.naive_coalesce(n_partitions)
+    if intervals:
+        logger.info("Filtering to %i intervals...", len(intervals))
+        ht = hl.filter_intervals(ht, intervals)
+    else:
+        # NOTE: `naive_coalesce` runs first in the pipeline, so it is skipped when
+        # intervals are specified (interval filtering already reduces partitions)
+        ht = ht.naive_coalesce(n_partitions)
     ht = filter_vep_transcript_csqs(
         t=ht,
         vep_root="vep",
         synonymous=False,
-        canonical=filter_to_canonical,
+        # NOTE: Never filtered to canonical transcripts -- `keep_transcripts` and
+        # `intervals` already restrict the context HT, and filtering here would drop
+        # non-canonical transcripts (e.g. MANE Plus Clinical) before their amino acids
+        # are looked up
+        canonical=False,
         protein_coding=True,
         ensembl_only=True,
         filter_empty_csq=True,
     )
-    ht = process_consequences(ht)
+    # Filter consequences before exploding so only the desired transcripts are expanded
+    if keep_transcripts:
+        logger.info("Filtering to desired transcripts only...")
+        keep_transcripts_expr = hl.literal(keep_transcripts)
+        ht = ht.annotate(
+            vep=ht.vep.annotate(
+                transcript_consequences=ht.vep.transcript_consequences.filter(
+                    lambda csq: keep_transcripts_expr.contains(csq.transcript_id)
+                )
+            )
+        )
+        ht = ht.filter(hl.len(ht.vep.transcript_consequences) > 0)
+
     ht = explode_by_vep_annotation(ht, "transcript_consequences")
     ht = ht.select("transcript_consequences")
+
+    # Remove consequences that are non-coding in this transcript
+    # NOTE: HT is exploded above, so each row is a single transcript's consequence;
+    # a variant that is coding in one transcript and non-coding in another keeps only
+    # the coding transcript's row.
+    # NOTE: `most_severe_consequence` isn't annotated per transcript consequence in
+    # the context HT, and `process_consequences` (which adds it) is an expensive pass.
+    # `CSQ_NON_CODING` is a suffix of the severity-ordered `CSQ_ORDER`, so a
+    # consequence's most severe term is non-coding only if none of its terms are
+    # coding, which makes this filter equivalent to filtering on
+    # `most_severe_consequence`.
+    non_coding_csq = hl.literal(CSQ_NON_CODING)
     ht = ht.filter(
-        ~hl.literal(CSQ_NON_CODING).contains(
-            ht.transcript_consequences.most_severe_consequence
+        ht.transcript_consequences.consequence_terms.any(
+            lambda csq: ~non_coding_csq.contains(csq)
         )
     )
     # Unnest annotations from context HT
@@ -243,12 +291,8 @@ def get_aa_from_context(
         amino_acids=ht.transcript_consequences.amino_acids,
     )
 
-    if keep_transcripts:
-        logger.info("Filtering to desired transcripts only...")
-        ht = ht.filter(hl.literal(keep_transcripts).contains(ht.transcript))
-
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/vep_amino_acids.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_vep_amino_acids.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
@@ -258,6 +302,7 @@ def get_aa_from_context(
 def get_ref_aa(
     ht: hl.Table,
     overwrite_temp: bool,
+    freeze: int = CURRENT_FREEZE,
     extra_aa_map: Dict[str, str] = {"*": "Ter", "U": "Sec"},
     aa_to_remove: Set[str] = {"X"},
 ) -> hl.Table:
@@ -268,6 +313,8 @@ def get_ref_aa(
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
+    :param freeze: RMC freeze number. Used to name temporary data.
+        Default is `CURRENT_FREEZE`.
     :param extra_aa_map: Dictionary mapping any amino acid one letter codes to three letter codes.
         Designed to capture any amino acids not present in `ACID_NAMES_PATH`.
         Default is {"*": "Ter", "U": "Sec"}.
@@ -279,61 +326,53 @@ def get_ref_aa(
     # Add any extra mappings into amino acid mapping dict
     if extra_aa_map:
         aa_map.update(extra_aa_map)
-    aa_map = hl.literal(aa_map)
+    # NOTE: `aa_map` is kept as a python dict so that its values can be checked below
+    # without evaluating the literal
+    aa_map_expr = hl.literal(aa_map)
     ht = ht.annotate(ref_aa_1_letter=ht.amino_acids.split("/")[0])
-    ht = ht.annotate(ref_aa=aa_map.get(ht.ref_aa_1_letter, ht.ref_aa_1_letter))
+    ht = ht.annotate(ref_aa=aa_map_expr.get(ht.ref_aa_1_letter, ht.ref_aa_1_letter))
     if aa_to_remove:
         ht = ht.filter(~hl.literal(aa_to_remove).contains(ht.ref_aa))
 
     # Select fields and checkpoint
     ht = ht.select("ref_aa", "aa_start_num", "aa_end_num", "transcript")
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/ref_amino_acids.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_ref_amino_acids.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
 
-    # Check if there are any ref amino acids in HT that aren't in `aa_map`
-    ref_aa_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/ref_aa_3_letter_check.he"
-    overwrite_ref_aa_he = (
-        not file_exists(ref_aa_check_he_path) if not overwrite_temp else overwrite_temp
+    # Check that all ref amino acids are in `aa_map` and that protein start always
+    # equals protein end
+    # NOTE: Both checks are collected in a single aggregation and cached together
+    checks_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_ref_aa_checks.he"
+    overwrite_checks_he = (
+        not file_exists(checks_he_path) if not overwrite_temp else overwrite_temp
     )
-    if overwrite_ref_aa_he:
-        ref_aa_check = ht.aggregate(hl.agg.collect_as_set(ht.ref_aa))
-        hl.experimental.write_expression(
-            ref_aa_check, ref_aa_check_he_path, overwrite=True
+    if overwrite_checks_he:
+        checks = ht.aggregate(
+            hl.struct(
+                ref_aa=hl.agg.collect_as_set(ht.ref_aa),
+                n_protein_num_mismatch=hl.agg.count_where(
+                    ht.aa_start_num != ht.aa_end_num
+                ),
+            )
         )
-    ref_aa_check = hl.eval(hl.experimental.read_expression(ref_aa_check_he_path))
-    ref_aa_check = ref_aa_check.difference(set(hl.eval(aa_map).values()))
-    if len(ref_aa_check) != 0:
+        hl.experimental.write_expression(checks, checks_he_path, overwrite=True)
+    else:
+        checks = hl.eval(hl.experimental.read_expression(checks_he_path))
+
+    unmapped_aa = checks.ref_aa.difference(set(aa_map.values()))
+    if len(unmapped_aa) != 0:
         logger.warning(
             "The following reference amino acids were not mapped to three letter"
             " codes: %s",
-            ref_aa_check,
+            unmapped_aa,
         )
-
-    # Double check that protein start always equals protein end
-    protein_num_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/protein_num_count.he"
-    overwrite_protein_num_he = (
-        not file_exists(protein_num_check_he_path)
-        if not overwrite_temp
-        else overwrite_temp
-    )
-    if overwrite_protein_num_he:
-        protein_num_check = ht.aggregate(
-            hl.agg.count_where(ht.aa_start_num != ht.aa_end_num)
-        )
-        hl.experimental.write_expression(
-            protein_num_check, protein_num_check_he_path, overwrite=True
-        )
-    # Assume file already exists otherwise
-    protein_num_check = hl.eval(
-        hl.experimental.read_expression(protein_num_check_he_path)
-    )
-    if protein_num_check != 0:
+    if checks.n_protein_num_mismatch != 0:
         raise DataException(
-            f"{protein_num_check} sites had different amino acid numbers at start and"
-            " end -- please double check!"
+            f"{checks.n_protein_num_mismatch} sites had different amino acid numbers at"
+            " start and end -- please double check!"
         )
 
     # Reformat reference AA to have both the 3 letter code and number
@@ -348,30 +387,33 @@ def get_ref_aa(
     ht = ht.key_by("locus", "transcript").drop("alleles", "aa_start_num", "aa_end_num")
     ht = ht.collect_by_key(name="aa_info")
     ht = ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/ref_aa_collected.ht",
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_ref_aa_collected.ht",
         _read_if_exists=not overwrite_temp,
         overwrite=overwrite_temp,
     )
 
     # Check to see if AA info is defined for all alleles associated with a locus/transcript
-    missing_aa_check_he_path = f"{TEMP_PATH_WITH_FAST_DEL}/missing_aa_check.he"
+    missing_aa_check_he_path = (
+        f"{TEMP_PATH_WITH_FAST_DEL}/freeze{freeze}_missing_aa_check.he"
+    )
     overwrite_he = (
         not file_exists(missing_aa_check_he_path)
         if not overwrite_temp
         else overwrite_temp
     )
     if overwrite_he:
-        ht = ht.annotate(
-            any_aa_missing=hl.any(hl.map(lambda x: hl.is_missing(x.ref_aa), ht.aa_info))
+        missing_aa_check = ht.aggregate(
+            hl.agg.count_where(
+                hl.any(hl.map(lambda x: hl.is_missing(x.ref_aa), ht.aa_info))
+            )
         )
-        missing_aa_check = ht.aggregate(hl.agg.count_where(ht.any_aa_missing))
-        missing_aa_check = hl.experimental.write_expression(
+        hl.experimental.write_expression(
             missing_aa_check, missing_aa_check_he_path, overwrite=True
         )
-
-    missing_aa_check = hl.eval(
-        hl.experimental.read_expression(missing_aa_check_he_path)
-    )
+    else:
+        missing_aa_check = hl.eval(
+            hl.experimental.read_expression(missing_aa_check_he_path)
+        )
     if missing_aa_check != 0:
         logger.warning(
             "%i locus-transcript combinations had missing AA info for at least 1"
@@ -538,6 +580,7 @@ def get_coverage_correction_expr(
     Get 'coverage' correction for expected variants count.
 
     .. note::
+
         - As of gnomAD v4, we use allele number (AN) as a proxy for coverage,
             because coverage in v4 was not computed from CRAMs.
         - Default high coverage cutoff taken from gnomAD LoF repo.
@@ -571,6 +614,7 @@ def get_plateau_model(
     Get model to determine adjustment to mutation rate based on locus type and CpG status.
 
     .. note::
+
         This function expects that the context Table has each plateau model (autosome, X, Y) added as global annotations.
 
     :param hl.expr.LocusExpression locus_expr: Locus expression.
@@ -599,52 +643,35 @@ def get_plateau_model(
 ####################################################################################
 ## Outlier transcript utils
 ####################################################################################
-def get_constraint_transcripts(
+def _constraint_filter_expr(
+    constraint_transcript_ht: hl.Table,
     all_transcripts: bool = False,
     filter_to_canonical: bool = False,
     outlier: bool = True,
     outlier_class: str = None,
-) -> hl.expr.SetExpression:
+    gene_flag: str = None,
+) -> hl.expr.BooleanExpression:
     """
-    Read in LoF constraint HT results to get set of transcripts.
+    Build the per-row filter used to select transcripts from the constraint HT.
 
-    Return either set of transcripts to keep (transcripts that passed transcript QC)
-    or outlier transcripts.
+    See :func:`get_constraint_transcripts` for the meaning of each argument and for
+    constraint HT version compatibility notes.
 
-    Transcripts are removed for the reasons detailed here:
-    https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
-
-    .. note::
-        - Function assumes that LoF constraint HT has been filtered to include only
-            protein-coding transcripts.
-
-    :param all_transcripts: Whether to filter to all transcripts. Will only keep
-        all transcripts if `filter_to_canonical` is False, otherwise toggles
-        between removing or keeping non-outlier transcripts. Default is False.
-    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
-    :param outlier: Whether to filter LoF constraint HT to outlier transcripts (if True),
-        or QC-pass transcripts (if False). Applies only if `all_transcripts` is False.
-        Default is True.
-    :param outlier_class: Optionally restrict outlier transcripts to a single class.
-        Applies only if `all_transcripts` is False and `outlier` is True. One of:
-            - "no_exp": Outliers missing at least one class of variation (any
-                constraint flag starting with "no_exp").
-            - "count": Outliers with outlier counts of variation only (no "no_exp"
-                flags).
-        Default is None (return all outlier transcripts).
-    :return: Set of outlier transcripts or transcript QC pass transcripts.
-    :rtype: hl.expr.SetExpression
+    :param constraint_transcript_ht: Constraint HT to build the filter expression against.
+    :param all_transcripts: Whether to keep all transcripts (skips the outlier filter).
+        Default is False.
+    :param filter_to_canonical: Whether to restrict to canonical transcripts. Default is False.
+    :param outlier: Whether to keep outlier transcripts (if True) or QC-pass transcripts
+        (if False). Applies only if `all_transcripts` is False. Default is True.
+    :param outlier_class: Optionally restrict outlier transcripts to a single class
+        ("no_exp" or "count"). Default is None.
+    :param gene_flag: Optionally restrict to transcripts whose `gene_flags` set contains
+        this value. Default is None.
+    :return: Boolean row expression selecting the requested transcripts.
+    :rtype: hl.expr.BooleanExpression
     """
     if outlier_class is not None and outlier_class not in {"no_exp", "count"}:
         raise ValueError("`outlier_class` must be one of None, 'no_exp', or 'count'!")
-    logger.warning(
-        "Assumes LoF constraint has been separately calculated and that constraint HT"
-        " exists..."
-    )
-    if not file_exists(constraint_ht.path):
-        raise DataException("Constraint HT not found!")
-
-    constraint_transcript_ht = constraint_ht.ht()
 
     # NOTE: all protein-coding transcripts are ENST transcripts in constraint HT
     filter_expr = constraint_transcript_ht.transcript_type == "protein_coding"
@@ -668,9 +695,140 @@ def get_constraint_transcripts(
         else:
             filter_expr &= hl.len(constraint_transcript_ht.constraint_flags) == 0
 
+    if gene_flag is not None:
+        filter_expr &= constraint_transcript_ht.gene_flags.contains(gene_flag)
+
+    return filter_expr
+
+
+def get_constraint_transcripts(
+    all_transcripts: bool = False,
+    filter_to_canonical: bool = False,
+    outlier: bool = True,
+    outlier_class: str = None,
+    gene_flag: str = None,
+) -> hl.expr.SetExpression:
+    """
+    Read in LoF constraint HT results to get set of transcripts.
+
+    Return either set of transcripts to keep (transcripts that passed transcript QC)
+    or outlier transcripts.
+
+    Transcripts are removed for the reasons detailed here:
+    https://gnomad.broadinstitute.org/faq#why-are-constraint-metrics-missing-for-this-gene-or-annotated-with-a-note
+
+    .. note::
+        - Function assumes that LoF constraint HT has been filtered to include only
+            protein-coding transcripts.
+        - This function is designed for gnomAD v4.1.1 constraint data and is not
+            compatible with previous versions, which used different names for the
+            outlier flags (`constraint_flags`).
+        - The `gene_flags` field used by `gene_flag` does not exist in constraint HT
+            versions prior to 4.1.1, so `gene_flag` can only be used with 4.1.1+.
+
+    :param all_transcripts: Whether to skip the outlier filter and keep transcripts
+        regardless of their constraint flags, which makes `outlier` and `outlier_class`
+        no-ops. `filter_to_canonical` and `gene_flag` still apply. Default is False.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only. Default is False.
+    :param outlier: Whether to filter LoF constraint HT to outlier transcripts (if True),
+        or QC-pass transcripts (if False). Applies only if `all_transcripts` is False.
+        Default is True.
+    :param outlier_class: Optionally restrict outlier transcripts to a single class.
+        Applies only if `all_transcripts` is False and `outlier` is True. One of:
+            - "no_exp": Outliers missing at least one class of variation (any
+                constraint flag starting with "no_exp").
+            - "count": Outliers with outlier counts of variation only (no "no_exp"
+                flags).
+        Default is None (return all outlier transcripts).
+    :param gene_flag: Optionally restrict to transcripts whose constraint `gene_flags`
+        set contains this value, e.g. "low_exome_coverage" (low coverage) or
+        "low_exome_mapping_quality" (low mappability). Only available for constraint HT
+        version 4.1.1+ (see note above). Default is None (no gene flag filter).
+    :return: Set of outlier transcripts or transcript QC pass transcripts.
+    :rtype: hl.expr.SetExpression
+    """
+    logger.warning(
+        "Assumes LoF constraint has been separately calculated and that constraint HT"
+        " exists..."
+    )
+    if not file_exists(constraint_ht.path):
+        raise DataException("Constraint HT not found!")
+
+    constraint_transcript_ht = constraint_ht.ht()
+    filter_expr = _constraint_filter_expr(
+        constraint_transcript_ht,
+        all_transcripts=all_transcripts,
+        filter_to_canonical=filter_to_canonical,
+        outlier=outlier,
+        outlier_class=outlier_class,
+        gene_flag=gene_flag,
+    )
     constraint_transcript_ht = constraint_transcript_ht.filter(filter_expr)
     return hl.literal(
         constraint_transcript_ht.aggregate(
             hl.agg.collect_as_set(constraint_transcript_ht.transcript)
         )
     )
+
+
+def get_constraint_transcript_sets(
+    specs: Dict[str, Dict],
+    filter_to_canonical: bool = False,
+) -> Dict[str, hl.expr.SetExpression]:
+    """
+    Read the constraint HT once and return one transcript set per named spec.
+
+    Each spec value is a dict of keyword arguments accepted by
+    :func:`get_constraint_transcripts` (`all_transcripts`, `outlier`, `outlier_class`,
+    `gene_flag`) describing one filter. `filter_to_canonical` is applied to every spec
+    that doesn't set it itself.
+    All sets are collected in a single aggregation pass over the constraint HT, which is
+    more efficient than calling :func:`get_constraint_transcripts` once per set (each
+    such call otherwise re-reads and re-aggregates the constraint HT).
+
+    Example::
+
+        get_constraint_transcript_sets(
+            {
+                "all": {"all_transcripts": True},
+                "low_coverage": {
+                    "all_transcripts": True,
+                    "gene_flag": "low_exome_coverage",
+                },
+            }
+        )
+
+    .. note::
+        - Same constraint HT assumptions and version compatibility as
+            :func:`get_constraint_transcripts` (designed for gnomAD v4.1.1 data).
+        - Spec names become struct field names, so they must be valid Hail field names.
+
+    :param specs: Mapping of output name to `get_constraint_transcripts` keyword arguments.
+    :param filter_to_canonical: Whether to filter to canonical transcripts only.
+        Overridden by a spec that sets it. Default is False.
+    :return: Mapping of each spec name to its set of transcripts.
+    :rtype: Dict[str, hl.expr.SetExpression]
+    """
+    logger.warning(
+        "Assumes LoF constraint has been separately calculated and that constraint HT"
+        " exists..."
+    )
+    if not file_exists(constraint_ht.path):
+        raise DataException("Constraint HT not found!")
+
+    constraint_transcript_ht = constraint_ht.ht()
+    results = constraint_transcript_ht.aggregate(
+        hl.struct(
+            **{
+                name: hl.agg.filter(
+                    _constraint_filter_expr(
+                        constraint_transcript_ht,
+                        **{"filter_to_canonical": filter_to_canonical, **spec},
+                    ),
+                    hl.agg.collect_as_set(constraint_transcript_ht.transcript),
+                )
+                for name, spec in specs.items()
+            }
+        )
+    )
+    return {name: hl.literal(results[name]) for name in specs}
