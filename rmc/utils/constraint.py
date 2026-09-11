@@ -2708,7 +2708,25 @@ def union_rmc_browser_regions(freezes: List[int], output_freeze: int) -> hl.Tabl
         raise DataException(
             f"Transcripts overlap across browser Tables for freezes {freezes}!"
         )
-    return hts[0].union(*hts[1:])
+    union_ht = hts[0].union(*hts[1:])
+    union_ht = union_ht.checkpoint(
+        f"{TEMP_PATH_WITH_FAST_DEL}/unioned_freeze_{output_freeze}.ht", overwrite=True
+    )
+
+    # Check that all expected transcripts made it into the unioned Table
+    expected_transcripts = set().union(*transcript_sets)
+    unioned_transcripts = union_ht.aggregate(hl.agg.collect_as_set(union_ht.transcript))
+    missing_transcripts = expected_transcripts - unioned_transcripts
+
+    if missing_transcripts:
+        # Converting to a list and slicing to avoid blowing up the error message if there are many
+        missing_sample = list(missing_transcripts)[:10]
+        raise DataException(
+            f"The unioned Table is missing {len(missing_transcripts)} transcripts! "
+            f"Missing transcripts include: {missing_sample}"
+        )
+
+    return union_ht
 
 
 def format_rmc_browser_ht(
