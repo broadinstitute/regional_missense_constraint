@@ -2709,9 +2709,6 @@ def union_rmc_browser_regions(freezes: List[int], output_freeze: int) -> hl.Tabl
             f"Transcripts overlap across browser Tables for freezes {freezes}!"
         )
     union_ht = hts[0].union(*hts[1:])
-    union_ht = union_ht.checkpoint(
-        f"{TEMP_PATH_WITH_FAST_DEL}/unioned_freeze_{output_freeze}.ht", overwrite=True
-    )
 
     # Check that all expected transcripts made it into the unioned Table
     expected_transcripts = set().union(*transcript_sets)
