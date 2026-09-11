@@ -26,7 +26,7 @@ from rmc.resources.basics import (
 from rmc.resources.reference_data import FOLD_K
 from rmc.resources.resource_utils import CURRENT_GNOMAD_VERSION
 
-FREEZES = [1, 2, 3, 4]
+FREEZES = [1, 2, 3, 4, 5]
 """
 RMC/MPC data versions computed with current gnomAD version.
 
@@ -36,11 +36,13 @@ gnomAD v4.1 freezes: [1, 2, 3, 4].
 
 NOTE: v4.1 freeze 1 was a test run to ensure that RMC results calculated using allele number (AN) as a proxy for coverage looked reasonable. This freeze defined high coverage as AN > 66%.
 v4.1 freeze 2 also uses AN as a proxy for coverage and defines high coverage as AN>= 90%.
-v4.1 freeze 3 is an incremental run over the transcripts unique to the MANE Select
+v4.1 freeze 3 is a rerun of freeze 2 after fixing a bug in simultaneous break searches
+(see https://github.com/broadinstitute/regional_missense_constraint/pull/325).
+v4.1 freeze 4 is an incremental run over the transcripts unique to the MANE Select
 plus clinical set (MANE Plus Clinical transcripts that aren't Ensembl canonical, and
-were therefore not searched in freeze 2). Break search results are independent per
-transcript, so freeze 3 uses the same models and thresholds as freeze 2.
-v4.1 freeze 4 is the union of freezes 2 and 3, created with `union_freeze_resources`.
+were therefore not searched in freezes 2/3). Break search results are independent per
+transcript, so freeze 4 uses the same models and thresholds as freezes 2/3.
+v4.1 freeze 5 is the union of freezes 3 and 4, created with `union_freeze_resources`.
 
 NOTE: Freezes 2-4 are computed on gnomAD v4.1.1 data (the models underlying the
 expected variant counts and the gene constraint HT are both v4.1.1), but resource
@@ -52,7 +54,7 @@ NOTE: Missense badness and MPC were not regenerated for freezes 3 and 4 -- they 
 on freeze 2, which is why `context_with_oe` was not unioned into freeze 4.
 """
 
-CURRENT_FREEZE = 2
+CURRENT_FREEZE = 5
 """
 Current RMC/MPC data version.
 
