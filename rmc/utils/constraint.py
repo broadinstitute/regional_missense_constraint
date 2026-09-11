@@ -2466,10 +2466,8 @@ def create_rmc_coverage_stats(
         transcript=rmc_ht.transcript,
     ).select()
 
-    regions_ht = rmc_ht
-
     logger.info("Exploding CDS intervals to loci...")
-    transcripts = regions_ht.aggregate(hl.agg.collect_as_set(regions_ht.transcript))
+    transcripts = rmc_ht.aggregate(hl.agg.collect_as_set(rmc_ht.transcript))
     cds_ht = transcript_cds.ht()
     cds_ht = cds_ht.filter(hl.literal(transcripts).contains(cds_ht.transcript))
     cds_ht = explode_intervals_to_loci(cds_ht, interval_field="interval")
@@ -2477,8 +2475,8 @@ def create_rmc_coverage_stats(
     # Annotate each CDS locus with the region it falls in
     # NOTE: Regions are collected per transcript so that this is a key join on
     # transcript rather than an interval join
-    regions_by_transcript = regions_ht.group_by("transcript").aggregate(
-        regions=hl.agg.collect(regions_ht.interval)
+    regions_by_transcript = rmc_ht.group_by("transcript").aggregate(
+        regions=hl.agg.collect(rmc_ht.interval)
     )
     cds_ht = cds_ht.annotate(
         interval=regions_by_transcript[cds_ht.transcript].regions.find(
