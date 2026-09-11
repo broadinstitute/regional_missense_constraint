@@ -2766,6 +2766,7 @@ def format_rmc_browser_ht(
     :param overwrite_temp: Whether to overwrite temporary data.
         If False, will read existing temp data rather than overwriting.
         If True, will overwrite temp data.
+        Not applicable when `union_freezes` is True.
     :param extra_transcripts: Additional transcripts covered by this freeze on top of
         the canonical transcripts, e.g. the transcripts unique to the MANE Select plus
         clinical set. Used to annotate globals. Default is None.
