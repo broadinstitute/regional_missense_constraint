@@ -2379,6 +2379,8 @@ def annot_rmc_with_percentile(ht: hl.Table, oe_field: str) -> hl.Table:
     return ht.annotate(mis_oe_percentile=hl.if_else(oe > max_oe, 100, match[0] + 1))
 
 
+# TODO: Consider replacing with `get_exome_coverage_expr` once it has been merged to main
+# in gnomad-constraint repo
 def get_exomes_an_percent_expr(
     locus_expr: hl.expr.LocusExpression,
     an_expr: hl.expr.ArrayExpression,
