@@ -36,6 +36,25 @@ VEP_VERSION = "105"
 VEP version used to annotate variants.
 """
 
+GENCODE_GTF_PATH = f"gs://gcp-public-data--gnomad/resources/grch38/gencode/gencode.v{GENCODE_VERSION}.annotation.gtf.gz"
+"""
+Path to public GENCODE GTF for `GENCODE_VERSION`.
+
+Same GTF imported by the gnomad_methods `gencode` GRCh38 resource.
+Used to get MANE Select and MANE Plus Clinical transcripts.
+"""
+
+mane_plus_clinical_transcripts_path = (
+    f"{get_ref_data_prefix()}/ht/mane_plus_clinical_transcripts.he"
+)
+"""
+Path to HailExpression of transcripts unique to the MANE Select plus clinical set.
+
+Contains the protein-coding MANE Plus Clinical transcripts that aren't Ensembl
+canonical, i.e. the transcripts not searched in RMC freeze 2 (56 transcripts in
+GENCODE v39).
+"""
+
 # TODO: Replace this with `browser_gene()` gnomad_methods resource
 gene_model = VersionedTableResource(
     default_version=CURRENT_BUILD,
@@ -176,6 +195,7 @@ def train_val_test_transcripts_path(
     By default, all training transcripts are returned.
 
     .. note::
+
         - `is_test` cannot be True if `fold` is defined.
         - `is_test` and `is_val` cannot be True simultaneously.
         - If `is_val` is True, `fold` must also be defined.
@@ -322,6 +342,7 @@ Sample count* breakdown:
 - 5,492 control siblings without NDDs
 
 .. note::
+
     Fu et al. note that:
     "one family is in both SPARK and unpublished ASC data, with different probands;
     one mother in the unpublished ASC data is also a proband in a different trio

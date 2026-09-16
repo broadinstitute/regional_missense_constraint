@@ -18,7 +18,9 @@ from rmc.resources.resource_utils import (
 )
 from rmc.resources.rmc import (
     CURRENT_FREEZE,
+    NO_BREAKS_RESOURCE,
     P_VALUE,
+    UNIONABLE_RESOURCES,
     constraint_prep,
     merged_search_ht_path,
     rmc_results,
@@ -32,11 +34,13 @@ from rmc.utils.constraint import (
     create_context_with_oe,
     create_filtered_context_ht,
     create_no_breaks_he,
+    create_rmc_coverage_stats,
     format_rmc_browser_ht,
     merge_rmc_hts,
     process_sections,
+    union_freeze_resources,
 )
-from rmc.utils.data_loading import create_transcript_ref
+from rmc.utils.data_loading import create_mane_plus_clinical_he, create_transcript_ref
 from rmc.utils.generic import get_constraint_transcripts
 
 logging.basicConfig(
@@ -100,11 +104,21 @@ def main(args):
                     "Pipeline is currently set up to run on missenses. Please make sure"
                     " all missense-relevant files are deleted before running."
                 )
+            keep_transcripts = None
+            if args.keep_transcripts_he:
+                logger.info(
+                    "Reading transcripts to search from %s...", args.keep_transcripts_he
+                )
+                keep_transcripts = hl.eval(
+                    hl.experimental.read_expression(args.keep_transcripts_he)
+                )
             n_partitions = 10000
             create_constraint_prep_ht(
                 filter_csq=csq,
                 n_partitions=args.n_partitions if args.n_partitions else n_partitions,
                 overwrite=args.overwrite,
+                freeze=args.freeze,
+                keep_transcripts=keep_transcripts,
             )
 
         if args.command == "search-for-single-break":
@@ -142,11 +156,11 @@ def main(args):
                     logger.info("Reading in constraint prep HT...")
                     if args.n_partitions:
                         ht = hl.read_table(
-                            constraint_prep.path,
+                            constraint_prep.versions[args.freeze].path,
                             _n_partitions=args.n_partitions,
                         )
                     else:
-                        ht = constraint_prep.ht()
+                        ht = constraint_prep.versions[args.freeze].ht()
 
             else:
                 logger.info(
@@ -461,6 +475,48 @@ def main(args):
                 filter_outliers=args.filter_outliers,
             )
 
+        if args.command == "create-mane-plus-clinical-he":
+            hl.init(
+                log="/RMC_create_mane_plus_clinical_he.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
+            )
+            hl.default_reference("GRCh38")
+            logger.info(
+                "Creating HailExpression of transcripts unique to the MANE Select plus"
+                " clinical set..."
+            )
+            create_mane_plus_clinical_he(overwrite=args.overwrite)
+
+        if args.command == "create-coverage-stats":
+            hl.init(
+                log="/RMC_create_coverage_stats.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
+            )
+            hl.default_reference("GRCh38")
+            logger.info("Creating RMC coverage stats HT...")
+            create_rmc_coverage_stats(
+                overwrite_temp=args.overwrite_temp,
+                freeze=args.freeze,
+                overwrite=args.overwrite,
+            )
+
+        if args.command == "union-freezes":
+            hl.init(
+                log="/RMC_union_freezes.log",
+                tmp_dir=TEMP_PATH_WITH_FAST_DEL,
+                quiet=args.quiet,
+            )
+            hl.default_reference("GRCh38")
+            logger.info("Unioning resources across freezes...")
+            union_freeze_resources(
+                resource_names=args.union_resources,
+                freezes=args.union_freezes,
+                output_freeze=args.output_freeze,
+                overwrite=args.overwrite,
+            )
+
         if args.command == "create-rmc-release":
             logger.info(
                 "Creating versions of files to be publicly released on gnomAD"
@@ -474,11 +530,23 @@ def main(args):
             hl.default_reference("GRCh38")
             # NOTE: This step creates the browser release, which is distinct from the
             # MCR release files.
-            # NOTE: `filter_to_canonical` is included here only to make
-            # amino acid annotation with context HT more efficient if
-            # RMC results were filtered to canonical transcripts
+            # NOTE: `--filter-to-canonical` doesn't apply here. Amino acid annotation
+            # is restricted by the RMC transcripts themselves, and the released
+            # transcript sets are always canonical plus `--extra-transcripts-he`.
+            extra_transcripts = None
+            if args.extra_transcripts_he:
+                logger.info(
+                    "Reading additional covered transcripts from %s...",
+                    args.extra_transcripts_he,
+                )
+                extra_transcripts = hl.eval(
+                    hl.experimental.read_expression(args.extra_transcripts_he)
+                )
             format_rmc_browser_ht(
-                args.freeze, args.overwrite_temp, args.filter_to_canonical
+                args.freeze,
+                args.overwrite_temp,
+                extra_transcripts,
+                args.union_freezes_aa,
             )
 
     finally:
@@ -582,6 +650,16 @@ if __name__ == "__main__":
         break search.
         """,
     )
+    prep_constraint.add_argument(
+        "--keep-transcripts-he",
+        help="""
+        Path to HailExpression containing the set of transcripts to search.
+        If not specified, canonical transcripts will be searched.
+        Use `mane_plus_clinical_transcripts_path` (written by
+        `create-mane-plus-clinical-he`) when searching the transcripts unique to the
+        MANE Select plus clinical set.
+        """,
+    )
     prep_csq = parser.add_mutually_exclusive_group()
     prep_csq.add_argument(
         "--prep-nonsense",
@@ -635,9 +713,71 @@ if __name__ == "__main__":
         help="Create context Table with observed/expected values for RMC assessment.",
     )
 
+    create_mane_plus_clinical = subparsers.add_parser(
+        "create-mane-plus-clinical-he",
+        help="""
+        Create HailExpression of transcripts unique to the MANE Select plus clinical
+        set (MANE Plus Clinical transcripts that aren't Ensembl canonical).
+        """,
+    )
+
+    create_coverage_stats = subparsers.add_parser(
+        "create-coverage-stats",
+        help="""
+        Create Table of median exome AN percent per RMC region.
+        Must be run after `finalize` and before `create-rmc-release`.
+        """,
+    )
+
+    union_freezes = subparsers.add_parser(
+        "union-freezes",
+        help="Union resources from multiple freezes into a single output freeze.",
+    )
+    union_freezes.add_argument(
+        "--union-freezes",
+        help="Freeze numbers to union. Transcripts must be disjoint across freezes.",
+        type=int,
+        nargs="+",
+        required=True,
+    )
+    union_freezes.add_argument(
+        "--output-freeze",
+        help="Freeze number to write unioned resources to.",
+        type=int,
+        required=True,
+    )
+    union_freezes.add_argument(
+        "--union-resources",
+        help="Names of resources to union.",
+        nargs="+",
+        required=True,
+        choices=sorted(set(UNIONABLE_RESOURCES) | {NO_BREAKS_RESOURCE}),
+    )
+
     create_release = subparsers.add_parser(
         "create-rmc-release",
         help="Create RMC browser release table.",
+    )
+    create_release.add_argument(
+        "--extra-transcripts-he",
+        help="""
+        Path to HailExpression containing transcripts covered by this freeze on top of
+        canonical transcripts, e.g. the transcripts unique to the MANE Select plus
+        clinical set. Used to annotate globals.
+        Use `mane_plus_clinical_transcripts_path` (written by
+        `create-mane-plus-clinical-he`) when releasing a freeze that covers those
+        transcripts.
+        """,
+    )
+    create_release.add_argument(
+        "--union-freezes-aa",
+        help="""
+        Freezes whose browser Tables already hold amino acid annotations for this
+        freeze's transcripts. Pass the freezes unioned by `union-freezes` to reuse
+        their annotations instead of looking amino acids up again.
+        """,
+        type=int,
+        nargs="+",
     )
     args = parser.parse_args()
 

@@ -4,8 +4,13 @@ BUILDS = ["GRCh37", "GRCh38"]
 
 # NOTE: RMC on v4 was started on gnomAD v4.1, which is why the version here is still 4.1
 # However, the models underlying the expected variant counts match computed gnomAD v4.1.1
+# `CONSTRAINT_VERSION` is pinned for the same reason: gnomad-constraint's
+# `CURRENT_VERSION` moved to 4.1.1 in the per-base refactor
+# (https://github.com/broadinstitute/gnomad-constraint/pull/51), but the coverage
+# corrected per-variant expected dataset RMC reads only exists for 4.1
 CURRENT_GNOMAD_VERSION = "4.1"
 GNOMAD_VERSIONS = ["2.1.1", "4.1"]
+CONSTRAINT_VERSION = "4.1"
 
 MISSENSE = "missense_variant"
 """
