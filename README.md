@@ -3,11 +3,10 @@
 **WARNING: This repository is under active development!**
 
 * Regional missense constraint (RMC): Regional variability in tolerance to missense variation within a gene
-* Missense badness: Score that predicts deleteriousness of specific amino acid subsitution
-* MPC (Missense badness, Polyphen-2, and Constraint): Score that predicts missense variant deleteriousness by incorporating information about the specific amino acid substitution and the region around the variant
+* MPC (Missense deleteriousness Prediction by Constraint): RMC-based metric that predicts deleteriousness of an individual missense variant by incorporating information about the specific amino acid substitution and the region around the variant
 
 
-This repository contains code to determine RMC regions in gnomAD (currently v2.1.1) and use these regions to calculate both missense badness and MPC. All methods in this repository are adapted from [Samocha et al (2017)](https://www.biorxiv.org/content/10.1101/148353v1.full.pdf).
+This repository contains code to determine RMC regions in gnomAD (currently v4.1.1) and use these regions to calculate both missense badness and MPC. All methods in this repository are described in [Wang et al (2026)](https://www.biorxiv.org/content/10.1101/2024.04.11.588920v3.full.pdf).
 
 ## Repository structure:
 * regional_missense_constraint/rmc/pipeline: Contains pipeline scripts that call utility functions to generate results.
@@ -30,12 +29,11 @@ Output:
 * utils/generic.py: Utility functions that help prepare data for calculations.
 * utils/constraint.py: Utility functions that calculate RMC results.
 
-## Missense badness
-### Scripts
-* pipeline/calculate_missense_badness.py: Pipeline code that prepares input Table and calculates missense badness score.
-* utils/missense_badness.py: Utility functions that prepare data for calculations and calculates missense badness.
+## Amino acid-level missense O/E metrics
+### Notebooks
+* mpc_notebooks/build_missense_badness.py: Jupyter notebook that builds missense badness, a measure of deleteriousness for an amino acid substitution class using missense O/E, normalized with nonsense and synonymous substitutions.
+* mpc_notebooks/build_aa_oe_metrics: Jupyter notebook that builds the other amino acid-level missense O/E metrics described in [Wang et al (2026)](https://www.biorxiv.org/content/10.1101/2024.04.11.588920v3.full.pdf).
 
 ## MPC
-### Scripts
-* pipeline/calculate_mpc.py: Pipeline code that prepares input Table, calculates MPC, and annotates given input Table with MPC score.
-* utils/mpc.py: Utility functions that prepare data for calculations, creates MPC model regressions, and calculates MPC.
+### Notebooks
+* mpc_notebooks/build_mpc.ipynb: Jupyter notebook that prepares the input Table to the MPC regression model, fits the MPC regression model, calculates MPC scores based on regression model fitted values, and annotates all missense variants with an MPC score.
